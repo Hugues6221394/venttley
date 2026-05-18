@@ -1,0 +1,69 @@
+name: vently_app
+description: "Vently — anonymous social platform for emotional expression and peer support"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # State management
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Routing
+  go_router: ^14.2.7
+
+  # Persistence
+  shared_preferences: ^2.3.2
+  flutter_secure_storage: ^9.2.2
+
+  # Networking & backend
+  supabase_flutter: ^2.6.0
+
+  # Crypto
+  crypto: ^3.0.5
+  cryptography: ^2.7.0
+  uuid: ^4.5.1
+
+  # UI utilities
+  google_fonts: ^6.2.1
+  flutter_svg: ^2.0.10+1
+  cached_network_image: ^3.4.1
+  shimmer: ^3.0.0
+  intl: ^0.19.0
+  collection: ^1.18.0
+
+  # Voice / audio
+  record: ^5.1.2
+  just_audio: ^0.9.40
+  path_provider: ^2.1.4
+  permission_handler: ^11.3.1
+
+  # Share card export
+  screenshot: ^3.0.0
+  share_plus: ^10.0.2
+
+  # Animations
+  flutter_animate: ^4.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+# Pin transitive dependencies that ship newer Android Gradle requirements
+# than Flutter 3.24.5 can satisfy.
+# app_links 6.4.0+ uses `flutter.compileSdkVersion` (added in Flutter 3.27).
+dependency_overrides:
+  app_links: 6.3.3
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/audio/
+    - assets/images/
