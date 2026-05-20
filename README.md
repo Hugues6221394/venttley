@@ -2,41 +2,47 @@
 
 > Your safe space to connect anonymously. Vent. Heal. Belong.
 
-Venttly is a standalone, zero-PII anonymous social platform for Gen Z emotional
-expression and peer support — built with **Flutter** on the client and
-**Supabase / PostgreSQL** on the server. Highlights:
+Venttly is an anonymous social platform for Gen Z emotional expression and
+peer support — built with **Flutter** on the client and **Supabase /
+PostgreSQL** on the server.
 
-* **Zero personal data.** No email, phone, or real name. Onboarding hashes a
-  device-side recovery key with a per-device Argon2-style salt and maps it to a
-  UUID. The only way back into your sanctuary is your Secret Recovery Key.
-* **18 emotional channels** with mood badges, mood filters, and category-
+V1 keeps the surface area small and honest. Highlights:
+
+* **Zero personal data.** No email, phone, or real name. Sign-up takes only a
+  username + password; the username is mapped to a synthetic auth handle
+  (`<username>@id.venttly.app`) that never receives mail.
+* **Layered account recovery.** Optional 12-word recovery phrase seals the
+  user's password into an AES-GCM blob whose key is derived (Argon2id) from
+  the phrase. Blob + salt are stored on the user row and read back pre-auth
+  during recovery — no email-reset needed.
+* **20 emotional channels** with mood badges, mood filters, and category-
   specific UX (Confessions + Trauma disable DM initiations; Dark Thoughts
   surfaces crisis helplines automatically).
-* **Plugz & Tribes.** Verified community keepers post styled "Question of the
-  Day" prompts in a heart-shaped Berry Magenta speech bubble. Following a Plug
-  joins their Tribe.
-* **Threaded comments** powered by PostgreSQL's `ltree` extension and a GIST
+* **Hybrid Tribes.** Tribes are *both* communities (anyone can create, members
+  join) *and* creator ecosystems (a Keeper — optionally a verified Plug —
+  moderates). Bottom nav: Home · Tribes · Post · Questions · Inbox.
+* **Threaded comments** powered by PostgreSQL's `ltree` extension and a GiST
   index for `O(log N)` deep-thread traversal. The client clusters siblings
   chronologically and collapses comments past depth 4 into a "View deeper
   replies" sheet.
-* **End-to-end encrypted DMs.** Curve25519 + AES-GCM-256, gated behind a
-  structured message-request handshake so users can never receive unsolicited
-  pings.
-* **Voice vents with masking.** Local pitch shift + breathy whisper layer +
-  white-noise floor before bytes leave the device.
-* **Llama Guard 3 safety cascade.** A fast local keyword tier (self-harm /
-  doxxing) feeds into the edge model. Average review latency ≤ 100 ms.
-* **Pink-gradient share cards.** Built-in Instagram / Snap / TikTok / WhatsApp
-  exporter with QR back-link.
+* **Private DMs.** Plaintext server-side so reported chats can be reviewed;
+  the UI never claims end-to-end encryption.
+* **Two-tier safety moderation.** Local keyword scan (self-harm, doxxing/PII,
+  hate, harassment, sexual content) feeds a Groq-hosted LLM safety check that
+  returns a structured JSON verdict.
+* **Member reports.** Any signed-in user can flag a post. Reports are
+  write-anyone / read-admin via Row Level Security.
 
 ## Phase status
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 1 | Zero-PII Onboarding, security, DB setup | ✅ |
-| 2 | Categorized Feeds, Plugz, Tribes, Q&A prompt cards, comment tree | ✅ |
-| 3 | E2EE messaging, voice masking, client-side reporting | ✅ |
-| 4 | Theming, glassmorphism, share sheets, polish | ✅ |
+| 0 | Security hardening — users-table column-level grants, seed wipe | ✅ |
+| 1 | Username + password sign-up, 12-word recovery phrase, login + restore | ✅ |
+| 2 | Hybrid Tribes (members + keeper), Tribes directory/detail/create, Questions tab | ✅ |
+| 3 | Two-tier moderation (Tier-1 local + Tier-2 Groq), member reports table | ✅ |
+| 4 | Private DMs (no E2EE claim), realtime chat, moderation on send | ✅ |
+| 5 | Profile screen, recovery-phrase reveal, launch readiness | in progress |
 
 ## Visual identity
 
@@ -51,98 +57,106 @@ expression and peer support — built with **Flutter** on the client and
 | `#E0D5D7` | Soft Off-White | Dark typography |
 | `#361F23` | Muted Burgundy | Dark dividers |
 
-All cards use `BorderRadius.circular(24.0)`, glassmorphic surfaces use
-`BackdropFilter(ImageFilter.blur(10))`, and the entire shell ships with
-matching light + dark themes that meet WCAG 4.5:1 contrast.
+All cards use `BorderRadius.circular(24.0)` and ship with matching light +
+dark themes that meet WCAG 4.5:1 contrast.
 
 ## Architecture
 
 ```
 lib/
-├── core/                       # constants, providers, DI
+├── core/                       # constants, Riverpod providers, DI
 ├── data/
-│   ├── repositories/           # VentlyRepository facade
-│   └── services/               # identity, crypto, moderation, voice mask, mock backend
+│   ├── repositories/           # VentlyRepository facade (live + mock)
+│   └── services/               # IdentityService, ModerationService, backends
 ├── domain/
 │   └── entities/               # plain, immutable entities
 └── presentation/
-    ├── router/                 # GoRouter + redirect on session
-    ├── screens/                # onboarding, feed, post detail, plugz, inbox, chat, voice, share, profile
+    ├── router/                 # GoRouter + session-aware redirect
+    ├── screens/                # onboarding, feed, tribes, questions, inbox, profile
     ├── theme/                  # VentlyTheme.light/dark + VentlyColors
-    └── widgets/                # AnonymousAvatar, PostCard, PromptCard, MoodChip, GlassCard, VentlyLogo
+    └── widgets/                # AnonymousAvatar, PostCard, PromptCard, etc.
 supabase/
-├── migrations/0001_init_schema.sql   # Full schema, indexes, triggers, RPCs
-└── seed/seed_demo.sql                # Demo users, Plugz, posts, threads, prompts
+└── migrations/
+    ├── 0001_init_schema.sql    # Core schema, indexes, triggers, RPCs
+    ├── 0003_security_hardening.sql
+    ├── 0004_username_auth_and_recovery.sql
+    ├── 0005_hybrid_tribes.sql
+    └── 0006_reports.sql
 ```
 
-The `data/` layer is a single `VentlyRepository` facade. By default it talks
-to a deterministic in-memory `MockBackend` that mirrors `seed_demo.sql` so
-the UI is fully populated without a live Supabase instance.
+`VentlyRepository` is the single data-layer facade. By default it talks to a
+deterministic in-memory `MockBackend` that boots with seed Tribes, Plugz,
+posts, and prompts; flip to live Supabase via `--dart-define`.
 
-To switch to live Supabase, build with `--dart-define`:
+## Configuration
 
-```
+All credentials are passed at build time. None of them are baked into source.
+
+| Variable | Required for | Default |
+| --- | --- | --- |
+| `SUPABASE_URL` | live backend | repo's project URL |
+| `SUPABASE_ANON_KEY` | live backend | repo's publishable key |
+| `USE_MOCK_BACKEND` | force the in-memory backend | `false` |
+| `GROQ_API_KEY` | Tier-2 LLM moderation | empty → Tier-2 skipped |
+| `GROQ_GUARD_MODEL` | override moderation model | `llama-3.3-70b-versatile` |
+
+```bash
 flutter run \
   --dart-define=SUPABASE_URL=https://YOUR-PROJECT.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=ey...
+  --dart-define=SUPABASE_ANON_KEY=ey... \
+  --dart-define=GROQ_API_KEY=gsk_...
 ```
+
+The Tier-2 moderation call uses Groq's OpenAI-compatible chat-completion
+endpoint with `response_format: json_object`, so any chat model on the
+account works — swap the model name with `--dart-define=GROQ_GUARD_MODEL=...`.
 
 ## Database
 
-The schema lives in `supabase/migrations/0001_init_schema.sql`. It includes:
-
-* The `users`, `plug_profiles`, `tribes_follows`, `spaces`,
-  `space_memberships`, `posts`, `post_polls`, `poll_options`, `poll_votes`,
-  `post_likes`, `post_saves`, `posts_comments`, `comment_likes`,
-  `chat_rooms`, `chat_messages`, `user_blocks`, `moderation_reports`,
-  `plug_prompts`, `prompt_answers`, and `notifications` tables.
-* `mood_badge_type`, `user_role_type`, and `safety_tier_type` enums.
-* A `path ltree` column on `posts_comments` plus a GiST index for fast
-  subtree traversal.
-* Atomic count triggers for likes, comments, and tribe counts.
-* Two RPC helpers — `create_threaded_comment` and `fetch_comment_tree`.
-
-Deploy locally:
+Migrations live in `supabase/migrations/`. To deploy a remote Supabase
+project, run them in order with `psql`:
 
 ```bash
-PGPASSWORD=trigga psql -U postgres -h localhost -d vently_db \
-  -f supabase/migrations/0001_init_schema.sql
-PGPASSWORD=trigga psql -U postgres -h localhost -d vently_db \
-  -f supabase/seed/seed_demo.sql
+for f in supabase/migrations/*.sql; do
+  PGPASSWORD=… psql "host=db.YOUR-REF.supabase.co port=5432 dbname=postgres user=postgres sslmode=require" -f "$f"
+done
 ```
 
-The `fetch_comment_tree(post_id)` RPC sorts results by ltree path + created_at
-so siblings cluster naturally and threads display oldest→newest from each
-parent. The client computes depth on the fly:
+Key schema notes:
 
-```
-indentation_offset(d) = min(d × 12px, 36px)   // capped at depth 3
-```
-
-For `d ≥ 4` the client renders a "View deeper replies (N)" button that opens
-the sub-thread in a focused bottom sheet.
+* `users.recovery_blob` + `users.recovery_salt` — encrypted-password material
+  read back pre-auth via the `fetch_recovery_material` SECURITY DEFINER RPC.
+* `tribes` + `tribe_members` (migration 0005) replace the older
+  `spaces` + `tribes_follows` split. Tribes have a `keeper_id` and an
+  `is_private` flag.
+* `tribe_directory` view denormalises the keeper's pseudonym, avatar seed,
+  and `is_verified` flag so the directory list paints in one query.
+* `feed_posts` view exposes `tribe_name` / `tribe_slug` alongside post data
+  so the feed never round-trips per row.
+* `post_reports` (migration 0006) is write-anyone / read-admin via RLS.
 
 ## Safety & compliance
 
-* **COPPA / FTC compliance.** A neutral DOB picker blocks under-13s outright
-  and places 13–17 users into the `restricted_minor` safety tier (no DM
+* **COPPA / FTC compliance.** A DOB picker blocks under-13s outright and
+  places 13–17 users into the `restricted_minor` safety tier (no DM
   initiation, no external links).
 * **No deceptive engagement.** Venttly never generates fake confessions or
-  simulated messages to drive upgrades. Premium tiers are aesthetic only.
-* **Llama Guard 3 cascade.** `ModerationService` first runs a local
-  dictionary scan for self-harm + phone numbers, then the edge model.
-  Crisis helplines are surfaced inline whenever self-harm signals fire.
-* **Encrypted-payload report path.** When a chat is reported, the most recent
-  encrypted block + the local session keys are exported to the moderation
-  queue so reviewers can see context without unlocking unrelated chats.
+  simulated messages to drive upgrades.
+* **Two-tier moderation cascade.** Tier-1 keyword scan runs in-process
+  (self-harm phrases, phone/email PII, hate, harassment, sexual
+  solicitation). Tier-2 is a Groq chat-completion JSON-mode call (skipped
+  silently when no key is configured — never fails closed on infrastructure).
+  Crisis helplines surface inline whenever self-harm signals fire — and
+  self-harm content is *never* hard-blocked.
+* **Reported chats.** Moderators can review messages in a reported chat;
+  other conversations stay private.
 
 ## Running
 
 ```bash
 flutter pub get
-flutter run            # uses MockBackend by default
-flutter test           # unit + widget tests
-flutter analyze        # zero errors, zero warnings
+flutter run            # MockBackend by default — no Supabase needed
+flutter analyze        # zero errors
 ```
 
 ## Tech stack
@@ -151,8 +165,7 @@ flutter analyze        # zero errors, zero warnings
 * `flutter_riverpod` for state management
 * `go_router` for declarative navigation
 * `supabase_flutter` for live data
-* `cryptography` for E2EE primitives (Curve25519 + AES-GCM-256)
-* `flutter_secure_storage` for encrypted local secrets (recovery key, salt)
-* `record` + `just_audio` + `permission_handler` for voice vents
-* `screenshot` + `share_plus` for the pink-gradient share-card exporter
+* `cryptography` for the Argon2id KDF + AES-GCM recovery-phrase blob
+* `flutter_secure_storage` for the on-device recovery phrase
+* `http` for the Groq moderation call
 * `google_fonts` (Plus Jakarta Sans) for warm, organic typography
