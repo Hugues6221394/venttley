@@ -5,7 +5,7 @@ import 'package:cryptography/cryptography.dart';
 /// Client-side end-to-end encryption gateway.
 ///
 /// Real production E2EE would implement the full Signal Double-Ratchet
-/// protocol. For Vently's MVP we provide:
+/// protocol. For Venttly's MVP we provide:
 ///   * an X25519 identity keypair per device,
 ///   * an AES-GCM-256 session key derived per chat room,
 ///   * encrypt/decrypt helpers that return base64 strings ready for the
@@ -52,7 +52,7 @@ class CryptoService {
 
   /// Helper for in-memory mock chats: yields a deterministic test key.
   Future<SecretKey> derivePresetKey(String label) async {
-    final hash = await Sha256().hash(utf8.encode('vently.mock.$label'));
+    final hash = await Sha256().hash(utf8.encode('venttly.mock.$label'));
     return SecretKey(Uint8List.fromList(hash.bytes));
   }
 }

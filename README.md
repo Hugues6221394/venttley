@@ -1,8 +1,8 @@
-# Vently
+# Venttly
 
 > Your safe space to connect anonymously. Vent. Heal. Belong.
 
-Vently is a standalone, zero-PII anonymous social platform for Gen Z emotional
+Venttly is a standalone, zero-PII anonymous social platform for Gen Z emotional
 expression and peer support — built with **Flutter** on the client and
 **Supabase / PostgreSQL** on the server. Highlights:
 
@@ -127,7 +127,7 @@ the sub-thread in a focused bottom sheet.
 * **COPPA / FTC compliance.** A neutral DOB picker blocks under-13s outright
   and places 13–17 users into the `restricted_minor` safety tier (no DM
   initiation, no external links).
-* **No deceptive engagement.** Vently never generates fake confessions or
+* **No deceptive engagement.** Venttly never generates fake confessions or
   simulated messages to drive upgrades. Premium tiers are aesthetic only.
 * **Llama Guard 3 cascade.** `ModerationService` first runs a local
   dictionary scan for self-harm + phone numbers, then the edge model.

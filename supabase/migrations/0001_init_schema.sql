@@ -1,5 +1,5 @@
 -- ============================================================================
--- Vently | Initial Schema Migration
+-- Venttly | Initial Schema Migration
 -- Anonymous social platform for Gen Z emotional expression and peer support.
 -- Zero-PII by design. Uses ltree for high-speed comment tree traversal.
 -- ============================================================================

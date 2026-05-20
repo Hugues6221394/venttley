@@ -39,7 +39,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp> {
     final mode = ref.watch(themeModeProvider);
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
-      title: 'Vently',
+      title: 'Venttly',
       debugShowCheckedModeBanner: false,
       theme: VentlyTheme.light(),
       darkTheme: VentlyTheme.dark(),

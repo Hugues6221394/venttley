@@ -422,7 +422,7 @@ class _ReportSheet extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Vently moderators review reports anonymously, usually within minutes.',
+              'Venttly moderators review reports anonymously, usually within minutes.',
               style: TextStyle(
                 color: scheme.onSurface.withOpacity(0.65),
               ),

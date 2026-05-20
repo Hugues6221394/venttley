@@ -1,4 +1,4 @@
-/// Global compile-time constants for Vently.
+/// Global compile-time constants for Venttly.
 library;
 
 class VentlyConfig {

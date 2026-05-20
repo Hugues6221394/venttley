@@ -20,7 +20,7 @@ class ProfileScreen extends ConsumerWidget {
         body: Center(
           child: ElevatedButton(
             onPressed: () => context.go('/onboarding'),
-            child: const Text('Step into Vently'),
+            child: const Text('Step into Venttly'),
           ),
         ),
       );

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Vently brand palette. Source of truth for both light + dark themes.
+/// Venttly brand palette. Source of truth for both light + dark themes.
 class VentlyColors {
   // ---------------- Light theme ----------------
   /// Pastel Blush Pink — primary canvas / background.

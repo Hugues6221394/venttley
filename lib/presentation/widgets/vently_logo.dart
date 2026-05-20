@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/colors.dart';
 
-/// Vently wordmark — the lowercase "Vently" in Berry Magenta with a
+/// Venttly wordmark — the lowercase "Venttly" in Berry Magenta with a
 /// continuous heart-bubble glyph used as the dot of the "y".
 class VentlyLogo extends StatelessWidget {
   const VentlyLogo({super.key, this.size = 28});
@@ -23,7 +23,7 @@ class VentlyLogo extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         Text(
-          'Vently',
+          'Venttly',
           style: TextStyle(
             fontSize: size,
             fontWeight: FontWeight.w800,

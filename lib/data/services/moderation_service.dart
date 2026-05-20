@@ -51,7 +51,7 @@ class ModerationService {
     var verdict = SafetyVerdict.safe;
 
     if (_phoneNumber.hasMatch(text)) {
-      reasons.add('Looks like a phone number — Vently masks contact info.');
+      reasons.add('Looks like a phone number — Venttly masks contact info.');
       verdict = SafetyVerdict.block;
     }
     for (final phrase in _harassment) {
@@ -82,7 +82,7 @@ class ModerationService {
     final guardVerdict = await _llamaGuardStub(text);
     if (guardVerdict == SafetyVerdict.block) {
       verdict = SafetyVerdict.block;
-      reasons.add('Flagged by Vently safety AI.');
+      reasons.add('Flagged by Venttly safety AI.');
     } else if (guardVerdict == SafetyVerdict.warn && verdict == SafetyVerdict.safe) {
       verdict = SafetyVerdict.warn;
     }
@@ -133,7 +133,7 @@ class CrisisResource {
 }
 
 const List<CrisisResource> kCrisisResources = [
-  CrisisResource('Vently Care Line',           'Text CARE to 741741 (free, 24/7)'),
+  CrisisResource('Venttly Care Line',           'Text CARE to 741741 (free, 24/7)'),
   CrisisResource('IsangeOne Stop Centre, Rwanda', 'Call 3029 from any phone'),
   CrisisResource('International Befrienders',  'https://befrienders.org'),
 ];
