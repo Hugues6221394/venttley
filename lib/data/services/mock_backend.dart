@@ -213,6 +213,15 @@ class MockBackend {
     _emitPosts();
   }
 
+  final Set<String> _reportedPosts = {};
+  void reportPost({
+    required String postId,
+    required String reason,
+    String? note,
+  }) {
+    _reportedPosts.add(postId);
+  }
+
   List<Post> mySaved() => _posts
       .where((p) => _savedPosts.contains(p.postId))
       .map((p) => p.copyWith(savedByMe: true, likedByMe: _likedPosts.contains(p.postId)))

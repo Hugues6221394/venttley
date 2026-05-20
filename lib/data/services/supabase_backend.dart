@@ -334,6 +334,24 @@ class SupabaseBackend {
     _emitPosts();
   }
 
+  Future<void> reportPost({
+    required String postId,
+    required String reason,
+    String? note,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    await _client.from('post_reports').upsert(
+      {
+        'post_id':     postId,
+        'reporter_id': uid,
+        'reason':      reason,
+        'note':        note,
+      },
+      onConflict: 'post_id,reporter_id',
+    );
+  }
+
   Future<List<Post>> mySaved() async {
     final uid = _uid;
     if (uid == null) return const [];

@@ -36,6 +36,24 @@ class VentlyConfig {
   /// users 13–17 are placed in a restricted safety tier.
   static const int minAge = 13;
   static const int restrictedMaxAge = 17;
+
+  /// Optional Groq API key used by the Tier-2 LlamaGuard moderation call.
+  /// Pass at build time:
+  ///   flutter run --dart-define=GROQ_API_KEY=gsk_...
+  ///
+  /// When empty, the moderation pipeline runs Tier-1 keyword scan only and
+  /// the LLM step is skipped (safe-fail, not block-fail).
+  static const String groqApiKey = String.fromEnvironment(
+    'GROQ_API_KEY',
+    defaultValue: '',
+  );
+
+  /// Model used by Groq's hosted Llama Guard endpoint. Pinned so we can roll
+  /// forward intentionally rather than at Groq's release cadence.
+  static const String groqGuardModel = String.fromEnvironment(
+    'GROQ_GUARD_MODEL',
+    defaultValue: 'llama-guard-3-8b',
+  );
 }
 
 /// The eighteen + two emotional story channels.

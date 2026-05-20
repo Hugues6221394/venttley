@@ -260,6 +260,18 @@ class VentlyRepository {
     return Future.value(_mock.postById(postId));
   }
 
+  Future<void> reportPost({
+    required String postId,
+    required String reason,
+    String? note,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.reportPost(postId: postId, reason: reason, note: note);
+    }
+    _mock.reportPost(postId: postId, reason: reason, note: note);
+  }
+
   Future<List<Post>> mySaved() {
     final live = _live;
     if (live != null) return live.mySaved();

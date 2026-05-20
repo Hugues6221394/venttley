@@ -141,6 +141,25 @@ class PostCard extends ConsumerWidget {
                       tooltip: 'Request a chat',
                       onPressed: onMessage,
                     ),
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_horiz, color: muted),
+                    tooltip: 'More',
+                    onSelected: (v) {
+                      if (v == 'report') _openReportSheet(context, ref, post.postId);
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'report',
+                        child: Row(
+                          children: [
+                            Icon(Icons.flag_outlined, size: 16),
+                            SizedBox(width: 8),
+                            Text('Report'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
               if (dmDisabled)
@@ -180,6 +199,81 @@ class PostCard extends ConsumerWidget {
       return v >= 10 ? '${v.toStringAsFixed(0)}k' : '${v.toStringAsFixed(1)}k';
     }
     return '${(n / 1000000).toStringAsFixed(1)}M';
+  }
+}
+
+Future<void> _openReportSheet(
+    BuildContext context, WidgetRef ref, String postId) async {
+  const reasons = <(String, String)>[
+    ('self_harm',       'Self-harm or suicide concern'),
+    ('hate',            'Hate speech'),
+    ('harassment',      'Harassment or bullying'),
+    ('sexual_content',  'Sexual content'),
+    ('violence',        'Violence or threats'),
+    ('privacy',         'Personal info / doxxing'),
+    ('spam',            'Spam or scam'),
+    ('other',           'Something else'),
+  ];
+  final choice = await showModalBottomSheet<String>(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Text(
+                'Report this post',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Text(
+                'A moderator reviews every report. Reports are anonymous.',
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final r in reasons)
+              ListTile(
+                title: Text(r.$2),
+                onTap: () => Navigator.of(ctx).pop(r.$1),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (choice == null) return;
+  try {
+    await ref.read(repositoryProvider).reportPost(
+          postId: postId,
+          reason: choice,
+        );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Thank you — a moderator will review.')),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not send report: $e')),
+    );
   }
 }
 

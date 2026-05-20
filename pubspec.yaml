@@ -24,6 +24,7 @@ dependencies:
 
   # Networking & backend
   supabase_flutter: ^2.6.0
+  http: ^1.2.2
 
   # Crypto
   crypto: ^3.0.5
