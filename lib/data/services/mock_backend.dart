@@ -5,6 +5,10 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/constants.dart';
 import '../../domain/entities/entities.dart';
+import 'supabase_backend.dart'
+    show
+        UsernameTakenException,
+        InvalidCredentialsException;
 
 /// In-memory backend used when [VentlyConfig.useMockBackend] is true.
 ///
@@ -21,6 +25,8 @@ class MockBackend {
 
   AppUser? _me;
   final List<AppUser> _users = [];
+  final Map<String, String> _passwords = {}; // lowercased username → password
+  final Map<String, ({String blob, String salt})> _recovery = {};
   final List<PlugProfile> _plugz = [];
   final List<Space> _spaces = [];
   final List<Post> _posts = [];
@@ -51,6 +57,67 @@ class MockBackend {
       _users.add(user);
     }
     _emitAll();
+  }
+
+  /// Mock counterpart of [SupabaseBackend.signUp].
+  AppUser signUp({
+    required String username,
+    required String password,
+    required String avatarSeed,
+    required int birthYear,
+    required String safetyTier,
+    required String recoveryBlob,
+    required String recoverySalt,
+  }) {
+    final key = username.toLowerCase();
+    if (_passwords.containsKey(key)) {
+      throw UsernameTakenException();
+    }
+    final user = AppUser(
+      userId: _uuid.v4(),
+      anonymousPseudonym: username,
+      avatarSeed: avatarSeed,
+      currentMood: 'healing',
+      userRole: 'normal',
+      isVerified: false,
+      safetyTier: safetyTier,
+      accountStatus: 'active',
+      birthYear: birthYear,
+    );
+    _users.add(user);
+    _passwords[key] = password;
+    _recovery[key] = (blob: recoveryBlob, salt: recoverySalt);
+    _me = user;
+    _emitAll();
+    return user;
+  }
+
+  /// Mock counterpart of [SupabaseBackend.signIn].
+  AppUser signIn({required String username, required String password}) {
+    final key = username.toLowerCase();
+    final stored = _passwords[key];
+    if (stored == null || stored != password) {
+      throw InvalidCredentialsException();
+    }
+    final user =
+        _users.firstWhere((u) => u.anonymousPseudonym.toLowerCase() == key);
+    _me = user;
+    _emitAll();
+    return user;
+  }
+
+  ({String blob, String salt})? fetchRecoveryMaterial(String username) =>
+      _recovery[username.toLowerCase()];
+
+  /// Test-only helper: look up the in-memory password so the repository can
+  /// re-sign-in after a hot restart in mock mode. Lives on the mock backend
+  /// only — the live backend uses Supabase's persisted auth session.
+  String? passwordOf(String username) => _passwords[username.toLowerCase()];
+
+  /// Update the password for [username] — used by the recover-with-phrase
+  /// flow when the user sets a new password after restoring their account.
+  void resetPassword({required String username, required String newPassword}) {
+    _passwords[username.toLowerCase()] = newPassword;
   }
 
   void logout() {

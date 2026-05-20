@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entities/entities.dart';
+import 'identity_service.dart';
 
 /// Live Supabase backend.
 ///
@@ -42,40 +43,60 @@ class SupabaseBackend {
   RealtimeChannel? _roomsChannel;
 
   // ===================================================================
-  // SESSION  (anonymous auth + matching public.users row)
+  // SESSION  (username + password via a synthetic, zero-PII handle, plus
+  //           phrase-based recovery — see migration 0004)
   // ===================================================================
-  Future<AppUser> bootstrap({
-    required String pseudonym,
+
+  /// Create a new account. The trigger `handle_new_auth_user` materialises
+  /// the matching `public.users` row from the signup metadata; we then attach
+  /// the encrypted recovery blob to that row.
+  Future<AppUser> signUp({
+    required String username,
+    required String password,
     required String avatarSeed,
     required int birthYear,
     required String safetyTier,
+    required String recoveryBlob,
+    required String recoverySalt,
   }) async {
-    final res = await _client.auth.signInAnonymously(data: {
-      'pseudonym':   pseudonym,
-      'avatar_seed': avatarSeed,
-      'birth_year':  birthYear,
-      'safety_tier': safetyTier,
-    });
-    final uid = res.user?.id;
-    if (uid == null) {
-      throw StateError('Anonymous sign-in failed: no user id');
+    final email = IdentityService.syntheticEmail(username);
+    final AuthResponse res;
+    try {
+      res = await _client.auth.signUp(
+        email: email,
+        password: password,
+        data: {
+          'pseudonym':   username,
+          'avatar_seed': avatarSeed,
+          'birth_year':  birthYear,
+          'safety_tier': safetyTier,
+        },
+      );
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('already') || msg.contains('registered')) {
+        throw UsernameTakenException();
+      }
+      rethrow;
     }
-    // The auth trigger `handle_new_auth_user` will create the matching
-    // public.users row; we still upsert defensively so the app keeps working
-    // if the trigger ever drifts.
-    await _client.from('users').upsert({
-      'user_id':             uid,
-      'anonymous_pseudonym': pseudonym,
-      'avatar_seed':         avatarSeed,
-      'current_mood':        'healing',
-      'safety_tier':         safetyTier,
-      'birth_year':          birthYear,
-      'recovery_key_hash':   'auth-managed',
-    }, onConflict: 'user_id');
+    final user = res.user;
+    if (user == null) {
+      throw StateError('Sign-up returned no user');
+    }
+    if (res.session == null) {
+      // Supabase project still requires email confirmation. Synthetic
+      // username handles cannot receive mail, so this would strand the
+      // account before it ever becomes usable.
+      throw const EmailConfirmationStillOnException();
+    }
+    await _client.from('users').update({
+      'recovery_blob': recoveryBlob,
+      'recovery_salt': recoverySalt,
+    }).eq('user_id', user.id);
 
     _me = AppUser(
-      userId: uid,
-      anonymousPseudonym: pseudonym,
+      userId: user.id,
+      anonymousPseudonym: username,
       avatarSeed: avatarSeed,
       currentMood: 'healing',
       userRole: 'normal',
@@ -88,12 +109,56 @@ class SupabaseBackend {
     return _me!;
   }
 
+  /// Sign in an existing account with username + password.
+  Future<AppUser> signIn({
+    required String username,
+    required String password,
+  }) async {
+    final email = IdentityService.syntheticEmail(username);
+    try {
+      await _client.auth.signInWithPassword(email: email, password: password);
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('invalid') || msg.contains('credentials')) {
+        throw InvalidCredentialsException();
+      }
+      rethrow;
+    }
+    final user = await restore();
+    if (user == null) {
+      throw StateError('Signed in but no matching profile row');
+    }
+    return user;
+  }
+
+  /// Pre-auth: fetch the encrypted recovery material for [username].
+  /// Returns null if no such user, or if no recovery material was stored.
+  Future<({String blob, String salt})?> fetchRecoveryMaterial(
+      String username) async {
+    final rows = await _client.rpc(
+      'fetch_recovery_material',
+      params: {'p_username': username},
+    ) as List<dynamic>;
+    if (rows.isEmpty) return null;
+    final r = rows.first as Map<String, dynamic>;
+    final blob = r['recovery_blob'] as String?;
+    final salt = r['recovery_salt'] as String?;
+    if (blob == null || salt == null) return null;
+    return (blob: blob, salt: salt);
+  }
+
   Future<AppUser?> restore() async {
     final uid = _uid;
     if (uid == null) return null;
+    // Explicit column list: migration 0003 revokes column SELECT on the
+    // sensitive columns (recovery_key_hash, device_signature_hash,
+    // public_key), so a bare `select()` (which expands to `*`) now fails.
     final row = await _client
         .from('users')
-        .select()
+        .select(
+          'user_id, anonymous_pseudonym, avatar_seed, current_mood, '
+          'user_role, is_verified, account_status, safety_tier, birth_year',
+        )
         .eq('user_id', uid)
         .maybeSingle();
     if (row == null) return null;
@@ -730,6 +795,9 @@ class SupabaseBackend {
     );
   }
 
+  /// Friendly, UI-facing auth failure types — see [signUp] / [signIn].
+  // (defined below the class)
+
   /// Pick a random other user — used for the demo "find a peer" flow until
   /// a richer peer-discovery UX ships.
   Future<Map<String, dynamic>?> randomPeer() async {
@@ -742,5 +810,24 @@ class SupabaseBackend {
     if (rows.isEmpty) return null;
     return rows[_rng.nextInt(rows.length)];
   }
+}
+
+class UsernameTakenException implements Exception {
+  @override
+  String toString() => 'That name is already in someone\'s sanctuary — try another.';
+}
+
+class InvalidCredentialsException implements Exception {
+  @override
+  String toString() => 'Username or password doesn\'t match.';
+}
+
+class EmailConfirmationStillOnException implements Exception {
+  const EmailConfirmationStillOnException();
+  @override
+  String toString() =>
+      'Supabase Auth still requires email confirmation. Disable '
+      '"Confirm email" in Authentication → Providers → Email so the '
+      'zero-PII username handles can sign up.';
 }
 

@@ -40,7 +40,7 @@ class WelcomeScreen extends StatelessWidget {
               const Center(child: VentlyLogo(size: 36)),
               const SizedBox(height: 12),
               Text(
-                'Welcome to Vently',
+                'Welcome to Venttly',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w800,
@@ -74,7 +74,7 @@ class WelcomeScreen extends StatelessWidget {
               const SizedBox(height: 12),
               TextButton(
                 onPressed: () => context.push('/onboarding/recover'),
-                child: const Text('Lost your key? Restore your sanctuary'),
+                child: const Text('Already have an account? Sign in'),
               ),
             ],
           ),

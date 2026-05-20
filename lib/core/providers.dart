@@ -31,17 +31,46 @@ class SessionController extends StateNotifier<AppUser?> {
     state = await _repo.restoreSession();
   }
 
-  Future<AppUser> register({
+  /// Sign up. Returns the user *and* the freshly generated 12-word recovery
+  /// phrase — the caller must display it once before navigating away;
+  /// nothing else holds a copy outside the user's device + their own memory.
+  Future<({AppUser user, String recoveryPhrase})> register({
     required DateTime birthDate,
-    required String pseudonym,
+    required String username,
+    required String password,
     required String avatarSeed,
   }) async {
-    final user = await _repo.bootstrapAccount(
+    final result = await _repo.registerAccount(
       birthDate: birthDate,
-      pseudonym: pseudonym,
+      username: username,
+      password: password,
       avatarSeed: avatarSeed,
     );
+    state = result.user;
+    return result;
+  }
+
+  /// Username + password sign-in for returning users.
+  Future<AppUser> signIn({
+    required String username,
+    required String password,
+  }) async {
+    final user = await _repo.signIn(username: username, password: password);
     state = user;
+    return user;
+  }
+
+  /// Restore an account on a fresh install using the 12-word phrase.
+  /// Returns null if the phrase doesn't decrypt the recovery blob.
+  Future<AppUser?> recoverWithPhrase({
+    required String username,
+    required String phrase,
+  }) async {
+    final user = await _repo.recoverWithPhrase(
+      username: username,
+      phrase: phrase,
+    );
+    if (user != null) state = user;
     return user;
   }
 

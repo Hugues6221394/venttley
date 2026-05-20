@@ -34,8 +34,15 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: GoRouterRefreshStream(ref),
     routes: [
       GoRoute(path: '/onboarding', builder: (_, __) => const WelcomeScreen()),
-      GoRoute(path: '/onboarding/identity', builder: (_, __) => const IdentityScreen()),
-      GoRoute(path: '/onboarding/key', builder: (_, __) => const RecoveryKeyScreen()),
+      GoRoute(
+        path: '/onboarding/identity',
+        builder: (_, __) => const IdentityScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding/key',
+        builder: (ctx, st) =>
+            RecoveryKeyScreen(phrase: (st.extra as String?) ?? ''),
+      ),
       GoRoute(path: '/onboarding/recover', builder: (_, __) => const RecoverScreen()),
 
       StatefulShellRoute.indexedStack(
