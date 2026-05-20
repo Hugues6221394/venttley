@@ -9,11 +9,11 @@ class HomeShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
 
   static const _tabs = [
-    _Tab('/feed',    Icons.home_outlined,        Icons.home_rounded,       'Feed'),
-    _Tab('/plugz',   Icons.diversity_3_outlined, Icons.diversity_3,        'Plugz'),
-    _Tab('/compose', Icons.add_circle_outline,   Icons.add_circle,         'Post'),
-    _Tab('/inbox',   Icons.notifications_none,   Icons.notifications,      'Inbox'),
-    _Tab('/profile', Icons.person_outline,       Icons.person,             'Profile'),
+    _Tab('/feed',      Icons.home_outlined,             Icons.home_rounded,         'Home'),
+    _Tab('/tribes',    Icons.diversity_3_outlined,      Icons.diversity_3,          'Tribes'),
+    _Tab('/compose',   Icons.add_circle_outline,        Icons.add_circle,           'Post'),
+    _Tab('/questions', Icons.help_outline,              Icons.help_rounded,         'Questions'),
+    _Tab('/inbox',     Icons.notifications_none,        Icons.notifications,        'Inbox'),
   ];
 
   @override

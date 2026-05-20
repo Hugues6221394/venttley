@@ -12,7 +12,6 @@ class PlugProfileScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final repo = ref.watch(repositoryProvider);
     final plugAsync = ref.watch(plugByNameProvider(displayName));
     final plug = plugAsync.valueOrNull;
     if (plugAsync.isLoading && plug == null) {
@@ -27,7 +26,6 @@ class PlugProfileScreen extends ConsumerWidget {
         body: const Center(child: Text('Plug not found')),
       );
     }
-    final following = repo.isFollowing(plug.plugId);
     final scheme = Theme.of(context).colorScheme;
     final allPrompts = ref.watch(promptsProvider).valueOrNull ?? const [];
     final prompts =
@@ -92,12 +90,10 @@ class PlugProfileScreen extends ConsumerWidget {
                     const SizedBox(height: 16),
                     SizedBox(
                       width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          await repo.toggleFollow(plug.plugId);
-                          ref.invalidate(plugByNameProvider(displayName));
-                        },
-                        child: Text(following ? 'In Tribe' : 'Join the Tribe'),
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.diversity_3, size: 16),
+                        onPressed: () => context.push('/tribes'),
+                        label: const Text('See their Tribes'),
                       ),
                     ),
                   ],

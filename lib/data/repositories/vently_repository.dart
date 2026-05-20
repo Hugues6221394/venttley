@@ -174,7 +174,7 @@ class VentlyRepository {
   }
 
   // ===================== Posts / Feed =====================
-  Stream<List<Post>> watchFeed({String? category, String? mood, String? spaceName}) {
+  Stream<List<Post>> watchFeed({String? category, String? mood, String? tribeSlug}) {
     final live = _live;
     if (live != null) {
       // Seed the stream with an immediate fetch, then track realtime emits.
@@ -184,7 +184,7 @@ class VentlyRepository {
         controller.add(await live.feed(
           category: category,
           mood: mood,
-          spaceName: spaceName,
+          tribeSlug: tribeSlug,
         ));
       }
       sub = live.postsStream.listen((_) => emit());
@@ -195,24 +195,24 @@ class VentlyRepository {
     return _mock.postsStream.map((_) => _mock.feed(
           category: category,
           mood: mood,
-          spaceName: spaceName,
+          tribeSlug: tribeSlug,
         ));
   }
 
-  Future<List<Post>> feed({String? category, String? mood, String? spaceName}) {
+  Future<List<Post>> feed({String? category, String? mood, String? tribeSlug}) {
     final live = _live;
     if (live != null) {
-      return live.feed(category: category, mood: mood, spaceName: spaceName);
+      return live.feed(category: category, mood: mood, tribeSlug: tribeSlug);
     }
     return Future.value(
-        _mock.feed(category: category, mood: mood, spaceName: spaceName));
+        _mock.feed(category: category, mood: mood, tribeSlug: tribeSlug));
   }
 
   Future<Post> createPost({
     required String content,
     required String category,
     required String mood,
-    String? spaceName,
+    String? tribeId,
     bool isAudio = false,
     String? audioUrl,
     int audioDurationMs = 0,
@@ -223,7 +223,7 @@ class VentlyRepository {
         content: content,
         category: category,
         mood: mood,
-        spaceName: spaceName,
+        tribeId: tribeId,
         isAudio: isAudio,
         audioUrl: audioUrl,
         audioDurationMs: audioDurationMs,
@@ -233,7 +233,7 @@ class VentlyRepository {
       content: content,
       category: category,
       mood: mood,
-      spaceName: spaceName,
+      tribeId: tribeId,
       isAudio: isAudio,
       audioUrl: audioUrl,
       audioDurationMs: audioDurationMs,
@@ -293,7 +293,7 @@ class VentlyRepository {
         postId: postId, parentId: parentId, content: content);
   }
 
-  // ===================== Plugz / Tribes =====================
+  // ===================== Plugz (read-only metadata) =====================
   Future<List<PlugProfile>> allPlugz() {
     final live = _live;
     if (live != null) return live.allPlugz();
@@ -306,34 +306,60 @@ class VentlyRepository {
     return Future.value(_mock.plugByDisplayName(name));
   }
 
-  bool isFollowing(String plugId) {
+  // ===================== Tribes =====================
+  Future<List<Tribe>> tribes({String? category, String? search}) {
     final live = _live;
-    if (live != null) return live.isFollowing(plugId);
-    return _mock.isFollowing(plugId);
+    if (live != null) return live.tribes(category: category, search: search);
+    return Future.value(_mock.tribes(category: category, search: search));
   }
 
-  Future<void> toggleFollow(String plugId) {
+  Future<Tribe?> tribeBySlug(String slug) {
     final live = _live;
-    if (live != null) return live.toggleFollow(plugId);
-    _mock.toggleFollow(plugId);
+    if (live != null) return live.tribeBySlug(slug);
+    return Future.value(_mock.tribeBySlug(slug));
+  }
+
+  Future<Tribe> createTribe({
+    required String name,
+    required String category,
+    String? description,
+    bool isPrivate = false,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.createTribe(
+        name: name,
+        category: category,
+        description: description,
+        isPrivate: isPrivate,
+      );
+    }
+    return Future.value(_mock.createTribe(
+      name: name,
+      category: category,
+      description: description,
+      isPrivate: isPrivate,
+    ));
+  }
+
+  bool joinedTribe(String tribeId) {
+    final live = _live;
+    if (live != null) return live.joinedTribe(tribeId);
+    return _mock.joinedTribe(tribeId);
+  }
+
+  Future<void> joinTribe(String tribeId) {
+    final live = _live;
+    if (live != null) return live.joinTribe(tribeId);
+    _mock.joinTribe(tribeId);
     return Future.value();
   }
 
-  // ===================== Spaces =====================
-  Future<List<Space>> spaces() {
+  Future<void> leaveTribe(String tribeId) {
     final live = _live;
-    if (live != null) return live.spaces();
-    return Future.value(_mock.spaces());
-  }
-
-  Future<Space> createSpace(
-      {required String name, required String type, String? description}) {
-    final live = _live;
-    if (live != null) {
-      return live.createSpace(name: name, type: type, description: description);
-    }
-    return Future.value(
-        _mock.createSpace(name: name, type: type, description: description));
+    if (live != null) return live.leaveTribe(tribeId);
+    _mock.leaveTribe(tribeId);
+    return Future.value();
   }
 
   // ===================== Chat =====================

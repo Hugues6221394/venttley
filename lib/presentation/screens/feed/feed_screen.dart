@@ -27,13 +27,10 @@ class FeedScreen extends ConsumerWidget {
         ),
         title: const VentlyLogo(size: 26),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Chip(
-              avatar: Icon(Icons.language, size: 14, color: scheme.primary),
-              label: const Text('Global', style: TextStyle(fontSize: 11)),
-              padding: EdgeInsets.zero,
-            ),
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            tooltip: 'My profile',
+            onPressed: () => context.push('/profile'),
           ),
         ],
       ),

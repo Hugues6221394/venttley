@@ -71,15 +71,25 @@ class PostCard extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        if (post.spaceName != null)
+                        if (post.tribeName != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              post.spaceName!,
-                              style: TextStyle(
-                                color: scheme.primary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
+                            child: GestureDetector(
+                              onTap: post.tribeSlug == null || onTap == null
+                                  ? null
+                                  : () {
+                                      // Tribe-name tap is handled by the parent
+                                      // screen via [onTap]; specific tribe-detail
+                                      // routing lives in the home feed/list.
+                                      onTap!.call();
+                                    },
+                              child: Text(
+                                'in ${post.tribeName!}',
+                                style: TextStyle(
+                                  color: scheme.primary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),

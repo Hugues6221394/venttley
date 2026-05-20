@@ -28,12 +28,12 @@ class MockBackend {
   final Map<String, String> _passwords = {}; // lowercased username → password
   final Map<String, ({String blob, String salt})> _recovery = {};
   final List<PlugProfile> _plugz = [];
-  final List<Space> _spaces = [];
+  final List<Tribe> _tribes = [];
   final List<Post> _posts = [];
   final Map<String, List<ThreadedComment>> _commentsByPost = {};
   final Set<String> _likedPosts = {};
   final Set<String> _savedPosts = {};
-  final Set<String> _followedPlugz = {};
+  final Set<String> _joinedTribes = {};
   final List<ChatRoom> _rooms = [];
   final Map<String, List<ChatMessage>> _messages = {};
   final List<PlugPrompt> _prompts = [];
@@ -126,12 +126,12 @@ class MockBackend {
   }
 
   // -------------------- Feed --------------------
-  List<Post> feed({String? category, String? mood, String? spaceName}) {
+  List<Post> feed({String? category, String? mood, String? tribeSlug}) {
     final filtered = _posts.where((p) {
       final byCategory = category == null || p.categoryName == category;
       final byMood     = mood == null || p.postMood == mood;
-      final bySpace    = spaceName == null || p.spaceName == spaceName;
-      return byCategory && byMood && bySpace;
+      final byTribe    = tribeSlug == null || p.tribeSlug == tribeSlug;
+      return byCategory && byMood && byTribe;
     }).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return [
@@ -156,17 +156,21 @@ class MockBackend {
     required String content,
     required String category,
     required String mood,
-    String? spaceName,
+    String? tribeId,
     bool isAudio = false,
     String? audioUrl,
     int audioDurationMs = 0,
   }) async {
     final me = _me;
     if (me == null) throw StateError('No active session');
+    final tribe = tribeId == null
+        ? null
+        : _tribes.firstWhereOrNull((t) => t.tribeId == tribeId);
     final post = Post(
       postId: _uuid.v4(),
       authorPseudonym: '@${me.anonymousPseudonym}',
       authorAvatarSeed: me.avatarSeed,
+      authorIsVerified: me.isVerified,
       categoryName: category,
       postType: 'user_post',
       content: content,
@@ -177,7 +181,9 @@ class MockBackend {
       likesCount: 0,
       commentsCount: 0,
       createdAt: DateTime.now(),
-      spaceName: spaceName,
+      tribeId: tribe?.tribeId,
+      tribeName: tribe?.name,
+      tribeSlug: tribe?.slug,
     );
     _posts.insert(0, post);
     _emitPosts();
@@ -275,57 +281,82 @@ class MockBackend {
     return null;
   }
 
-  // -------------------- Plugz / Tribes --------------------
+  // -------------------- Plugz (read-only metadata) --------------------
   List<PlugProfile> allPlugz() => List.unmodifiable(_plugz);
 
   PlugProfile? plugByDisplayName(String name) =>
       _plugz.firstWhereOrNull((p) => p.displayName == name);
 
-  bool isFollowing(String plugId) => _followedPlugz.contains(plugId);
+  // -------------------- Tribes --------------------
+  bool joinedTribe(String tribeId) => _joinedTribes.contains(tribeId);
 
-  void toggleFollow(String plugId) {
-    final idx = _plugz.indexWhere((p) => p.plugId == plugId);
-    if (idx == -1) return;
-    if (_followedPlugz.contains(plugId)) {
-      _followedPlugz.remove(plugId);
-      _plugz[idx] = PlugProfile(
-        plugId: _plugz[idx].plugId,
-        displayName: _plugz[idx].displayName,
-        bio: _plugz[idx].bio,
-        locationLabel: _plugz[idx].locationLabel,
-        tribeCount: max(_plugz[idx].tribeCount - 1, 0),
-        avatarSeed: _plugz[idx].avatarSeed,
-      );
-    } else {
-      _followedPlugz.add(plugId);
-      _plugz[idx] = PlugProfile(
-        plugId: _plugz[idx].plugId,
-        displayName: _plugz[idx].displayName,
-        bio: _plugz[idx].bio,
-        locationLabel: _plugz[idx].locationLabel,
-        tribeCount: _plugz[idx].tribeCount + 1,
-        avatarSeed: _plugz[idx].avatarSeed,
-      );
-    }
+  List<Tribe> tribes({String? category, String? search}) {
+    final q = search?.trim().toLowerCase();
+    return _tribes
+        .where((t) => category == null || t.category == category)
+        .where((t) =>
+            q == null || q.isEmpty || t.name.toLowerCase().contains(q))
+        .map((t) => t.copyWith(joinedByMe: _joinedTribes.contains(t.tribeId)))
+        .toList()
+      ..sort((a, b) => b.memberCount.compareTo(a.memberCount));
   }
 
-  // -------------------- Spaces --------------------
-  List<Space> spaces() => List.unmodifiable(_spaces);
+  Tribe? tribeBySlug(String slug) {
+    final t = _tribes.firstWhereOrNull((t) => t.slug == slug);
+    return t?.copyWith(joinedByMe: _joinedTribes.contains(t.tribeId));
+  }
 
-  Space createSpace({
+  Tribe createTribe({
     required String name,
-    required String type,
+    required String category,
     String? description,
+    bool isPrivate = false,
   }) {
-    final s = Space(
-      spaceId: _uuid.v4(),
-      spaceName: name,
-      spaceType: type,
+    final me = _me;
+    final slug = name
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    final t = Tribe(
+      tribeId: _uuid.v4(),
+      name: name,
+      slug: slug,
       description: description,
+      category: category,
       memberCount: 1,
+      isPrivate: isPrivate,
+      createdAt: DateTime.now(),
+      keeperId: me?.userId,
+      keeperPseudonym: me?.anonymousPseudonym,
+      keeperAvatarSeed: me?.avatarSeed,
+      keeperIsVerified: me?.isVerified ?? false,
+      joinedByMe: true,
     );
-    _spaces.add(s);
-    return s;
+    _tribes.add(t);
+    _joinedTribes.add(t.tribeId);
+    return t;
+  }
+
+  void joinTribe(String tribeId) {
+    final i = _tribes.indexWhere((t) => t.tribeId == tribeId);
+    if (i == -1) return;
+    if (_joinedTribes.contains(tribeId)) return;
+    _joinedTribes.add(tribeId);
+    _tribes[i] = _tribes[i].copyWith(
+      memberCount: _tribes[i].memberCount + 1,
+      joinedByMe: true,
+    );
+  }
+
+  void leaveTribe(String tribeId) {
+    final i = _tribes.indexWhere((t) => t.tribeId == tribeId);
+    if (i == -1) return;
+    if (!_joinedTribes.contains(tribeId)) return;
+    _joinedTribes.remove(tribeId);
+    _tribes[i] = _tribes[i].copyWith(
+      memberCount: max(_tribes[i].memberCount - 1, 0),
+      joinedByMe: false,
+    );
   }
 
   // -------------------- Chat / Inbox --------------------
@@ -499,29 +530,60 @@ class MockBackend {
     );
     _plugz.addAll([patrick, healing, campus]);
 
-    _spaces.addAll([
-      Space(
-        spaceId: _uuid.v4(),
-        spaceName: 'University of Rwanda',
-        spaceType: 'campus',
+    final now0 = DateTime.now();
+    _tribes.addAll([
+      Tribe(
+        tribeId: _uuid.v4(),
+        name: 'University of Rwanda',
+        slug: 'university-of-rwanda',
         description: 'The official emotional sanctuary for UR students.',
+        category: 'campus',
         memberCount: 4209,
+        isPrivate: false,
+        createdAt: now0.subtract(const Duration(days: 90)),
+        keeperPseudonym: 'CampusCircle',
+        keeperAvatarSeed: 'berry-spark-0098',
+        keeperIsVerified: true,
       ),
-      Space(
-        spaceId: _uuid.v4(),
-        spaceName: 'Kigali Institute',
-        spaceType: 'campus',
+      Tribe(
+        tribeId: _uuid.v4(),
+        name: 'Kigali Institute',
+        slug: 'kigali-institute',
         description: 'Late-night thoughts welcome.',
+        category: 'campus',
         memberCount: 1200,
+        isPrivate: false,
+        createdAt: now0.subtract(const Duration(days: 60)),
       ),
-      Space(
-        spaceId: _uuid.v4(),
-        spaceName: 'Kigali Tech Confessions',
-        spaceType: 'interest_group',
+      Tribe(
+        tribeId: _uuid.v4(),
+        name: 'Kigali Tech Confessions',
+        slug: 'kigali-tech-confessions',
         description: 'Anonymous confessions from the tech scene.',
+        category: 'interest_group',
         memberCount: 3892,
+        isPrivate: false,
+        createdAt: now0.subtract(const Duration(days: 30)),
+        keeperPseudonym: 'PatrickO',
+        keeperAvatarSeed: 'plum-orb-0001',
+        keeperIsVerified: true,
+      ),
+      Tribe(
+        tribeId: _uuid.v4(),
+        name: 'Healing Together',
+        slug: 'healing-together',
+        description: 'Soft daily reminders. We rise together.',
+        category: 'support',
+        memberCount: 2102,
+        isPrivate: false,
+        createdAt: now0.subtract(const Duration(days: 14)),
+        keeperPseudonym: 'HealingCoach',
+        keeperAvatarSeed: 'rose-leaf-0042',
+        keeperIsVerified: true,
       ),
     ]);
+    final ur     = _tribes[0];
+    final kInst  = _tribes[1];
 
     final now = DateTime.now();
     _posts.addAll([
@@ -593,7 +655,9 @@ class MockBackend {
         likesCount: 124,
         commentsCount: 32,
         createdAt: now.subtract(const Duration(hours: 2, minutes: 30)),
-        spaceName: 'Kigali Institute',
+        tribeId: kInst.tribeId,
+        tribeName: kInst.name,
+        tribeSlug: kInst.slug,
       ),
       Post(
         postId: _uuid.v4(),
@@ -608,7 +672,9 @@ class MockBackend {
         likesCount: 89,
         commentsCount: 15,
         createdAt: now.subtract(const Duration(hours: 5, minutes: 20)),
-        spaceName: 'University of Rwanda',
+        tribeId: ur.tribeId,
+        tribeName: ur.name,
+        tribeSlug: ur.slug,
       ),
       Post(
         postId: _uuid.v4(),
@@ -638,7 +704,9 @@ class MockBackend {
         likesCount: 241,
         commentsCount: 45,
         createdAt: now.subtract(const Duration(hours: 2, minutes: 45)),
-        spaceName: 'University of Rwanda',
+        tribeId: ur.tribeId,
+        tribeName: ur.name,
+        tribeSlug: ur.slug,
       ),
       Post(
         postId: _uuid.v4(),
@@ -653,7 +721,9 @@ class MockBackend {
         likesCount: 189,
         commentsCount: 12,
         createdAt: now.subtract(const Duration(hours: 5, minutes: 12)),
-        spaceName: 'University of Rwanda',
+        tribeId: ur.tribeId,
+        tribeName: ur.name,
+        tribeSlug: ur.slug,
       ),
     ]);
 

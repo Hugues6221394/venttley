@@ -27,7 +27,7 @@ class SupabaseBackend {
   // Local mirrors of the calling user's "personalised" state.
   final Set<String> _likedPosts = {};
   final Set<String> _savedPosts = {};
-  final Set<String> _followedPlugz = {};
+  final Set<String> _joinedTribes = {};
 
   AppUser? _me;
   AppUser? get me => _me;
@@ -176,7 +176,7 @@ class SupabaseBackend {
     _me = null;
     _likedPosts.clear();
     _savedPosts.clear();
-    _followedPlugz.clear();
+    _joinedTribes.clear();
   }
 
   Future<void> _hydrateRealtime() async {
@@ -204,13 +204,13 @@ class SupabaseBackend {
     _savedPosts
       ..clear()
       ..addAll(saves.map((r) => r['post_id'] as String));
-    final follows = await _client
-        .from('tribes_follows')
-        .select('plug_id')
-        .eq('follower_id', uid);
-    _followedPlugz
+    final memberships = await _client
+        .from('tribe_members')
+        .select('tribe_id')
+        .eq('user_id', uid);
+    _joinedTribes
       ..clear()
-      ..addAll(follows.map((r) => r['plug_id'] as String));
+      ..addAll(memberships.map((r) => r['tribe_id'] as String));
   }
 
   void _subscribePostsRealtime() {
@@ -245,13 +245,13 @@ class SupabaseBackend {
   Future<List<Post>> feed({
     String? category,
     String? mood,
-    String? spaceName,
+    String? tribeSlug,
     int limit = 100,
   }) async {
     var query = _client.from('feed_posts').select();
     if (category != null)  query = query.eq('category_name', category);
     if (mood != null)      query = query.eq('post_mood', mood);
-    if (spaceName != null) query = query.eq('space_name', spaceName);
+    if (tribeSlug != null) query = query.eq('tribe_slug', tribeSlug);
     final rows = await query
         .order('created_at', ascending: false)
         .limit(limit);
@@ -271,25 +271,16 @@ class SupabaseBackend {
     required String content,
     required String category,
     required String mood,
-    String? spaceName,
+    String? tribeId,
     bool isAudio = false,
     String? audioUrl,
     int audioDurationMs = 0,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
-    String? spaceId;
-    if (spaceName != null) {
-      final s = await _client
-          .from('spaces')
-          .select('space_id')
-          .eq('space_name', spaceName)
-          .maybeSingle();
-      spaceId = s?['space_id'] as String?;
-    }
     final inserted = await _client.from('posts').insert({
       'author_id':         uid,
-      'space_id':          spaceId,
+      'tribe_id':          tribeId,
       'category_name':     category,
       'post_type':         'user_post',
       'content':           content,
@@ -467,7 +458,8 @@ class SupabaseBackend {
   }
 
   // ===================================================================
-  // PLUGZ / TRIBES
+  // PLUGZ  (verified keeper metadata; reads only — follow/unfollow is now
+  //         expressed by joining/leaving the plug's Tribes)
   // ===================================================================
   Future<List<PlugProfile>> allPlugz() async {
     final rows = await _client.from('plug_profiles').select(
@@ -486,73 +478,88 @@ class SupabaseBackend {
     return row == null ? null : _plugFromRow(row);
   }
 
-  bool isFollowing(String plugId) => _followedPlugz.contains(plugId);
+  // ===================================================================
+  // TRIBES  (hybrid community + creator ecosystem — see migration 0005)
+  // ===================================================================
+  bool joinedTribe(String tribeId) => _joinedTribes.contains(tribeId);
 
-  Future<void> toggleFollow(String plugId) async {
+  Future<List<Tribe>> tribes({String? category, String? search}) async {
+    var q = _client.from('tribe_directory').select();
+    if (category != null) q = q.eq('category', category);
+    if (search != null && search.trim().isNotEmpty) {
+      q = q.ilike('name', '%${search.trim()}%');
+    }
+    final rows = await q.order('member_count', ascending: false);
+    return rows.map<Tribe>(_tribeFromRow).toList();
+  }
+
+  Future<Tribe?> tribeBySlug(String slug) async {
+    final row = await _client
+        .from('tribe_directory')
+        .select()
+        .eq('slug', slug)
+        .maybeSingle();
+    return row == null ? null : _tribeFromRow(row);
+  }
+
+  Future<Tribe> createTribe({
+    required String name,
+    required String category,
+    String? description,
+    bool isPrivate = false,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    final slug = _slugify(name);
+    final row = await _client
+        .from('tribes')
+        .insert({
+          'name':        name,
+          'slug':        slug,
+          'category':    category,
+          'description': description,
+          'is_private':  isPrivate,
+          'keeper_id':   uid,
+        })
+        .select('tribe_id')
+        .single();
+    final tribeId = row['tribe_id'] as String;
+    // Keeper auto-joins their own tribe.
+    await _client.from('tribe_members').insert({
+      'tribe_id': tribeId,
+      'user_id':  uid,
+    });
+    _joinedTribes.add(tribeId);
+    final created = await tribeBySlug(slug);
+    return created!;
+  }
+
+  Future<void> joinTribe(String tribeId) async {
     final uid = _uid;
     if (uid == null) return;
-    if (_followedPlugz.contains(plugId)) {
-      await _client
-          .from('tribes_follows')
-          .delete()
-          .eq('follower_id', uid)
-          .eq('plug_id', plugId);
-      _followedPlugz.remove(plugId);
-    } else {
-      await _client.from('tribes_follows').insert({
-        'follower_id': uid,
-        'plug_id':     plugId,
-      });
-      _followedPlugz.add(plugId);
-    }
+    if (_joinedTribes.contains(tribeId)) return;
+    await _client.from('tribe_members').insert({
+      'tribe_id': tribeId,
+      'user_id':  uid,
+    });
+    _joinedTribes.add(tribeId);
   }
 
-  // ===================================================================
-  // SPACES
-  // ===================================================================
-  Future<List<Space>> spaces() async {
-    final rows = await _client.from('spaces').select().order('member_count',
-        ascending: false);
-    return rows
-        .map<Space>((r) => Space(
-              spaceId: r['space_id'] as String,
-              spaceName: r['space_name'] as String,
-              spaceType: r['space_type'] as String,
-              memberCount: r['member_count'] as int,
-              description: r['description'] as String?,
-            ))
-        .toList();
-  }
-
-  Future<Space> createSpace({
-    required String name,
-    required String type,
-    String? description,
-  }) async {
-    final row = await _client
-        .from('spaces')
-        .insert({
-          'space_name':  name,
-          'space_type':  type,
-          'description': description,
-        })
-        .select()
-        .single();
+  Future<void> leaveTribe(String tribeId) async {
     final uid = _uid;
-    if (uid != null) {
-      await _client.from('space_memberships').insert({
-        'space_id': row['space_id'],
-        'user_id':  uid,
-      });
-    }
-    return Space(
-      spaceId: row['space_id'] as String,
-      spaceName: row['space_name'] as String,
-      spaceType: row['space_type'] as String,
-      memberCount: (row['member_count'] as int?) ?? 1,
-      description: row['description'] as String?,
-    );
+    if (uid == null) return;
+    await _client
+        .from('tribe_members')
+        .delete()
+        .eq('tribe_id', tribeId)
+        .eq('user_id', uid);
+    _joinedTribes.remove(tribeId);
   }
+
+  String _slugify(String s) => s
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
 
   // ===================================================================
   // CHAT  (E2EE payloads stored encrypted; this layer is the transport)
@@ -753,6 +760,7 @@ class SupabaseBackend {
       postId: r['post_id'] as String,
       authorPseudonym: (r['author_pseudonym'] as String?) ?? '@anonymous',
       authorAvatarSeed: (r['author_avatar_seed'] as String?) ?? 'default-orb',
+      authorIsVerified: (r['author_is_verified'] as bool?) ?? false,
       categoryName: r['category_name'] as String,
       postType: r['post_type'] as String,
       content: r['content'] as String,
@@ -763,9 +771,29 @@ class SupabaseBackend {
       likesCount: r['likes_count'] as int,
       commentsCount: r['comments_count'] as int,
       createdAt: DateTime.parse(r['created_at'] as String),
-      spaceName: r['space_name'] as String?,
+      tribeId: r['tribe_id'] as String?,
+      tribeName: r['tribe_name'] as String?,
+      tribeSlug: r['tribe_slug'] as String?,
       likedByMe: _likedPosts.contains(r['post_id']),
       savedByMe: _savedPosts.contains(r['post_id']),
+    );
+  }
+
+  Tribe _tribeFromRow(Map<String, dynamic> r) {
+    return Tribe(
+      tribeId: r['tribe_id'] as String,
+      name: r['name'] as String,
+      slug: r['slug'] as String,
+      description: r['description'] as String?,
+      category: r['category'] as String,
+      memberCount: (r['member_count'] as int?) ?? 0,
+      isPrivate: (r['is_private'] as bool?) ?? false,
+      keeperId: r['keeper_id'] as String?,
+      keeperPseudonym: r['keeper_pseudonym'] as String?,
+      keeperAvatarSeed: r['keeper_avatar_seed'] as String?,
+      keeperIsVerified: (r['keeper_is_verified'] as bool?) ?? false,
+      createdAt: DateTime.parse(r['created_at'] as String),
+      joinedByMe: _joinedTribes.contains(r['tribe_id']),
     );
   }
 
