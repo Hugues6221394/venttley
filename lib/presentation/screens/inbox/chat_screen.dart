@@ -54,9 +54,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 style: const TextStyle(fontWeight: FontWeight.w800)),
             Row(
               children: [
-                Icon(Icons.lock, size: 10, color: scheme.primary),
+                Icon(Icons.shield_outlined, size: 10, color: scheme.primary),
                 const SizedBox(width: 3),
-                Text('E2EE',
+                Text('Private',
                     style: TextStyle(
                       fontSize: 11,
                       color: scheme.primary,
@@ -83,7 +83,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 Icon(Icons.shield_outlined, size: 14, color: scheme.primary),
                 const SizedBox(width: 6),
                 Text(
-                  'Messages are secured with end-to-end encryption.',
+                  'Private chat — only you and your peer see this. Moderators can review reported chats.',
                   style: TextStyle(
                     color: scheme.primary,
                     fontWeight: FontWeight.w700,
@@ -132,11 +132,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             onSend: () async {
               final t = _controller.text.trim();
               if (t.isEmpty) return;
+              final moderation =
+                  await ref.read(moderationServiceProvider).review(t);
+              if (!context.mounted) return;
+              if (moderation.isBlocked) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(moderation.reasons.isEmpty
+                        ? 'Held back by safety AI.'
+                        : moderation.reasons.first),
+                  ),
+                );
+                return;
+              }
               await ref.read(repositoryProvider).sendMessage(
                     roomId: widget.roomId,
                     plaintext: t,
                   );
-              ref.invalidate(messagesProvider(widget.roomId));
               _controller.clear();
               setState(() {});
             },
@@ -159,7 +171,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
             const SizedBox(height: 6),
             Text(
-              'When you report a chat, the most recent encrypted message block + your session keys are securely uploaded to moderators. Other conversations stay private.',
+              'When you report a chat, moderators can review the messages in this conversation. Other conversations stay private.',
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                 fontSize: 12,

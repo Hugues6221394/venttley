@@ -28,6 +28,12 @@ class ProfileScreen extends ConsumerWidget {
 
     final myVents = ref.watch(myVentsProvider).valueOrNull ?? const [];
     final mySaved = ref.watch(mySavedProvider).valueOrNull ?? const [];
+    final joinedTribes = ref
+        .watch(tribesProvider(const TribeQuery()))
+        .valueOrNull
+        ?.where((t) => t.joinedByMe)
+        .toList() ??
+        const [];
 
     return DefaultTabController(
       length: 2,
@@ -86,11 +92,12 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 10),
                     SizedBox(
-                      width: 180,
-                      child: ElevatedButton.icon(
-                        onPressed: () {},
-                        icon: const Icon(Icons.edit, size: 16),
-                        label: const Text('Edit Profile'),
+                      width: 220,
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            _showRecoveryPhrase(context, ref),
+                        icon: const Icon(Icons.key_outlined, size: 16),
+                        label: const Text('Show recovery phrase'),
                       ),
                     ),
                   ],
@@ -103,9 +110,9 @@ class ProfileScreen extends ConsumerWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _Stat(label: 'My Vents',     value: myVents.length.toString()),
-                    const _Stat(label: 'Support Given', value: '128'),
-                    const _Stat(label: 'Tribes Joined', value: '5'),
+                    _Stat(label: 'My Vents',      value: myVents.length.toString()),
+                    _Stat(label: 'Saved',         value: mySaved.length.toString()),
+                    _Stat(label: 'Tribes Joined', value: joinedTribes.length.toString()),
                   ],
                 ),
               ),
@@ -145,6 +152,101 @@ class ProfileScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+Future<void> _showRecoveryPhrase(BuildContext context, WidgetRef ref) async {
+  final repo = ref.read(repositoryProvider);
+  final phrase = await repo.identity.savedRecoveryPhrase();
+  if (!context.mounted) return;
+  if (phrase == null || phrase.isEmpty) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Recovery phrase not on this device'),
+        content: const Text(
+          'Your phrase is only stored on the device where you signed up. '
+          'If you have it written down, keep it safe — it is the only way '
+          'to restore your account.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
+  final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Show recovery phrase?'),
+          content: const Text(
+            'Make sure nobody is looking at your screen. Anyone with this '
+            'phrase can restore your account on any device.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Show'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+  if (!confirmed || !context.mounted) return;
+  final words = phrase.split(' ');
+  await showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Your recovery phrase'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var i = 0; i < words.length; i++)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.primary.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color:
+                          Theme.of(ctx).colorScheme.primary.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Text(
+                    '${i + 1}. ${words[i]}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Write it on paper. Do not screenshot.',
+            style: TextStyle(fontSize: 12),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Done'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _Stat extends StatelessWidget {

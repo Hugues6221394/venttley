@@ -580,7 +580,8 @@ class SupabaseBackend {
       .replaceAll(RegExp(r'^-+|-+$'), '');
 
   // ===================================================================
-  // CHAT  (E2EE payloads stored encrypted; this layer is the transport)
+  // CHAT  (plaintext stored server-side; column names are historical —
+  //        v1 does NOT advertise end-to-end encryption)
   // ===================================================================
   Future<List<ChatRoom>> inbox({required String tab}) async {
     final rows = await _client
@@ -683,10 +684,39 @@ class SupabaseBackend {
         .toList();
   }
 
+  /// Realtime stream of messages for a single room. Re-fetches on every
+  /// Postgres change so the listener sees both inserts and edits.
+  Stream<List<ChatMessage>> watchMessages(String roomId) {
+    final controller = StreamController<List<ChatMessage>>();
+    Future<void> emit() async {
+      try {
+        controller.add(await messages(roomId));
+      } catch (_) {/* listener retries on next event */}
+    }
+
+    final channel = _client
+        .channel('public:chat_messages:room=$roomId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'chat_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id',
+            value: roomId,
+          ),
+          callback: (_) => emit(),
+        )
+        .subscribe();
+
+    controller.onListen = emit;
+    controller.onCancel = () => channel.unsubscribe();
+    return controller.stream;
+  }
+
   Future<ChatMessage> sendMessage({
     required String roomId,
-    required String encryptedPayload,
-    required String nonceIv,
+    required String payload,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
@@ -695,8 +725,9 @@ class SupabaseBackend {
         .insert({
           'room_id':           roomId,
           'sender_id':         uid,
-          'encrypted_payload': encryptedPayload,
-          'nonce_iv':          nonceIv,
+          // Column name is historical from the E2EE plan we cut for v1.
+          'encrypted_payload': payload,
+          'nonce_iv':          'v1-plaintext',
         })
         .select()
         .single();
@@ -704,7 +735,7 @@ class SupabaseBackend {
       messageId: row['message_id'] as String,
       roomId: roomId,
       senderId: uid,
-      plaintext: encryptedPayload,
+      plaintext: payload,
       createdAt: DateTime.parse(row['created_at'] as String),
       sentByMe: true,
     );

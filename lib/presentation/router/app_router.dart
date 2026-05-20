@@ -20,7 +20,6 @@ import '../screens/share/share_card_screen.dart';
 import '../screens/tribes/create_tribe_screen.dart';
 import '../screens/tribes/tribe_detail_screen.dart';
 import '../screens/tribes/tribes_directory_screen.dart';
-import '../screens/voice/voice_record_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -100,7 +99,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (ctx, st) => ChatScreen(roomId: st.pathParameters['roomId']!),
       ),
       GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
-      GoRoute(path: '/voice', builder: (_, __) => const VoiceRecordScreen()),
     ],
   );
 });

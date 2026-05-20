@@ -48,11 +48,14 @@ class VentlyConfig {
     defaultValue: '',
   );
 
-  /// Model used by Groq's hosted Llama Guard endpoint. Pinned so we can roll
-  /// forward intentionally rather than at Groq's release cadence.
+  /// Groq chat model used for safety triage. The model is prompted to emit
+  /// a strict JSON verdict so we can keep the moderation contract identical
+  /// across whatever model Groq surfaces on the account. Override at build
+  /// time when the plan changes:
+  ///   flutter run --dart-define=GROQ_GUARD_MODEL=llama-3.3-70b-versatile
   static const String groqGuardModel = String.fromEnvironment(
     'GROQ_GUARD_MODEL',
-    defaultValue: 'llama-guard-3-8b',
+    defaultValue: 'llama-3.3-70b-versatile',
   );
 }
 

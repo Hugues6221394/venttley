@@ -246,7 +246,7 @@ class ChatMessage {
   final String messageId;
   final String roomId;
   final String senderId;
-  final String plaintext; // for E2EE these arrive encrypted; mock holds plaintext.
+  final String plaintext; // stored server-side as plaintext for moderation review.
   final DateTime createdAt;
   final bool sentByMe;
 

@@ -207,11 +207,6 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  TextButton.icon(
-                    onPressed: () => context.push('/voice'),
-                    icon: Icon(Icons.mic, color: scheme.primary),
-                    label: const Text('Record voice instead'),
-                  ),
                   const Spacer(),
                   MoodChip(mood: _mood, dense: true),
                 ],

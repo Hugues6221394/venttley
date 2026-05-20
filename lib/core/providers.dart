@@ -2,20 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/repositories/vently_repository.dart';
-import '../data/services/crypto_service.dart';
 import '../data/services/moderation_service.dart';
-import '../data/services/voice_mask_service.dart';
 import '../domain/entities/entities.dart';
 
 final repositoryProvider = Provider<VentlyRepository>((ref) {
   return VentlyRepository();
 });
 
-final cryptoServiceProvider = Provider<CryptoService>((ref) => CryptoService());
 final moderationServiceProvider =
     Provider<ModerationService>((ref) => ModerationService());
-final voiceMaskServiceProvider =
-    Provider<VoiceMaskService>((ref) => VoiceMaskService());
 
 /// Reactive session — null when logged out.
 final sessionProvider = StateNotifierProvider<SessionController, AppUser?>((ref) {
@@ -197,9 +192,9 @@ final commentsProvider =
             ref.watch(repositoryProvider).comments(postId));
 
 final messagesProvider =
-    FutureProvider.autoDispose.family<List<ChatMessage>, String>(
-        (ref, roomId) async =>
-            ref.watch(repositoryProvider).messages(roomId));
+    StreamProvider.autoDispose.family<List<ChatMessage>, String>(
+        (ref, roomId) =>
+            ref.watch(repositoryProvider).watchMessages(roomId));
 
 final roomByIdProvider =
     FutureProvider.autoDispose.family<ChatRoom?, String>((ref, roomId) async {

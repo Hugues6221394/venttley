@@ -179,11 +179,26 @@ class ModerationService {
   }
 
   // ---------------------------------------------------------------------
-  // TIER 2 — Groq llama-guard-3-8b
+  // TIER 2 — Groq chat completion in JSON mode.
   //
-  // LlamaGuard 3 returns either "safe" or "unsafe\nS<n>,S<m>" where S<n>
-  // codes follow MLCommons hazards. We map them back into our taxonomy.
+  // We prompt whichever model the founder has on their Groq plan (llama-3.3,
+  // gpt-oss, etc.) to emit a strict JSON safety verdict. This keeps the
+  // moderation contract model-agnostic.
   // ---------------------------------------------------------------------
+  static const String _guardSystemPrompt =
+      'You are Venttly\'s safety reviewer for an anonymous emotional-support '
+      'app. Read the user message and return ONLY a compact JSON object with '
+      'keys: verdict ("safe"|"warn"|"block"), categories (array of any of '
+      '"self_harm","hate","harassment","sexual_content","violence","privacy","other"), '
+      'reason (one short sentence the user will read). '
+      'Guidance: '
+      '  - block hate speech, harassment of others, sexual solicitation, '
+      'doxxing, credible threats, sexual content involving minors. '
+      '  - warn (do NOT block) when the writer expresses self-harm or '
+      'suicidal feelings — the user must still be able to reach out for help. '
+      '  - safe for emotional venting, sadness, anger, swearing, '
+      'or descriptions of past trauma told in the first person.';
+
   Future<ModerationResult> _llamaGuardReview(String text) async {
     final client = _http ?? http.Client();
     final res = await client.post(
@@ -193,16 +208,18 @@ class ModerationService {
         'Content-Type':  'application/json',
       },
       body: jsonEncode({
-        'model':       VentlyConfig.groqGuardModel,
-        'messages':    [
-          {'role': 'user', 'content': text},
+        'model':           VentlyConfig.groqGuardModel,
+        'temperature':     0,
+        'max_tokens':      200,
+        'response_format': {'type': 'json_object'},
+        'messages': [
+          {'role': 'system', 'content': _guardSystemPrompt},
+          {'role': 'user',   'content': text},
         ],
-        'temperature': 0,
-        'max_tokens':  100,
       }),
     );
     if (res.statusCode >= 400) {
-      throw StateError('LlamaGuard HTTP ${res.statusCode}');
+      throw StateError('Groq guard HTTP ${res.statusCode}: ${res.body}');
     }
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     final choices = body['choices'] as List?;
@@ -210,10 +227,12 @@ class ModerationService {
         ? null
         : choices.first as Map<String, dynamic>?;
     final message = firstChoice?['message'] as Map<String, dynamic>?;
-    final content =
-        ((message?['content'] as String?) ?? 'safe').trim().toLowerCase();
-
-    if (content.startsWith('safe')) {
+    final content = (message?['content'] as String?) ?? '{}';
+    Map<String, dynamic> parsed;
+    try {
+      parsed = jsonDecode(content) as Map<String, dynamic>;
+    } catch (_) {
+      // Model produced non-JSON despite the format hint — fail safe.
       return const ModerationResult(
         verdict: SafetyVerdict.safe,
         reasons: [],
@@ -221,22 +240,33 @@ class ModerationService {
         surfaceCrisisHelpline: false,
       );
     }
+
+    final verdictStr = (parsed['verdict'] as String?)?.toLowerCase();
+    final rawCats = parsed['categories'];
+    final reason = parsed['reason'] as String?;
     final cats = <HazardCategory>{};
-    bool crisis = false;
-    for (final code in _hazardCodes(content)) {
-      final mapped = _mapHazard(code);
-      if (mapped == HazardCategory.selfHarm) crisis = true;
-      cats.add(mapped);
+    if (rawCats is List) {
+      for (final c in rawCats) {
+        cats.add(_categoryFromString(c.toString()));
+      }
     }
-    // Self-harm only escalates to warn — keep the door open to crisis
-    // resources. Anything else blocks.
-    final blockOnly = {...cats}..remove(HazardCategory.selfHarm);
-    final verdict =
-        blockOnly.isEmpty ? SafetyVerdict.warn : SafetyVerdict.block;
+    final crisis = cats.contains(HazardCategory.selfHarm);
+    final verdict = switch (verdictStr) {
+      'block' => SafetyVerdict.block,
+      'warn'  => SafetyVerdict.warn,
+      _       => SafetyVerdict.safe,
+    };
+    // Self-harm never escalates to block — keep crisis support reachable.
+    final effective = (verdict == SafetyVerdict.block && crisis && cats.length == 1)
+        ? SafetyVerdict.warn
+        : verdict;
+
     return ModerationResult(
-      verdict: verdict,
+      verdict: effective,
       reasons: [
-        if (verdict == SafetyVerdict.block) 'Flagged by Venttly safety AI.',
+        if (reason != null && reason.isNotEmpty) reason
+        else if (effective == SafetyVerdict.block)
+          'Flagged by Venttly safety AI.',
         if (crisis) 'We care about you. Would you like crisis resources?',
       ],
       categories: cats,
@@ -244,30 +274,15 @@ class ModerationService {
     );
   }
 
-  static List<String> _hazardCodes(String content) {
-    // LlamaGuard format: "unsafe\nS1,S11"
-    return content
-        .split(RegExp(r'[\s,]+'))
-        .where((p) => p.startsWith('s'))
-        .toList();
-  }
-
-  static HazardCategory _mapHazard(String code) {
-    switch (code) {
-      case 's1':  return HazardCategory.violence;
-      case 's2':  return HazardCategory.violence;
-      case 's3':  return HazardCategory.sexualContent;
-      case 's4':  return HazardCategory.sexualContent;
-      case 's5':  return HazardCategory.privacy;
-      case 's6':  return HazardCategory.harassment;
-      case 's7':  return HazardCategory.privacy;
-      case 's8':  return HazardCategory.privacy;
-      case 's9':  return HazardCategory.violence;
-      case 's10': return HazardCategory.hate;
-      case 's11': return HazardCategory.selfHarm;
-      case 's12': return HazardCategory.sexualContent;
-      case 's13': return HazardCategory.harassment;
-      default:    return HazardCategory.other;
+  static HazardCategory _categoryFromString(String s) {
+    switch (s.trim().toLowerCase()) {
+      case 'self_harm':       return HazardCategory.selfHarm;
+      case 'hate':            return HazardCategory.hate;
+      case 'harassment':      return HazardCategory.harassment;
+      case 'sexual_content':  return HazardCategory.sexualContent;
+      case 'violence':        return HazardCategory.violence;
+      case 'privacy':         return HazardCategory.privacy;
+      default:                return HazardCategory.other;
     }
   }
 

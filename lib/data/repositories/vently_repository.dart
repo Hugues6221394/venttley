@@ -414,6 +414,14 @@ class VentlyRepository {
     return Future.value(_mock.roomMessages(roomId));
   }
 
+  /// Realtime per-room message stream. Mock mode replays the current list on
+  /// every inbox-stream tick — good enough for offline development.
+  Stream<List<ChatMessage>> watchMessages(String roomId) {
+    final live = _live;
+    if (live != null) return live.watchMessages(roomId);
+    return _mock.roomsStream.map((_) => _mock.roomMessages(roomId));
+  }
+
   Future<ChatRoom> sendMessageRequest({
     required String peerPseudonym,
     required String peerAvatarSeed,
@@ -438,16 +446,14 @@ class VentlyRepository {
     );
   }
 
-  /// In live mode messages are encrypted client-side. For the V1 build we
-  /// transmit plaintext so the demo conversation works end-to-end; once the
-  /// double-ratchet rolls out we'll plug `CryptoService.encryptForRoom` here.
+  /// Private DM send. V1 is plaintext server-side so moderators can review
+  /// reported chats; we do not advertise end-to-end encryption.
   Future<ChatMessage> sendMessage({required String roomId, required String plaintext}) {
     final live = _live;
     if (live != null) {
       return live.sendMessage(
         roomId: roomId,
-        encryptedPayload: plaintext,
-        nonceIv: 'v1-placeholder',
+        payload: plaintext,
       );
     }
     return Future.value(
