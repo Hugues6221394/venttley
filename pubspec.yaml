@@ -1,5 +1,5 @@
 name: vently_app
-description: "Vently — anonymous social platform for emotional expression and peer support"
+description: "Venttly — anonymous social platform for emotional expression and peer support"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -57,10 +57,20 @@ dev_dependencies:
   flutter_lints: ^4.0.0
 
 # Pin transitive dependencies that ship newer Android Gradle requirements
-# than Flutter 3.24.5 can satisfy.
-# app_links 6.4.0+ uses `flutter.compileSdkVersion` (added in Flutter 3.27).
+# than Flutter 3.24.5 can satisfy. Plugins published after Flutter 3.27
+# reference `flutter.compileSdkVersion` in their Android build.gradle, which
+# is only injected by Flutter 3.27+. Pinning to the last version that
+# hard-codes `compileSdk 34` keeps the build green on Flutter 3.24.5.
 dependency_overrides:
   app_links: 6.3.3
+  # record_android 1.3.3 = "fix: Gradle compile SDK to 34"
+  # 1.4.0+ switched to flutter.compileSdkVersion.
+  record_android: 1.3.3
+  # record_linux 0.7.2 (auto-resolved by `record: ^5.1.2`) implements an
+  # older RecordPlatformInterface than the 1.5.x interface the rest of the
+  # tree uses, breaking Dart kernel compilation. 1.3.0 implements the
+  # current interface (hasPermission `request` parameter + startStream).
+  record_linux: 1.3.0
 
 flutter:
   uses-material-design: true

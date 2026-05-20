@@ -8,15 +8,19 @@ plugins {
 android {
     namespace = "rw.vently.vently_app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Pinned to the installed NDK. Flutter 3.24.5 defaults `flutter.ndkVersion`
+    // to 23.1.7779620, which is not installed and is older than the 26.1+ that
+    // several plugins require. NDKs are backward-compatible, so the installed
+    // 29.x satisfies every plugin.
+    ndkVersion = "29.0.14206865"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8
+        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     defaultConfig {
@@ -24,7 +28,10 @@ android {
         applicationId = "rw.vently.vently_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // Bumped from flutter.minSdkVersion (21) to 23 because record_android
+        // and several other modern Flutter plugins require Android 6.0+.
+        // API 23 still covers ~99% of active Android devices.
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
