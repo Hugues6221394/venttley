@@ -225,6 +225,95 @@ class MockBackend {
     _reportedRooms.add(roomId);
   }
 
+  // -------------------- Keeper tools --------------------
+
+  final List<TribeReport> _tribeReports = [];
+
+  PlugPrompt createPromptForTribe({
+    required String tribeId,
+    required String text,
+  }) {
+    final me = _me;
+    final prompt = PlugPrompt(
+      promptId: _uuid.v4(),
+      plugDisplayName: '@${me?.anonymousPseudonym ?? 'keeper'}',
+      plugAvatarSeed: me?.avatarSeed ?? 'default-orb',
+      promptText: text,
+      answersCount: 0,
+    );
+    _prompts.insert(0, prompt);
+    return prompt;
+  }
+
+  List<TribeReport> tribeReports(String tribeId) {
+    // Mock only — keep the demo seed posts visible to the keeper as if
+    // they'd been reported, so the queue isn't empty in dev mode.
+    if (_tribeReports.isEmpty) {
+      final tribePosts =
+          _posts.where((p) => p.tribeId == tribeId).take(2).toList();
+      for (final p in tribePosts) {
+        _tribeReports.add(TribeReport(
+          reportId: _uuid.v4(),
+          reason: 'harassment',
+          isResolved: false,
+          createdAt: DateTime.now().subtract(const Duration(hours: 4)),
+          postId: p.postId,
+          postPreview:
+              p.content.length > 160 ? p.content.substring(0, 160) : p.content,
+          postDeleted: false,
+        ));
+      }
+    }
+    return List.unmodifiable(_tribeReports);
+  }
+
+  void resolveReport(String reportId) {
+    final i = _tribeReports.indexWhere((r) => r.reportId == reportId);
+    if (i == -1) return;
+    final r = _tribeReports[i];
+    _tribeReports[i] = TribeReport(
+      reportId: r.reportId,
+      reason: r.reason,
+      note: r.note,
+      isResolved: true,
+      createdAt: r.createdAt,
+      postId: r.postId,
+      postPreview: r.postPreview,
+      postDeleted: r.postDeleted,
+    );
+  }
+
+  Tribe updateTribe({
+    required String tribeId,
+    String? name,
+    String? description,
+    bool? isPrivate,
+  }) {
+    final i = _tribes.indexWhere((t) => t.tribeId == tribeId);
+    if (i == -1) throw StateError('Tribe not found');
+    final current = _tribes[i];
+    // Slug stays stable across name changes — keeps deep links + reports
+    // valid. Server-side migration 0005 only sets the slug at INSERT time
+    // for the same reason.
+    final updated = Tribe(
+      tribeId: current.tribeId,
+      name: name ?? current.name,
+      slug: current.slug,
+      description: description ?? current.description,
+      category: current.category,
+      memberCount: current.memberCount,
+      isPrivate: isPrivate ?? current.isPrivate,
+      keeperId: current.keeperId,
+      keeperPseudonym: current.keeperPseudonym,
+      keeperAvatarSeed: current.keeperAvatarSeed,
+      keeperIsVerified: current.keeperIsVerified,
+      createdAt: current.createdAt,
+      joinedByMe: current.joinedByMe,
+    );
+    _tribes[i] = updated;
+    return updated;
+  }
+
   List<Post> mySaved() => _posts
       .where((p) => _savedPosts.contains(p.postId))
       .map((p) => p.copyWith(savedByMe: true, likedByMe: _likedPosts.contains(p.postId)))

@@ -275,6 +275,55 @@ class VentlyRepository {
     _mock.reportChat(roomId: roomId, reason: reason, note: note);
   }
 
+  // ===================== Keeper tools =====================
+
+  Future<PlugPrompt> createPromptForTribe({
+    required String tribeId,
+    required String text,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.createPromptForTribe(tribeId: tribeId, text: text);
+    }
+    return Future.value(
+        _mock.createPromptForTribe(tribeId: tribeId, text: text));
+  }
+
+  Future<List<TribeReport>> tribeReports(String tribeId) {
+    final live = _live;
+    if (live != null) return live.tribeReports(tribeId);
+    return Future.value(_mock.tribeReports(tribeId));
+  }
+
+  Future<void> resolveReport(String reportId) async {
+    final live = _live;
+    if (live != null) return live.resolveReport(reportId);
+    _mock.resolveReport(reportId);
+  }
+
+  Future<Tribe> updateTribe({
+    required String tribeId,
+    String? name,
+    String? description,
+    bool? isPrivate,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.updateTribe(
+        tribeId: tribeId,
+        name: name,
+        description: description,
+        isPrivate: isPrivate,
+      );
+    }
+    return Future.value(_mock.updateTribe(
+      tribeId: tribeId,
+      name: name,
+      description: description,
+      isPrivate: isPrivate,
+    ));
+  }
+
   Future<List<Post>> mySaved() {
     final live = _live;
     if (live != null) return live.mySaved();

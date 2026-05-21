@@ -164,6 +164,12 @@ final tribeBySlugProvider =
 /// Cleared by the compose screen after it picks it up.
 final composeTargetTribeProvider = StateProvider<Tribe?>((ref) => null);
 
+/// Reports filed against posts in a specific Tribe — Keeper-only.
+final tribeReportsProvider =
+    FutureProvider.autoDispose.family<List<TribeReport>, String>(
+        (ref, tribeId) async =>
+            ref.watch(repositoryProvider).tribeReports(tribeId));
+
 final promptsProvider = FutureProvider.autoDispose<List<PlugPrompt>>(
     (ref) async => ref.watch(repositoryProvider).prompts());
 

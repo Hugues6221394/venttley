@@ -809,40 +809,28 @@ class _QuickActions extends ConsumerWidget {
             _ActionTile(
               icon: Icons.help_outline_rounded,
               label: 'Create prompt',
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Prompt creation arrives in the next release.',
-                    ),
-                  ),
-                );
+              onTap: () async {
+                if (tribeSlug == null) return;
+                final tribe =
+                    await ref.read(repositoryProvider).tribeBySlug(tribeSlug);
+                if (tribe == null || !context.mounted) return;
+                await _showCreatePromptSheet(context, ref, tribe.tribeId);
               },
             ),
             _ActionTile(
               icon: Icons.flag_outlined,
               label: 'Reports',
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Per-tribe report queue is admin-side for v1.',
-                    ),
-                  ),
-                );
+                if (tribeSlug == null) return;
+                context.push('/tribe/$tribeSlug/manage/reports');
               },
             ),
             _ActionTile(
               icon: Icons.tune_rounded,
               label: 'Settings',
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Tribe settings editor ships next.',
-                    ),
-                  ),
-                );
+                if (tribeSlug == null) return;
+                context.push('/tribe/$tribeSlug/manage/edit');
               },
             ),
             const SizedBox(width: 4),
@@ -925,3 +913,99 @@ final _tribeManagePostsProvider =
     FutureProvider.autoDispose.family<List<Post>, String>(
         (ref, slug) async =>
             ref.watch(repositoryProvider).feed(tribeSlug: slug));
+
+Future<void> _showCreatePromptSheet(
+    BuildContext context, WidgetRef ref, String tribeId) async {
+  final controller = TextEditingController();
+  final saved = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) {
+      return Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 12,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Text(
+              'Question of the Day',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Spark a soft, open-ended thread. Members answer anonymously.',
+              style: TextStyle(
+                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.65),
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              maxLength: 240,
+              maxLines: 3,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'e.g. What helped you breathe today?',
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  final t = controller.text.trim();
+                  if (t.length < 5) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text('Ask a fuller question (5+ chars).'),
+                      ),
+                    );
+                    return;
+                  }
+                  try {
+                    await ref
+                        .read(repositoryProvider)
+                        .createPromptForTribe(tribeId: tribeId, text: t);
+                    if (!ctx.mounted) return;
+                    Navigator.of(ctx).pop(true);
+                  } catch (e) {
+                    if (!ctx.mounted) return;
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text('Could not post: $e')),
+                    );
+                  }
+                },
+                child: const Text('Pin to my Tribe'),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+  controller.dispose();
+  if (saved == true && context.mounted) {
+    ref.invalidate(promptsProvider);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Your question is live.')),
+    );
+  }
+}

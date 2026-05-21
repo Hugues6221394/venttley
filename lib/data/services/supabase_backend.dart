@@ -368,6 +368,110 @@ class SupabaseBackend {
     }
   }
 
+  // -------------------- Keeper tools (migration 0008) --------------------
+
+  /// Create a Question-of-the-Day prompt pinned to a Tribe. Caller must be
+  /// the Tribe's Keeper — RLS enforces this server-side.
+  Future<PlugPrompt> createPromptForTribe({
+    required String tribeId,
+    required String text,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    final row = await _client
+        .from('plug_prompts')
+        .insert({
+          'tribe_id':    tribeId,
+          'prompt_text': text,
+          'is_active':   true,
+        })
+        .select('prompt_id, prompt_text, answers_count')
+        .single();
+    final me = _me;
+    return PlugPrompt(
+      promptId: row['prompt_id'] as String,
+      plugDisplayName: '@${me?.anonymousPseudonym ?? 'keeper'}',
+      plugAvatarSeed: me?.avatarSeed ?? 'default-orb',
+      promptText: row['prompt_text'] as String,
+      answersCount: (row['answers_count'] as int?) ?? 0,
+    );
+  }
+
+  /// Reports filed against posts in a given Tribe. Visible only to the
+  /// Tribe's Keeper (and super_admins) via the migration-0008 RLS policy.
+  Future<List<TribeReport>> tribeReports(String tribeId) async {
+    final rows = await _client
+        .from('reports')
+        .select(
+          'report_id, reason, note, is_resolved, created_at, post_id, '
+          'posts!inner(post_id, content, tribe_id, deleted_at, author_id)',
+        )
+        .eq('posts.tribe_id', tribeId)
+        .order('created_at', ascending: false);
+    return rows
+        .map<TribeReport>((r) {
+          final p = r['posts'] as Map<String, dynamic>?;
+          return TribeReport(
+            reportId: r['report_id'] as String,
+            reason: r['reason'] as String,
+            note: r['note'] as String?,
+            isResolved: (r['is_resolved'] as bool?) ?? false,
+            createdAt: DateTime.parse(r['created_at'] as String),
+            postId: r['post_id'] as String,
+            postPreview:
+                ((p?['content'] as String?) ?? '').substring(0, _previewLen(p)),
+            postDeleted: p?['deleted_at'] != null,
+          );
+        })
+        .toList();
+  }
+
+  static int _previewLen(Map<String, dynamic>? p) {
+    final s = (p?['content'] as String?) ?? '';
+    return s.length > 160 ? 160 : s.length;
+  }
+
+  Future<void> resolveReport(String reportId) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    await _client
+        .from('reports')
+        .update({
+          'is_resolved': true,
+          'resolved_by': uid,
+          'resolved_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('report_id', reportId);
+  }
+
+  /// Keeper-only — RLS enforces keeper_id = auth.uid().
+  Future<Tribe> updateTribe({
+    required String tribeId,
+    String? name,
+    String? description,
+    bool? isPrivate,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (name != null)         payload['name']        = name;
+    if (description != null)  payload['description'] = description;
+    if (isPrivate != null)    payload['is_private']  = isPrivate;
+    if (payload.isEmpty) {
+      final t = await _client
+          .from('tribe_directory')
+          .select()
+          .eq('tribe_id', tribeId)
+          .single();
+      return _tribeFromRow(t);
+    }
+    await _client.from('tribes').update(payload).eq('tribe_id', tribeId);
+    final row = await _client
+        .from('tribe_directory')
+        .select()
+        .eq('tribe_id', tribeId)
+        .single();
+    return _tribeFromRow(row);
+  }
+
   Future<List<Post>> mySaved() async {
     final uid = _uid;
     if (uid == null) return const [];

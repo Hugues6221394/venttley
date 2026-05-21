@@ -267,6 +267,43 @@ class PlugPrompt {
   });
 }
 
+/// A report filed against a single post — surfaced to the Tribe Keeper via
+/// the manage dashboard. Mirrors `reports JOIN posts` from migration 0008.
+class TribeReport {
+  final String reportId;
+  final String reason;
+  final String? note;
+  final bool isResolved;
+  final DateTime createdAt;
+  final String postId;
+  final String postPreview;
+  final bool postDeleted;
+
+  const TribeReport({
+    required this.reportId,
+    required this.reason,
+    required this.isResolved,
+    required this.createdAt,
+    required this.postId,
+    required this.postPreview,
+    required this.postDeleted,
+    this.note,
+  });
+
+  String get reasonLabel {
+    switch (reason) {
+      case 'self_harm':      return 'Self-harm concern';
+      case 'hate':           return 'Hate speech';
+      case 'harassment':     return 'Harassment';
+      case 'sexual_content': return 'Sexual content';
+      case 'violence':       return 'Violence';
+      case 'privacy':        return 'Privacy / doxxing';
+      case 'spam':           return 'Spam';
+      default:               return 'Other';
+    }
+  }
+}
+
 class NotificationItem {
   final String id;
   final String kind;
