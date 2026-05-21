@@ -272,22 +272,16 @@ class SupabaseBackend {
     required String category,
     required String mood,
     String? tribeId,
-    bool isAudio = false,
-    String? audioUrl,
-    int audioDurationMs = 0,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
     final inserted = await _client.from('posts').insert({
-      'author_id':         uid,
-      'tribe_id':          tribeId,
-      'category_name':     category,
-      'post_type':         'user_post',
-      'content':           content,
-      'post_mood':         mood,
-      'is_audio':          isAudio,
-      'audio_url':         audioUrl,
-      'audio_duration_ms': audioDurationMs,
+      'author_id':     uid,
+      'tribe_id':      tribeId,
+      'category_name': category,
+      'post_type':     'user_post',
+      'content':       content,
+      'post_mood':     mood,
     }).select('post_id').single();
     final post = await postById(inserted['post_id'] as String);
     _emitPosts();
@@ -341,21 +335,20 @@ class SupabaseBackend {
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
-    await _client.from('post_reports').upsert(
-      {
+    try {
+      await _client.from('reports').insert({
         'post_id':     postId,
         'reporter_id': uid,
         'reason':      reason,
         'note':        note,
-      },
-      onConflict: 'post_id,reporter_id',
-    );
+      });
+    } on PostgrestException catch (e) {
+      // 23505 = unique_violation — user already reported this target. Silent
+      // success so the UI doesn't surface a scary error for a no-op.
+      if (e.code != '23505') rethrow;
+    }
   }
 
-  /// Report a chat. Inserts into the legacy `moderation_reports` table whose
-  /// CHECK constraint allows: harassment, hate_speech, self_harm, doxxing,
-  /// spam, explicit. The UI uses the same eight-option list as posts and we
-  /// map down here.
   Future<void> reportChat({
     required String roomId,
     required String reason,
@@ -363,22 +356,15 @@ class SupabaseBackend {
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
-    await _client.from('moderation_reports').insert({
-      'reporter_id':     uid,
-      'target_room_id':  roomId,
-      'report_category': _mapToLegacyReason(reason),
-      'context_data':    note,
-    });
-  }
-
-  static String _mapToLegacyReason(String reason) {
-    switch (reason) {
-      case 'hate':           return 'hate_speech';
-      case 'sexual_content': return 'explicit';
-      case 'privacy':        return 'doxxing';
-      case 'violence':       return 'harassment';
-      case 'other':          return 'harassment';
-      default:               return reason; // self_harm | harassment | spam pass through
+    try {
+      await _client.from('reports').insert({
+        'target_room_id': roomId,
+        'reporter_id':    uid,
+        'reason':         reason,
+        'note':           note,
+      });
+    } on PostgrestException catch (e) {
+      if (e.code != '23505') rethrow;
     }
   }
 
@@ -844,9 +830,6 @@ class SupabaseBackend {
       postType: r['post_type'] as String,
       content: r['content'] as String,
       postMood: r['post_mood'] as String,
-      isAudio: r['is_audio'] as bool,
-      audioUrl: r['audio_url'] as String?,
-      audioDurationMs: (r['audio_duration_ms'] as int?) ?? 0,
       likesCount: r['likes_count'] as int,
       commentsCount: r['comments_count'] as int,
       createdAt: DateTime.parse(r['created_at'] as String),

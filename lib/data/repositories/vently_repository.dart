@@ -213,9 +213,6 @@ class VentlyRepository {
     required String category,
     required String mood,
     String? tribeId,
-    bool isAudio = false,
-    String? audioUrl,
-    int audioDurationMs = 0,
   }) {
     final live = _live;
     if (live != null) {
@@ -224,9 +221,6 @@ class VentlyRepository {
         category: category,
         mood: mood,
         tribeId: tribeId,
-        isAudio: isAudio,
-        audioUrl: audioUrl,
-        audioDurationMs: audioDurationMs,
       );
     }
     return _mock.createPost(
@@ -234,9 +228,6 @@ class VentlyRepository {
       category: category,
       mood: mood,
       tribeId: tribeId,
-      isAudio: isAudio,
-      audioUrl: audioUrl,
-      audioDurationMs: audioDurationMs,
     );
   }
 

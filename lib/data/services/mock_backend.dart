@@ -157,9 +157,6 @@ class MockBackend {
     required String category,
     required String mood,
     String? tribeId,
-    bool isAudio = false,
-    String? audioUrl,
-    int audioDurationMs = 0,
   }) async {
     final me = _me;
     if (me == null) throw StateError('No active session');
@@ -175,9 +172,6 @@ class MockBackend {
       postType: 'user_post',
       content: content,
       postMood: mood,
-      isAudio: isAudio,
-      audioUrl: audioUrl,
-      audioDurationMs: audioDurationMs,
       likesCount: 0,
       commentsCount: 0,
       createdAt: DateTime.now(),
@@ -614,7 +608,6 @@ class MockBackend {
         content:
             "Sometimes I feel like I'm giving 100% to everyone around me, but when I need someone, the room is empty. Just needed a safe place to put this thought down before I sleep.",
         postMood: 'exhausted',
-        isAudio: false,
         likesCount: 24,
         commentsCount: 8,
         createdAt: now.subtract(const Duration(hours: 2)),
@@ -628,7 +621,6 @@ class MockBackend {
         content:
             "Today is the first day in a month that I woke up and didn't immediately feel a heavy weight on my chest. Progress isn't linear, but today feels like a win.",
         postMood: 'healing',
-        isAudio: false,
         likesCount: 156,
         commentsCount: 42,
         createdAt: now.subtract(const Duration(hours: 5)),
@@ -641,7 +633,6 @@ class MockBackend {
         postType: 'user_post',
         content: 'Why do late nights always bring out the loudest thoughts?',
         postMood: 'overthinking',
-        isAudio: false,
         likesCount: 12,
         commentsCount: 2,
         createdAt: now.subtract(const Duration(hours: 8)),
@@ -655,7 +646,6 @@ class MockBackend {
         content:
             "I accidentally told my boss 'love you' before hanging up on a Zoom call. I haven't spoken to him since and I'm dreading tomorrow morning. Is it time to fake my own death?",
         postMood: 'anxious',
-        isAudio: false,
         likesCount: 4200,
         commentsCount: 128,
         createdAt: now.subtract(const Duration(hours: 2, minutes: 4)),
@@ -669,7 +659,6 @@ class MockBackend {
         content:
             "Finals week is draining my soul. Anyone else studying in the library until 2 AM tonight? Bring coffee beans.",
         postMood: 'exhausted',
-        isAudio: false,
         likesCount: 124,
         commentsCount: 32,
         createdAt: now.subtract(const Duration(hours: 2, minutes: 30)),
@@ -686,7 +675,6 @@ class MockBackend {
         content:
             "Just saw the cutest stray dog near the main gate. I gave him half my sandwich. Someone tell me I'm a good person.",
         postMood: 'happy',
-        isAudio: false,
         likesCount: 89,
         commentsCount: 15,
         createdAt: now.subtract(const Duration(hours: 5, minutes: 20)),
@@ -700,11 +688,9 @@ class MockBackend {
         authorAvatarSeed: 'berry-ash-1090',
         categoryName: 'vent_zone',
         postType: 'user_post',
-        content: 'Midnight Thoughts',
+        content:
+            "Sometimes 2am hits and every memory I never sat with shows up at once. I just want my mind to be quiet for one night.",
         postMood: 'overthinking',
-        isAudio: true,
-        audioUrl: 'local://demo/midnight-thoughts.m4a',
-        audioDurationMs: 130000,
         likesCount: 124,
         commentsCount: 18,
         createdAt: now.subtract(const Duration(hours: 2, minutes: 10)),
@@ -718,7 +704,6 @@ class MockBackend {
         content:
             "Does anyone else feel like the library is just a competitive stress arena? I walked in to study and left with anxiety because everyone looks like they're curing a disease.",
         postMood: 'anxious',
-        isAudio: false,
         likesCount: 241,
         commentsCount: 45,
         createdAt: now.subtract(const Duration(hours: 2, minutes: 45)),
@@ -735,7 +720,6 @@ class MockBackend {
         content:
             "I deliberately take the long way to the cafeteria just in hopes of bumping into that guy from my Monday morning lecture. I don't even know his name.",
         postMood: 'hopeful',
-        isAudio: false,
         likesCount: 189,
         commentsCount: 12,
         createdAt: now.subtract(const Duration(hours: 5, minutes: 12)),

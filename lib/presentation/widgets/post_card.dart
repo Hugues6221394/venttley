@@ -100,12 +100,10 @@ class PostCard extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              if (post.isAudio) _AudioPlayerBlock(post: post)
-              else
-                Text(
-                  post.content,
-                  style: const TextStyle(fontSize: 15, height: 1.4),
-                ),
+              Text(
+                post.content,
+                style: const TextStyle(fontSize: 15, height: 1.4),
+              ),
               const SizedBox(height: 14),
               Row(
                 children: [
@@ -306,92 +304,6 @@ class _PillAction extends StatelessWidget {
             style: TextStyle(color: c, fontWeight: FontWeight.w600, fontSize: 12),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _AudioPlayerBlock extends StatelessWidget {
-  const _AudioPlayerBlock({required this.post});
-  final Post post;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final duration = Duration(milliseconds: post.audioDurationMs);
-    final mm = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final ss = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: scheme.primary.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.primary.withOpacity(0.18)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: scheme.primary,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.play_arrow_rounded, color: Colors.white),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(post.content,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 14)),
-                const SizedBox(height: 4),
-                _WaveformBars(color: scheme.primary),
-              ],
-            ),
-          ),
-          Text(
-            '0:00 / $mm:$ss',
-            style: TextStyle(
-              color: scheme.onSurface.withOpacity(0.6),
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WaveformBars extends StatelessWidget {
-  const _WaveformBars({required this.color});
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final values = [
-      0.3, 0.6, 0.4, 0.8, 0.5, 0.9, 0.4, 0.7, 0.3, 0.5,
-      0.7, 0.4, 0.6, 0.3, 0.7, 0.5, 0.8, 0.4, 0.6, 0.3,
-    ];
-    return SizedBox(
-      height: 22,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: values
-            .map((v) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 1),
-                  child: Container(
-                    width: 3,
-                    height: 22 * v,
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ))
-            .toList(),
       ),
     );
   }

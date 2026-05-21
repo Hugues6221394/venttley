@@ -135,9 +135,6 @@ class Post {
   final String postType; // user_post | plug_prompt
   final String content;
   final String postMood;
-  final bool isAudio;
-  final String? audioUrl;
-  final int audioDurationMs;
   final int likesCount;
   final int commentsCount;
   final DateTime createdAt;
@@ -152,7 +149,6 @@ class Post {
     required this.postType,
     required this.content,
     required this.postMood,
-    required this.isAudio,
     required this.likesCount,
     required this.commentsCount,
     required this.createdAt,
@@ -160,8 +156,6 @@ class Post {
     this.tribeId,
     this.tribeName,
     this.tribeSlug,
-    this.audioUrl,
-    this.audioDurationMs = 0,
     this.likedByMe = false,
     this.savedByMe = false,
   });
@@ -181,15 +175,12 @@ class Post {
       postType: postType,
       content: content,
       postMood: postMood,
-      isAudio: isAudio,
       likesCount: likesCount ?? this.likesCount,
       commentsCount: commentsCount ?? this.commentsCount,
       createdAt: createdAt,
       tribeId: tribeId,
       tribeName: tribeName,
       tribeSlug: tribeSlug,
-      audioUrl: audioUrl,
-      audioDurationMs: audioDurationMs,
       likedByMe: likedByMe ?? this.likedByMe,
       savedByMe: savedByMe ?? this.savedByMe,
     );
