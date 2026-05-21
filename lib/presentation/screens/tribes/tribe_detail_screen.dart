@@ -55,9 +55,23 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
       _ => tribe.category,
     };
 
+    final me = ref.watch(sessionProvider);
+    final isKeeper = me != null && tribe.keeperId != null && tribe.keeperId == me.userId;
     return Scaffold(
       appBar: AppBar(
         title: Text(tribe.name, overflow: TextOverflow.ellipsis),
+        actions: [
+          if (isKeeper)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                icon: const Icon(Icons.tune_rounded, size: 16),
+                label: const Text('Manage'),
+                onPressed: () =>
+                    context.push('/tribe/${tribe.slug}/manage'),
+              ),
+            ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {

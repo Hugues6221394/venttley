@@ -19,6 +19,7 @@ import '../screens/questions/questions_screen.dart';
 import '../screens/share/share_card_screen.dart';
 import '../screens/tribes/create_tribe_screen.dart';
 import '../screens/tribes/tribe_detail_screen.dart';
+import '../screens/tribes/tribe_manage_screen.dart';
 import '../screens/tribes/tribes_directory_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -89,6 +90,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/tribe/:slug',
         builder: (ctx, st) =>
             TribeDetailScreen(slug: st.pathParameters['slug']!),
+        routes: [
+          GoRoute(
+            path: 'manage',
+            builder: (ctx, st) =>
+                TribeManageScreen(slug: st.pathParameters['slug']!),
+          ),
+        ],
       ),
       GoRoute(
         path: '/tribes/new',
