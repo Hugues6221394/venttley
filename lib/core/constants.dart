@@ -1,4 +1,4 @@
-/// Global compile-time constants for Vently.
+/// Global compile-time constants for Venttly.
 library;
 
 class VentlyConfig {
@@ -36,6 +36,27 @@ class VentlyConfig {
   /// users 13–17 are placed in a restricted safety tier.
   static const int minAge = 13;
   static const int restrictedMaxAge = 17;
+
+  /// Optional Groq API key used by the Tier-2 LlamaGuard moderation call.
+  /// Pass at build time:
+  ///   flutter run --dart-define=GROQ_API_KEY=gsk_...
+  ///
+  /// When empty, the moderation pipeline runs Tier-1 keyword scan only and
+  /// the LLM step is skipped (safe-fail, not block-fail).
+  static const String groqApiKey = String.fromEnvironment(
+    'GROQ_API_KEY',
+    defaultValue: '',
+  );
+
+  /// Groq chat model used for safety triage. The model is prompted to emit
+  /// a strict JSON verdict so we can keep the moderation contract identical
+  /// across whatever model Groq surfaces on the account. Override at build
+  /// time when the plan changes:
+  ///   flutter run --dart-define=GROQ_GUARD_MODEL=llama-3.3-70b-versatile
+  static const String groqGuardModel = String.fromEnvironment(
+    'GROQ_GUARD_MODEL',
+    defaultValue: 'llama-3.3-70b-versatile',
+  );
 }
 
 /// The eighteen + two emotional story channels.

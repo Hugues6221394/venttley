@@ -98,6 +98,21 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
             onSend: () async {
               final text = _replyController.text.trim();
               if (text.isEmpty) return;
+              final moderation =
+                  await ref.read(moderationServiceProvider).review(text);
+              if (!context.mounted) return;
+              if (moderation.isBlocked) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      moderation.reasons.isEmpty
+                          ? 'Held back by safety AI.'
+                          : moderation.reasons.first,
+                    ),
+                  ),
+                );
+                return;
+              }
               await repo.addComment(
                 postId: widget.postId,
                 parentId: _replyingToId,
@@ -127,7 +142,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   void _openReportSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      builder: (ctx) => const _ReportSheet(targetLabel: 'this post'),
+      builder: (ctx) => _ReportSheet(postId: widget.postId),
     );
   }
 }
@@ -392,20 +407,22 @@ class _ReplyComposer extends StatelessWidget {
   }
 }
 
-class _ReportSheet extends StatelessWidget {
-  const _ReportSheet({required this.targetLabel});
-  final String targetLabel;
+class _ReportSheet extends ConsumerWidget {
+  const _ReportSheet({required this.postId});
+  final String postId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     const categories = [
-      ('harassment',  'Harassment or bullying'),
-      ('hate_speech', 'Hate speech or slurs'),
-      ('self_harm',   'Self-harm or suicide'),
-      ('doxxing',     'Doxxing or personal info'),
-      ('spam',        'Spam or scam'),
-      ('explicit',    'Explicit adult content'),
+      ('harassment',     'Harassment or bullying'),
+      ('hate',           'Hate speech or slurs'),
+      ('self_harm',      'Self-harm or suicide'),
+      ('privacy',        'Doxxing or personal info'),
+      ('spam',           'Spam or scam'),
+      ('sexual_content', 'Sexual content'),
+      ('violence',       'Violence or threats'),
+      ('other',          'Something else'),
     ];
     return SafeArea(
       child: Padding(
@@ -415,14 +432,14 @@ class _ReportSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Report $targetLabel',
+              'Report this post',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
             ),
             const SizedBox(height: 4),
             Text(
-              'Vently moderators review reports anonymously, usually within minutes.',
+              'Venttly moderators review reports anonymously, usually within minutes.',
               style: TextStyle(
                 color: scheme.onSurface.withOpacity(0.65),
               ),
@@ -433,11 +450,26 @@ class _ReportSheet extends StatelessWidget {
                 contentPadding: EdgeInsets.zero,
                 title: Text(c.$2),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Report submitted: ${c.$2}')),
-                  );
+                  try {
+                    await ref.read(repositoryProvider).reportPost(
+                          postId: postId,
+                          reason: c.$1,
+                        );
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Thank you — a moderator will review.'),
+                      ),
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not send: $e')),
+                    );
+                  }
                 },
               ),
           ],

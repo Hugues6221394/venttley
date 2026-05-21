@@ -31,95 +31,137 @@ class VentlyRepository {
   // ===================== Session =====================
   AppUser? get currentUser => _live?.me ?? _mock.me;
 
-  Future<AppUser> bootstrapAccount({
+  /// Result of a successful sign-up. The caller surfaces [recoveryPhrase] to
+  /// the user once and only once — it is never stored server-side and the
+  /// only on-device copy is in secure storage.
+  /// Create a new account from username + password + DOB. Generates a
+  /// 12-word recovery phrase, seals the password into a blob with an
+  /// Argon2id-derived key, and stores blob + salt on the user row so the
+  /// account can be restored on any device with just the phrase.
+  Future<({AppUser user, String recoveryPhrase})> registerAccount({
     required DateTime birthDate,
-    required String pseudonym,
+    required String username,
+    required String password,
     required String avatarSeed,
   }) async {
+    if (!IdentityService.usernamePattern.hasMatch(username)) {
+      throw const FormatException(
+        'Usernames are 3–20 letters/numbers/underscores.',
+      );
+    }
+    if (password.length < 8) {
+      throw const FormatException('Password must be at least 8 characters.');
+    }
     final age = _ageFrom(birthDate);
     if (age < VentlyConfig.minAge) {
       throw AgeGateBlocked();
     }
-    final tier = age <= VentlyConfig.restrictedMaxAge
-        ? 'restricted_minor'
-        : 'standard';
+    final tier =
+        age <= VentlyConfig.restrictedMaxAge ? 'restricted_minor' : 'standard';
 
+    final phrase = _identity.generateRecoveryPhrase();
+    final sealed = await _identity.sealPassword(
+      password: password,
+      phrase: phrase,
+    );
+
+    final AppUser user;
     final live = _live;
     if (live != null) {
-      final user = await live.bootstrap(
-        pseudonym: pseudonym,
+      user = await live.signUp(
+        username: username,
+        password: password,
         avatarSeed: avatarSeed,
         birthYear: birthDate.year,
         safetyTier: tier,
+        recoveryBlob: sealed.blob,
+        recoverySalt: sealed.salt,
       );
-      await _identity.persistSession(
-        userId: user.userId,
-        pseudonym: pseudonym,
+    } else {
+      user = _mock.signUp(
+        username: username,
+        password: password,
         avatarSeed: avatarSeed,
-        recoveryKey: _identity.generateRecoveryKey(),
         birthYear: birthDate.year,
         safetyTier: tier,
+        recoveryBlob: sealed.blob,
+        recoverySalt: sealed.salt,
       );
-      return user;
     }
 
-    // Mock path — keep the previous deterministic-from-recovery-key flow.
-    final recoveryKey = _identity.generateRecoveryKey();
-    final salt = await _identity.ensureDeviceSalt();
-    final hash = _identity.hashRecoveryKey(recoveryKey, salt);
-    final userId = 'u_${hash.substring(0, 16)}';
-    final user = AppUser(
-      userId: userId,
-      anonymousPseudonym: pseudonym,
-      avatarSeed: avatarSeed,
-      currentMood: 'healing',
-      userRole: 'normal',
-      isVerified: false,
-      safetyTier: tier,
-      accountStatus: 'active',
-      birthYear: birthDate.year,
-    );
     await _identity.persistSession(
-      userId: userId,
-      pseudonym: pseudonym,
+      username: username,
       avatarSeed: avatarSeed,
-      recoveryKey: recoveryKey,
       birthYear: birthDate.year,
       safetyTier: tier,
+      recoveryPhrase: phrase,
     );
-    _mock.registerSession(user);
+    return (user: user, recoveryPhrase: phrase);
+  }
+
+  /// Sign in an existing account.
+  Future<AppUser> signIn({
+    required String username,
+    required String password,
+  }) async {
+    final AppUser user;
+    final live = _live;
+    if (live != null) {
+      user = await live.signIn(username: username, password: password);
+    } else {
+      user = _mock.signIn(username: username, password: password);
+    }
+    await _identity.persistSession(
+      username: user.anonymousPseudonym,
+      avatarSeed: user.avatarSeed,
+      birthYear: user.birthYear ?? DateTime.now().year - 18,
+      safetyTier: user.safetyTier,
+    );
     return user;
   }
 
-  Future<String> currentRecoveryKey() async {
-    final session = await _identity.loadSession();
-    if (session == null) return '';
-    final salt = await _identity.ensureDeviceSalt();
-    final hash = _identity.hashRecoveryKey(session['user_id'] ?? '', salt);
-    return hash.substring(0, 20).toUpperCase();
+  /// Recover access using the 12-word phrase. Fetches the encrypted blob,
+  /// derives the key from the phrase, decrypts to the original password, and
+  /// signs in. Returns null if the phrase doesn't match (the AES-GCM MAC
+  /// fails) or no such username exists.
+  Future<AppUser?> recoverWithPhrase({
+    required String username,
+    required String phrase,
+  }) async {
+    final live = _live;
+    final material = live != null
+        ? await live.fetchRecoveryMaterial(username)
+        : _mock.fetchRecoveryMaterial(username);
+    if (material == null) return null;
+    final password = await _identity.openPassword(
+      blob: material.blob,
+      salt: material.salt,
+      phrase: phrase,
+    );
+    if (password == null) return null;
+    return signIn(username: username, password: password);
   }
 
   Future<AppUser?> restoreSession() async {
     final live = _live;
     if (live != null) {
-      final user = await live.restore();
-      if (user != null) return user;
+      // Supabase persists the session token in secure storage; restore()
+      // hydrates from it.
+      return live.restore();
     }
-    final session = await _identity.loadSession();
-    if (session == null) return null;
-    final user = AppUser(
-      userId: session['user_id']!,
-      anonymousPseudonym: session['pseudonym']!,
-      avatarSeed: session['avatar_seed']!,
-      currentMood: 'healing',
-      userRole: 'normal',
-      isVerified: false,
-      safetyTier: session['safety_tier']!,
-      accountStatus: 'active',
-      birthYear: int.tryParse(session['birth_year'] ?? ''),
-    );
-    if (live == null) _mock.registerSession(user);
-    return user;
+    // Mock path — re-attach the locally remembered user, if any.
+    final username = await _identity.lastUsername();
+    if (username == null) return null;
+    try {
+      return _mock.signIn(
+        username: username,
+        // Mock backend trusts the in-memory password store; restoring after
+        // hot-restart only works if the mock still has the credential.
+        password: _mock.passwordOf(username) ?? '',
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> logout() async {
@@ -132,7 +174,7 @@ class VentlyRepository {
   }
 
   // ===================== Posts / Feed =====================
-  Stream<List<Post>> watchFeed({String? category, String? mood, String? spaceName}) {
+  Stream<List<Post>> watchFeed({String? category, String? mood, String? tribeSlug}) {
     final live = _live;
     if (live != null) {
       // Seed the stream with an immediate fetch, then track realtime emits.
@@ -142,7 +184,7 @@ class VentlyRepository {
         controller.add(await live.feed(
           category: category,
           mood: mood,
-          spaceName: spaceName,
+          tribeSlug: tribeSlug,
         ));
       }
       sub = live.postsStream.listen((_) => emit());
@@ -153,27 +195,24 @@ class VentlyRepository {
     return _mock.postsStream.map((_) => _mock.feed(
           category: category,
           mood: mood,
-          spaceName: spaceName,
+          tribeSlug: tribeSlug,
         ));
   }
 
-  Future<List<Post>> feed({String? category, String? mood, String? spaceName}) {
+  Future<List<Post>> feed({String? category, String? mood, String? tribeSlug}) {
     final live = _live;
     if (live != null) {
-      return live.feed(category: category, mood: mood, spaceName: spaceName);
+      return live.feed(category: category, mood: mood, tribeSlug: tribeSlug);
     }
     return Future.value(
-        _mock.feed(category: category, mood: mood, spaceName: spaceName));
+        _mock.feed(category: category, mood: mood, tribeSlug: tribeSlug));
   }
 
   Future<Post> createPost({
     required String content,
     required String category,
     required String mood,
-    String? spaceName,
-    bool isAudio = false,
-    String? audioUrl,
-    int audioDurationMs = 0,
+    String? tribeId,
   }) {
     final live = _live;
     if (live != null) {
@@ -181,20 +220,14 @@ class VentlyRepository {
         content: content,
         category: category,
         mood: mood,
-        spaceName: spaceName,
-        isAudio: isAudio,
-        audioUrl: audioUrl,
-        audioDurationMs: audioDurationMs,
+        tribeId: tribeId,
       );
     }
     return _mock.createPost(
       content: content,
       category: category,
       mood: mood,
-      spaceName: spaceName,
-      isAudio: isAudio,
-      audioUrl: audioUrl,
-      audioDurationMs: audioDurationMs,
+      tribeId: tribeId,
     );
   }
 
@@ -216,6 +249,30 @@ class VentlyRepository {
     final live = _live;
     if (live != null) return live.postById(postId);
     return Future.value(_mock.postById(postId));
+  }
+
+  Future<void> reportPost({
+    required String postId,
+    required String reason,
+    String? note,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.reportPost(postId: postId, reason: reason, note: note);
+    }
+    _mock.reportPost(postId: postId, reason: reason, note: note);
+  }
+
+  Future<void> reportChat({
+    required String roomId,
+    required String reason,
+    String? note,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.reportChat(roomId: roomId, reason: reason, note: note);
+    }
+    _mock.reportChat(roomId: roomId, reason: reason, note: note);
   }
 
   Future<List<Post>> mySaved() {
@@ -251,7 +308,7 @@ class VentlyRepository {
         postId: postId, parentId: parentId, content: content);
   }
 
-  // ===================== Plugz / Tribes =====================
+  // ===================== Plugz (read-only metadata) =====================
   Future<List<PlugProfile>> allPlugz() {
     final live = _live;
     if (live != null) return live.allPlugz();
@@ -264,34 +321,60 @@ class VentlyRepository {
     return Future.value(_mock.plugByDisplayName(name));
   }
 
-  bool isFollowing(String plugId) {
+  // ===================== Tribes =====================
+  Future<List<Tribe>> tribes({String? category, String? search}) {
     final live = _live;
-    if (live != null) return live.isFollowing(plugId);
-    return _mock.isFollowing(plugId);
+    if (live != null) return live.tribes(category: category, search: search);
+    return Future.value(_mock.tribes(category: category, search: search));
   }
 
-  Future<void> toggleFollow(String plugId) {
+  Future<Tribe?> tribeBySlug(String slug) {
     final live = _live;
-    if (live != null) return live.toggleFollow(plugId);
-    _mock.toggleFollow(plugId);
+    if (live != null) return live.tribeBySlug(slug);
+    return Future.value(_mock.tribeBySlug(slug));
+  }
+
+  Future<Tribe> createTribe({
+    required String name,
+    required String category,
+    String? description,
+    bool isPrivate = false,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.createTribe(
+        name: name,
+        category: category,
+        description: description,
+        isPrivate: isPrivate,
+      );
+    }
+    return Future.value(_mock.createTribe(
+      name: name,
+      category: category,
+      description: description,
+      isPrivate: isPrivate,
+    ));
+  }
+
+  bool joinedTribe(String tribeId) {
+    final live = _live;
+    if (live != null) return live.joinedTribe(tribeId);
+    return _mock.joinedTribe(tribeId);
+  }
+
+  Future<void> joinTribe(String tribeId) {
+    final live = _live;
+    if (live != null) return live.joinTribe(tribeId);
+    _mock.joinTribe(tribeId);
     return Future.value();
   }
 
-  // ===================== Spaces =====================
-  Future<List<Space>> spaces() {
+  Future<void> leaveTribe(String tribeId) {
     final live = _live;
-    if (live != null) return live.spaces();
-    return Future.value(_mock.spaces());
-  }
-
-  Future<Space> createSpace(
-      {required String name, required String type, String? description}) {
-    final live = _live;
-    if (live != null) {
-      return live.createSpace(name: name, type: type, description: description);
-    }
-    return Future.value(
-        _mock.createSpace(name: name, type: type, description: description));
+    if (live != null) return live.leaveTribe(tribeId);
+    _mock.leaveTribe(tribeId);
+    return Future.value();
   }
 
   // ===================== Chat =====================
@@ -334,6 +417,14 @@ class VentlyRepository {
     return Future.value(_mock.roomMessages(roomId));
   }
 
+  /// Realtime per-room message stream. Mock mode replays the current list on
+  /// every inbox-stream tick — good enough for offline development.
+  Stream<List<ChatMessage>> watchMessages(String roomId) {
+    final live = _live;
+    if (live != null) return live.watchMessages(roomId);
+    return _mock.roomsStream.map((_) => _mock.roomMessages(roomId));
+  }
+
   Future<ChatRoom> sendMessageRequest({
     required String peerPseudonym,
     required String peerAvatarSeed,
@@ -358,16 +449,14 @@ class VentlyRepository {
     );
   }
 
-  /// In live mode messages are encrypted client-side. For the V1 build we
-  /// transmit plaintext so the demo conversation works end-to-end; once the
-  /// double-ratchet rolls out we'll plug `CryptoService.encryptForRoom` here.
+  /// Private DM send. V1 is plaintext server-side so moderators can review
+  /// reported chats; we do not advertise end-to-end encryption.
   Future<ChatMessage> sendMessage({required String roomId, required String plaintext}) {
     final live = _live;
     if (live != null) {
       return live.sendMessage(
         roomId: roomId,
-        encryptedPayload: plaintext,
-        nonceIv: 'v1-placeholder',
+        payload: plaintext,
       );
     }
     return Future.value(
@@ -401,5 +490,5 @@ class VentlyRepository {
 class AgeGateBlocked implements Exception {
   @override
   String toString() =>
-      'Vently requires members to be 13 or older to keep our community safe.';
+      'Venttly requires members to be 13 or older to keep our community safe.';
 }

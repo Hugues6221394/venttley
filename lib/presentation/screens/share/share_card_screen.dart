@@ -141,11 +141,11 @@ class ShareCardScreen extends ConsumerWidget {
                   final bytes = await screenshotController.capture();
                   if (bytes == null) return;
                   final dir = await getTemporaryDirectory();
-                  final file = File('${dir.path}/vently-share.png');
+                  final file = File('${dir.path}/venttly-share.png');
                   await file.writeAsBytes(bytes);
                   await Share.shareXFiles(
                     [XFile(file.path)],
-                    text: 'Vented on Vently — your safe space.',
+                    text: 'Vented on Venttly — your safe space.',
                   );
                 },
                 icon: const Icon(Icons.download, size: 18),

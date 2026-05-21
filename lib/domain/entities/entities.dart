@@ -67,34 +67,74 @@ class PlugProfile {
   });
 }
 
-class Space {
-  final String spaceId;
-  final String spaceName;
-  final String spaceType;
+/// Hybrid Tribe — both a community (members join, posts belong to it) and a
+/// creator ecosystem (a keeper moderates it; keeper may be a verified Plug).
+/// Mirrors `public.tribe_directory` from migration 0005.
+class Tribe {
+  final String tribeId;
+  final String name;
+  final String slug;
   final String? description;
+  final String category; // campus | city | interest_group | hobby | support | venting
   final int memberCount;
+  final bool isPrivate;
+  final String? keeperId;
+  final String? keeperPseudonym;
+  final String? keeperAvatarSeed;
+  final bool keeperIsVerified;
+  final DateTime createdAt;
+  final bool joinedByMe;
 
-  const Space({
-    required this.spaceId,
-    required this.spaceName,
-    required this.spaceType,
+  const Tribe({
+    required this.tribeId,
+    required this.name,
+    required this.slug,
+    required this.category,
     required this.memberCount,
+    required this.isPrivate,
+    required this.createdAt,
     this.description,
+    this.keeperId,
+    this.keeperPseudonym,
+    this.keeperAvatarSeed,
+    this.keeperIsVerified = false,
+    this.joinedByMe = false,
   });
+
+  Tribe copyWith({
+    int? memberCount,
+    bool? joinedByMe,
+  }) {
+    return Tribe(
+      tribeId: tribeId,
+      name: name,
+      slug: slug,
+      description: description,
+      category: category,
+      memberCount: memberCount ?? this.memberCount,
+      isPrivate: isPrivate,
+      keeperId: keeperId,
+      keeperPseudonym: keeperPseudonym,
+      keeperAvatarSeed: keeperAvatarSeed,
+      keeperIsVerified: keeperIsVerified,
+      createdAt: createdAt,
+      joinedByMe: joinedByMe ?? this.joinedByMe,
+    );
+  }
 }
 
 class Post {
   final String postId;
   final String authorPseudonym;
   final String authorAvatarSeed;
-  final String? spaceName;
+  final bool authorIsVerified;
+  final String? tribeId;
+  final String? tribeName;
+  final String? tribeSlug;
   final String categoryName;
   final String postType; // user_post | plug_prompt
   final String content;
   final String postMood;
-  final bool isAudio;
-  final String? audioUrl;
-  final int audioDurationMs;
   final int likesCount;
   final int commentsCount;
   final DateTime createdAt;
@@ -109,13 +149,13 @@ class Post {
     required this.postType,
     required this.content,
     required this.postMood,
-    required this.isAudio,
     required this.likesCount,
     required this.commentsCount,
     required this.createdAt,
-    this.spaceName,
-    this.audioUrl,
-    this.audioDurationMs = 0,
+    this.authorIsVerified = false,
+    this.tribeId,
+    this.tribeName,
+    this.tribeSlug,
     this.likedByMe = false,
     this.savedByMe = false,
   });
@@ -130,17 +170,17 @@ class Post {
       postId: postId,
       authorPseudonym: authorPseudonym,
       authorAvatarSeed: authorAvatarSeed,
+      authorIsVerified: authorIsVerified,
       categoryName: categoryName,
       postType: postType,
       content: content,
       postMood: postMood,
-      isAudio: isAudio,
       likesCount: likesCount ?? this.likesCount,
       commentsCount: commentsCount ?? this.commentsCount,
       createdAt: createdAt,
-      spaceName: spaceName,
-      audioUrl: audioUrl,
-      audioDurationMs: audioDurationMs,
+      tribeId: tribeId,
+      tribeName: tribeName,
+      tribeSlug: tribeSlug,
       likedByMe: likedByMe ?? this.likedByMe,
       savedByMe: savedByMe ?? this.savedByMe,
     );
@@ -197,7 +237,7 @@ class ChatMessage {
   final String messageId;
   final String roomId;
   final String senderId;
-  final String plaintext; // for E2EE these arrive encrypted; mock holds plaintext.
+  final String plaintext; // stored server-side as plaintext for moderation review.
   final DateTime createdAt;
   final bool sentByMe;
 

@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
+import '../../../data/services/moderation_service.dart';
 import '../../theme/colors.dart';
 import '../../widgets/post_card.dart';
+import '../../widgets/skeleton.dart';
 import '../../widgets/vently_logo.dart';
 
 class FeedScreen extends ConsumerWidget {
@@ -13,32 +15,23 @@ class FeedScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
     final feed = ref.watch(feedPostsProvider);
     final filter = ref.watch(feedFilterProvider);
     final prompts = ref.watch(promptsProvider).valueOrNull ?? const [];
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.favorite),
-          color: scheme.primary,
-          onPressed: () {},
-        ),
         title: const VentlyLogo(size: 26),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Chip(
-              avatar: Icon(Icons.language, size: 14, color: scheme.primary),
-              label: const Text('Global', style: TextStyle(fontSize: 11)),
-              padding: EdgeInsets.zero,
-            ),
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            tooltip: 'My profile',
+            onPressed: () => context.push('/profile'),
           ),
         ],
       ),
       body: feed.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const PostSkeletonList(),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (posts) {
           return CustomScrollView(
@@ -274,11 +267,61 @@ class _CrisisBanner extends StatelessWidget {
               ),
             ),
           ),
-          TextButton(onPressed: () {}, child: const Text('Get help')),
+          TextButton(
+            onPressed: () => _showCrisisSheet(context),
+            child: const Text('Get help'),
+          ),
         ],
       ),
     );
   }
+}
+
+void _showCrisisSheet(BuildContext context) {
+  showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Text(
+              'You are not alone',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'These services are free and confidential. Reach out — '
+              'someone is ready to listen right now.',
+            ),
+            const SizedBox(height: 12),
+            for (final r in kCrisisResources)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.favorite_border),
+                title: Text(r.label,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text(r.reach),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _EmptyState extends StatelessWidget {

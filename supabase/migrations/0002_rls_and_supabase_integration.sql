@@ -1,5 +1,5 @@
 -- ============================================================================
--- Vently | Supabase integration + Row Level Security
+-- Venttly | Supabase integration + Row Level Security
 --
 -- This migration is layered on top of 0001_init_schema.sql. It enables RLS on
 -- every table in the public schema and wires policies to `auth.uid()` so the
@@ -16,7 +16,7 @@
 -- ============================================================================
 
 -- ------------------------------------------------------------------
--- Helper: get the calling user's Vently user_id from Supabase Auth.
+-- Helper: get the calling user's Venttly user_id from Supabase Auth.
 -- ------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.current_user_id()
 RETURNS UUID

@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entities/entities.dart';
+import 'identity_service.dart';
 
 /// Live Supabase backend.
 ///
@@ -26,7 +27,7 @@ class SupabaseBackend {
   // Local mirrors of the calling user's "personalised" state.
   final Set<String> _likedPosts = {};
   final Set<String> _savedPosts = {};
-  final Set<String> _followedPlugz = {};
+  final Set<String> _joinedTribes = {};
 
   AppUser? _me;
   AppUser? get me => _me;
@@ -42,40 +43,60 @@ class SupabaseBackend {
   RealtimeChannel? _roomsChannel;
 
   // ===================================================================
-  // SESSION  (anonymous auth + matching public.users row)
+  // SESSION  (username + password via a synthetic, zero-PII handle, plus
+  //           phrase-based recovery — see migration 0004)
   // ===================================================================
-  Future<AppUser> bootstrap({
-    required String pseudonym,
+
+  /// Create a new account. The trigger `handle_new_auth_user` materialises
+  /// the matching `public.users` row from the signup metadata; we then attach
+  /// the encrypted recovery blob to that row.
+  Future<AppUser> signUp({
+    required String username,
+    required String password,
     required String avatarSeed,
     required int birthYear,
     required String safetyTier,
+    required String recoveryBlob,
+    required String recoverySalt,
   }) async {
-    final res = await _client.auth.signInAnonymously(data: {
-      'pseudonym':   pseudonym,
-      'avatar_seed': avatarSeed,
-      'birth_year':  birthYear,
-      'safety_tier': safetyTier,
-    });
-    final uid = res.user?.id;
-    if (uid == null) {
-      throw StateError('Anonymous sign-in failed: no user id');
+    final email = IdentityService.syntheticEmail(username);
+    final AuthResponse res;
+    try {
+      res = await _client.auth.signUp(
+        email: email,
+        password: password,
+        data: {
+          'pseudonym':   username,
+          'avatar_seed': avatarSeed,
+          'birth_year':  birthYear,
+          'safety_tier': safetyTier,
+        },
+      );
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('already') || msg.contains('registered')) {
+        throw UsernameTakenException();
+      }
+      rethrow;
     }
-    // The auth trigger `handle_new_auth_user` will create the matching
-    // public.users row; we still upsert defensively so the app keeps working
-    // if the trigger ever drifts.
-    await _client.from('users').upsert({
-      'user_id':             uid,
-      'anonymous_pseudonym': pseudonym,
-      'avatar_seed':         avatarSeed,
-      'current_mood':        'healing',
-      'safety_tier':         safetyTier,
-      'birth_year':          birthYear,
-      'recovery_key_hash':   'auth-managed',
-    }, onConflict: 'user_id');
+    final user = res.user;
+    if (user == null) {
+      throw StateError('Sign-up returned no user');
+    }
+    if (res.session == null) {
+      // Supabase project still requires email confirmation. Synthetic
+      // username handles cannot receive mail, so this would strand the
+      // account before it ever becomes usable.
+      throw const EmailConfirmationStillOnException();
+    }
+    await _client.from('users').update({
+      'recovery_blob': recoveryBlob,
+      'recovery_salt': recoverySalt,
+    }).eq('user_id', user.id);
 
     _me = AppUser(
-      userId: uid,
-      anonymousPseudonym: pseudonym,
+      userId: user.id,
+      anonymousPseudonym: username,
       avatarSeed: avatarSeed,
       currentMood: 'healing',
       userRole: 'normal',
@@ -88,12 +109,56 @@ class SupabaseBackend {
     return _me!;
   }
 
+  /// Sign in an existing account with username + password.
+  Future<AppUser> signIn({
+    required String username,
+    required String password,
+  }) async {
+    final email = IdentityService.syntheticEmail(username);
+    try {
+      await _client.auth.signInWithPassword(email: email, password: password);
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('invalid') || msg.contains('credentials')) {
+        throw InvalidCredentialsException();
+      }
+      rethrow;
+    }
+    final user = await restore();
+    if (user == null) {
+      throw StateError('Signed in but no matching profile row');
+    }
+    return user;
+  }
+
+  /// Pre-auth: fetch the encrypted recovery material for [username].
+  /// Returns null if no such user, or if no recovery material was stored.
+  Future<({String blob, String salt})?> fetchRecoveryMaterial(
+      String username) async {
+    final rows = await _client.rpc(
+      'fetch_recovery_material',
+      params: {'p_username': username},
+    ) as List<dynamic>;
+    if (rows.isEmpty) return null;
+    final r = rows.first as Map<String, dynamic>;
+    final blob = r['recovery_blob'] as String?;
+    final salt = r['recovery_salt'] as String?;
+    if (blob == null || salt == null) return null;
+    return (blob: blob, salt: salt);
+  }
+
   Future<AppUser?> restore() async {
     final uid = _uid;
     if (uid == null) return null;
+    // Explicit column list: migration 0003 revokes column SELECT on the
+    // sensitive columns (recovery_key_hash, device_signature_hash,
+    // public_key), so a bare `select()` (which expands to `*`) now fails.
     final row = await _client
         .from('users')
-        .select()
+        .select(
+          'user_id, anonymous_pseudonym, avatar_seed, current_mood, '
+          'user_role, is_verified, account_status, safety_tier, birth_year',
+        )
         .eq('user_id', uid)
         .maybeSingle();
     if (row == null) return null;
@@ -111,7 +176,7 @@ class SupabaseBackend {
     _me = null;
     _likedPosts.clear();
     _savedPosts.clear();
-    _followedPlugz.clear();
+    _joinedTribes.clear();
   }
 
   Future<void> _hydrateRealtime() async {
@@ -139,13 +204,13 @@ class SupabaseBackend {
     _savedPosts
       ..clear()
       ..addAll(saves.map((r) => r['post_id'] as String));
-    final follows = await _client
-        .from('tribes_follows')
-        .select('plug_id')
-        .eq('follower_id', uid);
-    _followedPlugz
+    final memberships = await _client
+        .from('tribe_members')
+        .select('tribe_id')
+        .eq('user_id', uid);
+    _joinedTribes
       ..clear()
-      ..addAll(follows.map((r) => r['plug_id'] as String));
+      ..addAll(memberships.map((r) => r['tribe_id'] as String));
   }
 
   void _subscribePostsRealtime() {
@@ -180,13 +245,13 @@ class SupabaseBackend {
   Future<List<Post>> feed({
     String? category,
     String? mood,
-    String? spaceName,
+    String? tribeSlug,
     int limit = 100,
   }) async {
     var query = _client.from('feed_posts').select();
     if (category != null)  query = query.eq('category_name', category);
     if (mood != null)      query = query.eq('post_mood', mood);
-    if (spaceName != null) query = query.eq('space_name', spaceName);
+    if (tribeSlug != null) query = query.eq('tribe_slug', tribeSlug);
     final rows = await query
         .order('created_at', ascending: false)
         .limit(limit);
@@ -206,32 +271,17 @@ class SupabaseBackend {
     required String content,
     required String category,
     required String mood,
-    String? spaceName,
-    bool isAudio = false,
-    String? audioUrl,
-    int audioDurationMs = 0,
+    String? tribeId,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
-    String? spaceId;
-    if (spaceName != null) {
-      final s = await _client
-          .from('spaces')
-          .select('space_id')
-          .eq('space_name', spaceName)
-          .maybeSingle();
-      spaceId = s?['space_id'] as String?;
-    }
     final inserted = await _client.from('posts').insert({
-      'author_id':         uid,
-      'space_id':          spaceId,
-      'category_name':     category,
-      'post_type':         'user_post',
-      'content':           content,
-      'post_mood':         mood,
-      'is_audio':          isAudio,
-      'audio_url':         audioUrl,
-      'audio_duration_ms': audioDurationMs,
+      'author_id':     uid,
+      'tribe_id':      tribeId,
+      'category_name': category,
+      'post_type':     'user_post',
+      'content':       content,
+      'post_mood':     mood,
     }).select('post_id').single();
     final post = await postById(inserted['post_id'] as String);
     _emitPosts();
@@ -276,6 +326,46 @@ class SupabaseBackend {
       _savedPosts.add(postId);
     }
     _emitPosts();
+  }
+
+  Future<void> reportPost({
+    required String postId,
+    required String reason,
+    String? note,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    try {
+      await _client.from('reports').insert({
+        'post_id':     postId,
+        'reporter_id': uid,
+        'reason':      reason,
+        'note':        note,
+      });
+    } on PostgrestException catch (e) {
+      // 23505 = unique_violation — user already reported this target. Silent
+      // success so the UI doesn't surface a scary error for a no-op.
+      if (e.code != '23505') rethrow;
+    }
+  }
+
+  Future<void> reportChat({
+    required String roomId,
+    required String reason,
+    String? note,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    try {
+      await _client.from('reports').insert({
+        'target_room_id': roomId,
+        'reporter_id':    uid,
+        'reason':         reason,
+        'note':           note,
+      });
+    } on PostgrestException catch (e) {
+      if (e.code != '23505') rethrow;
+    }
   }
 
   Future<List<Post>> mySaved() async {
@@ -402,7 +492,8 @@ class SupabaseBackend {
   }
 
   // ===================================================================
-  // PLUGZ / TRIBES
+  // PLUGZ  (verified keeper metadata; reads only — follow/unfollow is now
+  //         expressed by joining/leaving the plug's Tribes)
   // ===================================================================
   Future<List<PlugProfile>> allPlugz() async {
     final rows = await _client.from('plug_profiles').select(
@@ -421,76 +512,92 @@ class SupabaseBackend {
     return row == null ? null : _plugFromRow(row);
   }
 
-  bool isFollowing(String plugId) => _followedPlugz.contains(plugId);
+  // ===================================================================
+  // TRIBES  (hybrid community + creator ecosystem — see migration 0005)
+  // ===================================================================
+  bool joinedTribe(String tribeId) => _joinedTribes.contains(tribeId);
 
-  Future<void> toggleFollow(String plugId) async {
+  Future<List<Tribe>> tribes({String? category, String? search}) async {
+    var q = _client.from('tribe_directory').select();
+    if (category != null) q = q.eq('category', category);
+    if (search != null && search.trim().isNotEmpty) {
+      q = q.ilike('name', '%${search.trim()}%');
+    }
+    final rows = await q.order('member_count', ascending: false);
+    return rows.map<Tribe>(_tribeFromRow).toList();
+  }
+
+  Future<Tribe?> tribeBySlug(String slug) async {
+    final row = await _client
+        .from('tribe_directory')
+        .select()
+        .eq('slug', slug)
+        .maybeSingle();
+    return row == null ? null : _tribeFromRow(row);
+  }
+
+  Future<Tribe> createTribe({
+    required String name,
+    required String category,
+    String? description,
+    bool isPrivate = false,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    final slug = _slugify(name);
+    final row = await _client
+        .from('tribes')
+        .insert({
+          'name':        name,
+          'slug':        slug,
+          'category':    category,
+          'description': description,
+          'is_private':  isPrivate,
+          'keeper_id':   uid,
+        })
+        .select('tribe_id')
+        .single();
+    final tribeId = row['tribe_id'] as String;
+    // Keeper auto-joins their own tribe.
+    await _client.from('tribe_members').insert({
+      'tribe_id': tribeId,
+      'user_id':  uid,
+    });
+    _joinedTribes.add(tribeId);
+    final created = await tribeBySlug(slug);
+    return created!;
+  }
+
+  Future<void> joinTribe(String tribeId) async {
     final uid = _uid;
     if (uid == null) return;
-    if (_followedPlugz.contains(plugId)) {
-      await _client
-          .from('tribes_follows')
-          .delete()
-          .eq('follower_id', uid)
-          .eq('plug_id', plugId);
-      _followedPlugz.remove(plugId);
-    } else {
-      await _client.from('tribes_follows').insert({
-        'follower_id': uid,
-        'plug_id':     plugId,
-      });
-      _followedPlugz.add(plugId);
-    }
+    if (_joinedTribes.contains(tribeId)) return;
+    await _client.from('tribe_members').insert({
+      'tribe_id': tribeId,
+      'user_id':  uid,
+    });
+    _joinedTribes.add(tribeId);
   }
 
-  // ===================================================================
-  // SPACES
-  // ===================================================================
-  Future<List<Space>> spaces() async {
-    final rows = await _client.from('spaces').select().order('member_count',
-        ascending: false);
-    return rows
-        .map<Space>((r) => Space(
-              spaceId: r['space_id'] as String,
-              spaceName: r['space_name'] as String,
-              spaceType: r['space_type'] as String,
-              memberCount: r['member_count'] as int,
-              description: r['description'] as String?,
-            ))
-        .toList();
-  }
-
-  Future<Space> createSpace({
-    required String name,
-    required String type,
-    String? description,
-  }) async {
-    final row = await _client
-        .from('spaces')
-        .insert({
-          'space_name':  name,
-          'space_type':  type,
-          'description': description,
-        })
-        .select()
-        .single();
+  Future<void> leaveTribe(String tribeId) async {
     final uid = _uid;
-    if (uid != null) {
-      await _client.from('space_memberships').insert({
-        'space_id': row['space_id'],
-        'user_id':  uid,
-      });
-    }
-    return Space(
-      spaceId: row['space_id'] as String,
-      spaceName: row['space_name'] as String,
-      spaceType: row['space_type'] as String,
-      memberCount: (row['member_count'] as int?) ?? 1,
-      description: row['description'] as String?,
-    );
+    if (uid == null) return;
+    await _client
+        .from('tribe_members')
+        .delete()
+        .eq('tribe_id', tribeId)
+        .eq('user_id', uid);
+    _joinedTribes.remove(tribeId);
   }
 
+  String _slugify(String s) => s
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+
   // ===================================================================
-  // CHAT  (E2EE payloads stored encrypted; this layer is the transport)
+  // CHAT  (plaintext stored server-side; column names are historical —
+  //        v1 does NOT advertise end-to-end encryption)
   // ===================================================================
   Future<List<ChatRoom>> inbox({required String tab}) async {
     final rows = await _client
@@ -593,10 +700,39 @@ class SupabaseBackend {
         .toList();
   }
 
+  /// Realtime stream of messages for a single room. Re-fetches on every
+  /// Postgres change so the listener sees both inserts and edits.
+  Stream<List<ChatMessage>> watchMessages(String roomId) {
+    final controller = StreamController<List<ChatMessage>>();
+    Future<void> emit() async {
+      try {
+        controller.add(await messages(roomId));
+      } catch (_) {/* listener retries on next event */}
+    }
+
+    final channel = _client
+        .channel('public:chat_messages:room=$roomId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'chat_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id',
+            value: roomId,
+          ),
+          callback: (_) => emit(),
+        )
+        .subscribe();
+
+    controller.onListen = emit;
+    controller.onCancel = () => channel.unsubscribe();
+    return controller.stream;
+  }
+
   Future<ChatMessage> sendMessage({
     required String roomId,
-    required String encryptedPayload,
-    required String nonceIv,
+    required String payload,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
@@ -605,8 +741,9 @@ class SupabaseBackend {
         .insert({
           'room_id':           roomId,
           'sender_id':         uid,
-          'encrypted_payload': encryptedPayload,
-          'nonce_iv':          nonceIv,
+          // Column name is historical from the E2EE plan we cut for v1.
+          'encrypted_payload': payload,
+          'nonce_iv':          'v1-plaintext',
         })
         .select()
         .single();
@@ -614,7 +751,7 @@ class SupabaseBackend {
       messageId: row['message_id'] as String,
       roomId: roomId,
       senderId: uid,
-      plaintext: encryptedPayload,
+      plaintext: payload,
       createdAt: DateTime.parse(row['created_at'] as String),
       sentByMe: true,
     );
@@ -688,19 +825,37 @@ class SupabaseBackend {
       postId: r['post_id'] as String,
       authorPseudonym: (r['author_pseudonym'] as String?) ?? '@anonymous',
       authorAvatarSeed: (r['author_avatar_seed'] as String?) ?? 'default-orb',
+      authorIsVerified: (r['author_is_verified'] as bool?) ?? false,
       categoryName: r['category_name'] as String,
       postType: r['post_type'] as String,
       content: r['content'] as String,
       postMood: r['post_mood'] as String,
-      isAudio: r['is_audio'] as bool,
-      audioUrl: r['audio_url'] as String?,
-      audioDurationMs: (r['audio_duration_ms'] as int?) ?? 0,
       likesCount: r['likes_count'] as int,
       commentsCount: r['comments_count'] as int,
       createdAt: DateTime.parse(r['created_at'] as String),
-      spaceName: r['space_name'] as String?,
+      tribeId: r['tribe_id'] as String?,
+      tribeName: r['tribe_name'] as String?,
+      tribeSlug: r['tribe_slug'] as String?,
       likedByMe: _likedPosts.contains(r['post_id']),
       savedByMe: _savedPosts.contains(r['post_id']),
+    );
+  }
+
+  Tribe _tribeFromRow(Map<String, dynamic> r) {
+    return Tribe(
+      tribeId: r['tribe_id'] as String,
+      name: r['name'] as String,
+      slug: r['slug'] as String,
+      description: r['description'] as String?,
+      category: r['category'] as String,
+      memberCount: (r['member_count'] as int?) ?? 0,
+      isPrivate: (r['is_private'] as bool?) ?? false,
+      keeperId: r['keeper_id'] as String?,
+      keeperPseudonym: r['keeper_pseudonym'] as String?,
+      keeperAvatarSeed: r['keeper_avatar_seed'] as String?,
+      keeperIsVerified: (r['keeper_is_verified'] as bool?) ?? false,
+      createdAt: DateTime.parse(r['created_at'] as String),
+      joinedByMe: _joinedTribes.contains(r['tribe_id']),
     );
   }
 
@@ -730,6 +885,9 @@ class SupabaseBackend {
     );
   }
 
+  /// Friendly, UI-facing auth failure types — see [signUp] / [signIn].
+  // (defined below the class)
+
   /// Pick a random other user — used for the demo "find a peer" flow until
   /// a richer peer-discovery UX ships.
   Future<Map<String, dynamic>?> randomPeer() async {
@@ -742,5 +900,24 @@ class SupabaseBackend {
     if (rows.isEmpty) return null;
     return rows[_rng.nextInt(rows.length)];
   }
+}
+
+class UsernameTakenException implements Exception {
+  @override
+  String toString() => 'That name is already in someone\'s sanctuary — try another.';
+}
+
+class InvalidCredentialsException implements Exception {
+  @override
+  String toString() => 'Username or password doesn\'t match.';
+}
+
+class EmailConfirmationStillOnException implements Exception {
+  const EmailConfirmationStillOnException();
+  @override
+  String toString() =>
+      'Supabase Auth still requires email confirmation. Disable '
+      '"Confirm email" in Authentication → Providers → Email so the '
+      'zero-PII username handles can sign up.';
 }
 

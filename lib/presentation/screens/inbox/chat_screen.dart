@@ -54,9 +54,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 style: const TextStyle(fontWeight: FontWeight.w800)),
             Row(
               children: [
-                Icon(Icons.lock, size: 10, color: scheme.primary),
+                Icon(Icons.shield_outlined, size: 10, color: scheme.primary),
                 const SizedBox(width: 3),
-                Text('E2EE',
+                Text('Private',
                     style: TextStyle(
                       fontSize: 11,
                       color: scheme.primary,
@@ -83,7 +83,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 Icon(Icons.shield_outlined, size: 14, color: scheme.primary),
                 const SizedBox(width: 6),
                 Text(
-                  'Messages are secured with end-to-end encryption.',
+                  'Private chat — only you and your peer see this. Moderators can review reported chats.',
                   style: TextStyle(
                     color: scheme.primary,
                     fontWeight: FontWeight.w700,
@@ -132,11 +132,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             onSend: () async {
               final t = _controller.text.trim();
               if (t.isEmpty) return;
+              final moderation =
+                  await ref.read(moderationServiceProvider).review(t);
+              if (!context.mounted) return;
+              if (moderation.isBlocked) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(moderation.reasons.isEmpty
+                        ? 'Held back by safety AI.'
+                        : moderation.reasons.first),
+                  ),
+                );
+                return;
+              }
               await ref.read(repositoryProvider).sendMessage(
                     roomId: widget.roomId,
                     plaintext: t,
                   );
-              ref.invalidate(messagesProvider(widget.roomId));
               _controller.clear();
               setState(() {});
             },
@@ -147,36 +159,83 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _openReportSheet(BuildContext context) {
+    const reasons = <(String, String)>[
+      ('harassment',     'Harassment or bullying'),
+      ('hate',           'Hate speech'),
+      ('self_harm',      'Self-harm or suicide concern'),
+      ('sexual_content', 'Sexual content'),
+      ('privacy',        'Doxxing or personal info'),
+      ('spam',           'Spam or scam'),
+      ('other',          'Something else'),
+    ];
     showModalBottomSheet(
       context: context,
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Report this chat',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-            const SizedBox(height: 6),
-            Text(
-              'When you report a chat, the most recent encrypted message block + your session keys are securely uploaded to moderators. Other conversations stay private.',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                fontSize: 12,
-                height: 1.4,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Report submitted to moderators.')),
-                );
-              },
-              child: const Text('Submit report'),
-            ),
-          ],
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Text('Report this chat',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+              ),
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  'Moderators can review messages in this conversation. Other conversations stay private.',
+                  style: TextStyle(
+                    color:
+                        Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final r in reasons)
+                ListTile(
+                  title: Text(r.$2),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    try {
+                      await ref.read(repositoryProvider).reportChat(
+                            roomId: widget.roomId,
+                            reason: r.$1,
+                          );
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content:
+                              Text('Thank you — a moderator will review.'),
+                        ),
+                      );
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Could not send: $e')),
+                      );
+                    }
+                  },
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -253,10 +312,6 @@ class _Composer extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
         child: Row(
           children: [
-            IconButton(
-              icon: Icon(Icons.add_circle, color: scheme.primary),
-              onPressed: () {},
-            ),
             Expanded(
               child: TextField(
                 controller: controller,
@@ -265,11 +320,7 @@ class _Composer extends StatelessWidget {
                 decoration: const InputDecoration(hintText: 'Message'),
               ),
             ),
-            IconButton(
-              icon: Icon(Icons.emoji_emotions_outlined,
-                  color: scheme.onSurface.withOpacity(0.6)),
-              onPressed: () {},
-            ),
+            const SizedBox(width: 8),
             Container(
               decoration: BoxDecoration(
                   color: scheme.primary, shape: BoxShape.circle),

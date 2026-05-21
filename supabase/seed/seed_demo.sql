@@ -1,5 +1,5 @@
 -- ============================================================================
--- Vently | Demo seed data (idempotent)
+-- Venttly | Demo seed data (idempotent)
 -- Provides demo users, plugz, posts, comments, and a sample tribe prompt.
 -- ============================================================================
 

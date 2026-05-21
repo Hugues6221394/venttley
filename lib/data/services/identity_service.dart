@@ -1,97 +1,146 @@
 import 'dart:convert';
 import 'dart:math';
-import 'package:crypto/crypto.dart';
+
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// Zero-PII identity management.
+import 'recovery_wordlist.dart';
+
+/// Zero-PII identity + account recovery.
 ///
-/// We never store emails, phone numbers, or real names. Instead we derive
-/// a stable user id from a high-entropy *recovery key* the user keeps
-/// off-device, hashed with a device-side salt so the server only ever sees
-/// a one-way digest.
+/// v1 uses **username + password**. To stay zero-PII the username is mapped to
+/// a synthetic internal handle (`<username>@id.venttly.app`) that is used as the
+/// Supabase auth email — no real email, phone, or name is ever collected.
+///
+/// The optional **12-word recovery phrase** lets a user restore access on a new
+/// device with no server infrastructure: the password is sealed into an
+/// AES-GCM blob whose key is derived (Argon2id) from the phrase. The blob +
+/// salt are stored on the user row and read back, pre-auth, during recovery.
 class IdentityService {
   IdentityService({FlutterSecureStorage? storage})
       : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
 
-  static const _kRecoveryKey  = 'vently.recovery_key';
-  static const _kDeviceSalt   = 'vently.device_salt';
-  static const _kUserId       = 'vently.user_id';
-  static const _kPseudonym    = 'vently.pseudonym';
-  static const _kAvatarSeed   = 'vently.avatar_seed';
-  static const _kBirthYear    = 'vently.birth_year';
-  static const _kSafetyTier   = 'vently.safety_tier';
+  static const _kUsername       = 'venttly.username';
+  static const _kAvatarSeed     = 'venttly.avatar_seed';
+  static const _kRecoveryPhrase = 'venttly.recovery_phrase';
+  static const _kBirthYear      = 'venttly.birth_year';
+  static const _kSafetyTier     = 'venttly.safety_tier';
 
-  /// Generate a high-entropy human-friendly recovery key.
-  /// Format: 4 groups of 5 base32 characters, e.g. `J3K9W-2QXAP-RT8H4-NM6Z2`.
-  String generateRecoveryKey() {
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  /// Domain for the synthetic, zero-PII auth handle. Never receives mail.
+  static const String identityEmailDomain = 'id.venttly.app';
+
+  /// Allowed username shape — also the login handle, so keep it email-safe.
+  static final RegExp usernamePattern = RegExp(r'^[A-Za-z0-9_]{3,20}$');
+
+  /// Deterministic, case-insensitive map from username to the internal auth
+  /// email, so login only ever needs the username the user already knows.
+  static String syntheticEmail(String username) =>
+      '${username.trim().toLowerCase()}@$identityEmailDomain';
+
+  // ===================== Recovery phrase =====================
+
+  /// A 12-word phrase from [kRecoveryWordlist] (~84 bits of entropy).
+  String generateRecoveryPhrase() {
     final rng = Random.secure();
-    final groups = List.generate(4, (_) {
-      return String.fromCharCodes(List.generate(5, (_) =>
-          alphabet.codeUnitAt(rng.nextInt(alphabet.length))));
-    });
-    return groups.join('-');
+    return List.generate(
+      12,
+      (_) => kRecoveryWordlist[rng.nextInt(kRecoveryWordlist.length)],
+    ).join(' ');
   }
 
-  /// Derive a server-safe hash of the recovery key + device salt.
-  ///
-  /// In production this would be Argon2id; here we use SHA-256 with a
-  /// per-device salt to avoid pulling a native crypto dependency for the
-  /// onboarding pipeline.
-  String hashRecoveryKey(String recoveryKey, String deviceSalt) {
-    final material = utf8.encode('vently.v1|$recoveryKey|$deviceSalt');
-    return sha256.convert(material).toString();
+  // Light Argon2id params: the 12-word phrase already carries the entropy, so
+  // the KDF only needs to map it to key bytes — it is not stretching a weak
+  // secret. Kept modest so onboarding/recovery stay responsive.
+  final _argon2 = Argon2id(
+    parallelism: 1,
+    memory: 8192, // 8 MiB
+    iterations: 2,
+    hashLength: 32,
+  );
+  final _aead = AesGcm.with256bits();
+
+  /// Seal [password] into a recovery blob with a key derived from [phrase].
+  /// Returns the blob and salt (both base64) to persist on the user row.
+  Future<({String blob, String salt})> sealPassword({
+    required String password,
+    required String phrase,
+  }) async {
+    final rng = Random.secure();
+    final salt = List<int>.generate(16, (_) => rng.nextInt(256));
+    final key = await _deriveKey(phrase, salt);
+    final box = await _aead.encrypt(utf8.encode(password), secretKey: key);
+    final blob = [
+      base64Url.encode(box.nonce),
+      base64Url.encode(box.cipherText),
+      base64Url.encode(box.mac.bytes),
+    ].join('.');
+    return (blob: blob, salt: base64Url.encode(salt));
   }
 
-  Future<String> ensureDeviceSalt() async {
-    var salt = await _storage.read(key: _kDeviceSalt);
-    if (salt == null) {
-      final bytes = List<int>.generate(32, (_) => Random.secure().nextInt(256));
-      salt = base64Url.encode(bytes);
-      await _storage.write(key: _kDeviceSalt, value: salt);
+  /// Reverse of [sealPassword]. Returns the password, or null when the phrase
+  /// is wrong (the AES-GCM MAC fails) or the blob is malformed.
+  Future<String?> openPassword({
+    required String blob,
+    required String salt,
+    required String phrase,
+  }) async {
+    try {
+      final parts = blob.split('.');
+      if (parts.length != 3) return null;
+      final key = await _deriveKey(phrase, base64Url.decode(salt));
+      final box = SecretBox(
+        base64Url.decode(parts[1]),
+        nonce: base64Url.decode(parts[0]),
+        mac: Mac(base64Url.decode(parts[2])),
+      );
+      return utf8.decode(await _aead.decrypt(box, secretKey: key));
+    } catch (_) {
+      return null;
     }
-    return salt;
   }
+
+  Future<SecretKey> _deriveKey(String phrase, List<int> salt) {
+    return _argon2.deriveKey(
+      secretKey: SecretKey(utf8.encode(_normalizePhrase(phrase))),
+      nonce: salt,
+    );
+  }
+
+  /// Phrases compare case-insensitively with single-spaced words.
+  static String _normalizePhrase(String phrase) =>
+      phrase.trim().toLowerCase().split(RegExp(r'\s+')).join(' ');
+
+  // ===================== Local session cache =====================
+  // Convenience only — Supabase owns the real session/token. We keep the
+  // username (to pre-fill login) and recovery phrase (so the user can re-view
+  // it from Settings) on the device.
 
   Future<void> persistSession({
-    required String userId,
-    required String pseudonym,
+    required String username,
     required String avatarSeed,
-    required String recoveryKey,
     required int birthYear,
     required String safetyTier,
+    String? recoveryPhrase,
   }) async {
-    await _storage.write(key: _kUserId,      value: userId);
-    await _storage.write(key: _kPseudonym,   value: pseudonym);
-    await _storage.write(key: _kAvatarSeed,  value: avatarSeed);
-    await _storage.write(key: _kRecoveryKey, value: recoveryKey);
-    await _storage.write(key: _kBirthYear,   value: birthYear.toString());
-    await _storage.write(key: _kSafetyTier,  value: safetyTier);
+    await _storage.write(key: _kUsername,   value: username);
+    await _storage.write(key: _kAvatarSeed, value: avatarSeed);
+    await _storage.write(key: _kBirthYear,  value: birthYear.toString());
+    await _storage.write(key: _kSafetyTier, value: safetyTier);
+    if (recoveryPhrase != null) {
+      await _storage.write(key: _kRecoveryPhrase, value: recoveryPhrase);
+    }
   }
 
-  Future<Map<String, String>?> loadSession() async {
-    final userId    = await _storage.read(key: _kUserId);
-    final pseudonym = await _storage.read(key: _kPseudonym);
-    final avatar    = await _storage.read(key: _kAvatarSeed);
-    final tier      = await _storage.read(key: _kSafetyTier);
-    final year      = await _storage.read(key: _kBirthYear);
-    if (userId == null || pseudonym == null) return null;
-    return {
-      'user_id':      userId,
-      'pseudonym':    pseudonym,
-      'avatar_seed':  avatar ?? 'default-orb',
-      'safety_tier':  tier ?? 'standard',
-      'birth_year':   year ?? '2000',
-    };
-  }
+  Future<String?> lastUsername() => _storage.read(key: _kUsername);
+  Future<String?> savedRecoveryPhrase() =>
+      _storage.read(key: _kRecoveryPhrase);
 
   Future<void> clearSession() async {
-    await _storage.delete(key: _kUserId);
-    await _storage.delete(key: _kPseudonym);
+    await _storage.delete(key: _kUsername);
     await _storage.delete(key: _kAvatarSeed);
-    await _storage.delete(key: _kRecoveryKey);
+    await _storage.delete(key: _kRecoveryPhrase);
     await _storage.delete(key: _kBirthYear);
     await _storage.delete(key: _kSafetyTier);
   }
@@ -119,10 +168,13 @@ class PseudonymGenerator {
     'bolt', 'vapor', 'ash', 'feather',
   ];
 
+  /// A pseudonym with a short numeric suffix — keeps fresh suggestions likely
+  /// to be unique on the first try (the username is the unique login handle).
   static String pseudonym([Random? rng]) {
     final r = rng ?? Random.secure();
     return '${_adjectives[r.nextInt(_adjectives.length)]}'
-        '${_nouns[r.nextInt(_nouns.length)]}';
+        '${_nouns[r.nextInt(_nouns.length)]}'
+        '${r.nextInt(900) + 100}';
   }
 
   static String avatarSeed([Random? rng]) {

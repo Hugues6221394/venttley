@@ -71,15 +71,25 @@ class PostCard extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        if (post.spaceName != null)
+                        if (post.tribeName != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              post.spaceName!,
-                              style: TextStyle(
-                                color: scheme.primary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
+                            child: GestureDetector(
+                              onTap: post.tribeSlug == null || onTap == null
+                                  ? null
+                                  : () {
+                                      // Tribe-name tap is handled by the parent
+                                      // screen via [onTap]; specific tribe-detail
+                                      // routing lives in the home feed/list.
+                                      onTap!.call();
+                                    },
+                              child: Text(
+                                'in ${post.tribeName!}',
+                                style: TextStyle(
+                                  color: scheme.primary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
@@ -90,12 +100,10 @@ class PostCard extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              if (post.isAudio) _AudioPlayerBlock(post: post)
-              else
-                Text(
-                  post.content,
-                  style: const TextStyle(fontSize: 15, height: 1.4),
-                ),
+              Text(
+                post.content,
+                style: const TextStyle(fontSize: 15, height: 1.4),
+              ),
               const SizedBox(height: 14),
               Row(
                 children: [
@@ -131,6 +139,25 @@ class PostCard extends ConsumerWidget {
                       tooltip: 'Request a chat',
                       onPressed: onMessage,
                     ),
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_horiz, color: muted),
+                    tooltip: 'More',
+                    onSelected: (v) {
+                      if (v == 'report') _openReportSheet(context, ref, post.postId);
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'report',
+                        child: Row(
+                          children: [
+                            Icon(Icons.flag_outlined, size: 16),
+                            SizedBox(width: 8),
+                            Text('Report'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
               if (dmDisabled)
@@ -173,6 +200,81 @@ class PostCard extends ConsumerWidget {
   }
 }
 
+Future<void> _openReportSheet(
+    BuildContext context, WidgetRef ref, String postId) async {
+  const reasons = <(String, String)>[
+    ('self_harm',       'Self-harm or suicide concern'),
+    ('hate',            'Hate speech'),
+    ('harassment',      'Harassment or bullying'),
+    ('sexual_content',  'Sexual content'),
+    ('violence',        'Violence or threats'),
+    ('privacy',         'Personal info / doxxing'),
+    ('spam',            'Spam or scam'),
+    ('other',           'Something else'),
+  ];
+  final choice = await showModalBottomSheet<String>(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Text(
+                'Report this post',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Text(
+                'A moderator reviews every report. Reports are anonymous.',
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final r in reasons)
+              ListTile(
+                title: Text(r.$2),
+                onTap: () => Navigator.of(ctx).pop(r.$1),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (choice == null) return;
+  try {
+    await ref.read(repositoryProvider).reportPost(
+          postId: postId,
+          reason: choice,
+        );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Thank you — a moderator will review.')),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not send report: $e')),
+    );
+  }
+}
+
 class _PillAction extends StatelessWidget {
   const _PillAction({
     required this.icon,
@@ -202,92 +304,6 @@ class _PillAction extends StatelessWidget {
             style: TextStyle(color: c, fontWeight: FontWeight.w600, fontSize: 12),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _AudioPlayerBlock extends StatelessWidget {
-  const _AudioPlayerBlock({required this.post});
-  final Post post;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final duration = Duration(milliseconds: post.audioDurationMs);
-    final mm = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final ss = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: scheme.primary.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.primary.withOpacity(0.18)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: scheme.primary,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.play_arrow_rounded, color: Colors.white),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(post.content,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 14)),
-                const SizedBox(height: 4),
-                _WaveformBars(color: scheme.primary),
-              ],
-            ),
-          ),
-          Text(
-            '0:00 / $mm:$ss',
-            style: TextStyle(
-              color: scheme.onSurface.withOpacity(0.6),
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WaveformBars extends StatelessWidget {
-  const _WaveformBars({required this.color});
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final values = [
-      0.3, 0.6, 0.4, 0.8, 0.5, 0.9, 0.4, 0.7, 0.3, 0.5,
-      0.7, 0.4, 0.6, 0.3, 0.7, 0.5, 0.8, 0.4, 0.6, 0.3,
-    ];
-    return SizedBox(
-      height: 22,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: values
-            .map((v) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 1),
-                  child: Container(
-                    width: 3,
-                    height: 22 * v,
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ))
-            .toList(),
       ),
     );
   }

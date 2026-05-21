@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'colors.dart';
 
-/// Vently global theme — warmth, safety, emotional comfort.
+/// Venttly global theme — warmth, safety, emotional comfort.
 class VentlyTheme {
   static const double radius = 24.0;
 

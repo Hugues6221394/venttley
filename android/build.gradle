@@ -6,6 +6,63 @@ allprojects {
 }
 
 rootProject.buildDir = "../build"
+
+// Configure Java 17 for every Android module *before* each project is evaluated.
+// Using `subprojects { afterEvaluate { ... } }` breaks with Flutter's
+// `evaluationDependsOn(":app")` chain ("Cannot run afterEvaluate when already evaluated").
+// `gradle.beforeProject` + `plugins.withId` is safe: listeners register early and run
+// when AGP is applied (fires immediately if already applied).
+gradle.beforeProject { proj ->
+    proj.plugins.withId("com.android.library") {
+        proj.android {
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+        }
+    }
+    proj.plugins.withId("com.android.application") {
+        proj.android {
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+        }
+    }
+}
+
+// Some plugins still declare Java 8/11 in their own android.compileOptions,
+// and a plugin's own `android { compileOptions ... }` runs after our
+// `gradle.beforeProject` listener, overriding it. Re-assert Java 17 *after*
+// each module is evaluated by overriding the Android compileOptions.
+//
+// NOTE: do NOT use `JavaCompile.options.release` here. The `--release` flag
+// makes javac discard the `-bootclasspath`, which is where AGP puts
+// `android.jar` — that drops every `android.*` class and fails the build.
+gradle.projectsEvaluated {
+    rootProject.subprojects.each { sub ->
+        def androidExt = sub.extensions.findByName("android")
+        if (androidExt != null) {
+            androidExt.compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+        }
+        // Kotlin compile tasks must use the same JVM target as the Java tasks
+        // (17), otherwise AGP fails with "jvm target compatibility should be
+        // set to the same Java version". Matched dynamically by class name so
+        // the Kotlin Gradle plugin classes aren't needed on the root
+        // buildscript classpath.
+        sub.tasks.configureEach { t ->
+            if (t.class.name.contains("KotlinCompile")) {
+                t.kotlinOptions {
+                    jvmTarget = JavaVersion.VERSION_17.toString()
+                }
+            }
+        }
+    }
+}
+
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }

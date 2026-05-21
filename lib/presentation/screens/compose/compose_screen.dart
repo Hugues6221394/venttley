@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../../data/services/moderation_service.dart';
+import '../../../domain/entities/entities.dart';
 import '../../widgets/mood_chip.dart';
 
 class ComposeScreen extends ConsumerStatefulWidget {
@@ -45,22 +46,34 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         return;
       }
     }
+    final tribe = ref.read(composeTargetTribeProvider);
     await ref.read(repositoryProvider).createPost(
           content: text,
           category: _category,
           mood: _mood,
+          tribeId: tribe?.tribeId,
         );
+    ref.read(composeTargetTribeProvider.notifier).state = null;
     if (!mounted) return;
     setState(() => _busy = false);
-    context.go('/feed');
+    if (tribe != null) {
+      context.go('/tribe/${tribe.slug}');
+    } else {
+      context.go('/feed');
+    }
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Vent posted anonymously.')),
+      SnackBar(
+        content: Text(tribe == null
+            ? 'Vent posted anonymously.'
+            : 'Posted to ${tribe.name}.'),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final Tribe? target = ref.watch(composeTargetTribeProvider);
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -81,6 +94,42 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (target != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(14),
+                      border:
+                          Border.all(color: scheme.primary.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.diversity_3,
+                            size: 16, color: scheme.primary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Posting in ${target.name}',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: scheme.primary),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 16),
+                          onPressed: () => ref
+                              .read(composeTargetTribeProvider.notifier)
+                              .state = null,
+                          tooltip: 'Post to general feed instead',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               Row(
                 children: [
                   const Text('Category',
@@ -158,11 +207,6 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  TextButton.icon(
-                    onPressed: () => context.push('/voice'),
-                    icon: Icon(Icons.mic, color: scheme.primary),
-                    label: const Text('Record voice instead'),
-                  ),
                   const Spacer(),
                   MoodChip(mood: _mood, dense: true),
                 ],

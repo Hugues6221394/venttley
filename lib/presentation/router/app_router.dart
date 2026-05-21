@@ -14,11 +14,12 @@ import '../screens/onboarding/recover_screen.dart';
 import '../screens/onboarding/recovery_key_screen.dart';
 import '../screens/onboarding/welcome_screen.dart';
 import '../screens/plugz/plug_profile_screen.dart';
-import '../screens/plugz/plugz_directory_screen.dart';
 import '../screens/profile/profile_screen.dart';
+import '../screens/questions/questions_screen.dart';
 import '../screens/share/share_card_screen.dart';
-import '../screens/spaces/spaces_discovery_screen.dart';
-import '../screens/voice/voice_record_screen.dart';
+import '../screens/tribes/create_tribe_screen.dart';
+import '../screens/tribes/tribe_detail_screen.dart';
+import '../screens/tribes/tribes_directory_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -34,8 +35,15 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: GoRouterRefreshStream(ref),
     routes: [
       GoRoute(path: '/onboarding', builder: (_, __) => const WelcomeScreen()),
-      GoRoute(path: '/onboarding/identity', builder: (_, __) => const IdentityScreen()),
-      GoRoute(path: '/onboarding/key', builder: (_, __) => const RecoveryKeyScreen()),
+      GoRoute(
+        path: '/onboarding/identity',
+        builder: (_, __) => const IdentityScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding/key',
+        builder: (ctx, st) =>
+            RecoveryKeyScreen(phrase: (st.extra as String?) ?? ''),
+      ),
       GoRoute(path: '/onboarding/recover', builder: (_, __) => const RecoverScreen()),
 
       StatefulShellRoute.indexedStack(
@@ -43,19 +51,19 @@ final routerProvider = Provider<GoRouter>((ref) {
             HomeShell(navigationShell: navigationShell),
         branches: [
           StatefulShellBranch(routes: [
-            GoRoute(path: '/feed',     builder: (_, __) => const FeedScreen()),
+            GoRoute(path: '/feed',      builder: (_, __) => const FeedScreen()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/plugz',    builder: (_, __) => const PlugzDirectoryScreen()),
+            GoRoute(path: '/tribes',    builder: (_, __) => const TribesDirectoryScreen()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/compose',  builder: (_, __) => const ComposeScreen()),
+            GoRoute(path: '/compose',   builder: (_, __) => const ComposeScreen()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/inbox',    builder: (_, __) => const InboxScreen()),
+            GoRoute(path: '/questions', builder: (_, __) => const QuestionsScreen()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/profile',  builder: (_, __) => const ProfileScreen()),
+            GoRoute(path: '/inbox',     builder: (_, __) => const InboxScreen()),
           ]),
         ],
       ),
@@ -78,11 +86,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/tribe/:slug',
+        builder: (ctx, st) =>
+            TribeDetailScreen(slug: st.pathParameters['slug']!),
+      ),
+      GoRoute(
+        path: '/tribes/new',
+        builder: (_, __) => const CreateTribeScreen(),
+      ),
+      GoRoute(
         path: '/chat/:roomId',
         builder: (ctx, st) => ChatScreen(roomId: st.pathParameters['roomId']!),
       ),
-      GoRoute(path: '/voice', builder: (_, __) => const VoiceRecordScreen()),
-      GoRoute(path: '/discover', builder: (_, __) => const SpacesDiscoveryScreen()),
+      GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
     ],
   );
 });
