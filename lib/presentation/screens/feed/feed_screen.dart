@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../../data/services/moderation_service.dart';
+import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
+import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/vently_logo.dart';
 
+/// Premium home — a single rich vertical scroll that opens with an
+/// emotion-aware greeting, surfaces a few high-intent CTAs, then leads into
+/// today's prompt, the tribes rail, and finally the personalised feed.
 class FeedScreen extends ConsumerWidget {
   const FeedScreen({super.key});
 
@@ -18,95 +24,629 @@ class FeedScreen extends ConsumerWidget {
     final feed = ref.watch(feedPostsProvider);
     final filter = ref.watch(feedFilterProvider);
     final prompts = ref.watch(promptsProvider).valueOrNull ?? const [];
+    final tribes = ref
+            .watch(tribesProvider(const TribeQuery()))
+            .valueOrNull
+            ?.take(6)
+            .toList() ??
+        const <Tribe>[];
 
     return Scaffold(
       appBar: AppBar(
         title: const VentlyLogo(size: 26),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_outline),
-            tooltip: 'My profile',
-            onPressed: () => context.push('/profile'),
+            icon: const Icon(Icons.notifications_none_rounded),
+            tooltip: 'Inbox',
+            onPressed: () => context.go('/inbox'),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: IconButton(
+              icon: const Icon(Icons.person_outline),
+              tooltip: 'My profile',
+              onPressed: () => context.push('/profile'),
+            ),
           ),
         ],
       ),
-      body: feed.when(
-        loading: () => const PostSkeletonList(),
-        error: (e, _) => Center(child: Text('Error: $e')),
-        data: (posts) {
-          return CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: _CategoryRail(filter: filter)),
-              SliverToBoxAdapter(child: _MoodRail(filter: filter)),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  child: Row(
-                    children: [
-                      Text(
-                        FeedCategories.label(filter.category ?? 'confessions'),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(feedPostsProvider);
+          ref.invalidate(tribesProvider);
+          ref.invalidate(promptsProvider);
+        },
+        child: feed.when(
+          loading: () => const PostSkeletonList(),
+          error: (e, _) => Center(child: Text('Error: $e')),
+          data: (posts) {
+            return CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                const SliverToBoxAdapter(child: _HeroGreetingCard()),
+                const SliverToBoxAdapter(child: _QuickActionsRail()),
+                if (prompts.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: PromptCard(
+                        prompt: prompts.first,
+                        onSubmit: (text) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content:
+                                  Text('Your answer was added anonymously.'),
+                            ),
+                          );
+                        },
                       ),
-                      const Spacer(),
-                      if (filter.mood != null)
-                        TextButton.icon(
-                          onPressed: () => ref
-                              .read(feedFilterProvider.notifier)
-                              .update((s) => s.copyWith(clearMood: true)),
-                          icon: const Icon(Icons.clear, size: 14),
-                          label: const Text('Clear mood'),
-                        ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-              if (prompts.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: PromptCard(
-                    prompt: prompts.first,
-                    onSubmit: (text) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Answer posted to the Tribe.')),
+                if (tribes.isNotEmpty)
+                  SliverToBoxAdapter(child: _TribesRail(tribes: tribes)),
+                const SliverToBoxAdapter(child: _AffirmationStrip()),
+                SliverToBoxAdapter(child: _FeedSectionHeader(filter: filter)),
+                SliverToBoxAdapter(child: _CategoryRail(filter: filter)),
+                if (FeedCategories.crisisAware.contains(filter.category))
+                  const SliverToBoxAdapter(child: _CrisisBanner()),
+                if (posts.isEmpty)
+                  const SliverToBoxAdapter(child: _EmptyState())
+                else
+                  SliverList.builder(
+                    itemCount: posts.length,
+                    itemBuilder: (ctx, i) {
+                      final post = posts[i];
+                      return PostCard(
+                        post: post,
+                        onTap: () => context.push('/post/${post.postId}'),
+                        onComment: () =>
+                            context.push('/post/${post.postId}'),
+                        onShare: () =>
+                            context.push('/post/${post.postId}/share'),
+                        onMessage: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Send a structured message request from the user’s profile.',
+                              ),
+                            ),
+                          );
+                        },
                       );
                     },
                   ),
+                const SliverToBoxAdapter(child: SizedBox(height: 32)),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// HERO GREETING
+// =========================================================================
+
+class _HeroGreetingCard extends ConsumerWidget {
+  const _HeroGreetingCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(sessionProvider);
+    final filter = ref.watch(feedFilterProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final greeting = _greetingFor(DateTime.now());
+    final supportive = _supportiveLineFor(DateTime.now(), me?.userId);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  scheme.primary.withOpacity(0.18),
+                  VentlyColors.cardDark,
+                ]
+              : [
+                  scheme.primary.withOpacity(0.10),
+                  VentlyColors.cardBlush,
+                ],
+        ),
+        border: Border.all(
+          color: scheme.primary.withOpacity(isDark ? 0.30 : 0.18),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withOpacity(0.10),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (me != null)
+                AnonymousAvatar(
+                  seed: me.avatarSeed,
+                  label: me.anonymousPseudonym,
+                  size: 44,
                 ),
-              if (FeedCategories.crisisAware.contains(filter.category))
-                const SliverToBoxAdapter(child: _CrisisBanner()),
-              if (posts.isEmpty)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _EmptyState(),
-                )
-              else
-                SliverList.builder(
-                  itemCount: posts.length,
-                  itemBuilder: (ctx, i) {
-                    final post = posts[i];
-                    return PostCard(
-                      post: post,
-                      onTap: () => context.push('/post/${post.postId}'),
-                      onComment: () => context.push('/post/${post.postId}'),
-                      onShare: () => context.push('/post/${post.postId}/share'),
-                      onMessage: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Send a structured message request from the user\u2019s profile.',
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$greeting${me != null ? ', @${me.anonymousPseudonym}' : ''}',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: isDark
+                            ? VentlyColors.softOffWhite
+                            : VentlyColors.deepBurgundy,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      supportive,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurface.withOpacity(0.65),
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
                 ),
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              ),
             ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'How are you feeling?',
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w800,
+              color: scheme.primary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 38,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: Moods.all.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (_, i) {
+                final m = Moods.all[i];
+                final selected = filter.mood == m;
+                return GestureDetector(
+                  onTap: () {
+                    ref.read(feedFilterProvider.notifier).update((s) {
+                      if (selected) return s.copyWith(clearMood: true);
+                      return s.copyWith(mood: m);
+                    });
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? scheme.primary
+                          : Theme.of(context).cardColor,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: selected
+                            ? scheme.primary
+                            : scheme.primary.withOpacity(0.25),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(Moods.emoji(m),
+                            style: const TextStyle(fontSize: 15)),
+                        const SizedBox(width: 6),
+                        Text(
+                          Moods.label(m),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: selected
+                                ? Colors.white
+                                : scheme.onSurface.withOpacity(0.85),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 320.ms).moveY(begin: 8, end: 0);
+  }
+
+  String _greetingFor(DateTime t) {
+    final h = t.hour;
+    if (h < 5)  return 'Late night';
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    if (h < 22) return 'Good evening';
+    return 'Hey, night owl';
+  }
+
+  /// Deterministic, gentle supportive line — picked by date-of-year so it
+  /// rotates daily but stays consistent across screen rebuilds.
+  String _supportiveLineFor(DateTime t, String? salt) {
+    const lines = [
+      'Whatever you bring tonight, you bring it as you are.',
+      "You don't have to perform here. Just breathe.",
+      'Soft hello — your sanctuary is open.',
+      'One word at a time. That is more than enough.',
+      'You showed up. That already counts.',
+      "Take your time. Everyone here moves slow on purpose.",
+      'Whatever the day was, you get to set it down for a moment.',
+    ];
+    final day = t.difference(DateTime(2026, 1, 1)).inDays;
+    return lines[(day + (salt?.length ?? 0)) % lines.length];
+  }
+}
+
+// =========================================================================
+// QUICK ACTIONS
+// =========================================================================
+
+class _QuickActionsRail extends StatelessWidget {
+  const _QuickActionsRail();
+
+  static const _actions = <(IconData, String, String, String)>[
+    // (icon, label, route, category-override)
+    (Icons.edit_note_rounded, 'Vent',       '/compose',    'confessions'),
+    (Icons.help_outline,      'Ask',        '/compose',    'questions'),
+    (Icons.auto_stories,      'Story',      '/compose',    'testimonies'),
+    (Icons.diversity_3,       'Tribes',     '/tribes',     ''),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 96,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        itemCount: _actions.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (ctx, i) {
+          final (icon, label, route, _) = _actions[i];
+          return _QuickActionCard(
+            icon: icon,
+            label: label,
+            onTap: () => GoRouter.of(ctx).go(route),
           );
         },
+      ),
+    );
+  }
+}
+
+class _QuickActionCard extends StatelessWidget {
+  const _QuickActionCard({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          width: 90,
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            color: isDark
+                ? VentlyColors.cardDark
+                : Theme.of(context).cardColor,
+            border: Border.all(
+              color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withOpacity(0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: scheme.primary, size: 19),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// TRIBES RAIL
+// =========================================================================
+
+class _TribesRail extends StatelessWidget {
+  const _TribesRail({required this.tribes});
+  final List<Tribe> tribes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+          child: Row(
+            children: [
+              const Text(
+                'Discover Tribes',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () => GoRouter.of(context).go('/tribes'),
+                child: const Text('See all'),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 138,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: tribes.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (ctx, i) => _TribeChipCard(tribe: tribes[i]),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TribeChipCard extends StatelessWidget {
+  const _TribeChipCard({required this.tribe});
+  final Tribe tribe;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SizedBox(
+      width: 188,
+      child: InkWell(
+        onTap: () => GoRouter.of(context).push('/tribe/${tribe.slug}'),
+        borderRadius: BorderRadius.circular(22),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark
+                ? VentlyColors.cardDark
+                : Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withOpacity(0.14),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child:
+                        Icon(Icons.diversity_3, color: scheme.primary, size: 18),
+                  ),
+                  const Spacer(),
+                  if (tribe.joinedByMe)
+                    Icon(Icons.check_circle,
+                        size: 16, color: scheme.primary)
+                  else
+                    Icon(Icons.add_circle_outline,
+                        size: 16,
+                        color: scheme.onSurface.withOpacity(0.5)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                tribe.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  height: 1.25,
+                ),
+              ),
+              const Spacer(),
+              Row(
+                children: [
+                  Icon(Icons.people_alt_outlined,
+                      size: 12,
+                      color: scheme.onSurface.withOpacity(0.55)),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${PostCard.compactNumber(tribe.memberCount)} members',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface.withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// AFFIRMATION STRIP
+// =========================================================================
+
+class _AffirmationStrip extends StatelessWidget {
+  const _AffirmationStrip();
+
+  static const _affirmations = [
+    'Your feelings are valid. All of them.',
+    'You are allowed to take up space.',
+    "It's okay to put yourself first today.",
+    'You have survived 100% of your hardest days.',
+    'Healing isn\'t linear and that\'s okay.',
+    'Soft is also strong.',
+    "Being honest with yourself is its own kind of courage.",
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final day = DateTime.now()
+        .difference(DateTime(2026, 1, 1))
+        .inDays;
+    final affirmation = _affirmations[day.abs() % _affirmations.length];
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: isDark
+            ? scheme.primary.withOpacity(0.12)
+            : VentlyColors.softMauve.withOpacity(0.25),
+        border: Border.all(
+          color: scheme.primary.withOpacity(0.22),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.spa_outlined, size: 18, color: scheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              affirmation,
+              style: TextStyle(
+                fontStyle: FontStyle.italic,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: isDark
+                    ? VentlyColors.softOffWhite
+                    : VentlyColors.deepBurgundy,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// FEED SECTION HEADER + CATEGORY RAIL
+// =========================================================================
+
+class _FeedSectionHeader extends ConsumerWidget {
+  const _FeedSectionHeader({required this.filter});
+  final FeedFilter filter;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+      child: Row(
+        children: [
+          const Text(
+            'Your feed',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          ),
+          if (filter.mood != null) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: scheme.primary.withOpacity(0.14),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  Text(Moods.emoji(filter.mood!),
+                      style: const TextStyle(fontSize: 11)),
+                  const SizedBox(width: 4),
+                  Text(
+                    Moods.label(filter.mood!),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.primary,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => ref
+                        .read(feedFilterProvider.notifier)
+                        .update((s) => s.copyWith(clearMood: true)),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Icon(Icons.close,
+                          size: 12, color: scheme.primary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const Spacer(),
+        ],
       ),
     );
   }
@@ -121,7 +661,7 @@ class _CategoryRail extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     const items = FeedCategories.all;
     return SizedBox(
-      height: 48,
+      height: 44,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -160,84 +700,9 @@ class _CategoryRail extends ConsumerWidget {
   }
 }
 
-class _MoodRail extends ConsumerWidget {
-  const _MoodRail({required this.filter});
-  final FeedFilter filter;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return SizedBox(
-      height: 76,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: Moods.all.length + 1,
-        itemBuilder: (ctx, i) {
-          if (i == 0) {
-            return Padding(
-              padding: const EdgeInsets.only(right: 12, top: 12),
-              child: Column(
-                children: [
-                  Text('MOODS',
-                      style: TextStyle(
-                        fontSize: 11,
-                        letterSpacing: 1,
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.w800,
-                      )),
-                  const Spacer(),
-                ],
-              ),
-            );
-          }
-          final mood = Moods.all[i - 1];
-          final selected = filter.mood == mood;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: GestureDetector(
-              onTap: () {
-                ref.read(feedFilterProvider.notifier).update((s) {
-                  if (selected) return s.copyWith(clearMood: true);
-                  return s.copyWith(mood: mood);
-                });
-              },
-              child: Column(
-                children: [
-                  Container(
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withOpacity(0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      Moods.emoji(mood),
-                      style: const TextStyle(fontSize: 20),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    Moods.label(mood),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
+// =========================================================================
+// CRISIS BANNER + EMPTY
+// =========================================================================
 
 class _CrisisBanner extends StatelessWidget {
   const _CrisisBanner();
@@ -246,7 +711,7 @@ class _CrisisBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: scheme.primary.withOpacity(0.1),
