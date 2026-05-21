@@ -7,6 +7,7 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/post_card.dart';
+import '../../widgets/skeleton.dart';
 import '../../widgets/vently_logo.dart';
 
 /// Hybrid Tribes browse + search + create entry point.
@@ -89,7 +90,7 @@ class _TribesDirectoryScreenState
           const SizedBox(height: 4),
           Expanded(
             child: async.isLoading && tribes.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? const TribeSkeletonList()
                 : tribes.isEmpty
                     ? Center(
                         child: Padding(

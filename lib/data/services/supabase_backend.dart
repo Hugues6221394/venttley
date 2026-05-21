@@ -352,6 +352,36 @@ class SupabaseBackend {
     );
   }
 
+  /// Report a chat. Inserts into the legacy `moderation_reports` table whose
+  /// CHECK constraint allows: harassment, hate_speech, self_harm, doxxing,
+  /// spam, explicit. The UI uses the same eight-option list as posts and we
+  /// map down here.
+  Future<void> reportChat({
+    required String roomId,
+    required String reason,
+    String? note,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    await _client.from('moderation_reports').insert({
+      'reporter_id':     uid,
+      'target_room_id':  roomId,
+      'report_category': _mapToLegacyReason(reason),
+      'context_data':    note,
+    });
+  }
+
+  static String _mapToLegacyReason(String reason) {
+    switch (reason) {
+      case 'hate':           return 'hate_speech';
+      case 'sexual_content': return 'explicit';
+      case 'privacy':        return 'doxxing';
+      case 'violence':       return 'harassment';
+      case 'other':          return 'harassment';
+      default:               return reason; // self_harm | harassment | spam pass through
+    }
+  }
+
   Future<List<Post>> mySaved() async {
     final uid = _uid;
     if (uid == null) return const [];

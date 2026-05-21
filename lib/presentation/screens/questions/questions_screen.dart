@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/post_card.dart';
+import '../../widgets/skeleton.dart';
 import '../../widgets/vently_logo.dart';
 
 /// The Questions tab — Question of the Day plus a feed of all open
@@ -20,15 +21,9 @@ class QuestionsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const VentlyLogo(size: 26),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: async.isLoading && prompts.isEmpty
-          ? const Center(child: CircularProgressIndicator())
+          ? const QuestionsSkeletonList()
           : prompts.isEmpty
               ? Center(
                   child: Padding(

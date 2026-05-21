@@ -24,9 +24,6 @@ class InboxScreen extends ConsumerWidget {
           onPressed: () => context.go('/feed'),
         ),
         title: const Text('Requests'),
-        actions: [
-          IconButton(icon: const Icon(Icons.more_vert), onPressed: () {}),
-        ],
       ),
       body: Column(
         children: [

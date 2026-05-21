@@ -58,12 +58,6 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(tribe.name, overflow: TextOverflow.ellipsis),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share_outlined),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {

@@ -214,12 +214,21 @@ class MockBackend {
   }
 
   final Set<String> _reportedPosts = {};
+  final Set<String> _reportedRooms = {};
   void reportPost({
     required String postId,
     required String reason,
     String? note,
   }) {
     _reportedPosts.add(postId);
+  }
+
+  void reportChat({
+    required String roomId,
+    required String reason,
+    String? note,
+  }) {
+    _reportedRooms.add(roomId);
   }
 
   List<Post> mySaved() => _posts

@@ -35,10 +35,6 @@ class PlugProfileScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Plug Profile'),
-        actions: [
-          IconButton(icon: const Icon(Icons.share), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.more_horiz), onPressed: () {}),
-        ],
       ),
       body: ListView(
         children: [
