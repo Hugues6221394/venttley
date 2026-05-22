@@ -68,7 +68,7 @@ export default async function ModerationPage() {
     .order("created_at", { ascending: false })
     .limit(200);
 
-  const rows = (data ?? []) as Row[];
+  const rows = (data ?? []) as unknown as Row[];
   const pending = rows.filter((r) => !r.is_resolved);
   const resolved = rows.filter((r) => r.is_resolved);
 
