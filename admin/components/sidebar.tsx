@@ -14,10 +14,10 @@ const items: Item[] = [
   { href: "/overview",      label: "Overview",      icon: "▦", ready: true },
   { href: "/moderation",    label: "Moderation",    icon: "▲", ready: true },
   { href: "/users",         label: "Users",         icon: "◉", ready: true },
-  { href: "/tribes",        label: "Tribes",        icon: "◍" },
-  { href: "/analytics",     label: "Analytics",     icon: "◮" },
-  { href: "/notifications", label: "Notifications", icon: "✦" },
-  { href: "/settings",      label: "Settings",      icon: "❖" },
+  { href: "/tribes",        label: "Tribes",        icon: "◍", ready: true },
+  { href: "/analytics",     label: "Analytics",     icon: "◮", ready: true },
+  { href: "/notifications", label: "Notifications", icon: "✦", ready: true },
+  { href: "/settings",      label: "Settings",      icon: "❖", ready: true },
 ];
 
 export default function Sidebar() {

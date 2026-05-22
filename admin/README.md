@@ -30,17 +30,17 @@ Visit http://localhost:3000.
 - The dashboard layout server-checks `users.user_role == 'super_admin'`
   every request. Anyone else lands on a "Not authorized" panel.
 
-## What's live in this MVP
+## What's wired
 
-| Page | Status |
+| Page | Backing data |
 | --- | --- |
-| Overview | Real counts: users, tribes, posts, comments, reports, growth window |
-| Moderation | Real `reports` queue with mark-resolved + soft-delete-post actions |
-| Users | Real user list with role + safety tier filters and per-row actions |
-| Tribes | Coming soon |
-| Analytics | Coming soon |
-| Notifications | Coming soon |
-| Settings | Coming soon |
+| Overview | Real counts: users / tribes / posts / comments / reports / chat msgs + 7d growth, 24h post volume |
+| Moderation | Real `reports` queue with mark-resolved + soft-delete-post server actions |
+| Users | Paged user table, pseudonym + status filter, suspend / reactivate |
+| Tribes | Real tribe table, category + flag filters, feature / suspend toggles |
+| Analytics | 30-day new-user series, sentiment trend, top categories, top tribes |
+| Notifications | Compose platform-wide announcement → fans out into `notifications` + audit row in `admin_broadcasts` |
+| Settings | Env-var presence, moderation pipeline summary, role assignment (normal / plug / super_admin) |
 
 ## Architecture notes
 

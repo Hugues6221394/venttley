@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
+import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/post_card.dart';
@@ -14,6 +16,7 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(sessionProvider);
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (me == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Profile')),
@@ -28,15 +31,21 @@ class ProfileScreen extends ConsumerWidget {
 
     final myVents = ref.watch(myVentsProvider).valueOrNull ?? const [];
     final mySaved = ref.watch(mySavedProvider).valueOrNull ?? const [];
-    final joinedTribes = ref
-        .watch(tribesProvider(const TribeQuery()))
-        .valueOrNull
-        ?.where((t) => t.joinedByMe)
-        .toList() ??
-        const [];
+    final allTribes =
+        ref.watch(tribesProvider(const TribeQuery())).valueOrNull ?? const [];
+    final joinedTribes =
+        allTribes.where((t) => t.joinedByMe).toList();
+    final keptTribes =
+        allTribes.where((t) => t.keeperId == me.userId).toList();
+
+    final tabs = <_ProfileTab>[
+      _ProfileTab('My Vents', myVents),
+      if (keptTribes.isNotEmpty) const _ProfileTab('Kept', null),
+      _ProfileTab('Saved', mySaved),
+    ];
 
     return DefaultTabController(
-      length: 2,
+      length: tabs.length,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Profile'),
@@ -61,98 +70,512 @@ class ProfileScreen extends ConsumerWidget {
         body: NestedScrollView(
           headerSliverBuilder: (ctx, _) => [
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                child: Column(
-                  children: [
-                    AnonymousAvatar(
-                      seed: me.avatarSeed,
-                      label: me.anonymousPseudonym,
-                      size: 96,
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      '@${me.anonymousPseudonym}',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    Chip(
-                      label: Text(
-                        me.isRestrictedMinor ? 'Restricted (13–17)' : 'Standard Tier',
-                        style: TextStyle(
-                          color: scheme.primary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 11,
-                        ),
-                      ),
-                      backgroundColor: scheme.primary.withOpacity(0.12),
-                      side: BorderSide.none,
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: 220,
-                      child: OutlinedButton.icon(
-                        onPressed: () =>
-                            _showRecoveryPhrase(context, ref),
-                        icon: const Icon(Icons.key_outlined, size: 16),
-                        label: const Text('Show recovery phrase'),
-                      ),
-                    ),
-                  ],
-                ),
+              child: _HeroCard(
+                me: me,
+                onShowPhrase: () => _showRecoveryPhrase(context, ref),
               ),
             ),
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _Stat(label: 'My Vents',      value: myVents.length.toString()),
-                    _Stat(label: 'Saved',         value: mySaved.length.toString()),
-                    _Stat(label: 'Tribes Joined', value: joinedTribes.length.toString()),
-                  ],
-                ),
+              child: _StatsRow(
+                vents: myVents.length,
+                saved: mySaved.length,
+                joined: joinedTribes.length,
+                kept: keptTribes.length,
               ),
             ),
-            const SliverPersistentHeader(
+            if (keptTribes.isNotEmpty)
+              SliverToBoxAdapter(
+                child: _KeeperOverviewStrip(tribes: keptTribes),
+              ),
+            SliverPersistentHeader(
               pinned: true,
-              delegate: _TabsHeader(),
+              delegate: _TabsHeader(
+                tabs: tabs.map((t) => t.label).toList(),
+                bg: isDark ? scheme.surface : Theme.of(context).scaffoldBackgroundColor,
+              ),
             ),
           ],
           body: TabBarView(
-            children: [
-              ListView(
-                children: [
-                  if (myVents.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: Text('You haven\'t vented yet.')),
-                    )
-                  else
-                    for (final p in myVents) PostCard(post: p, onTap: () => context.push('/post/${p.postId}')),
-                ],
-              ),
-              ListView(
-                children: [
-                  if (mySaved.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: Text('Bookmark vents to keep them safe here.')),
-                    )
-                  else
-                    for (final p in mySaved) PostCard(post: p, onTap: () => context.push('/post/${p.postId}')),
-                ],
-              ),
-            ],
+            children: tabs.map((t) {
+              if (t.label == 'Kept') {
+                return _KeptTribesTab(tribes: keptTribes);
+              }
+              return _PostsTab(
+                posts: t.posts!,
+                emptyText: t.label == 'My Vents'
+                    ? "You haven't vented yet."
+                    : 'Bookmark vents to keep them safe here.',
+              );
+            }).toList(),
           ),
         ),
       ),
     );
   }
 }
+
+class _ProfileTab {
+  const _ProfileTab(this.label, this.posts);
+  final String label;
+  final List<Post>? posts;
+}
+
+// =========================================================================
+// HERO
+// =========================================================================
+
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({required this.me, required this.onShowPhrase});
+  final AppUser me;
+  final VoidCallback onShowPhrase;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  scheme.primary.withOpacity(0.20),
+                  VentlyColors.cardDark,
+                ]
+              : [
+                  scheme.primary.withOpacity(0.12),
+                  VentlyColors.cardBlush,
+                ],
+        ),
+        border: Border.all(
+          color: scheme.primary.withOpacity(isDark ? 0.30 : 0.20),
+        ),
+      ),
+      child: Column(
+        children: [
+          AnonymousAvatar(
+            seed: me.avatarSeed,
+            label: me.anonymousPseudonym,
+            size: 96,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '@${me.anonymousPseudonym}',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 20,
+              color: isDark
+                  ? VentlyColors.softOffWhite
+                  : VentlyColors.deepBurgundy,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            children: [
+              _SoftChip(
+                label: me.isRestrictedMinor
+                    ? 'Restricted (13–17)'
+                    : 'Standard tier',
+                icon: Icons.shield_outlined,
+              ),
+              _SoftChip(
+                label: me.isPlug ? 'Verified plug' : 'Member',
+                icon: me.isPlug ? Icons.verified : Icons.person_outline,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: 240,
+            child: OutlinedButton.icon(
+              onPressed: onShowPhrase,
+              icon: const Icon(Icons.key_outlined, size: 16),
+              label: const Text('Show recovery phrase'),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 320.ms).moveY(begin: 8, end: 0);
+  }
+}
+
+class _SoftChip extends StatelessWidget {
+  const _SoftChip({required this.label, required this.icon});
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: scheme.primary.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: scheme.primary),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: scheme.primary,
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// STATS ROW
+// =========================================================================
+
+class _StatsRow extends StatelessWidget {
+  const _StatsRow({
+    required this.vents,
+    required this.saved,
+    required this.joined,
+    required this.kept,
+  });
+  final int vents;
+  final int saved;
+  final int joined;
+  final int kept;
+
+  @override
+  Widget build(BuildContext context) {
+    final stats = <(String, int)>[
+      ('Vents',  vents),
+      ('Saved',  saved),
+      ('Tribes', joined),
+      if (kept > 0) ('Kept', kept),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      child: Row(
+        children: [
+          for (final s in stats)
+            Expanded(child: _Stat(label: s.$1, value: s.$2.toString())),
+        ],
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: scheme.primary,
+              fontWeight: FontWeight.w800,
+              fontSize: 22,
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// KEEPER OVERVIEW STRIP (horizontal preview of tribes you keep)
+// =========================================================================
+
+class _KeeperOverviewStrip extends StatelessWidget {
+  const _KeeperOverviewStrip({required this.tribes});
+  final List<Tribe> tribes;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+          child: Row(
+            children: [
+              Icon(Icons.shield_moon_outlined,
+                  size: 16, color: scheme.primary),
+              const SizedBox(width: 6),
+              const Text(
+                'Tribes you keep',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+              ),
+              const Spacer(),
+              Text(
+                '${tribes.length}',
+                style: TextStyle(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 88,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: tribes.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (_, i) => _KeptTribeChip(tribe: tribes[i]),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _KeptTribeChip extends StatelessWidget {
+  const _KeptTribeChip({required this.tribe});
+  final Tribe tribe;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return InkWell(
+      onTap: () => context.push('/tribe/${tribe.slug}/manage'),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 160,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.diversity_3,
+                      size: 14, color: scheme.primary),
+                ),
+                const Spacer(),
+                Text(
+                  PostCard.compactNumber(tribe.memberCount),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: scheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              tribe.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// TABS
+// =========================================================================
+
+class _PostsTab extends StatelessWidget {
+  const _PostsTab({required this.posts, required this.emptyText});
+  final List<Post> posts;
+  final String emptyText;
+
+  @override
+  Widget build(BuildContext context) {
+    if (posts.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            emptyText,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+    return ListView(
+      children: [
+        for (final p in posts)
+          PostCard(
+            post: p,
+            onTap: () => context.push('/post/${p.postId}'),
+          ),
+      ],
+    );
+  }
+}
+
+class _KeptTribesTab extends StatelessWidget {
+  const _KeptTribesTab({required this.tribes});
+  final List<Tribe> tribes;
+
+  @override
+  Widget build(BuildContext context) {
+    if (tribes.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Text(
+            "You don't keep any Tribes yet.",
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      );
+    }
+    return ListView(
+      children: [
+        for (final t in tribes) _KeptTribeRow(tribe: t),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+}
+
+class _KeptTribeRow extends StatelessWidget {
+  const _KeptTribeRow({required this.tribe});
+  final Tribe tribe;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: scheme.primary.withOpacity(0.14),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(Icons.diversity_3, color: scheme.primary, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tribe.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${PostCard.compactNumber(tribe.memberCount)} members'
+                    '${tribe.isPrivate ? " • Private" : ""}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurface.withOpacity(0.65),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.tune_rounded, size: 14),
+              onPressed: () =>
+                  context.push('/tribe/${tribe.slug}/manage'),
+              label: const Text('Manage'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TabsHeader extends SliverPersistentHeaderDelegate {
+  const _TabsHeader({required this.tabs, required this.bg});
+  final List<String> tabs;
+  final Color bg;
+
+  @override
+  double get minExtent => 50;
+  @override
+  double get maxExtent => 50;
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: bg,
+      child: TabBar(
+        labelStyle: const TextStyle(fontWeight: FontWeight.w800),
+        tabs: [for (final t in tabs) Tab(text: t)],
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _TabsHeader oldDelegate) =>
+      oldDelegate.tabs.length != tabs.length;
+}
+
+// =========================================================================
+// RECOVERY-PHRASE REVEAL (kept from prior version)
+// =========================================================================
 
 Future<void> _showRecoveryPhrase(BuildContext context, WidgetRef ref) async {
   final repo = ref.read(repositoryProvider);
@@ -247,66 +670,4 @@ Future<void> _showRecoveryPhrase(BuildContext context, WidgetRef ref) async {
       ],
     ),
   );
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
-        ),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                color: scheme.primary,
-                fontWeight: FontWeight.w800,
-                fontSize: 22,
-              ),
-            ),
-            Text(
-              label,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TabsHeader extends SliverPersistentHeaderDelegate {
-  const _TabsHeader();
-  @override
-  double get minExtent => 50;
-  @override
-  double get maxExtent => 50;
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: const TabBar(
-        labelStyle: TextStyle(fontWeight: FontWeight.w800),
-        tabs: [
-          Tab(text: 'My Vents'),
-          Tab(text: 'Saved'),
-        ],
-      ),
-    );
-  }
-
-  @override
-  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) => false;
 }
