@@ -71,13 +71,29 @@ class FeedScreen extends ConsumerWidget {
                       padding: const EdgeInsets.only(top: 4),
                       child: PromptCard(
                         prompt: prompts.first,
-                        onSubmit: (text) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content:
-                                  Text('Your answer was added anonymously.'),
-                            ),
-                          );
+                        onTap: () => context.go('/questions'),
+                        onSubmit: (text) async {
+                          try {
+                            await ref.read(repositoryProvider).addPromptAnswer(
+                                  promptId: prompts.first.promptId,
+                                  text: text,
+                                );
+                            ref.invalidate(promptsProvider);
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Your answer was added anonymously.'),
+                              ),
+                            );
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Could not post: $e'),
+                              ),
+                            );
+                          }
                         },
                       ),
                     ),

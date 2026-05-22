@@ -251,6 +251,24 @@ class ChatMessage {
   });
 }
 
+class PromptAnswer {
+  final String answerId;
+  final String promptId;
+  final String authorPseudonym;
+  final String authorAvatarSeed;
+  final String text;
+  final DateTime createdAt;
+
+  const PromptAnswer({
+    required this.answerId,
+    required this.promptId,
+    required this.authorPseudonym,
+    required this.authorAvatarSeed,
+    required this.text,
+    required this.createdAt,
+  });
+}
+
 class PlugPrompt {
   final String promptId;
   final String plugDisplayName;

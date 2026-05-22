@@ -519,6 +519,24 @@ class VentlyRepository {
     return Future.value(_mock.prompts());
   }
 
+  Future<List<PromptAnswer>> promptAnswers(String promptId) {
+    final live = _live;
+    if (live != null) return live.promptAnswers(promptId);
+    return Future.value(_mock.promptAnswers(promptId));
+  }
+
+  Future<PromptAnswer> addPromptAnswer({
+    required String promptId,
+    required String text,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.addPromptAnswer(promptId: promptId, text: text);
+    }
+    return Future.value(
+        _mock.addPromptAnswer(promptId: promptId, text: text));
+  }
+
   // ===================== Notifications =====================
   Future<List<NotificationItem>> notifications() {
     final live = _live;

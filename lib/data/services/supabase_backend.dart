@@ -881,6 +881,77 @@ class SupabaseBackend {
   }
 
   // ===================================================================
+  // PROMPT ANSWERS  (Question-of-the-Day replies)
+  // ===================================================================
+  Future<List<PromptAnswer>> promptAnswers(String promptId) async {
+    final rows = await _client
+        .from('prompt_answers')
+        .select(
+          'answer_id, prompt_id, answer_text, created_at, author_id, '
+          'users:author_id(anonymous_pseudonym, avatar_seed)',
+        )
+        .eq('prompt_id', promptId)
+        .order('created_at', ascending: false)
+        .limit(200);
+    return rows.map<PromptAnswer>((r) {
+      final u = r['users'] as Map<String, dynamic>?;
+      return PromptAnswer(
+        answerId: r['answer_id'] as String,
+        promptId: r['prompt_id'] as String,
+        authorPseudonym: u?['anonymous_pseudonym'] != null
+            ? '@${u!['anonymous_pseudonym']}'
+            : '@anonymous',
+        authorAvatarSeed: (u?['avatar_seed'] as String?) ?? 'default-orb',
+        text: r['answer_text'] as String,
+        createdAt: DateTime.parse(r['created_at'] as String),
+      );
+    }).toList();
+  }
+
+  Future<PromptAnswer> addPromptAnswer({
+    required String promptId,
+    required String text,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    final row = await _client
+        .from('prompt_answers')
+        .insert({
+          'prompt_id':   promptId,
+          'author_id':   uid,
+          'answer_text': text,
+        })
+        .select('answer_id, prompt_id, answer_text, created_at')
+        .single();
+    // Best-effort: bump the prompt's answers_count for the home strip.
+    await _client.rpc('increment_prompt_answers', params: {
+      'p_prompt_id': promptId,
+    }).then((_) {}, onError: (_) async {
+      // RPC may not exist on older deployments; fall back to a direct update.
+      // Race: another inserter may bump first, but we accept some drift.
+      final p = await _client
+          .from('plug_prompts')
+          .select('answers_count')
+          .eq('prompt_id', promptId)
+          .single();
+      final cur = (p['answers_count'] as int?) ?? 0;
+      await _client
+          .from('plug_prompts')
+          .update({'answers_count': cur + 1})
+          .eq('prompt_id', promptId);
+    });
+    final me = _me;
+    return PromptAnswer(
+      answerId: row['answer_id'] as String,
+      promptId: row['prompt_id'] as String,
+      authorPseudonym: '@${me?.anonymousPseudonym ?? 'anonymous'}',
+      authorAvatarSeed: me?.avatarSeed ?? 'default-orb',
+      text: row['answer_text'] as String,
+      createdAt: DateTime.parse(row['created_at'] as String),
+    );
+  }
+
+  // ===================================================================
   // NOTIFICATIONS
   // ===================================================================
   Future<List<NotificationItem>> notifications() async {

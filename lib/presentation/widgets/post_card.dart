@@ -312,9 +312,15 @@ class _PillAction extends StatelessWidget {
 /// Plug-prompt card — the heart-shaped speech-bubble container used for
 /// "Question of the Day" cards.
 class PromptCard extends StatelessWidget {
-  const PromptCard({super.key, required this.prompt, this.onSubmit});
+  const PromptCard({
+    super.key,
+    required this.prompt,
+    this.onSubmit,
+    this.onTap,
+  });
   final PlugPrompt prompt;
   final ValueChanged<String>? onSubmit;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -424,11 +430,17 @@ class PromptCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Text(
-              '${prompt.answersCount} anonymous answers • tap to read the thread',
-              style: TextStyle(
-                fontSize: 11,
-                color: scheme.onSurface.withOpacity(0.55),
+            InkWell(
+              onTap: onTap,
+              child: Text(
+                '${prompt.answersCount} anonymous answers • tap to read the thread',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  decoration:
+                      onTap == null ? null : TextDecoration.underline,
+                  color: scheme.onSurface.withOpacity(0.65),
+                ),
               ),
             ),
           ],

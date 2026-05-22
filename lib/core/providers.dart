@@ -170,6 +170,12 @@ final tribeReportsProvider =
         (ref, tribeId) async =>
             ref.watch(repositoryProvider).tribeReports(tribeId));
 
+/// Anonymous answers to a Question of the Day.
+final promptAnswersProvider =
+    FutureProvider.autoDispose.family<List<PromptAnswer>, String>(
+        (ref, promptId) async =>
+            ref.watch(repositoryProvider).promptAnswers(promptId));
+
 final promptsProvider = FutureProvider.autoDispose<List<PlugPrompt>>(
     (ref) async => ref.watch(repositoryProvider).prompts());
 

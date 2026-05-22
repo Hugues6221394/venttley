@@ -577,6 +577,38 @@ class MockBackend {
   // -------------------- Prompts --------------------
   List<PlugPrompt> prompts() => List.unmodifiable(_prompts);
 
+  final Map<String, List<PromptAnswer>> _promptAnswers = {};
+
+  List<PromptAnswer> promptAnswers(String promptId) =>
+      List.unmodifiable(_promptAnswers[promptId] ?? const []);
+
+  PromptAnswer addPromptAnswer({
+    required String promptId,
+    required String text,
+  }) {
+    final me = _me;
+    final a = PromptAnswer(
+      answerId: _uuid.v4(),
+      promptId: promptId,
+      authorPseudonym: '@${me?.anonymousPseudonym ?? 'anonymous'}',
+      authorAvatarSeed: me?.avatarSeed ?? 'default-orb',
+      text: text,
+      createdAt: DateTime.now(),
+    );
+    _promptAnswers.putIfAbsent(promptId, () => []).insert(0, a);
+    final i = _prompts.indexWhere((p) => p.promptId == promptId);
+    if (i != -1) {
+      _prompts[i] = PlugPrompt(
+        promptId: _prompts[i].promptId,
+        plugDisplayName: _prompts[i].plugDisplayName,
+        plugAvatarSeed: _prompts[i].plugAvatarSeed,
+        promptText: _prompts[i].promptText,
+        answersCount: _prompts[i].answersCount + 1,
+      );
+    }
+    return a;
+  }
+
   // -------------------- Notifications --------------------
   List<NotificationItem> notifications() => List.unmodifiable(_notifications);
 

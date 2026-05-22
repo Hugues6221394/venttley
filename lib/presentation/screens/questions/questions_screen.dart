@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/providers.dart';
+import '../../../domain/entities/entities.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/vently_logo.dart';
 
-/// The Questions tab — Question of the Day plus a feed of all open
-/// prompts. Each prompt opens an answer thread (rendered as a sheet).
+/// Question of the Day + every open prompt. Tapping a prompt opens its
+/// real answer thread, backed by the `prompt_answers` table.
 class QuestionsScreen extends ConsumerWidget {
   const QuestionsScreen({super.key});
 
@@ -71,15 +73,9 @@ class QuestionsScreen extends ConsumerWidget {
                       ),
                       PromptCard(
                         prompt: prompts.first,
-                        onSubmit: (answer) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Your answer was added anonymously.',
-                              ),
-                            ),
-                          );
-                        },
+                        onTap: () => _openThread(context, prompts.first),
+                        onSubmit: (answer) =>
+                            _submitAnswer(context, ref, prompts.first, answer),
                       ),
                       if (prompts.length > 1) ...[
                         Padding(
@@ -118,12 +114,10 @@ class QuestionsScreen extends ConsumerWidget {
                                 '${p.plugDisplayName} • ${PostCard.compactNumber(p.answersCount)} answers',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color:
-                                      scheme.onSurface.withOpacity(0.65),
+                                  color: scheme.onSurface.withOpacity(0.65),
                                 ),
                               ),
-                              onTap: () => _openAnswers(context, p.promptText,
-                                  p.plugDisplayName),
+                              onTap: () => _openThread(context, p),
                             ),
                           ),
                       ],
@@ -134,66 +128,284 @@ class QuestionsScreen extends ConsumerWidget {
     );
   }
 
-  void _openAnswers(BuildContext context, String prompt, String plug) {
+  Future<void> _submitAnswer(
+      BuildContext context, WidgetRef ref, PlugPrompt prompt, String text) async {
+    final moderation =
+        await ref.read(moderationServiceProvider).review(text);
+    if (!context.mounted) return;
+    if (moderation.isBlocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            moderation.reasons.isEmpty
+                ? 'Held back by safety AI.'
+                : moderation.reasons.first,
+          ),
+        ),
+      );
+      return;
+    }
+    try {
+      await ref
+          .read(repositoryProvider)
+          .addPromptAnswer(promptId: prompt.promptId, text: text);
+      ref.invalidate(promptAnswersProvider(prompt.promptId));
+      ref.invalidate(promptsProvider);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your answer was added anonymously.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not post: $e')),
+      );
+    }
+  }
+
+  void _openThread(BuildContext context, PlugPrompt prompt) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.85,
-        builder: (ctx, scrollController) {
-          return Padding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 12,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+      builder: (_) => _AnswerThreadSheet(prompt: prompt),
+    );
+  }
+}
+
+class _AnswerThreadSheet extends ConsumerStatefulWidget {
+  const _AnswerThreadSheet({required this.prompt});
+  final PlugPrompt prompt;
+
+  @override
+  ConsumerState<_AnswerThreadSheet> createState() =>
+      _AnswerThreadSheetState();
+}
+
+class _AnswerThreadSheetState extends ConsumerState<_AnswerThreadSheet> {
+  final _controller = TextEditingController();
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final t = _controller.text.trim();
+    if (t.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    try {
+      final moderation =
+          await ref.read(moderationServiceProvider).review(t);
+      if (!mounted) return;
+      if (moderation.isBlocked) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              moderation.reasons.isEmpty
+                  ? 'Held back by safety AI.'
+                  : moderation.reasons.first,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 44,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Text(plug,
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                Text('"$prompt"',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontStyle: FontStyle.italic,
-                      fontWeight: FontWeight.w700,
-                    )),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: ListView(
-                    controller: scrollController,
-                    children: const [
-                      Padding(
-                        padding: EdgeInsets.symmetric(vertical: 32),
-                        child: Center(
-                          child: Text(
-                            'Anonymous answers will appear here as members reply.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          ),
+        );
+        return;
+      }
+      await ref.read(repositoryProvider).addPromptAnswer(
+            promptId: widget.prompt.promptId,
+            text: t,
           );
-        },
+      _controller.clear();
+      ref.invalidate(promptAnswersProvider(widget.prompt.promptId));
+      ref.invalidate(promptsProvider);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not post: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final async = ref.watch(promptAnswersProvider(widget.prompt.promptId));
+    final answers = async.valueOrNull ?? const [];
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.85,
+      builder: (ctx, scrollController) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 12,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Row(
+                children: [
+                  AnonymousAvatar(
+                    seed: widget.prompt.plugAvatarSeed,
+                    label: widget.prompt.plugDisplayName,
+                    size: 32,
+                    showVerifiedBadge: true,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.prompt.plugDisplayName,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '"${widget.prompt.promptText}"',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: async.isLoading && answers.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : answers.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: Text(
+                                'Be the first to answer.',
+                                style: TextStyle(
+                                  color: scheme.onSurface.withOpacity(0.55),
+                                ),
+                              ),
+                            ),
+                          )
+                        : ListView.separated(
+                            controller: scrollController,
+                            itemCount: answers.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (_, i) {
+                              final a = answers[i];
+                              return _AnswerBubble(answer: a);
+                            },
+                          ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      minLines: 1,
+                      maxLines: 4,
+                      maxLength: 500,
+                      decoration: const InputDecoration(
+                        hintText: 'Answer anonymously…',
+                        counterText: '',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: _sending
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.send_rounded,
+                              color: Colors.white),
+                      onPressed: _sending ? null : _send,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AnswerBubble extends StatelessWidget {
+  const _AnswerBubble({required this.answer});
+  final PromptAnswer answer;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.primary.withOpacity(0.06),
+        border: Border.all(color: scheme.primary.withOpacity(0.20)),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              AnonymousAvatar(
+                seed: answer.authorAvatarSeed,
+                label: answer.authorPseudonym,
+                size: 22,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                answer.authorPseudonym,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                DateFormat.MMMd().add_jm().format(answer.createdAt),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: scheme.onSurface.withOpacity(0.55),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            answer.text,
+            style: const TextStyle(fontSize: 14, height: 1.35),
+          ),
+        ],
       ),
     );
   }
