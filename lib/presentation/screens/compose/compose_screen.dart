@@ -24,6 +24,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   String _mood = 'healing';
   bool _busy = false;
   bool _includePoll = false;
+  bool _isWhisper = false;
 
   @override
   void dispose() {
@@ -72,6 +73,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           category: _category,
           mood: _mood,
           tribeId: tribe?.tribeId,
+          isWhisper: _isWhisper,
         );
     if (_includePoll) {
       try {
@@ -251,7 +253,17 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                       size: 18,
                       color: scheme.primary,
                     ),
-                    label: Text(_includePoll ? 'Poll on' : 'Add a poll'),
+                    label: Text(_includePoll ? 'Poll on' : 'Poll'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () =>
+                        setState(() => _isWhisper = !_isWhisper),
+                    icon: Icon(
+                      _isWhisper ? Icons.nightlight : Icons.nightlight_outlined,
+                      size: 18,
+                      color: scheme.primary,
+                    ),
+                    label: Text(_isWhisper ? 'Whisper · 24h' : 'Whisper'),
                   ),
                   const Spacer(),
                   MoodChip(mood: _mood, dense: true),

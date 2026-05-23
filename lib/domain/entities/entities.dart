@@ -148,6 +148,7 @@ class Post {
   final String postType; // user_post | plug_prompt
   final String content;
   final String postMood;
+  final bool isWhisper;
   final int likesCount;
   final int commentsCount;
   final DateTime createdAt;
@@ -170,9 +171,18 @@ class Post {
     this.tribeId,
     this.tribeName,
     this.tribeSlug,
+    this.isWhisper = false,
     this.likedByMe = false,
     this.savedByMe = false,
   });
+
+  /// Whispers expire 24h after creation.
+  Duration get whisperRemaining {
+    if (!isWhisper) return Duration.zero;
+    final expiresAt = createdAt.add(const Duration(hours: 24));
+    final left = expiresAt.difference(DateTime.now());
+    return left.isNegative ? Duration.zero : left;
+  }
 
   Post copyWith({
     int? likesCount,
@@ -190,6 +200,7 @@ class Post {
       postType: postType,
       content: content,
       postMood: postMood,
+      isWhisper: isWhisper,
       likesCount: likesCount ?? this.likesCount,
       commentsCount: commentsCount ?? this.commentsCount,
       createdAt: createdAt,
@@ -335,6 +346,36 @@ class PlugPrompt {
     required this.promptText,
     required this.answersCount,
   });
+}
+
+/// A keeper-issued invitation to join a Tribe. Lifecycle:
+/// pending → accepted (joins the tribe) | declined.
+class TribeInvite {
+  final String inviteId;
+  final String tribeId;
+  final String tribeName;
+  final String? tribeSlug;
+  final String? tribeAvatarUrl;
+  final String invitedUserId;
+  final String? invitedByPseudonym;
+  final String? message;
+  final String status; // pending | accepted | declined
+  final DateTime createdAt;
+
+  const TribeInvite({
+    required this.inviteId,
+    required this.tribeId,
+    required this.tribeName,
+    required this.invitedUserId,
+    required this.status,
+    required this.createdAt,
+    this.tribeSlug,
+    this.tribeAvatarUrl,
+    this.invitedByPseudonym,
+    this.message,
+  });
+
+  bool get isPending => status == 'pending';
 }
 
 /// A report filed against a single post — surfaced to the Tribe Keeper via

@@ -127,11 +127,13 @@ class MockBackend {
 
   // -------------------- Feed --------------------
   List<Post> feed({String? category, String? mood, String? tribeSlug}) {
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
     final filtered = _posts.where((p) {
       final byCategory = category == null || p.categoryName == category;
       final byMood     = mood == null || p.postMood == mood;
       final byTribe    = tribeSlug == null || p.tribeSlug == tribeSlug;
-      return byCategory && byMood && byTribe;
+      final byWhisper  = !p.isWhisper || p.createdAt.isAfter(cutoff);
+      return byCategory && byMood && byTribe && byWhisper;
     }).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return [
@@ -157,6 +159,7 @@ class MockBackend {
     required String category,
     required String mood,
     String? tribeId,
+    bool isWhisper = false,
   }) async {
     final me = _me;
     if (me == null) throw StateError('No active session');
@@ -172,6 +175,7 @@ class MockBackend {
       postType: 'user_post',
       content: content,
       postMood: mood,
+      isWhisper: isWhisper,
       likesCount: 0,
       commentsCount: 0,
       createdAt: DateTime.now(),
@@ -316,6 +320,68 @@ class MockBackend {
     );
     _tribes[i] = updated;
     return updated;
+  }
+
+  // -------------------- User lookup --------------------
+  AppUser? findUserByPseudonym(String pseudonym) {
+    final q = pseudonym.trim().replaceAll('@', '').toLowerCase();
+    if (q.isEmpty) return null;
+    return _users.firstWhereOrNull(
+        (u) => u.anonymousPseudonym.toLowerCase() == q);
+  }
+
+  // -------------------- Tribe invitations --------------------
+  final List<TribeInvite> _invites = [];
+
+  void inviteToTribe({
+    required String tribeId,
+    required String invitedUserId,
+    String? message,
+  }) {
+    if (_invites.any((i) =>
+        i.tribeId == tribeId &&
+        i.invitedUserId == invitedUserId &&
+        i.isPending)) return;
+    final tribe = _tribes.firstWhereOrNull((t) => t.tribeId == tribeId);
+    _invites.add(TribeInvite(
+      inviteId: _uuid.v4(),
+      tribeId: tribeId,
+      tribeName: tribe?.name ?? 'a Tribe',
+      tribeSlug: tribe?.slug,
+      tribeAvatarUrl: tribe?.avatarUrl,
+      invitedUserId: invitedUserId,
+      invitedByPseudonym: _me?.anonymousPseudonym,
+      message: message,
+      status: 'pending',
+      createdAt: DateTime.now(),
+    ));
+  }
+
+  List<TribeInvite> myPendingInvites() {
+    final me = _me;
+    if (me == null) return const [];
+    return _invites
+        .where((i) => i.invitedUserId == me.userId && i.isPending)
+        .toList();
+  }
+
+  void respondToInvite({required String inviteId, required bool accept}) {
+    final i = _invites.indexWhere((x) => x.inviteId == inviteId);
+    if (i == -1) return;
+    final cur = _invites[i];
+    _invites[i] = TribeInvite(
+      inviteId: cur.inviteId,
+      tribeId: cur.tribeId,
+      tribeName: cur.tribeName,
+      tribeSlug: cur.tribeSlug,
+      tribeAvatarUrl: cur.tribeAvatarUrl,
+      invitedUserId: cur.invitedUserId,
+      invitedByPseudonym: cur.invitedByPseudonym,
+      message: cur.message,
+      status: accept ? 'accepted' : 'declined',
+      createdAt: cur.createdAt,
+    );
+    if (accept) joinTribe(cur.tribeId);
   }
 
   // -------------------- Polls --------------------

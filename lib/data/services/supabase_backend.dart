@@ -256,7 +256,14 @@ class SupabaseBackend {
     final rows = await query
         .order('created_at', ascending: false)
         .limit(limit);
-    return rows.map<Post>(_postFromRow).toList();
+    // Whispers vanish from the feed after 24h. We filter client-side
+    // because PostgREST's `or` filter doesn't cleanly express
+    // "is_whisper = false OR created_at > now() - 24h" against a view.
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    return rows
+        .map<Post>(_postFromRow)
+        .where((p) => !p.isWhisper || p.createdAt.isAfter(cutoff))
+        .toList();
   }
 
   Future<Post?> postById(String postId) async {
@@ -273,6 +280,7 @@ class SupabaseBackend {
     required String category,
     required String mood,
     String? tribeId,
+    bool isWhisper = false,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
@@ -283,6 +291,7 @@ class SupabaseBackend {
       'post_type':     'user_post',
       'content':       content,
       'post_mood':     mood,
+      'is_whisper':    isWhisper,
     }).select('post_id').single();
     final post = await postById(inserted['post_id'] as String);
     _emitPosts();
@@ -366,6 +375,97 @@ class SupabaseBackend {
       });
     } on PostgrestException catch (e) {
       if (e.code != '23505') rethrow;
+    }
+  }
+
+  // -------------------- Tribe invitations (migration 0011) --------------
+
+  /// Issue an invite to a single user. Caller must be the tribe's keeper —
+  /// RLS enforces it server-side. Trigger fans a notification row to the
+  /// invited user.
+  Future<void> inviteToTribe({
+    required String tribeId,
+    required String invitedUserId,
+    String? message,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    try {
+      await _client.from('tribe_invites').insert({
+        'tribe_id':         tribeId,
+        'invited_user_id':  invitedUserId,
+        'invited_by':       uid,
+        'message':          message,
+      });
+    } on PostgrestException catch (e) {
+      // Already invited — silent no-op.
+      if (e.code != '23505') rethrow;
+    }
+  }
+
+  /// Pending invites *to me*. Used by the inbox/notifications panel.
+  Future<List<TribeInvite>> myPendingInvites() async {
+    final uid = _uid;
+    if (uid == null) return const [];
+    final rows = await _client
+        .from('tribe_invites')
+        .select(
+          'invite_id, tribe_id, invited_user_id, status, created_at, message, '
+          'tribes!inner(name, slug, avatar_url), '
+          'inviter:invited_by(anonymous_pseudonym)',
+        )
+        .eq('invited_user_id', uid)
+        .eq('status', 'pending')
+        .order('created_at', ascending: false);
+    return rows
+        .map<TribeInvite>((r) {
+          final t = r['tribes'] as Map<String, dynamic>?;
+          final inv = r['inviter'] as Map<String, dynamic>?;
+          return TribeInvite(
+            inviteId: r['invite_id'] as String,
+            tribeId: r['tribe_id'] as String,
+            tribeName: (t?['name'] as String?) ?? 'a Tribe',
+            tribeSlug: t?['slug'] as String?,
+            tribeAvatarUrl: t?['avatar_url'] as String?,
+            invitedUserId: r['invited_user_id'] as String,
+            invitedByPseudonym: inv?['anonymous_pseudonym'] as String?,
+            message: r['message'] as String?,
+            status: r['status'] as String,
+            createdAt: DateTime.parse(r['created_at'] as String),
+          );
+        })
+        .toList();
+  }
+
+  Future<void> respondToInvite({
+    required String inviteId,
+    required bool accept,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    // Flip the status. RLS lets only the invitee do this.
+    final row = await _client
+        .from('tribe_invites')
+        .update({
+          'status':      accept ? 'accepted' : 'declined',
+          'decided_at':  DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('invite_id', inviteId)
+        .select('tribe_id, invited_user_id')
+        .single();
+    if (accept) {
+      // Auto-join the tribe — UNIQUE(tribe_id, user_id) on tribe_members
+      // means re-accepting an invite the user already joined manually is
+      // a no-op.
+      try {
+        await _client.from('tribe_members').insert({
+          'tribe_id': row['tribe_id'],
+          'user_id':  uid,
+        });
+        _joinedTribes.add(row['tribe_id'] as String);
+      } on PostgrestException catch (e) {
+        if (e.code != '23505') rethrow;
+      }
     }
   }
 
@@ -1140,6 +1240,7 @@ class SupabaseBackend {
       tribeId: r['tribe_id'] as String?,
       tribeName: r['tribe_name'] as String?,
       tribeSlug: r['tribe_slug'] as String?,
+      isWhisper: (r['is_whisper'] as bool?) ?? false,
       likedByMe: _likedPosts.contains(r['post_id']),
       savedByMe: _savedPosts.contains(r['post_id']),
     );
@@ -1194,6 +1295,19 @@ class SupabaseBackend {
 
   /// Friendly, UI-facing auth failure types — see [signUp] / [signIn].
   // (defined below the class)
+
+  /// Look up a user by pseudonym (case-insensitive). Returns enough info to
+  /// show a confirmation card before sending an invite.
+  Future<Map<String, dynamic>?> findUserByPseudonym(String pseudonym) async {
+    final cleaned = pseudonym.trim().replaceAll('@', '');
+    if (cleaned.isEmpty) return null;
+    final row = await _client
+        .from('users')
+        .select('user_id, anonymous_pseudonym, avatar_seed, is_verified')
+        .ilike('anonymous_pseudonym', cleaned)
+        .maybeSingle();
+    return row;
+  }
 
   /// Pick a random other user — used for the demo "find a peer" flow until
   /// a richer peer-discovery UX ships.

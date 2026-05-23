@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
+import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/post_card.dart';
 
 /// Plugz / Keeper creator dashboard.
@@ -818,6 +819,17 @@ class _QuickActions extends ConsumerWidget {
               },
             ),
             _ActionTile(
+              icon: Icons.group_add_outlined,
+              label: 'Invite',
+              onTap: () async {
+                if (tribeSlug == null) return;
+                final tribe =
+                    await ref.read(repositoryProvider).tribeBySlug(tribeSlug);
+                if (tribe == null || !context.mounted) return;
+                await _showInviteSheet(context, ref, tribe);
+              },
+            ),
+            _ActionTile(
               icon: Icons.flag_outlined,
               label: 'Reports',
               onTap: () {
@@ -1008,4 +1020,173 @@ Future<void> _showCreatePromptSheet(
       const SnackBar(content: Text('Your question is live.')),
     );
   }
+}
+
+Future<void> _showInviteSheet(
+    BuildContext context, WidgetRef ref, Tribe tribe) async {
+  final search = TextEditingController();
+  final message = TextEditingController();
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setState) {
+          ({String userId, String pseudonym, String avatarSeed})? found;
+          bool busy = false;
+          String? error;
+
+          Future<void> lookup() async {
+            setState(() {
+              busy = true;
+              error = null;
+              found = null;
+            });
+            final result = await ref
+                .read(repositoryProvider)
+                .findUserByPseudonym(search.text);
+            setState(() {
+              busy = false;
+              found = result;
+              if (result == null) error = 'No member with that pseudonym.';
+            });
+          }
+
+          Future<void> send() async {
+            if (found == null) return;
+            setState(() => busy = true);
+            try {
+              await ref.read(repositoryProvider).inviteToTribe(
+                    tribeId: tribe.tribeId,
+                    invitedUserId: found!.userId,
+                    message: message.text.trim().isEmpty
+                        ? null
+                        : message.text.trim(),
+                  );
+              if (ctx.mounted) Navigator.of(ctx).pop();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                      content: Text(
+                          'Invite sent to @${found!.pseudonym}.')),
+                );
+              }
+            } catch (e) {
+              setState(() {
+                busy = false;
+                error = 'Could not send: $e';
+              });
+            }
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 12,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 44,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Text(
+                  'Invite to ${tribe.name}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 18),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: search,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Pseudonym',
+                    hintText: 'e.g. @SilentSoul',
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.search),
+                      onPressed: busy ? null : lookup,
+                    ),
+                  ),
+                  onSubmitted: (_) => lookup(),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    error!,
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+                if (found != null) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      AnonymousAvatar(
+                        seed: found!.avatarSeed,
+                        label: found!.pseudonym,
+                        size: 36,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '@${found!.pseudonym}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: message,
+                    maxLength: 160,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Personal note (optional)',
+                      counterText: '',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: busy ? null : send,
+                      child: busy
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Send invite'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+  search.dispose();
+  message.dispose();
 }

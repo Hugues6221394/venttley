@@ -196,6 +196,10 @@ final pollForPostProvider =
         (ref, postId) async =>
             ref.watch(repositoryProvider).pollForPost(postId));
 
+/// Pending tribe invitations waiting on the current user.
+final myInvitesProvider = FutureProvider.autoDispose<List<TribeInvite>>(
+    (ref) async => ref.watch(repositoryProvider).myPendingInvites());
+
 final myVentsProvider = FutureProvider.autoDispose<List<Post>>((ref) async {
   ref.watch(feedPostsProvider);
   return ref.watch(repositoryProvider).myVents();

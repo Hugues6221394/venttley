@@ -18,6 +18,7 @@ class NotificationsScreen extends ConsumerWidget {
     final async = ref.watch(notificationsProvider);
     final items = async.valueOrNull ?? const <NotificationItem>[];
     final unread = items.where((n) => !n.isRead).length;
+    final invites = ref.watch(myInvitesProvider).valueOrNull ?? const [];
 
     return Scaffold(
       appBar: AppBar(
@@ -66,15 +67,149 @@ class NotificationsScreen extends ConsumerWidget {
                       ),
                     ),
                   )
-                : ListView.builder(
+                : ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: items.length,
-                    itemBuilder: (_, i) {
-                      final n = items[i];
-                      return _NotificationTile(item: n);
-                    },
+                    children: [
+                      if (invites.isNotEmpty) ...[
+                        Padding(
+                          padding:
+                              const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                          child: Text(
+                            'Tribe invitations',
+                            style: TextStyle(
+                              fontSize: 11,
+                              letterSpacing: 1.2,
+                              fontWeight: FontWeight.w800,
+                              color: scheme.primary,
+                            ),
+                          ),
+                        ),
+                        for (final inv in invites) _InviteCard(invite: inv),
+                        const SizedBox(height: 8),
+                      ],
+                      for (final n in items)
+                        _NotificationTile(item: n),
+                    ],
                   ),
+      ),
+    );
+  }
+}
+
+class _InviteCard extends ConsumerWidget {
+  const _InviteCard({required this.invite});
+  final TribeInvite invite;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark
+            ? VentlyColors.cardDark
+            : Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: scheme.primary.withOpacity(isDark ? 0.30 : 0.22),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withOpacity(0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: invite.tribeAvatarUrl != null &&
+                        invite.tribeAvatarUrl!.isNotEmpty
+                    ? Image.network(
+                        invite.tribeAvatarUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(
+                            Icons.diversity_3,
+                            size: 18,
+                            color: scheme.primary),
+                      )
+                    : Icon(Icons.diversity_3,
+                        size: 18, color: scheme.primary),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      invite.tribeName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (invite.invitedByPseudonym != null)
+                      Text(
+                        'Invited by @${invite.invitedByPseudonym}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurface.withOpacity(0.65),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (invite.message != null && invite.message!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              invite.message!,
+              style: TextStyle(
+                fontStyle: FontStyle.italic,
+                fontSize: 12,
+                color: scheme.onSurface.withOpacity(0.75),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              OutlinedButton(
+                onPressed: () async {
+                  await ref.read(repositoryProvider).respondToInvite(
+                        inviteId: invite.inviteId,
+                        accept: false,
+                      );
+                  ref.invalidate(myInvitesProvider);
+                  ref.invalidate(notificationsProvider);
+                },
+                child: const Text('Decline'),
+              ),
+              const Spacer(),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.check, size: 16),
+                onPressed: () async {
+                  await ref.read(repositoryProvider).respondToInvite(
+                        inviteId: invite.inviteId,
+                        accept: true,
+                      );
+                  ref.invalidate(myInvitesProvider);
+                  ref.invalidate(notificationsProvider);
+                  ref.invalidate(tribesProvider);
+                },
+                label: const Text('Accept & join'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

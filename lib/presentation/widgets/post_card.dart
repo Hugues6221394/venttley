@@ -115,6 +115,24 @@ class PostCard extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 12),
+              if (post.isWhisper) ...[
+                Row(
+                  children: [
+                    Icon(Icons.nightlight, size: 12, color: scheme.primary),
+                    const SizedBox(width: 4),
+                    Text(
+                      'WHISPER · expires ${_whisperExpiry(post.whisperRemaining)}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        letterSpacing: 1.0,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+              ],
               Text(
                 post.content,
                 style: const TextStyle(fontSize: 15, height: 1.4),
@@ -206,6 +224,12 @@ class PostCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  String _whisperExpiry(Duration left) {
+    if (left.inMinutes < 1) return 'soon';
+    if (left.inHours < 1) return 'in ${left.inMinutes}m';
+    return 'in ${left.inHours}h';
   }
 
   String _ago(DateTime ts) {

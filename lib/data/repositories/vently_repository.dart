@@ -213,6 +213,7 @@ class VentlyRepository {
     required String category,
     required String mood,
     String? tribeId,
+    bool isWhisper = false,
   }) {
     final live = _live;
     if (live != null) {
@@ -221,6 +222,7 @@ class VentlyRepository {
         category: category,
         mood: mood,
         tribeId: tribeId,
+        isWhisper: isWhisper,
       );
     }
     return _mock.createPost(
@@ -228,7 +230,70 @@ class VentlyRepository {
       category: category,
       mood: mood,
       tribeId: tribeId,
+      isWhisper: isWhisper,
     );
+  }
+
+  // ===================== User lookup =====================
+  Future<({String userId, String pseudonym, String avatarSeed})?>
+      findUserByPseudonym(String pseudonym) async {
+    final live = _live;
+    if (live != null) {
+      final row = await live.findUserByPseudonym(pseudonym);
+      if (row == null) return null;
+      return (
+        userId: row['user_id'] as String,
+        pseudonym: row['anonymous_pseudonym'] as String,
+        avatarSeed:
+            (row['avatar_seed'] as String?) ?? 'default-orb',
+      );
+    }
+    final u = _mock.findUserByPseudonym(pseudonym);
+    if (u == null) return null;
+    return (
+      userId: u.userId,
+      pseudonym: u.anonymousPseudonym,
+      avatarSeed: u.avatarSeed,
+    );
+  }
+
+  // ===================== Tribe invitations =====================
+
+  Future<void> inviteToTribe({
+    required String tribeId,
+    required String invitedUserId,
+    String? message,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.inviteToTribe(
+        tribeId: tribeId,
+        invitedUserId: invitedUserId,
+        message: message,
+      );
+    }
+    _mock.inviteToTribe(
+      tribeId: tribeId,
+      invitedUserId: invitedUserId,
+      message: message,
+    );
+  }
+
+  Future<List<TribeInvite>> myPendingInvites() {
+    final live = _live;
+    if (live != null) return live.myPendingInvites();
+    return Future.value(_mock.myPendingInvites());
+  }
+
+  Future<void> respondToInvite({
+    required String inviteId,
+    required bool accept,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.respondToInvite(inviteId: inviteId, accept: accept);
+    }
+    _mock.respondToInvite(inviteId: inviteId, accept: accept);
   }
 
   Future<void> toggleLike(String postId) {
