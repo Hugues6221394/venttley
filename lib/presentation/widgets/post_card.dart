@@ -8,6 +8,7 @@ import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
 import 'anonymous_avatar.dart';
 import 'mood_chip.dart';
+import 'poll_card.dart';
 
 class PostCard extends ConsumerWidget {
   const PostCard({
@@ -64,6 +65,20 @@ class PostCard extends ConsumerWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            if (post.authorKarma >= 10) ...[
+                              const SizedBox(width: 4),
+                              Icon(Icons.auto_awesome,
+                                  size: 11, color: scheme.primary),
+                              const SizedBox(width: 2),
+                              Text(
+                                PostCard.compactNumber(post.authorKarma),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: scheme.primary,
+                                ),
+                              ),
+                            ],
                             const SizedBox(width: 6),
                             Text(
                               _ago(post.createdAt),
@@ -104,7 +119,19 @@ class PostCard extends ConsumerWidget {
                 post.content,
                 style: const TextStyle(fontSize: 15, height: 1.4),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
+              Consumer(
+                builder: (ctx, r, _) {
+                  final poll =
+                      r.watch(pollForPostProvider(post.postId)).valueOrNull;
+                  if (poll == null) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: PollCard(poll: poll, compact: true),
+                  );
+                },
+              ),
+              const SizedBox(height: 6),
               Row(
                 children: [
                   _PillAction(

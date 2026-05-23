@@ -306,6 +306,8 @@ class VentlyRepository {
     String? name,
     String? description,
     bool? isPrivate,
+    String? avatarUrl,
+    String? bannerUrl,
   }) {
     final live = _live;
     if (live != null) {
@@ -314,6 +316,8 @@ class VentlyRepository {
         name: name,
         description: description,
         isPrivate: isPrivate,
+        avatarUrl: avatarUrl,
+        bannerUrl: bannerUrl,
       );
     }
     return Future.value(_mock.updateTribe(
@@ -321,7 +325,50 @@ class VentlyRepository {
       name: name,
       description: description,
       isPrivate: isPrivate,
+      avatarUrl: avatarUrl,
+      bannerUrl: bannerUrl,
     ));
+  }
+
+  // ===================== Polls =====================
+  Future<PostPoll> createPoll({
+    required String postId,
+    required String question,
+    required List<String> optionTexts,
+    Duration closesIn = const Duration(days: 3),
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.createPoll(
+        postId: postId,
+        question: question,
+        optionTexts: optionTexts,
+        closesIn: closesIn,
+      );
+    }
+    return Future.value(_mock.createPoll(
+      postId: postId,
+      question: question,
+      optionTexts: optionTexts,
+      closesIn: closesIn,
+    ));
+  }
+
+  Future<PostPoll?> pollForPost(String postId) {
+    final live = _live;
+    if (live != null) return live.pollForPost(postId);
+    return Future.value(_mock.pollForPost(postId));
+  }
+
+  Future<void> votePoll({
+    required String pollId,
+    required String optionId,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.votePoll(pollId: pollId, optionId: optionId);
+    }
+    _mock.votePoll(pollId: pollId, optionId: optionId);
   }
 
   Future<List<Post>> mySaved() {
@@ -542,6 +589,18 @@ class VentlyRepository {
     final live = _live;
     if (live != null) return live.notifications();
     return Future.value(_mock.notifications());
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    final live = _live;
+    if (live != null) return live.markNotificationRead(id);
+    _mock.markNotificationRead(id);
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    final live = _live;
+    if (live != null) return live.markAllNotificationsRead();
+    _mock.markAllNotificationsRead();
   }
 
   int _ageFrom(DateTime birth) {

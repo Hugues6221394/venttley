@@ -35,11 +35,7 @@ class FeedScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const VentlyLogo(size: 26),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none_rounded),
-            tooltip: 'Inbox',
-            onPressed: () => context.go('/inbox'),
-          ),
+          const _BellAction(),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: IconButton(
@@ -803,6 +799,52 @@ void _showCrisisSheet(BuildContext context) {
       ),
     ),
   );
+}
+
+/// Bell icon with an unread badge. Tap opens `/notifications`.
+class _BellAction extends ConsumerWidget {
+  const _BellAction();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final unread =
+        ref.watch(unreadNotificationsCountProvider).valueOrNull ?? 0;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_none_rounded),
+          tooltip: 'Notifications',
+          onPressed: () => context.push('/notifications'),
+        ),
+        if (unread > 0)
+          Positioned(
+            right: 6,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 5, vertical: 1),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              decoration: BoxDecoration(
+                color: scheme.primary,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                unread > 9 ? '9+' : '$unread',
+                style: const TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _EmptyState extends StatelessWidget {

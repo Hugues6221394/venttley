@@ -182,6 +182,20 @@ final promptsProvider = FutureProvider.autoDispose<List<PlugPrompt>>(
 final notificationsProvider = FutureProvider.autoDispose<List<NotificationItem>>(
     (ref) async => ref.watch(repositoryProvider).notifications());
 
+/// Unread notification count — derived from notificationsProvider so it
+/// updates whenever the list does. Used by the bell-icon badge.
+final unreadNotificationsCountProvider =
+    FutureProvider.autoDispose<int>((ref) async {
+  final items = await ref.watch(notificationsProvider.future);
+  return items.where((n) => !n.isRead).length;
+});
+
+/// A poll attached to a single Post, if any.
+final pollForPostProvider =
+    FutureProvider.autoDispose.family<PostPoll?, String>(
+        (ref, postId) async =>
+            ref.watch(repositoryProvider).pollForPost(postId));
+
 final myVentsProvider = FutureProvider.autoDispose<List<Post>>((ref) async {
   ref.watch(feedPostsProvider);
   return ref.watch(repositoryProvider).myVents();

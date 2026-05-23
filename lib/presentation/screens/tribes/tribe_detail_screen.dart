@@ -83,9 +83,21 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (tribe.bannerUrl != null && tribe.bannerUrl!.isNotEmpty)
+                      Image.network(
+                        tribe.bannerUrl!,
+                        height: 96,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
@@ -93,13 +105,25 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                           Container(
                             width: 56,
                             height: 56,
+                            clipBehavior: Clip.antiAlias,
                             decoration: BoxDecoration(
                               color: scheme.primary.withOpacity(0.14),
                               borderRadius: BorderRadius.circular(18),
                             ),
                             alignment: Alignment.center,
-                            child: Icon(Icons.diversity_3,
-                                color: scheme.primary, size: 28),
+                            child: tribe.avatarUrl != null &&
+                                    tribe.avatarUrl!.isNotEmpty
+                                ? Image.network(
+                                    tribe.avatarUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Icon(
+                                      Icons.diversity_3,
+                                      color: scheme.primary,
+                                      size: 28,
+                                    ),
+                                  )
+                                : Icon(Icons.diversity_3,
+                                    color: scheme.primary, size: 28),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -180,6 +204,8 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                       ),
                     ],
                   ),
+                ),
+                  ],
                 ),
               ),
             ),

@@ -172,12 +172,20 @@ class _TribeCard extends ConsumerWidget {
               Container(
                 width: 52,
                 height: 52,
+                clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   color: scheme.primary.withOpacity(isDark ? 0.18 : 0.12),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 alignment: Alignment.center,
-                child: Icon(Icons.diversity_3, color: scheme.primary),
+                child: tribe.avatarUrl != null && tribe.avatarUrl!.isNotEmpty
+                    ? Image.network(
+                        tribe.avatarUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            Icon(Icons.diversity_3, color: scheme.primary),
+                      )
+                    : Icon(Icons.diversity_3, color: scheme.primary),
               ),
               const SizedBox(width: 12),
               Expanded(

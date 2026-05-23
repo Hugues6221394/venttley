@@ -12,6 +12,7 @@ class AppUser {
   final String safetyTier; // restricted_minor | standard
   final int? birthYear;
   final String accountStatus;
+  final int karmaPoints;
 
   const AppUser({
     required this.userId,
@@ -23,6 +24,7 @@ class AppUser {
     required this.safetyTier,
     required this.accountStatus,
     this.birthYear,
+    this.karmaPoints = 0,
   });
 
   bool get isRestrictedMinor => safetyTier == 'restricted_minor';
@@ -34,6 +36,7 @@ class AppUser {
     String? safetyTier,
     String? userRole,
     bool? isVerified,
+    int? karmaPoints,
   }) {
     return AppUser(
       userId: userId,
@@ -45,6 +48,7 @@ class AppUser {
       safetyTier: safetyTier ?? this.safetyTier,
       accountStatus: accountStatus,
       birthYear: birthYear,
+      karmaPoints: karmaPoints ?? this.karmaPoints,
     );
   }
 }
@@ -78,6 +82,8 @@ class Tribe {
   final String category; // campus | city | interest_group | hobby | support | venting
   final int memberCount;
   final bool isPrivate;
+  final String? avatarUrl;
+  final String? bannerUrl;
   final String? keeperId;
   final String? keeperPseudonym;
   final String? keeperAvatarSeed;
@@ -94,6 +100,8 @@ class Tribe {
     required this.isPrivate,
     required this.createdAt,
     this.description,
+    this.avatarUrl,
+    this.bannerUrl,
     this.keeperId,
     this.keeperPseudonym,
     this.keeperAvatarSeed,
@@ -104,6 +112,8 @@ class Tribe {
   Tribe copyWith({
     int? memberCount,
     bool? joinedByMe,
+    String? avatarUrl,
+    String? bannerUrl,
   }) {
     return Tribe(
       tribeId: tribeId,
@@ -113,6 +123,8 @@ class Tribe {
       category: category,
       memberCount: memberCount ?? this.memberCount,
       isPrivate: isPrivate,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      bannerUrl: bannerUrl ?? this.bannerUrl,
       keeperId: keeperId,
       keeperPseudonym: keeperPseudonym,
       keeperAvatarSeed: keeperAvatarSeed,
@@ -128,6 +140,7 @@ class Post {
   final String authorPseudonym;
   final String authorAvatarSeed;
   final bool authorIsVerified;
+  final int authorKarma;
   final String? tribeId;
   final String? tribeName;
   final String? tribeSlug;
@@ -153,6 +166,7 @@ class Post {
     required this.commentsCount,
     required this.createdAt,
     this.authorIsVerified = false,
+    this.authorKarma = 0,
     this.tribeId,
     this.tribeName,
     this.tribeSlug,
@@ -171,6 +185,7 @@ class Post {
       authorPseudonym: authorPseudonym,
       authorAvatarSeed: authorAvatarSeed,
       authorIsVerified: authorIsVerified,
+      authorKarma: authorKarma,
       categoryName: categoryName,
       postType: postType,
       content: content,
@@ -249,6 +264,43 @@ class ChatMessage {
     required this.createdAt,
     required this.sentByMe,
   });
+}
+
+/// A two-option (or more) poll attached to a Post.
+///
+/// `myVoteOptionId` is null when the viewer hasn't voted yet. `optionCounts`
+/// is keyed by option_id and counts unique votes — the schema enforces one
+/// vote per (poll_id, user_id) so the counts are accurate by construction.
+class PostPoll {
+  final String pollId;
+  final String postId;
+  final String question;
+  final DateTime closesAt;
+  final List<PollOption> options;
+  final Map<String, int> optionCounts;
+  final String? myVoteOptionId;
+
+  const PostPoll({
+    required this.pollId,
+    required this.postId,
+    required this.question,
+    required this.closesAt,
+    required this.options,
+    required this.optionCounts,
+    this.myVoteOptionId,
+  });
+
+  int get totalVotes =>
+      optionCounts.values.fold(0, (a, b) => a + b);
+
+  bool get isClosed => DateTime.now().isAfter(closesAt);
+  bool get hasVoted => myVoteOptionId != null;
+}
+
+class PollOption {
+  final String optionId;
+  final String text;
+  const PollOption({required this.optionId, required this.text});
 }
 
 class PromptAnswer {

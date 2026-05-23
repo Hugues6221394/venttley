@@ -17,19 +17,39 @@ class ComposeScreen extends ConsumerStatefulWidget {
 
 class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   final _controller = TextEditingController();
+  final _pollQ = TextEditingController();
+  final _pollA = TextEditingController();
+  final _pollB = TextEditingController();
   String _category = 'confessions';
   String _mood = 'healing';
   bool _busy = false;
+  bool _includePoll = false;
 
   @override
   void dispose() {
     _controller.dispose();
+    _pollQ.dispose();
+    _pollA.dispose();
+    _pollB.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
+    if (_includePoll) {
+      if (_pollQ.text.trim().length < 4 ||
+          _pollA.text.trim().isEmpty ||
+          _pollB.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Add a poll question and two options, or untoggle the poll.'),
+          ),
+        );
+        return;
+      }
+    }
     setState(() => _busy = true);
     final moderation =
         await ref.read(moderationServiceProvider).review(text);
@@ -47,12 +67,28 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       }
     }
     final tribe = ref.read(composeTargetTribeProvider);
-    await ref.read(repositoryProvider).createPost(
+    final post = await ref.read(repositoryProvider).createPost(
           content: text,
           category: _category,
           mood: _mood,
           tribeId: tribe?.tribeId,
         );
+    if (_includePoll) {
+      try {
+        await ref.read(repositoryProvider).createPoll(
+              postId: post.postId,
+              question: _pollQ.text.trim(),
+              optionTexts: [_pollA.text.trim(), _pollB.text.trim()],
+            );
+      } catch (e) {
+        // Post landed; poll attach failed. Surface a soft error.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Posted, but poll failed: $e')),
+          );
+        }
+      }
+    }
     ref.read(composeTargetTribeProvider.notifier).state = null;
     if (!mounted) return;
     setState(() => _busy = false);
@@ -207,10 +243,69 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
+                  TextButton.icon(
+                    onPressed: () =>
+                        setState(() => _includePoll = !_includePoll),
+                    icon: Icon(
+                      _includePoll ? Icons.poll : Icons.poll_outlined,
+                      size: 18,
+                      color: scheme.primary,
+                    ),
+                    label: Text(_includePoll ? 'Poll on' : 'Add a poll'),
+                  ),
                   const Spacer(),
                   MoodChip(mood: _mood, dense: true),
                 ],
               ),
+              if (_includePoll)
+                Container(
+                  margin: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withOpacity(0.06),
+                    border:
+                        Border.all(color: scheme.primary.withOpacity(0.25)),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _pollQ,
+                        maxLength: 120,
+                        decoration: const InputDecoration(
+                          labelText: 'Poll question',
+                          hintText: 'e.g. Should I text them back?',
+                          counterText: '',
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _pollA,
+                              maxLength: 60,
+                              decoration: const InputDecoration(
+                                labelText: 'Option A',
+                                counterText: '',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: _pollB,
+                              maxLength: 60,
+                              decoration: const InputDecoration(
+                                labelText: 'Option B',
+                                counterText: '',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               SafeArea(
                 top: false,
                 child: SizedBox(

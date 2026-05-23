@@ -157,7 +157,8 @@ class SupabaseBackend {
         .from('users')
         .select(
           'user_id, anonymous_pseudonym, avatar_seed, current_mood, '
-          'user_role, is_verified, account_status, safety_tier, birth_year',
+          'user_role, is_verified, account_status, safety_tier, birth_year, '
+          'karma_points',
         )
         .eq('user_id', uid)
         .maybeSingle();
@@ -450,11 +451,15 @@ class SupabaseBackend {
     String? name,
     String? description,
     bool? isPrivate,
+    String? avatarUrl,
+    String? bannerUrl,
   }) async {
     final payload = <String, dynamic>{};
     if (name != null)         payload['name']        = name;
     if (description != null)  payload['description'] = description;
     if (isPrivate != null)    payload['is_private']  = isPrivate;
+    if (avatarUrl != null)    payload['avatar_url']  = avatarUrl;
+    if (bannerUrl != null)    payload['banner_url']  = bannerUrl;
     if (payload.isEmpty) {
       final t = await _client
           .from('tribe_directory')
@@ -470,6 +475,113 @@ class SupabaseBackend {
         .eq('tribe_id', tribeId)
         .single();
     return _tribeFromRow(row);
+  }
+
+  // ===================================================================
+  // POLLS  (post_polls + poll_options + poll_votes — see migration 0001)
+  // ===================================================================
+
+  /// Attach a poll to a freshly-created post. The caller must own the post —
+  /// the RLS policy "polls insert by post author" enforces this server-side.
+  Future<PostPoll> createPoll({
+    required String postId,
+    required String question,
+    required List<String> optionTexts,
+    Duration closesIn = const Duration(days: 3),
+  }) async {
+    if (optionTexts.length < 2) {
+      throw ArgumentError('Polls need at least two options.');
+    }
+    final pollRow = await _client
+        .from('post_polls')
+        .insert({
+          'post_id':    postId,
+          'question':   question,
+          'closes_at':  DateTime.now().add(closesIn).toIso8601String(),
+        })
+        .select('poll_id, post_id, question, closes_at')
+        .single();
+    final pollId = pollRow['poll_id'] as String;
+    final optionRows = await _client
+        .from('poll_options')
+        .insert(optionTexts
+            .map((t) => {'poll_id': pollId, 'option_text': t})
+            .toList())
+        .select('option_id, option_text');
+    return PostPoll(
+      pollId: pollId,
+      postId: postId,
+      question: pollRow['question'] as String,
+      closesAt: DateTime.parse(pollRow['closes_at'] as String),
+      options: optionRows
+          .map<PollOption>((r) => PollOption(
+                optionId: r['option_id'] as String,
+                text: r['option_text'] as String,
+              ))
+          .toList(),
+      optionCounts: {for (final r in optionRows) r['option_id'] as String: 0},
+    );
+  }
+
+  /// Hydrate a Post's poll (or null if it has none).
+  Future<PostPoll?> pollForPost(String postId) async {
+    final poll = await _client
+        .from('post_polls')
+        .select('poll_id, post_id, question, closes_at')
+        .eq('post_id', postId)
+        .maybeSingle();
+    if (poll == null) return null;
+    final pollId = poll['poll_id'] as String;
+    final options = await _client
+        .from('poll_options')
+        .select('option_id, option_text')
+        .eq('poll_id', pollId);
+    final votes = await _client
+        .from('poll_votes')
+        .select('option_id, user_id')
+        .eq('poll_id', pollId);
+    final counts = <String, int>{
+      for (final o in options) o['option_id'] as String: 0,
+    };
+    final uid = _uid;
+    String? mine;
+    for (final v in votes) {
+      final oid = v['option_id'] as String;
+      counts[oid] = (counts[oid] ?? 0) + 1;
+      if (uid != null && v['user_id'] == uid) mine = oid;
+    }
+    return PostPoll(
+      pollId: pollId,
+      postId: postId,
+      question: poll['question'] as String,
+      closesAt: DateTime.parse(poll['closes_at'] as String),
+      options: options
+          .map<PollOption>((o) => PollOption(
+                optionId: o['option_id'] as String,
+                text: o['option_text'] as String,
+              ))
+          .toList(),
+      optionCounts: counts,
+      myVoteOptionId: mine,
+    );
+  }
+
+  Future<void> votePoll({
+    required String pollId,
+    required String optionId,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    // UNIQUE(poll_id, user_id) — duplicate votes silently no-op.
+    try {
+      await _client.from('poll_votes').insert({
+        'poll_id':   pollId,
+        'option_id': optionId,
+        'user_id':   uid,
+      });
+    } on PostgrestException catch (e) {
+      if (e.code != '23505') rethrow;
+    }
   }
 
   Future<List<Post>> mySaved() async {
@@ -952,8 +1064,24 @@ class SupabaseBackend {
   }
 
   // ===================================================================
-  // NOTIFICATIONS
+  // NOTIFICATIONS  (RLS: notifications owner — user_id = auth.uid())
   // ===================================================================
+  Future<void> markNotificationRead(String notificationId) async {
+    await _client
+        .from('notifications')
+        .update({'is_read': true})
+        .eq('notification_id', notificationId);
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    final uid = _uid;
+    if (uid == null) return;
+    await _client
+        .from('notifications')
+        .update({'is_read': true})
+        .eq('user_id', uid)
+        .eq('is_read', false);
+  }
   Future<List<NotificationItem>> notifications() async {
     final uid = _uid;
     if (uid == null) return const [];
@@ -1008,6 +1136,7 @@ class SupabaseBackend {
       likesCount: r['likes_count'] as int,
       commentsCount: r['comments_count'] as int,
       createdAt: DateTime.parse(r['created_at'] as String),
+      authorKarma: (r['author_karma'] as int?) ?? 0,
       tribeId: r['tribe_id'] as String?,
       tribeName: r['tribe_name'] as String?,
       tribeSlug: r['tribe_slug'] as String?,
@@ -1025,6 +1154,8 @@ class SupabaseBackend {
       category: r['category'] as String,
       memberCount: (r['member_count'] as int?) ?? 0,
       isPrivate: (r['is_private'] as bool?) ?? false,
+      avatarUrl: r['avatar_url'] as String?,
+      bannerUrl: r['banner_url'] as String?,
       keeperId: r['keeper_id'] as String?,
       keeperPseudonym: r['keeper_pseudonym'] as String?,
       keeperAvatarSeed: r['keeper_avatar_seed'] as String?,
@@ -1057,6 +1188,7 @@ class SupabaseBackend {
       safetyTier: r['safety_tier'] as String,
       accountStatus: r['account_status'] as String,
       birthYear: r['birth_year'] as int?,
+      karmaPoints: (r['karma_points'] as int?) ?? 0,
     );
   }
 

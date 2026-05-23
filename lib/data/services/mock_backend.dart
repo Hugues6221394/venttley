@@ -288,6 +288,8 @@ class MockBackend {
     String? name,
     String? description,
     bool? isPrivate,
+    String? avatarUrl,
+    String? bannerUrl,
   }) {
     final i = _tribes.indexWhere((t) => t.tribeId == tribeId);
     if (i == -1) throw StateError('Tribe not found');
@@ -303,6 +305,8 @@ class MockBackend {
       category: current.category,
       memberCount: current.memberCount,
       isPrivate: isPrivate ?? current.isPrivate,
+      avatarUrl: avatarUrl ?? current.avatarUrl,
+      bannerUrl: bannerUrl ?? current.bannerUrl,
       keeperId: current.keeperId,
       keeperPseudonym: current.keeperPseudonym,
       keeperAvatarSeed: current.keeperAvatarSeed,
@@ -312,6 +316,55 @@ class MockBackend {
     );
     _tribes[i] = updated;
     return updated;
+  }
+
+  // -------------------- Polls --------------------
+  final Map<String, PostPoll> _polls = {}; // keyed by postId
+
+  PostPoll createPoll({
+    required String postId,
+    required String question,
+    required List<String> optionTexts,
+    Duration closesIn = const Duration(days: 3),
+  }) {
+    final options = [
+      for (final t in optionTexts)
+        PollOption(optionId: _uuid.v4(), text: t),
+    ];
+    final poll = PostPoll(
+      pollId: _uuid.v4(),
+      postId: postId,
+      question: question,
+      closesAt: DateTime.now().add(closesIn),
+      options: options,
+      optionCounts: {for (final o in options) o.optionId: 0},
+    );
+    _polls[postId] = poll;
+    return poll;
+  }
+
+  PostPoll? pollForPost(String postId) => _polls[postId];
+
+  void votePoll({
+    required String pollId,
+    required String optionId,
+  }) {
+    final entry =
+        _polls.entries.firstWhereOrNull((e) => e.value.pollId == pollId);
+    if (entry == null) return;
+    final poll = entry.value;
+    if (poll.myVoteOptionId != null) return; // one vote per user
+    final next = Map<String, int>.from(poll.optionCounts);
+    next[optionId] = (next[optionId] ?? 0) + 1;
+    _polls[entry.key] = PostPoll(
+      pollId: poll.pollId,
+      postId: poll.postId,
+      question: poll.question,
+      closesAt: poll.closesAt,
+      options: poll.options,
+      optionCounts: next,
+      myVoteOptionId: optionId,
+    );
   }
 
   List<Post> mySaved() => _posts
@@ -611,6 +664,35 @@ class MockBackend {
 
   // -------------------- Notifications --------------------
   List<NotificationItem> notifications() => List.unmodifiable(_notifications);
+
+  void markNotificationRead(String id) {
+    final i = _notifications.indexWhere((n) => n.id == id);
+    if (i == -1 || _notifications[i].isRead) return;
+    final n = _notifications[i];
+    _notifications[i] = NotificationItem(
+      id: n.id,
+      kind: n.kind,
+      title: n.title,
+      body: n.body,
+      createdAt: n.createdAt,
+      isRead: true,
+    );
+  }
+
+  void markAllNotificationsRead() {
+    for (var i = 0; i < _notifications.length; i++) {
+      if (_notifications[i].isRead) continue;
+      final n = _notifications[i];
+      _notifications[i] = NotificationItem(
+        id: n.id,
+        kind: n.kind,
+        title: n.title,
+        body: n.body,
+        createdAt: n.createdAt,
+        isRead: true,
+      );
+    }
+  }
 
   // -------------------- Internal helpers --------------------
   void _emitAll() {

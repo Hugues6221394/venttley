@@ -15,6 +15,8 @@ class EditTribeScreen extends ConsumerStatefulWidget {
 class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
   late final TextEditingController _name;
   late final TextEditingController _desc;
+  late final TextEditingController _avatarUrl;
+  late final TextEditingController _bannerUrl;
   bool _private = false;
   bool _hydrated = false;
   bool _saving = false;
@@ -24,12 +26,16 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
     super.initState();
     _name = TextEditingController();
     _desc = TextEditingController();
+    _avatarUrl = TextEditingController();
+    _bannerUrl = TextEditingController();
   }
 
   @override
   void dispose() {
     _name.dispose();
     _desc.dispose();
+    _avatarUrl.dispose();
+    _bannerUrl.dispose();
     super.dispose();
   }
 
@@ -65,6 +71,8 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
     if (!_hydrated) {
       _name.text = tribe.name;
       _desc.text = tribe.description ?? '';
+      _avatarUrl.text = tribe.avatarUrl ?? '';
+      _bannerUrl.text = tribe.bannerUrl ?? '';
       _private = tribe.isPrivate;
       _hydrated = true;
     }
@@ -96,6 +104,22 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
             decoration: const InputDecoration(
               labelText: 'Description',
               hintText: 'What is this Tribe a sanctuary for?',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _avatarUrl,
+            decoration: const InputDecoration(
+              labelText: 'Avatar image URL',
+              hintText: 'https://… (square image)',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _bannerUrl,
+            decoration: const InputDecoration(
+              labelText: 'Banner image URL',
+              hintText: 'https://… (wide image)',
             ),
           ),
           const SizedBox(height: 8),
@@ -141,6 +165,8 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
             name: name,
             description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
             isPrivate: _private,
+            avatarUrl: _avatarUrl.text.trim(),
+            bannerUrl: _bannerUrl.text.trim(),
           );
       ref.invalidate(tribesProvider);
       ref.invalidate(tribeBySlugProvider(widget.slug));
