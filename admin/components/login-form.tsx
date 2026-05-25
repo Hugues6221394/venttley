@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createBrowserSupabase, syntheticEmail } from "@/lib/supabase/client";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -16,13 +15,17 @@ export default function LoginForm() {
     setError(null);
     setBusy(true);
     try {
-      const supabase = createBrowserSupabase();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: syntheticEmail(username),
-        password,
+      // Route handler does the Supabase sign-in and applies an
+      // Upstash Redis rate limit by IP (5/min). Cookies come back
+      // attached to the response automatically.
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
       });
-      if (error || !data.user) {
-        throw new Error(error?.message ?? "Login failed");
+      const body = (await res.json()) as { ok: boolean; error?: string };
+      if (!res.ok || !body.ok) {
+        throw new Error(body.error ?? "Login failed");
       }
       // Role check happens server-side in the dashboard layout. We just
       // bounce there and let it gate access.
