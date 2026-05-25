@@ -4,9 +4,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants.dart';
 import '../../domain/entities/entities.dart';
+import '../services/cache_service.dart';
 import '../services/identity_service.dart';
 import '../services/mock_backend.dart';
 import '../services/supabase_backend.dart';
+import '../services/telemetry_service.dart';
 
 /// Single facade exposing the data layer to the UI.
 ///
@@ -24,6 +26,8 @@ class VentlyRepository {
   final MockBackend _mock;
   final IdentityService _identity;
   final SupabaseBackend? _live;
+  final CacheService _cache = CacheService();
+  TelemetryService get _telemetry => TelemetryService.instance;
 
   IdentityService get identity => _identity;
   bool get isMockMode => _live == null;
@@ -166,6 +170,8 @@ class VentlyRepository {
 
   Future<void> logout() async {
     await _identity.clearSession();
+    _cache.clear();
+    unawaited(_telemetry.event('logout'));
     if (_live != null) {
       await _live.logout();
     } else {
@@ -179,10 +185,10 @@ class VentlyRepository {
     String? mood,
     String? tribeSlug,
     String? locationBucket,
+    String sort = 'fresh',
   }) {
     final live = _live;
     if (live != null) {
-      // Seed the stream with an immediate fetch, then track realtime emits.
       final controller = StreamController<List<Post>>();
       late StreamSubscription<List<Post>> sub;
       Future<void> emit() async {
@@ -191,6 +197,7 @@ class VentlyRepository {
           mood: mood,
           tribeSlug: tribeSlug,
           locationBucket: locationBucket,
+          sort: sort,
         ));
       }
       sub = live.postsStream.listen((_) => emit());
@@ -203,6 +210,7 @@ class VentlyRepository {
           mood: mood,
           tribeSlug: tribeSlug,
           locationBucket: locationBucket,
+          sort: sort,
         ));
   }
 
@@ -211,6 +219,7 @@ class VentlyRepository {
     String? mood,
     String? tribeSlug,
     String? locationBucket,
+    String sort = 'fresh',
   }) {
     final live = _live;
     if (live != null) {
@@ -219,6 +228,7 @@ class VentlyRepository {
         mood: mood,
         tribeSlug: tribeSlug,
         locationBucket: locationBucket,
+        sort: sort,
       );
     }
     return Future.value(_mock.feed(
@@ -226,6 +236,7 @@ class VentlyRepository {
       mood: mood,
       tribeSlug: tribeSlug,
       locationBucket: locationBucket,
+      sort: sort,
     ));
   }
 
@@ -304,10 +315,17 @@ class VentlyRepository {
   }
 
   // ===================== Badges + streaks =====================
+  /// Badge catalogue is effectively immutable per release — long TTL.
   Future<List<BadgeDefinition>> badgeCatalogue() {
-    final live = _live;
-    if (live != null) return live.badgeCatalogue();
-    return Future.value(_mock.badgeCatalogue());
+    return _cache.getOrLoad(
+      'badge_catalogue',
+      () async {
+        final live = _live;
+        if (live != null) return live.badgeCatalogue();
+        return _mock.badgeCatalogue();
+      },
+      ttl: const Duration(hours: 6),
+    );
   }
 
   Future<List<UserBadge>> badgesFor(String userId) {
@@ -597,10 +615,19 @@ class VentlyRepository {
   }
 
   // ===================== Tribes =====================
+  /// Tribe lists are stable enough to cache for a minute per query —
+  /// the directory screen swipes through several categories quickly.
   Future<List<Tribe>> tribes({String? category, String? search}) {
-    final live = _live;
-    if (live != null) return live.tribes(category: category, search: search);
-    return Future.value(_mock.tribes(category: category, search: search));
+    final key = 'tribes:${category ?? ''}:${search ?? ''}';
+    return _cache.getOrLoad(
+      key,
+      () async {
+        final live = _live;
+        if (live != null) return live.tribes(category: category, search: search);
+        return _mock.tribes(category: category, search: search);
+      },
+      ttl: const Duration(minutes: 1),
+    );
   }
 
   Future<Tribe?> tribeBySlug(String slug) {
@@ -638,18 +665,20 @@ class VentlyRepository {
     return _mock.joinedTribe(tribeId);
   }
 
-  Future<void> joinTribe(String tribeId) {
+  Future<void> joinTribe(String tribeId) async {
+    _cache.invalidate(prefix: 'tribes:');
+    unawaited(_telemetry.event('tribe_join', props: {'tribe_id': tribeId}));
     final live = _live;
     if (live != null) return live.joinTribe(tribeId);
     _mock.joinTribe(tribeId);
-    return Future.value();
   }
 
-  Future<void> leaveTribe(String tribeId) {
+  Future<void> leaveTribe(String tribeId) async {
+    _cache.invalidate(prefix: 'tribes:');
+    unawaited(_telemetry.event('tribe_leave', props: {'tribe_id': tribeId}));
     final live = _live;
     if (live != null) return live.leaveTribe(tribeId);
     _mock.leaveTribe(tribeId);
-    return Future.value();
   }
 
   // ===================== Chat =====================

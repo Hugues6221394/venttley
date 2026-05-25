@@ -248,17 +248,20 @@ class SupabaseBackend {
     String? mood,
     String? tribeSlug,
     String? locationBucket,
+    String sort = 'fresh', // fresh | hot
     int limit = 100,
   }) async {
-    var query = _client.from('feed_posts').select();
+    final source = sort == 'hot' ? 'feed_hot' : 'feed_posts';
+    var query = _client.from(source).select();
     if (category != null)  query = query.eq('category_name', category);
     if (mood != null)      query = query.eq('post_mood', mood);
     if (tribeSlug != null) query = query.eq('tribe_slug', tribeSlug);
     if (locationBucket != null) {
       query = query.eq('location_bucket', locationBucket);
     }
-    final rows = await query
-        .order('created_at', ascending: false)
+    final rows = await (sort == 'hot'
+            ? query.order('hot_score', ascending: false)
+            : query.order('created_at', ascending: false))
         .limit(limit);
     // Whispers vanish from the feed after 24h. We filter client-side
     // because PostgREST's `or` filter doesn't cleanly express

@@ -47,6 +47,9 @@ dependencies:
   # Animations
   flutter_animate: ^4.5.0
 
+  # Observability (Sprint 2)
+  sentry_flutter: ^8.10.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

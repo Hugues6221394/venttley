@@ -131,6 +131,7 @@ class MockBackend {
     String? mood,
     String? tribeSlug,
     String? locationBucket,
+    String sort = 'fresh',
   }) {
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
     final filtered = _posts.where((p) {
@@ -142,8 +143,21 @@ class MockBackend {
       // a local feed, return empty so the UI exercises the fallback path.
       final byLocation = locationBucket == null;
       return byCategory && byMood && byTribe && byWhisper && byLocation;
-    }).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList();
+
+    if (sort == 'hot') {
+      double score(Post p) {
+        final base = (p.likesCount + p.commentsCount) + 1;
+        final ageHours =
+            DateTime.now().difference(p.createdAt).inMinutes / 60.0;
+        // Reddit-ish hot: engagement / (age + 2)^1.5
+        return base / ((ageHours + 2) * (ageHours + 2)).clamp(1, 1e9);
+      }
+      filtered.sort((a, b) => score(b).compareTo(score(a)));
+    } else {
+      filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
+
     return [
       for (final p in filtered)
         p.copyWith(

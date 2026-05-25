@@ -635,6 +635,13 @@ class _FeedSectionHeader extends ConsumerWidget {
                 .read(feedFilterProvider.notifier)
                 .update((x) => x.copyWith(scope: s)),
           ),
+          const SizedBox(width: 6),
+          _SortToggle(
+            sort: filter.sort,
+            onChanged: (s) => ref
+                .read(feedFilterProvider.notifier)
+                .update((x) => x.copyWith(sort: s)),
+          ),
           if (filter.mood != null) ...[
             const SizedBox(width: 8),
             Container(
@@ -725,6 +732,60 @@ class _ScopeToggle extends StatelessWidget {
         pill('global', 'Global'),
         const SizedBox(width: 6),
         pill('local',  'Local'),
+      ],
+    );
+  }
+}
+
+/// Fresh (chronological) vs Hot (engagement-ranked). Backed by the
+/// `feed_hot` view + `mv_hot_posts` materialized view from migration 0013.
+class _SortToggle extends StatelessWidget {
+  const _SortToggle({required this.sort, required this.onChanged});
+  final String sort;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget pill(String key, IconData icon, String label) {
+      final selected = sort == key;
+      return GestureDetector(
+        onTap: () => onChanged(key),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primary
+                : scheme.primary.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon,
+                  size: 11,
+                  color: selected ? Colors.white : scheme.primary),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: selected ? Colors.white : scheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        pill('fresh', Icons.schedule, 'Fresh'),
+        const SizedBox(width: 6),
+        pill('hot', Icons.local_fire_department, 'Hot'),
       ],
     );
   }

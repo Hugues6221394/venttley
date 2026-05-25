@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/constants.dart';
 import 'core/providers.dart';
+import 'data/services/telemetry_service.dart';
 import 'presentation/router/app_router.dart';
 import 'presentation/theme/app_theme.dart';
 
@@ -15,7 +17,29 @@ Future<void> main() async {
       anonKey: VentlyConfig.supabaseAnonKey,
     );
   }
-  runApp(const ProviderScope(child: VentlyApp()));
+
+  // Sentry is opt-in: when SENTRY_DSN is empty (the dev default), we run
+  // the app directly so we don't ship breadcrumbs to a real project.
+  if (VentlyConfig.sentryDsn.isEmpty) {
+    runApp(const ProviderScope(child: VentlyApp()));
+    return;
+  }
+
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = VentlyConfig.sentryDsn;
+      options.environment = VentlyConfig.env;
+      options.tracesSampleRate = VentlyConfig.sentryTracesSampleRate;
+      options.sendDefaultPii = false; // anonymous app — never ship PII
+      options.attachScreenshot = false;
+      options.beforeSend = (event, hint) =>
+          event.copyWith(user: null, request: null);
+    },
+    appRunner: () {
+      TelemetryService.instance.markSentryReady();
+      runApp(const ProviderScope(child: VentlyApp()));
+    },
+  );
 }
 
 class VentlyApp extends ConsumerStatefulWidget {
@@ -31,6 +55,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(sessionProvider.notifier).restore();
+      TelemetryService.instance.event('app_open');
     });
   }
 

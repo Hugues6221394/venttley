@@ -37,6 +37,29 @@ class VentlyConfig {
   static const int minAge = 13;
   static const int restrictedMaxAge = 17;
 
+  /// Sentry DSN — empty by default. Pass at build time so dev runs do
+  /// not ship breadcrumbs to a real project:
+  ///   flutter run --dart-define=SENTRY_DSN=https://…@sentry.io/…
+  /// When empty, Sentry initialisation is a no-op.
+  static const String sentryDsn = String.fromEnvironment(
+    'SENTRY_DSN',
+    defaultValue: '',
+  );
+
+  /// Build environment label surfaced to Sentry + app_events.
+  static const String env = String.fromEnvironment(
+    'VENTTLY_ENV',
+    defaultValue: 'dev',
+  );
+
+  /// Sentry performance-trace sample rate. Low by default for cost control.
+  static const String _sentryTracesRaw = String.fromEnvironment(
+    'SENTRY_TRACES',
+    defaultValue: '0.1',
+  );
+  static double get sentryTracesSampleRate =>
+      double.tryParse(_sentryTracesRaw) ?? 0.1;
+
   /// Optional Groq API key used by the Tier-2 LlamaGuard moderation call.
   /// Pass at build time:
   ///   flutter run --dart-define=GROQ_API_KEY=gsk_...

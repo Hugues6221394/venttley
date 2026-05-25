@@ -90,17 +90,20 @@ class ThemeModeController extends StateNotifier<ThemeMode> {
 
 /// Feed filter state.
 ///
-/// `scope` controls global vs local. `tribeSlug` overrides scope when set.
+/// `scope` controls global vs local. `sort` controls fresh vs hot.
+/// `tribeSlug` overrides scope when set.
 class FeedFilter {
   final String? category;
   final String? mood;
   final String? tribeSlug;
   final String scope; // 'global' | 'local'
+  final String sort;  // 'fresh'  | 'hot'
   const FeedFilter({
     this.category = 'confessions',
     this.mood,
     this.tribeSlug,
     this.scope = 'global',
+    this.sort = 'fresh',
   });
 
   FeedFilter copyWith({
@@ -108,6 +111,7 @@ class FeedFilter {
     String? mood,
     String? tribeSlug,
     String? scope,
+    String? sort,
     bool clearMood = false,
     bool clearTribe = false,
   }) {
@@ -116,6 +120,7 @@ class FeedFilter {
       mood: clearMood ? null : (mood ?? this.mood),
       tribeSlug: clearTribe ? null : (tribeSlug ?? this.tribeSlug),
       scope: scope ?? this.scope,
+      sort: sort ?? this.sort,
     );
   }
   static const Object _unset = Object();
@@ -134,6 +139,7 @@ final feedPostsProvider = StreamProvider<List<Post>>((ref) {
     mood: filter.mood,
     tribeSlug: filter.tribeSlug,
     locationBucket: bucket,
+    sort: filter.sort,
   );
 });
 
