@@ -145,13 +145,23 @@ class MockBackend {
       return byCategory && byMood && byTribe && byWhisper && byLocation;
     }).toList();
 
-    if (sort == 'hot') {
+    if (sort == 'hot' || sort == 'foryou') {
+      final myTribeSlugs = _tribes
+          .where((t) => t.joinedByMe)
+          .map((t) => t.slug)
+          .toSet();
       double score(Post p) {
         final base = (p.likesCount + p.commentsCount) + 1;
         final ageHours =
             DateTime.now().difference(p.createdAt).inMinutes / 60.0;
-        // Reddit-ish hot: engagement / (age + 2)^1.5
-        return base / ((ageHours + 2) * (ageHours + 2)).clamp(1, 1e9);
+        var s = base / ((ageHours + 2) * (ageHours + 2)).clamp(1, 1e9);
+        if (sort == 'foryou') {
+          if (p.tribeSlug != null && myTribeSlugs.contains(p.tribeSlug)) {
+            s += 1.5;
+          }
+          if (p.commentsCount < 3 && ageHours < 12) s += 0.4;
+        }
+        return s;
       }
       filtered.sort((a, b) => score(b).compareTo(score(a)));
     } else {

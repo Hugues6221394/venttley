@@ -786,6 +786,8 @@ class _SortToggle extends StatelessWidget {
         pill('fresh', Icons.schedule, 'Fresh'),
         const SizedBox(width: 6),
         pill('hot', Icons.local_fire_department, 'Hot'),
+        const SizedBox(width: 6),
+        pill('foryou', Icons.auto_awesome, 'For you'),
       ],
     );
   }

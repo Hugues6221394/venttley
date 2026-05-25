@@ -248,9 +248,30 @@ class SupabaseBackend {
     String? mood,
     String? tribeSlug,
     String? locationBucket,
-    String sort = 'fresh', // fresh | hot
+    String sort = 'fresh', // fresh | hot | foryou
     int limit = 100,
   }) async {
+    // "For You" is a server-side blended ranking (migration 0015).
+    // The personal_score already factors in local + tribe affinity, so
+    // we pass through category + mood and ignore the scope filters
+    // (those would just over-constrain the candidate pool).
+    if (sort == 'foryou' && tribeSlug == null) {
+      final rows = await _client.rpc(
+        'personal_feed',
+        params: {
+          'p_limit': limit,
+          'p_category': category,
+          'p_mood': mood,
+        },
+      ) as List<dynamic>;
+      final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+      return rows
+          .cast<Map<String, dynamic>>()
+          .map<Post>(_postFromRow)
+          .where((p) => !p.isWhisper || p.createdAt.isAfter(cutoff))
+          .toList();
+    }
+
     final source = sort == 'hot' ? 'feed_hot' : 'feed_posts';
     var query = _client.from(source).select();
     if (category != null)  query = query.eq('category_name', category);
