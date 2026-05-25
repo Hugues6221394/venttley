@@ -31,7 +31,7 @@ class MockBackend {
   final List<Tribe> _tribes = [];
   final List<Post> _posts = [];
   final Map<String, List<ThreadedComment>> _commentsByPost = {};
-  final Set<String> _likedPosts = {};
+  final Map<String, String> _myReactions = {};
   final Set<String> _savedPosts = {};
   final Set<String> _joinedTribes = {};
   final List<ChatRoom> _rooms = [];
@@ -171,7 +171,7 @@ class MockBackend {
     return [
       for (final p in filtered)
         p.copyWith(
-          likedByMe: _likedPosts.contains(p.postId),
+          myReaction: _myReactions[p.postId],
           savedByMe: _savedPosts.contains(p.postId),
         ),
     ];
@@ -181,7 +181,7 @@ class MockBackend {
     final p = _posts.firstWhereOrNull((p) => p.postId == postId);
     if (p == null) return null;
     return p.copyWith(
-      likedByMe: _likedPosts.contains(postId),
+      myReaction: _myReactions[postId],
       savedByMe: _savedPosts.contains(postId),
     );
   }
@@ -220,18 +220,31 @@ class MockBackend {
     return post;
   }
 
-  void toggleLike(String postId) {
+  void toggleLike(String postId) => react(postId, 'like');
+
+  /// Mock parity for set_reaction: toggle off when same, switch when
+  /// different, insert when none. Returns the new reaction (or null
+  /// when toggled off).
+  String? react(String postId, String reaction) {
     final i = _posts.indexWhere((p) => p.postId == postId);
-    if (i == -1) return;
-    final liked = _likedPosts.contains(postId);
-    if (liked) {
-      _likedPosts.remove(postId);
-      _posts[i] = _posts[i].copyWith(likesCount: max(_posts[i].likesCount - 1, 0));
-    } else {
-      _likedPosts.add(postId);
+    if (i == -1) return null;
+    final current = _myReactions[postId];
+    String? result;
+    if (current == null) {
+      _myReactions[postId] = reaction;
       _posts[i] = _posts[i].copyWith(likesCount: _posts[i].likesCount + 1);
+      result = reaction;
+    } else if (current == reaction) {
+      _myReactions.remove(postId);
+      _posts[i] = _posts[i].copyWith(
+          likesCount: max(_posts[i].likesCount - 1, 0));
+      result = null;
+    } else {
+      _myReactions[postId] = reaction;
+      result = reaction;
     }
     _emitPosts();
+    return result;
   }
 
   void toggleSave(String postId) {
@@ -576,7 +589,7 @@ class MockBackend {
 
   List<Post> mySaved() => _posts
       .where((p) => _savedPosts.contains(p.postId))
-      .map((p) => p.copyWith(savedByMe: true, likedByMe: _likedPosts.contains(p.postId)))
+      .map((p) => p.copyWith(savedByMe: true, myReaction: _myReactions[p.postId]))
       .toList();
 
   List<Post> myVents() {
@@ -585,7 +598,7 @@ class MockBackend {
     return _posts
         .where((p) => p.authorPseudonym == '@${me.anonymousPseudonym}')
         .map((p) => p.copyWith(
-              likedByMe: _likedPosts.contains(p.postId),
+              myReaction: _myReactions[p.postId],
               savedByMe: _savedPosts.contains(p.postId),
             ))
         .toList();
@@ -911,7 +924,7 @@ class MockBackend {
   void _emitPosts() {
     final view = _posts
         .map((p) => p.copyWith(
-              likedByMe: _likedPosts.contains(p.postId),
+              myReaction: _myReactions[p.postId],
               savedByMe: _savedPosts.contains(p.postId),
             ))
         .toList();

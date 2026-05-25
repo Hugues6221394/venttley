@@ -152,13 +152,7 @@ class PostCard extends ConsumerWidget {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  _PillAction(
-                    icon: post.likedByMe ? Icons.favorite : Icons.favorite_border,
-                    label: PostCard.compactNumber(post.likesCount),
-                    color: post.likedByMe ? scheme.primary : null,
-                    onTap: () =>
-                        ref.read(repositoryProvider).toggleLike(post.postId),
-                  ),
+                  _ReactionButton(post: post),
                   const SizedBox(width: 16),
                   _PillAction(
                     icon: Icons.chat_bubble_outline,
@@ -331,28 +325,25 @@ class _PillAction extends StatelessWidget {
     required this.icon,
     required this.label,
     this.onTap,
-    this.color,
   });
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
-  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final muted = scheme.onSurface.withOpacity(0.6);
-    final c = color ?? muted;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: c),
+          Icon(icon, size: 18, color: muted),
           const SizedBox(width: 4),
           Text(
             label,
-            style: TextStyle(color: c, fontWeight: FontWeight.w600, fontSize: 12),
+            style: TextStyle(color: muted, fontWeight: FontWeight.w600, fontSize: 12),
           ),
         ],
       ),
@@ -530,4 +521,140 @@ class _HeartBubbleBgPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Emotion reaction button. Single tap toggles a default 'like' (clears
+/// the current reaction when one is set); long-press opens a picker
+/// with the full palette from [PostReactions.all].
+class _ReactionButton extends ConsumerWidget {
+  const _ReactionButton({required this.post});
+  final Post post;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final muted = scheme.onSurface.withOpacity(0.6);
+    final r = post.myReaction;
+    final color = r != null ? scheme.primary : muted;
+
+    Widget glyph;
+    if (r == null) {
+      glyph = Icon(Icons.favorite_border, size: 18, color: color);
+    } else if (r == 'like') {
+      glyph = Icon(Icons.favorite, size: 18, color: color);
+    } else {
+      glyph = Text(PostReactions.emoji(r), style: const TextStyle(fontSize: 16));
+    }
+
+    return GestureDetector(
+      onLongPress: () => _openPicker(context, ref),
+      child: InkWell(
+        onTap: () =>
+            ref.read(repositoryProvider).react(post.postId, r ?? 'like'),
+        borderRadius: BorderRadius.circular(16),
+        child: Row(
+          children: [
+            glyph,
+            const SizedBox(width: 4),
+            Text(
+              PostCard.compactNumber(post.likesCount),
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPicker(BuildContext context, WidgetRef ref) async {
+    final scheme = Theme.of(context).colorScheme;
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return SafeArea(
+          child: Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(ctx).cardColor,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: scheme.primary.withOpacity(0.22)),
+              boxShadow: [
+                BoxShadow(
+                  color: scheme.primary.withOpacity(0.10),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                for (final key in PostReactions.all)
+                  _ReactionChoice(
+                    reactionKey: key,
+                    isSelected: post.myReaction == key,
+                    onTap: () => Navigator.of(ctx).pop(key),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (picked == null) return;
+    await ref.read(repositoryProvider).react(post.postId, picked);
+  }
+}
+
+class _ReactionChoice extends StatelessWidget {
+  const _ReactionChoice({
+    required this.reactionKey,
+    required this.isSelected,
+    required this.onTap,
+  });
+  final String reactionKey;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          color: isSelected
+              ? scheme.primary.withOpacity(0.14)
+              : Colors.transparent,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(PostReactions.emoji(reactionKey),
+                style: const TextStyle(fontSize: 28)),
+            const SizedBox(height: 4),
+            Text(
+              PostReactions.label(reactionKey),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: isSelected
+                    ? scheme.primary
+                    : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

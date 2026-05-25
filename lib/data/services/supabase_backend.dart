@@ -25,7 +25,7 @@ class SupabaseBackend {
   final _rng = Random.secure();
 
   // Local mirrors of the calling user's "personalised" state.
-  final Set<String> _likedPosts = {};
+  final Map<String, String> _myReactions = {};
   final Set<String> _savedPosts = {};
   final Set<String> _joinedTribes = {};
 
@@ -175,7 +175,7 @@ class SupabaseBackend {
     _roomsChannel = null;
     await _client.auth.signOut();
     _me = null;
-    _likedPosts.clear();
+    _myReactions.clear();
     _savedPosts.clear();
     _joinedTribes.clear();
   }
@@ -193,11 +193,14 @@ class SupabaseBackend {
     if (uid == null) return;
     final likes = await _client
         .from('post_likes')
-        .select('post_id')
+        .select('post_id, reaction_type')
         .eq('user_id', uid);
-    _likedPosts
+    _myReactions
       ..clear()
-      ..addAll(likes.map((r) => r['post_id'] as String));
+      ..addEntries(likes.map((r) => MapEntry(
+            r['post_id'] as String,
+            r['reaction_type'] as String,
+          )));
     final saves = await _client
         .from('post_saves')
         .select('post_id')
@@ -326,24 +329,23 @@ class SupabaseBackend {
     return post!;
   }
 
-  Future<void> toggleLike(String postId) async {
+  Future<void> toggleLike(String postId) async => react(postId, 'like');
+
+  /// Returns the resulting reaction (`null` when the user toggled it off).
+  Future<String?> react(String postId, String reaction) async {
     final uid = _uid;
-    if (uid == null) return;
-    if (_likedPosts.contains(postId)) {
-      await _client
-          .from('post_likes')
-          .delete()
-          .eq('post_id', postId)
-          .eq('user_id', uid);
-      _likedPosts.remove(postId);
+    if (uid == null) return null;
+    final result = await _client.rpc('set_reaction', params: {
+      'p_post_id': postId,
+      'p_reaction': reaction,
+    });
+    if (result == null) {
+      _myReactions.remove(postId);
     } else {
-      await _client.from('post_likes').insert({
-        'post_id': postId,
-        'user_id': uid,
-      });
-      _likedPosts.add(postId);
+      _myReactions[postId] = result as String;
     }
     _emitPosts();
+    return result as String?;
   }
 
   Future<void> toggleSave(String postId) async {
@@ -1393,7 +1395,7 @@ class SupabaseBackend {
       tribeName: r['tribe_name'] as String?,
       tribeSlug: r['tribe_slug'] as String?,
       isWhisper: (r['is_whisper'] as bool?) ?? false,
-      likedByMe: _likedPosts.contains(r['post_id']),
+      myReaction: _myReactions[r['post_id']],
       savedByMe: _savedPosts.contains(r['post_id']),
     );
   }

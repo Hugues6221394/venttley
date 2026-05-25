@@ -227,7 +227,7 @@ class Post {
   final int likesCount;
   final int commentsCount;
   final DateTime createdAt;
-  final bool likedByMe;
+  final String? myReaction; // null | like | relate | hug | stay_strong | been_there | crazy
   final bool savedByMe;
 
   const Post({
@@ -247,9 +247,12 @@ class Post {
     this.tribeName,
     this.tribeSlug,
     this.isWhisper = false,
-    this.likedByMe = false,
+    this.myReaction,
     this.savedByMe = false,
   });
+
+  /// True when the caller has any reaction on this post.
+  bool get likedByMe => myReaction != null;
 
   /// Whispers expire 24h after creation.
   Duration get whisperRemaining {
@@ -262,7 +265,7 @@ class Post {
   Post copyWith({
     int? likesCount,
     int? commentsCount,
-    bool? likedByMe,
+    Object? myReaction = _unset,
     bool? savedByMe,
   }) {
     return Post(
@@ -282,9 +285,44 @@ class Post {
       tribeId: tribeId,
       tribeName: tribeName,
       tribeSlug: tribeSlug,
-      likedByMe: likedByMe ?? this.likedByMe,
+      myReaction:
+          myReaction == _unset ? this.myReaction : myReaction as String?,
       savedByMe: savedByMe ?? this.savedByMe,
     );
+  }
+
+  static const Object _unset = Object();
+}
+
+/// Static catalogue of the six emotion reactions. Kept in sync with the
+/// `reaction_type` enum in Postgres (migration 0016).
+class PostReactions {
+  static const List<String> all = [
+    'like', 'relate', 'hug', 'stay_strong', 'been_there', 'crazy',
+  ];
+
+  static String emoji(String key) {
+    switch (key) {
+      case 'like':        return '\u{2764}';       // ❤
+      case 'relate':      return '\u{1FAC2}';      // 🫂
+      case 'hug':         return '\u{1F917}';      // 🤗
+      case 'stay_strong': return '\u{1F4AA}';      // 💪
+      case 'been_there':  return '\u{1F62E}\u{200D}\u{1F4A8}'; // 😮‍💨
+      case 'crazy':       return '\u{1F92F}';      // 🤯
+      default:            return '\u{2764}';
+    }
+  }
+
+  static String label(String key) {
+    switch (key) {
+      case 'like':        return 'Heart';
+      case 'relate':      return 'Relate';
+      case 'hug':         return 'Hug';
+      case 'stay_strong': return 'Stay strong';
+      case 'been_there':  return 'Been there';
+      case 'crazy':       return 'Wow';
+      default:            return key;
+    }
   }
 }
 

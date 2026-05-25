@@ -428,11 +428,15 @@ class VentlyRepository {
     _mock.respondToInvite(inviteId: inviteId, accept: accept);
   }
 
-  Future<void> toggleLike(String postId) {
+  Future<void> toggleLike(String postId) => react(postId, 'like');
+
+  /// Set / switch / clear the caller's emotional reaction on a post.
+  /// Returns the resulting reaction (`null` when the user toggled the
+  /// same reaction off).
+  Future<String?> react(String postId, String reaction) async {
     final live = _live;
-    if (live != null) return live.toggleLike(postId);
-    _mock.toggleLike(postId);
-    return Future.value();
+    if (live != null) return live.react(postId, reaction);
+    return _mock.react(postId, reaction);
   }
 
   Future<void> toggleSave(String postId) {
