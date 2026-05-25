@@ -126,14 +126,22 @@ class MockBackend {
   }
 
   // -------------------- Feed --------------------
-  List<Post> feed({String? category, String? mood, String? tribeSlug}) {
+  List<Post> feed({
+    String? category,
+    String? mood,
+    String? tribeSlug,
+    String? locationBucket,
+  }) {
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
     final filtered = _posts.where((p) {
       final byCategory = category == null || p.categoryName == category;
       final byMood     = mood == null || p.postMood == mood;
       final byTribe    = tribeSlug == null || p.tribeSlug == tribeSlug;
       final byWhisper  = !p.isWhisper || p.createdAt.isAfter(cutoff);
-      return byCategory && byMood && byTribe && byWhisper;
+      // Mock posts don't carry a location_bucket. When the caller asks for
+      // a local feed, return empty so the UI exercises the fallback path.
+      final byLocation = locationBucket == null;
+      return byCategory && byMood && byTribe && byWhisper && byLocation;
     }).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return [
@@ -321,6 +329,115 @@ class MockBackend {
     _tribes[i] = updated;
     return updated;
   }
+
+  // -------------------- Profile location --------------------
+  AppUser updateMyLocation({
+    String? homeCity,
+    String? homeCountry,
+    String? homeCampus,
+  }) {
+    final me = _me;
+    if (me == null) throw StateError('Not signed in');
+    final updated = me.copyWith(
+      homeCity: homeCity?.trim().isEmpty == true ? null : homeCity?.trim(),
+      homeCountry:
+          homeCountry?.trim().isEmpty == true ? null : homeCountry?.trim(),
+      homeCampus:
+          homeCampus?.trim().isEmpty == true ? null : homeCampus?.trim(),
+    );
+    _me = updated;
+    final i = _users.indexWhere((u) => u.userId == me.userId);
+    if (i != -1) _users[i] = updated;
+    _emitAll();
+    return updated;
+  }
+
+  // -------------------- Co-mod hierarchy --------------------
+  final Map<String, Map<String, String>> _tribeRoles = {}; // tribeId -> userId -> role
+
+  String _roleFor(String tribeId, String userId) {
+    final tribe = _tribes.firstWhereOrNull((t) => t.tribeId == tribeId);
+    if (tribe?.keeperId == userId) return 'keeper';
+    return _tribeRoles[tribeId]?[userId] ?? 'member';
+  }
+
+  List<TribeMemberRow> tribeMembers(String tribeId) {
+    // Mock: derive from the seeded user list — only the keeper + me are
+    // realistic members. Returning the keeper-as-keeper is enough for the
+    // manage UI smoke test.
+    final tribe = _tribes.firstWhereOrNull((t) => t.tribeId == tribeId);
+    if (tribe == null) return const [];
+    final out = <TribeMemberRow>[];
+    if (tribe.keeperId != null) {
+      final keeper = _users.firstWhereOrNull((u) => u.userId == tribe.keeperId);
+      if (keeper != null) {
+        out.add(TribeMemberRow(
+          userId: keeper.userId,
+          pseudonym: keeper.anonymousPseudonym,
+          avatarSeed: keeper.avatarSeed,
+          role: 'keeper',
+          joinedAt: tribe.createdAt,
+        ));
+      }
+    }
+    final me = _me;
+    if (me != null && me.userId != tribe.keeperId && _joinedTribes.contains(tribeId)) {
+      out.add(TribeMemberRow(
+        userId: me.userId,
+        pseudonym: me.anonymousPseudonym,
+        avatarSeed: me.avatarSeed,
+        role: _roleFor(tribeId, me.userId),
+        joinedAt: DateTime.now(),
+      ));
+    }
+    return out;
+  }
+
+  void promoteToMod({required String tribeId, required String userId}) {
+    _tribeRoles.putIfAbsent(tribeId, () => {})[userId] = 'mod';
+  }
+
+  void demoteToMember({required String tribeId, required String userId}) {
+    _tribeRoles.putIfAbsent(tribeId, () => {})[userId] = 'member';
+  }
+
+  void kickMember({
+    required String tribeId,
+    required String userId,
+    String? reason,
+  }) {
+    _joinedTribes.remove(tribeId);
+    _tribeRoles[tribeId]?.remove(userId);
+  }
+
+  void transferKeeper({
+    required String tribeId,
+    required String toUserId,
+  }) {
+    final i = _tribes.indexWhere((t) => t.tribeId == tribeId);
+    if (i == -1) return;
+    _tribes[i] = _tribes[i].copyWith();
+    // Mock doesn't have full keeperId reassignment plumbing — left as a
+    // smoke shim; live path is the one we ship against.
+  }
+
+  // -------------------- Badges + streaks --------------------
+  final List<BadgeDefinition> _badgeCatalogue = const [
+    BadgeDefinition(key: 'first_vent', label: 'First Vent',
+        description: 'Your first confession.', icon: '⭐', tier: 'bronze'),
+    BadgeDefinition(key: 'seven_day_venter', label: '7-Day Venter',
+        description: 'Seven consecutive days posting.', icon: '🌙', tier: 'silver'),
+    BadgeDefinition(key: 'keeper', label: 'Keeper',
+        description: 'Started your own Tribe.', icon: '🌿', tier: 'silver'),
+    BadgeDefinition(key: 'whisper_keeper', label: 'Whisper Keeper',
+        description: 'Posted ten Whispers.', icon: '🌒', tier: 'bronze'),
+  ];
+  final Map<String, List<UserBadge>> _userBadges = {};
+
+  List<BadgeDefinition> badgeCatalogue() => _badgeCatalogue;
+  List<UserBadge> badgesFor(String userId) =>
+      _userBadges[userId] ?? const [];
+  List<UserStreak> myStreaks() => const [];
 
   // -------------------- User lookup --------------------
   AppUser? findUserByPseudonym(String pseudonym) {

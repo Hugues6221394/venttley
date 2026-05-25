@@ -91,6 +91,7 @@ class TribeManageScreen extends ConsumerWidget {
             _SentimentCard(posts: posts),
             _ActivityCard(posts: posts),
             const _QuickActions(),
+            _MembersCard(tribe: tribe, meId: me.userId),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 22, 20, 8),
               child: Row(
@@ -1189,4 +1190,346 @@ Future<void> _showInviteSheet(
   );
   search.dispose();
   message.dispose();
+}
+
+// =========================================================================
+// MEMBERS CARD — co-mod hierarchy: promote / demote / kick / transfer
+// =========================================================================
+
+class _MembersCard extends ConsumerWidget {
+  const _MembersCard({required this.tribe, required this.meId});
+  final Tribe tribe;
+  final String meId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final membersAsync = ref.watch(tribeMembersProvider(tribe.tribeId));
+    final members = membersAsync.valueOrNull ?? const <TribeMemberRow>[];
+    final modCount = members.where((m) => m.role == 'mod').length;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.shield_moon_outlined,
+                  size: 16, color: scheme.primary),
+              const SizedBox(width: 6),
+              const Text(
+                'Members & moderators',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+              ),
+              const Spacer(),
+              if (modCount > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$modCount mod${modCount == 1 ? '' : 's'}',
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Promote co-moderators to share the load. They can delete posts and resolve reports — only you can transfer keepership.',
+            style: TextStyle(
+              fontSize: 11,
+              color: scheme.onSurface.withOpacity(0.65),
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (membersAsync.isLoading && members.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (members.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'No members yet.',
+                style: TextStyle(
+                  color: scheme.onSurface.withOpacity(0.6),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          else
+            ...members.map((m) => _MemberRow(
+                  tribe: tribe,
+                  member: m,
+                  isMe: m.userId == meId,
+                )),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemberRow extends ConsumerWidget {
+  const _MemberRow({
+    required this.tribe,
+    required this.member,
+    required this.isMe,
+  });
+  final Tribe tribe;
+  final TribeMemberRow member;
+  final bool isMe;
+
+  Color _roleColor(String role, ColorScheme scheme) {
+    switch (role) {
+      case 'keeper':
+        return scheme.primary;
+      case 'mod':
+        return VentlyColors.warningAmber;
+      default:
+        return scheme.onSurface.withOpacity(0.5);
+    }
+  }
+
+  String _roleLabel(String role) {
+    switch (role) {
+      case 'keeper':
+        return 'Keeper';
+      case 'mod':
+        return 'Mod';
+      default:
+        return 'Member';
+    }
+  }
+
+  IconData _roleIcon(String role) {
+    switch (role) {
+      case 'keeper':
+        return Icons.workspace_premium_rounded;
+      case 'mod':
+        return Icons.shield_outlined;
+      default:
+        return Icons.person_outline;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final roleColor = _roleColor(member.role, scheme);
+    final isKeeper = member.role == 'keeper';
+    final isMod = member.role == 'mod';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          AnonymousAvatar(
+            seed: member.avatarSeed,
+            label: member.pseudonym,
+            size: 36,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '@${member.pseudonym}${isMe ? ' · you' : ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Icon(_roleIcon(member.role), size: 12, color: roleColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      _roleLabel(member.role),
+                      style: TextStyle(
+                        color: roleColor,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Joined ${DateFormat.yMMMd().format(member.joinedAt)}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: scheme.onSurface.withOpacity(0.55),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (!isMe && !isKeeper)
+            PopupMenuButton<String>(
+              tooltip: 'Manage member',
+              icon: Icon(Icons.more_vert,
+                  size: 18, color: scheme.onSurface.withOpacity(0.6)),
+              onSelected: (action) =>
+                  _handleAction(context, ref, action),
+              itemBuilder: (_) => [
+                if (!isMod)
+                  const PopupMenuItem(
+                    value: 'promote',
+                    child: Row(children: [
+                      Icon(Icons.arrow_upward_rounded, size: 16),
+                      SizedBox(width: 8),
+                      Text('Promote to mod'),
+                    ]),
+                  ),
+                if (isMod)
+                  const PopupMenuItem(
+                    value: 'demote',
+                    child: Row(children: [
+                      Icon(Icons.arrow_downward_rounded, size: 16),
+                      SizedBox(width: 8),
+                      Text('Demote to member'),
+                    ]),
+                  ),
+                const PopupMenuItem(
+                  value: 'kick',
+                  child: Row(children: [
+                    Icon(Icons.person_remove_outlined,
+                        size: 16, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Remove from tribe',
+                        style: TextStyle(color: Colors.red)),
+                  ]),
+                ),
+                if (isMod)
+                  const PopupMenuItem(
+                    value: 'transfer',
+                    child: Row(children: [
+                      Icon(Icons.workspace_premium_rounded,
+                          size: 16),
+                      SizedBox(width: 8),
+                      Text('Transfer keepership'),
+                    ]),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleAction(
+      BuildContext context, WidgetRef ref, String action) async {
+    final repo = ref.read(repositoryProvider);
+    void invalidate() {
+      ref.invalidate(tribeMembersProvider(tribe.tribeId));
+      ref.invalidate(tribeBySlugProvider(tribe.slug));
+    }
+    try {
+      switch (action) {
+        case 'promote':
+          await repo.promoteToMod(
+              tribeId: tribe.tribeId, userId: member.userId);
+          _snack(context, '@${member.pseudonym} is now a mod.');
+          invalidate();
+          break;
+        case 'demote':
+          await repo.demoteToMember(
+              tribeId: tribe.tribeId, userId: member.userId);
+          _snack(context, '@${member.pseudonym} is back to member.');
+          invalidate();
+          break;
+        case 'kick':
+          final ok = await _confirm(
+            context,
+            title: 'Remove @${member.pseudonym}?',
+            body:
+                'They will lose access to this tribe. You can re-invite later.',
+            confirm: 'Remove',
+            destructive: true,
+          );
+          if (ok != true) return;
+          await repo.kickMember(
+              tribeId: tribe.tribeId, userId: member.userId);
+          _snack(context, '@${member.pseudonym} removed.');
+          invalidate();
+          break;
+        case 'transfer':
+          final ok = await _confirm(
+            context,
+            title: 'Transfer keepership?',
+            body:
+                'You will become a mod. @${member.pseudonym} will be the new Keeper of ${tribe.name}.',
+            confirm: 'Transfer',
+            destructive: true,
+          );
+          if (ok != true) return;
+          await repo.transferKeeper(
+              tribeId: tribe.tribeId, toUserId: member.userId);
+          _snack(context,
+              'Keepership transferred to @${member.pseudonym}.');
+          invalidate();
+          break;
+      }
+    } catch (e) {
+      _snack(context, 'Action failed: $e');
+    }
+  }
+
+  void _snack(BuildContext context, String msg) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<bool?> _confirm(
+    BuildContext context, {
+    required String title,
+    required String body,
+    required String confirm,
+    bool destructive = false,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: destructive
+                ? ElevatedButton.styleFrom(backgroundColor: Colors.red)
+                : null,
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(confirm),
+          ),
+        ],
+      ),
+    );
+  }
 }

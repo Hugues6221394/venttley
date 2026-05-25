@@ -174,7 +174,12 @@ class VentlyRepository {
   }
 
   // ===================== Posts / Feed =====================
-  Stream<List<Post>> watchFeed({String? category, String? mood, String? tribeSlug}) {
+  Stream<List<Post>> watchFeed({
+    String? category,
+    String? mood,
+    String? tribeSlug,
+    String? locationBucket,
+  }) {
     final live = _live;
     if (live != null) {
       // Seed the stream with an immediate fetch, then track realtime emits.
@@ -185,6 +190,7 @@ class VentlyRepository {
           category: category,
           mood: mood,
           tribeSlug: tribeSlug,
+          locationBucket: locationBucket,
         ));
       }
       sub = live.postsStream.listen((_) => emit());
@@ -196,16 +202,124 @@ class VentlyRepository {
           category: category,
           mood: mood,
           tribeSlug: tribeSlug,
+          locationBucket: locationBucket,
         ));
   }
 
-  Future<List<Post>> feed({String? category, String? mood, String? tribeSlug}) {
+  Future<List<Post>> feed({
+    String? category,
+    String? mood,
+    String? tribeSlug,
+    String? locationBucket,
+  }) {
     final live = _live;
     if (live != null) {
-      return live.feed(category: category, mood: mood, tribeSlug: tribeSlug);
+      return live.feed(
+        category: category,
+        mood: mood,
+        tribeSlug: tribeSlug,
+        locationBucket: locationBucket,
+      );
     }
-    return Future.value(
-        _mock.feed(category: category, mood: mood, tribeSlug: tribeSlug));
+    return Future.value(_mock.feed(
+      category: category,
+      mood: mood,
+      tribeSlug: tribeSlug,
+      locationBucket: locationBucket,
+    ));
+  }
+
+  // ===================== Profile location =====================
+  Future<AppUser> updateMyLocation({
+    String? homeCity,
+    String? homeCountry,
+    String? homeCampus,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.updateMyLocation(
+        homeCity: homeCity,
+        homeCountry: homeCountry,
+        homeCampus: homeCampus,
+      );
+    }
+    return Future.value(_mock.updateMyLocation(
+      homeCity: homeCity,
+      homeCountry: homeCountry,
+      homeCampus: homeCampus,
+    ));
+  }
+
+  // ===================== Co-mods =====================
+  Future<List<TribeMemberRow>> tribeMembers(String tribeId) {
+    final live = _live;
+    if (live != null) return live.tribeMembers(tribeId);
+    return Future.value(_mock.tribeMembers(tribeId));
+  }
+
+  Future<void> promoteToMod({
+    required String tribeId,
+    required String userId,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.promoteToMod(tribeId: tribeId, userId: userId);
+    }
+    _mock.promoteToMod(tribeId: tribeId, userId: userId);
+  }
+
+  Future<void> demoteToMember({
+    required String tribeId,
+    required String userId,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.demoteToMember(tribeId: tribeId, userId: userId);
+    }
+    _mock.demoteToMember(tribeId: tribeId, userId: userId);
+  }
+
+  Future<void> kickMember({
+    required String tribeId,
+    required String userId,
+    String? reason,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.kickMember(
+          tribeId: tribeId, userId: userId, reason: reason);
+    }
+    _mock.kickMember(tribeId: tribeId, userId: userId, reason: reason);
+  }
+
+  Future<void> transferKeeper({
+    required String tribeId,
+    required String toUserId,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.transferKeeper(tribeId: tribeId, toUserId: toUserId);
+    }
+    _mock.transferKeeper(tribeId: tribeId, toUserId: toUserId);
+  }
+
+  // ===================== Badges + streaks =====================
+  Future<List<BadgeDefinition>> badgeCatalogue() {
+    final live = _live;
+    if (live != null) return live.badgeCatalogue();
+    return Future.value(_mock.badgeCatalogue());
+  }
+
+  Future<List<UserBadge>> badgesFor(String userId) {
+    final live = _live;
+    if (live != null) return live.badgesFor(userId);
+    return Future.value(_mock.badgesFor(userId));
+  }
+
+  Future<List<UserStreak>> myStreaks() {
+    final live = _live;
+    if (live != null) return live.myStreaks();
+    return Future.value(_mock.myStreaks());
   }
 
   Future<Post> createPost({

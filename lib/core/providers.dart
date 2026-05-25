@@ -89,17 +89,33 @@ class ThemeModeController extends StateNotifier<ThemeMode> {
 }
 
 /// Feed filter state.
+///
+/// `scope` controls global vs local. `tribeSlug` overrides scope when set.
 class FeedFilter {
   final String? category;
   final String? mood;
   final String? tribeSlug;
-  const FeedFilter({this.category = 'confessions', this.mood, this.tribeSlug});
+  final String scope; // 'global' | 'local'
+  const FeedFilter({
+    this.category = 'confessions',
+    this.mood,
+    this.tribeSlug,
+    this.scope = 'global',
+  });
 
-  FeedFilter copyWith({Object? category = _unset, String? mood, String? tribeSlug, bool clearMood = false, bool clearTribe = false}) {
+  FeedFilter copyWith({
+    Object? category = _unset,
+    String? mood,
+    String? tribeSlug,
+    String? scope,
+    bool clearMood = false,
+    bool clearTribe = false,
+  }) {
     return FeedFilter(
       category: category == _unset ? this.category : category as String?,
       mood: clearMood ? null : (mood ?? this.mood),
       tribeSlug: clearTribe ? null : (tribeSlug ?? this.tribeSlug),
+      scope: scope ?? this.scope,
     );
   }
   static const Object _unset = Object();
@@ -111,10 +127,13 @@ final feedFilterProvider =
 final feedPostsProvider = StreamProvider<List<Post>>((ref) {
   final repo = ref.watch(repositoryProvider);
   final filter = ref.watch(feedFilterProvider);
+  final me = ref.watch(sessionProvider);
+  final bucket = filter.scope == 'local' ? me?.localBucket : null;
   return repo.watchFeed(
     category: filter.category,
     mood: filter.mood,
     tribeSlug: filter.tribeSlug,
+    locationBucket: bucket,
   );
 });
 
@@ -199,6 +218,23 @@ final pollForPostProvider =
 /// Pending tribe invitations waiting on the current user.
 final myInvitesProvider = FutureProvider.autoDispose<List<TribeInvite>>(
     (ref) async => ref.watch(repositoryProvider).myPendingInvites());
+
+final tribeMembersProvider =
+    FutureProvider.autoDispose.family<List<TribeMemberRow>, String>(
+        (ref, tribeId) async =>
+            ref.watch(repositoryProvider).tribeMembers(tribeId));
+
+final badgeCatalogueProvider =
+    FutureProvider.autoDispose<List<BadgeDefinition>>(
+        (ref) async => ref.watch(repositoryProvider).badgeCatalogue());
+
+final badgesForUserProvider =
+    FutureProvider.autoDispose.family<List<UserBadge>, String>(
+        (ref, userId) async =>
+            ref.watch(repositoryProvider).badgesFor(userId));
+
+final myStreaksProvider = FutureProvider.autoDispose<List<UserStreak>>(
+    (ref) async => ref.watch(repositoryProvider).myStreaks());
 
 final myVentsProvider = FutureProvider.autoDispose<List<Post>>((ref) async {
   ref.watch(feedPostsProvider);

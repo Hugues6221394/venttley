@@ -13,6 +13,9 @@ class AppUser {
   final int? birthYear;
   final String accountStatus;
   final int karmaPoints;
+  final String? homeCity;
+  final String? homeCountry;
+  final String? homeCampus;
 
   const AppUser({
     required this.userId,
@@ -25,10 +28,22 @@ class AppUser {
     required this.accountStatus,
     this.birthYear,
     this.karmaPoints = 0,
+    this.homeCity,
+    this.homeCountry,
+    this.homeCampus,
   });
 
   bool get isRestrictedMinor => safetyTier == 'restricted_minor';
   bool get isPlug => userRole == 'plug' || userRole == 'super_admin';
+  bool get hasLocation =>
+      (homeCity != null && homeCity!.isNotEmpty) ||
+      (homeCampus != null && homeCampus!.isNotEmpty);
+
+  /// The normalized bucket key the feed uses for "local" scoping.
+  String? get localBucket {
+    final c = homeCity?.trim().toLowerCase();
+    return (c == null || c.isEmpty) ? null : c;
+  }
 
   AppUser copyWith({
     String? anonymousPseudonym,
@@ -37,6 +52,9 @@ class AppUser {
     String? userRole,
     bool? isVerified,
     int? karmaPoints,
+    String? homeCity,
+    String? homeCountry,
+    String? homeCampus,
   }) {
     return AppUser(
       userId: userId,
@@ -49,8 +67,65 @@ class AppUser {
       accountStatus: accountStatus,
       birthYear: birthYear,
       karmaPoints: karmaPoints ?? this.karmaPoints,
+      homeCity: homeCity ?? this.homeCity,
+      homeCountry: homeCountry ?? this.homeCountry,
+      homeCampus: homeCampus ?? this.homeCampus,
     );
   }
+}
+
+/// A member of a Tribe — joins tribe_members + users for the manage view.
+class TribeMemberRow {
+  final String userId;
+  final String pseudonym;
+  final String avatarSeed;
+  final String role; // member | mod | keeper
+  final DateTime joinedAt;
+
+  const TribeMemberRow({
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.role,
+    required this.joinedAt,
+  });
+
+  bool get isKeeper => role == 'keeper';
+  bool get isMod    => role == 'mod';
+}
+
+class BadgeDefinition {
+  final String key;
+  final String label;
+  final String description;
+  final String icon;
+  final String tier; // bronze | silver | gold
+  const BadgeDefinition({
+    required this.key,
+    required this.label,
+    required this.description,
+    required this.icon,
+    required this.tier,
+  });
+}
+
+class UserBadge {
+  final String key;
+  final DateTime awardedAt;
+  const UserBadge({required this.key, required this.awardedAt});
+}
+
+class UserStreak {
+  final String kind;        // posting | commenting | reactions
+  final int currentCount;
+  final int longestCount;
+  final DateTime lastEventAt;
+  const UserStreak({
+    required this.kind,
+    required this.currentCount,
+    required this.longestCount,
+    required this.lastEventAt,
+  });
 }
 
 class PlugProfile {

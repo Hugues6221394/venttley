@@ -158,7 +158,7 @@ class SupabaseBackend {
         .select(
           'user_id, anonymous_pseudonym, avatar_seed, current_mood, '
           'user_role, is_verified, account_status, safety_tier, birth_year, '
-          'karma_points',
+          'karma_points, home_city, home_country, home_campus',
         )
         .eq('user_id', uid)
         .maybeSingle();
@@ -247,12 +247,16 @@ class SupabaseBackend {
     String? category,
     String? mood,
     String? tribeSlug,
+    String? locationBucket,
     int limit = 100,
   }) async {
     var query = _client.from('feed_posts').select();
     if (category != null)  query = query.eq('category_name', category);
     if (mood != null)      query = query.eq('post_mood', mood);
     if (tribeSlug != null) query = query.eq('tribe_slug', tribeSlug);
+    if (locationBucket != null) {
+      query = query.eq('location_bucket', locationBucket);
+    }
     final rows = await query
         .order('created_at', ascending: false)
         .limit(limit);
@@ -376,6 +380,130 @@ class SupabaseBackend {
     } on PostgrestException catch (e) {
       if (e.code != '23505') rethrow;
     }
+  }
+
+  // -------------------- Profile location (migration 0012) ---------------
+
+  Future<AppUser> updateMyLocation({
+    String? homeCity,
+    String? homeCountry,
+    String? homeCampus,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    await _client.from('users').update({
+      'home_city':    homeCity?.trim().isEmpty == true ? null : homeCity?.trim(),
+      'home_country': homeCountry?.trim().isEmpty == true ? null : homeCountry?.trim(),
+      'home_campus':  homeCampus?.trim().isEmpty == true ? null : homeCampus?.trim(),
+    }).eq('user_id', uid);
+    final refreshed = await restore();
+    return refreshed!;
+  }
+
+  // -------------------- Co-mod hierarchy (migration 0012) ---------------
+
+  /// Member roster of a tribe with role + join date. Reads through RLS so
+  /// non-members of private tribes don't see this.
+  Future<List<TribeMemberRow>> tribeMembers(String tribeId) async {
+    final rows = await _client
+        .from('tribe_members')
+        .select(
+          'role, joined_at, '
+          'users!inner(user_id, anonymous_pseudonym, avatar_seed)',
+        )
+        .eq('tribe_id', tribeId)
+        .order('joined_at', ascending: true);
+    return rows.map<TribeMemberRow>((r) {
+      final u = r['users'] as Map<String, dynamic>;
+      return TribeMemberRow(
+        userId: u['user_id'] as String,
+        pseudonym: u['anonymous_pseudonym'] as String,
+        avatarSeed: (u['avatar_seed'] as String?) ?? 'default-orb',
+        role: r['role'] as String,
+        joinedAt: DateTime.parse(r['joined_at'] as String),
+      );
+    }).toList();
+  }
+
+  Future<void> promoteToMod(
+      {required String tribeId, required String userId}) async {
+    await _client.rpc('promote_to_mod',
+        params: {'p_tribe_id': tribeId, 'p_user_id': userId});
+  }
+
+  Future<void> demoteToMember(
+      {required String tribeId, required String userId}) async {
+    await _client.rpc('demote_to_member',
+        params: {'p_tribe_id': tribeId, 'p_user_id': userId});
+  }
+
+  Future<void> kickMember({
+    required String tribeId,
+    required String userId,
+    String? reason,
+  }) async {
+    await _client.rpc('kick_member', params: {
+      'p_tribe_id': tribeId,
+      'p_user_id': userId,
+      'p_reason': reason,
+    });
+  }
+
+  Future<void> transferKeeper({
+    required String tribeId,
+    required String toUserId,
+  }) async {
+    await _client.rpc('transfer_keeper',
+        params: {'p_tribe_id': tribeId, 'p_to_user_id': toUserId});
+  }
+
+  // -------------------- Badges + streaks --------------------------------
+
+  Future<List<BadgeDefinition>> badgeCatalogue() async {
+    final rows = await _client
+        .from('badge_definitions')
+        .select('badge_key, label, description, icon, tier')
+        .order('tier', ascending: true);
+    return rows
+        .map<BadgeDefinition>((r) => BadgeDefinition(
+              key: r['badge_key'] as String,
+              label: r['label'] as String,
+              description: r['description'] as String,
+              icon: r['icon'] as String,
+              tier: r['tier'] as String,
+            ))
+        .toList();
+  }
+
+  Future<List<UserBadge>> badgesFor(String userId) async {
+    final rows = await _client
+        .from('user_badges')
+        .select('badge_key, awarded_at')
+        .eq('user_id', userId)
+        .order('awarded_at', ascending: false);
+    return rows
+        .map<UserBadge>((r) => UserBadge(
+              key: r['badge_key'] as String,
+              awardedAt: DateTime.parse(r['awarded_at'] as String),
+            ))
+        .toList();
+  }
+
+  Future<List<UserStreak>> myStreaks() async {
+    final uid = _uid;
+    if (uid == null) return const [];
+    final rows = await _client
+        .from('user_streaks')
+        .select('streak_kind, current_count, longest_count, last_event_at')
+        .eq('user_id', uid);
+    return rows
+        .map<UserStreak>((r) => UserStreak(
+              kind: r['streak_kind'] as String,
+              currentCount: (r['current_count'] as int?) ?? 0,
+              longestCount: (r['longest_count'] as int?) ?? 0,
+              lastEventAt: DateTime.parse(r['last_event_at'] as String),
+            ))
+        .toList();
   }
 
   // -------------------- Tribe invitations (migration 0011) --------------
@@ -1290,6 +1418,9 @@ class SupabaseBackend {
       accountStatus: r['account_status'] as String,
       birthYear: r['birth_year'] as int?,
       karmaPoints: (r['karma_points'] as int?) ?? 0,
+      homeCity: r['home_city'] as String?,
+      homeCountry: r['home_country'] as String?,
+      homeCampus: r['home_campus'] as String?,
     );
   }
 

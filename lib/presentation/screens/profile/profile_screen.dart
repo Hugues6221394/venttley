@@ -73,6 +73,7 @@ class ProfileScreen extends ConsumerWidget {
               child: _HeroCard(
                 me: me,
                 onShowPhrase: () => _showRecoveryPhrase(context, ref),
+                onEditLocation: () => _showLocationSheet(context, ref, me),
               ),
             ),
             SliverToBoxAdapter(
@@ -83,6 +84,7 @@ class ProfileScreen extends ConsumerWidget {
                 kept: keptTribes.length,
               ),
             ),
+            SliverToBoxAdapter(child: _BadgesStrip(userId: me.userId)),
             if (keptTribes.isNotEmpty)
               SliverToBoxAdapter(
                 child: _KeeperOverviewStrip(tribes: keptTribes),
@@ -125,14 +127,23 @@ class _ProfileTab {
 // =========================================================================
 
 class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.me, required this.onShowPhrase});
+  const _HeroCard({
+    required this.me,
+    required this.onShowPhrase,
+    required this.onEditLocation,
+  });
   final AppUser me;
   final VoidCallback onShowPhrase;
+  final VoidCallback onEditLocation;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hasCity = (me.homeCity ?? '').trim().isNotEmpty;
+    final locationLabel = hasCity
+        ? '${me.homeCity}${(me.homeCountry ?? '').isNotEmpty ? ' · ${me.homeCountry}' : ''}'
+        : 'Set your city';
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
@@ -176,6 +187,8 @@ class _HeroCard extends StatelessWidget {
           const SizedBox(height: 6),
           Wrap(
             spacing: 6,
+            runSpacing: 6,
+            alignment: WrapAlignment.center,
             children: [
               _SoftChip(
                 label: me.isRestrictedMinor
@@ -188,6 +201,47 @@ class _HeroCard extends StatelessWidget {
                 icon: me.isPlug ? Icons.verified : Icons.person_outline,
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: onEditLocation,
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: scheme.primary.withOpacity(hasCity ? 0.14 : 0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: scheme.primary
+                      .withOpacity(hasCity ? 0.25 : 0.18),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    hasCity
+                        ? Icons.location_on_outlined
+                        : Icons.add_location_alt_outlined,
+                    size: 14,
+                    color: scheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    locationLabel,
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.edit_outlined,
+                      size: 12, color: scheme.primary),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 14),
           SizedBox(
@@ -571,6 +625,316 @@ class _TabsHeader extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant _TabsHeader oldDelegate) =>
       oldDelegate.tabs.length != tabs.length;
+}
+
+// =========================================================================
+// BADGES STRIP
+// =========================================================================
+
+class _BadgesStrip extends ConsumerWidget {
+  const _BadgesStrip({required this.userId});
+  final String userId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final cataloguePromise = ref.watch(badgeCatalogueProvider);
+    final earnedPromise = ref.watch(badgesForUserProvider(userId));
+    final streaksPromise = ref.watch(myStreaksProvider);
+
+    final catalogue = cataloguePromise.valueOrNull ?? const [];
+    final earned = earnedPromise.valueOrNull ?? const [];
+    final streaks = streaksPromise.valueOrNull ?? const [];
+    if (catalogue.isEmpty) return const SizedBox.shrink();
+
+    final earnedKeys = earned.map((b) => b.key).toSet();
+    final postingStreak = streaks
+        .where((s) => s.kind == 'posting')
+        .fold<int>(0, (_, s) => s.currentCount);
+
+    final sorted = [...catalogue]..sort((a, b) {
+        final ae = earnedKeys.contains(a.key) ? 0 : 1;
+        final be = earnedKeys.contains(b.key) ? 0 : 1;
+        if (ae != be) return ae - be;
+        return a.label.compareTo(b.label);
+      });
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+          child: Row(
+            children: [
+              Icon(Icons.emoji_events_outlined,
+                  size: 16, color: scheme.primary),
+              const SizedBox(width: 6),
+              const Text(
+                'Badges',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+              ),
+              const Spacer(),
+              if (postingStreak > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.local_fire_department,
+                          size: 12, color: scheme.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$postingStreak-day streak',
+                        style: TextStyle(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(width: 6),
+              Text(
+                '${earned.length}/${catalogue.length}',
+                style: TextStyle(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 96,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: sorted.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (_, i) {
+              final def = sorted[i];
+              final isEarned = earnedKeys.contains(def.key);
+              return _BadgeChip(def: def, earned: isEarned);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BadgeChip extends StatelessWidget {
+  const _BadgeChip({required this.def, required this.earned});
+  final BadgeDefinition def;
+  final bool earned;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Tooltip(
+      message: def.description,
+      child: Container(
+        width: 88,
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: earned
+              ? scheme.primary.withOpacity(isDark ? 0.18 : 0.10)
+              : Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: earned
+                ? scheme.primary.withOpacity(isDark ? 0.45 : 0.30)
+                : VentlyColors.softMauve.withOpacity(0.35),
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Opacity(
+              opacity: earned ? 1.0 : 0.35,
+              child: Text(def.icon, style: const TextStyle(fontSize: 26)),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              def.label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 10,
+                height: 1.1,
+                color: earned
+                    ? scheme.onSurface
+                    : scheme.onSurface.withOpacity(0.55),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// LOCATION SHEET — opt-in city/country/campus
+// =========================================================================
+
+Future<void> _showLocationSheet(
+  BuildContext context,
+  WidgetRef ref,
+  AppUser me,
+) async {
+  final cityCtl = TextEditingController(text: me.homeCity ?? '');
+  final countryCtl = TextEditingController(text: me.homeCountry ?? '');
+  final campusCtl = TextEditingController(text: me.homeCampus ?? '');
+  final saving = ValueNotifier<bool>(false);
+
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) {
+      final scheme = Theme.of(ctx).colorScheme;
+      return Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          8,
+          20,
+          MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.location_on_outlined, color: scheme.primary),
+                const SizedBox(width: 8),
+                const Text(
+                  'Your community',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 18),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'City only — no GPS, no IP. Used to surface a Local feed of nearby vents. You can clear it anytime.',
+              style: TextStyle(
+                fontSize: 12,
+                color: scheme.onSurface.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: cityCtl,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'City',
+                hintText: 'e.g. Kigali',
+                prefixIcon: Icon(Icons.apartment_outlined),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: countryCtl,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Country',
+                hintText: 'e.g. Rwanda',
+                prefixIcon: Icon(Icons.public),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: campusCtl,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Campus / university (optional)',
+                hintText: 'e.g. AUCA',
+                prefixIcon: Icon(Icons.school_outlined),
+              ),
+            ),
+            const SizedBox(height: 18),
+            ValueListenableBuilder<bool>(
+              valueListenable: saving,
+              builder: (_, busy, __) => Row(
+                children: [
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : () async {
+                            saving.value = true;
+                            try {
+                              await ref
+                                  .read(repositoryProvider)
+                                  .updateMyLocation(
+                                    homeCity: null,
+                                    homeCountry: null,
+                                    homeCampus: null,
+                                  );
+                              await ref
+                                  .read(sessionProvider.notifier)
+                                  .restore();
+                              if (ctx.mounted) Navigator.pop(ctx);
+                            } finally {
+                              saving.value = false;
+                            }
+                          },
+                    child: const Text('Clear'),
+                  ),
+                  const Spacer(),
+                  ElevatedButton.icon(
+                    onPressed: busy
+                        ? null
+                        : () async {
+                            saving.value = true;
+                            try {
+                              final city = cityCtl.text.trim();
+                              final country = countryCtl.text.trim();
+                              final campus = campusCtl.text.trim();
+                              await ref
+                                  .read(repositoryProvider)
+                                  .updateMyLocation(
+                                    homeCity: city.isEmpty ? null : city,
+                                    homeCountry:
+                                        country.isEmpty ? null : country,
+                                    homeCampus:
+                                        campus.isEmpty ? null : campus,
+                                  );
+                              await ref
+                                  .read(sessionProvider.notifier)
+                                  .restore();
+                              if (ctx.mounted) Navigator.pop(ctx);
+                            } finally {
+                              saving.value = false;
+                            }
+                          },
+                    icon: busy
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check_rounded, size: 16),
+                    label: const Text('Save'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
 }
 
 // =========================================================================

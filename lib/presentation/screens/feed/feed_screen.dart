@@ -98,6 +98,9 @@ class FeedScreen extends ConsumerWidget {
                   SliverToBoxAdapter(child: _TribesRail(tribes: tribes)),
                 const SliverToBoxAdapter(child: _AffirmationStrip()),
                 SliverToBoxAdapter(child: _FeedSectionHeader(filter: filter)),
+                if (filter.scope == 'local' &&
+                    ref.watch(sessionProvider)?.localBucket == null)
+                  const SliverToBoxAdapter(child: _LocationPromptBanner()),
                 SliverToBoxAdapter(child: _CategoryRail(filter: filter)),
                 if (FeedCategories.crisisAware.contains(filter.category))
                   const SliverToBoxAdapter(child: _CrisisBanner()),
@@ -614,6 +617,8 @@ class _FeedSectionHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
+    final me = ref.watch(sessionProvider);
+    final hasLocation = me?.localBucket != null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
       child: Row(
@@ -621,6 +626,14 @@ class _FeedSectionHeader extends ConsumerWidget {
           const Text(
             'Your feed',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(width: 10),
+          _ScopeToggle(
+            scope: filter.scope,
+            disabledLocal: !hasLocation,
+            onChanged: (s) => ref
+                .read(feedFilterProvider.notifier)
+                .update((x) => x.copyWith(scope: s)),
           ),
           if (filter.mood != null) ...[
             const SizedBox(width: 8),
@@ -658,6 +671,97 @@ class _FeedSectionHeader extends ConsumerWidget {
             ),
           ],
           const Spacer(),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScopeToggle extends StatelessWidget {
+  const _ScopeToggle({
+    required this.scope,
+    required this.disabledLocal,
+    required this.onChanged,
+  });
+  final String scope;
+  final bool disabledLocal;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget pill(String key, String label) {
+      final selected = scope == key;
+      final disabled = key == 'local' && disabledLocal;
+      return GestureDetector(
+        onTap: disabled ? null : () => onChanged(key),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primary
+                : scheme.primary.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: selected
+                  ? Colors.white
+                  : disabled
+                      ? scheme.onSurface.withOpacity(0.30)
+                      : scheme.primary,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        pill('global', 'Global'),
+        const SizedBox(width: 6),
+        pill('local',  'Local'),
+      ],
+    );
+  }
+}
+
+/// Shows when the user wants the local feed but hasn't set a city.
+class _LocationPromptBanner extends StatelessWidget {
+  const _LocationPromptBanner();
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.primary.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: scheme.primary.withOpacity(0.30)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.location_on_outlined, color: scheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Set your home city to see local Vents from nearby members.',
+              style: TextStyle(
+                color: scheme.primary,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => GoRouter.of(context).push('/profile'),
+            child: const Text('Set city'),
+          ),
         ],
       ),
     );
