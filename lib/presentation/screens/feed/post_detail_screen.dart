@@ -147,21 +147,57 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   }
 }
 
-class _CommentNode extends StatelessWidget {
+class _CommentNode extends ConsumerStatefulWidget {
   const _CommentNode({required this.comment, required this.onReply});
   final ThreadedComment comment;
   final ValueChanged<ThreadedComment> onReply;
 
+  @override
+  ConsumerState<_CommentNode> createState() => _CommentNodeState();
+}
+
+class _CommentNodeState extends ConsumerState<_CommentNode> {
+  bool _collapsed = false;
+  late bool _likedByMe = widget.comment.likedByMe;
+  late int _likesCount = widget.comment.likesCount;
+  bool _likeInFlight = false;
+
   /// Adaptive indentation: min(d * 12, 36px). Beyond depth 4 we collapse.
-  double _indent(int depth) {
-    final px = (depth * 12).clamp(0, 36).toDouble();
-    return px;
+  double _indent(int depth) => (depth * 12).clamp(0, 36).toDouble();
+
+  Future<void> _toggleLike() async {
+    if (_likeInFlight) return;
+    final wasLiked = _likedByMe;
+    setState(() {
+      _likeInFlight = true;
+      _likedByMe = !wasLiked;
+      _likesCount = wasLiked ? (_likesCount - 1).clamp(0, 1 << 30) : _likesCount + 1;
+    });
+    try {
+      final result = await ref
+          .read(repositoryProvider)
+          .toggleCommentLike(widget.comment.commentId);
+      if (!mounted) return;
+      setState(() {
+        _likedByMe = result;
+        _likeInFlight = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _likedByMe = wasLiked;
+        _likesCount = widget.comment.likesCount;
+        _likeInFlight = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final comment = widget.comment;
     final depth = comment.depth;
+    final hasChildren = comment.children.isNotEmpty;
     return Padding(
       padding: EdgeInsets.fromLTRB(16 + _indent(depth), 6, 16, 6),
       child: Container(
@@ -174,60 +210,105 @@ class _CommentNode extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                AnonymousAvatar(
-                  seed: comment.authorAvatarSeed,
-                  label: comment.authorPseudonym,
-                  size: 28,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    comment.authorPseudonym,
-                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+            InkWell(
+              onTap: hasChildren ? () => setState(() => _collapsed = !_collapsed) : null,
+              borderRadius: BorderRadius.circular(8),
+              child: Row(
+                children: [
+                  AnonymousAvatar(
+                    seed: comment.authorAvatarSeed,
+                    label: comment.authorPseudonym,
+                    size: 28,
                   ),
-                ),
-                Text(
-                  _ago(comment.createdAt),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: scheme.onSurface.withOpacity(0.55),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      comment.authorPseudonym,
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                    ),
                   ),
-                ),
-              ],
+                  if (hasChildren)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Icon(
+                        _collapsed ? Icons.expand_more : Icons.expand_less,
+                        size: 16,
+                        color: scheme.onSurface.withOpacity(0.55),
+                      ),
+                    ),
+                  Text(
+                    _ago(comment.createdAt),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurface.withOpacity(0.55),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 6),
             Text(comment.content, style: const TextStyle(fontSize: 14, height: 1.35)),
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(Icons.favorite_border, size: 14, color: scheme.onSurface.withOpacity(0.55)),
-                const SizedBox(width: 4),
-                Text(
-                  PostCard.compactNumber(comment.likesCount),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: scheme.onSurface.withOpacity(0.55),
+                InkWell(
+                  onTap: _toggleLike,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _likedByMe ? Icons.favorite : Icons.favorite_border,
+                          size: 14,
+                          color: _likedByMe
+                              ? scheme.primary
+                              : scheme.onSurface.withOpacity(0.55),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          PostCard.compactNumber(_likesCount),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: _likedByMe
+                                ? scheme.primary
+                                : scheme.onSurface.withOpacity(0.55),
+                            fontWeight: _likedByMe ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 10),
                 TextButton(
                   style: TextButton.styleFrom(
                     minimumSize: const Size(0, 0),
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  onPressed: () => onReply(comment),
+                  onPressed: () => widget.onReply(comment),
                   child: const Text('Reply',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
                       )),
                 ),
+                if (hasChildren && _collapsed) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    '${_countAll(comment.children)} hidden',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurface.withOpacity(0.55),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
               ],
             ),
-            if (comment.children.isNotEmpty)
+            if (hasChildren && !_collapsed)
               comment.depth >= 3
                   ? Padding(
                       padding: const EdgeInsets.only(top: 4),
@@ -242,7 +323,7 @@ class _CommentNode extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         for (final child in comment.children)
-                          _CommentNode(comment: child, onReply: onReply),
+                          _CommentNode(comment: child, onReply: widget.onReply),
                       ],
                     ),
           ],
@@ -315,7 +396,7 @@ class _CommentNode extends StatelessWidget {
                 controller: controller,
                 children: [
                   for (final c in root.children)
-                    _CommentNode(comment: c, onReply: onReply),
+                    _CommentNode(comment: c, onReply: widget.onReply),
                 ],
               ),
             ),

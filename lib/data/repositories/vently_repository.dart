@@ -605,6 +605,12 @@ class VentlyRepository {
         postId: postId, parentId: parentId, content: content);
   }
 
+  Future<bool> toggleCommentLike(String commentId) {
+    final live = _live;
+    if (live != null) return live.toggleCommentLike(commentId);
+    return _mock.toggleCommentLike(commentId);
+  }
+
   // ===================== Plugz (read-only metadata) =====================
   Future<List<PlugProfile>> allPlugz() {
     final live = _live;

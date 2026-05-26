@@ -655,6 +655,32 @@ class MockBackend {
     return null;
   }
 
+  Future<bool> toggleCommentLike(String commentId) async {
+    for (final tree in _commentsByPost.values) {
+      if (_swapLike(tree, commentId)) {
+        final n = _findInTree(tree, commentId);
+        return n?.likedByMe ?? false;
+      }
+    }
+    return false;
+  }
+
+  bool _swapLike(List<ThreadedComment> siblings, String id) {
+    for (var i = 0; i < siblings.length; i++) {
+      final n = siblings[i];
+      if (n.commentId == id) {
+        final next = !n.likedByMe;
+        siblings[i] = n.copyWith(
+          likedByMe: next,
+          likesCount: next ? n.likesCount + 1 : (n.likesCount - 1).clamp(0, 1 << 30),
+        );
+        return true;
+      }
+      if (_swapLike(n.children, id)) return true;
+    }
+    return false;
+  }
+
   // -------------------- Plugz (read-only metadata) --------------------
   List<PlugProfile> allPlugz() => List.unmodifiable(_plugz);
 

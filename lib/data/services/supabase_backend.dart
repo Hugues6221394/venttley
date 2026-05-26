@@ -906,6 +906,7 @@ class SupabaseBackend {
         path: r['path'] as String,
         depth: r['depth'] as int,
         likesCount: r['likes_count'] as int,
+        likedByMe: (r['liked_by_me'] as bool?) ?? false,
         createdAt: DateTime.parse(r['created_at'] as String),
       );
     }).toList();
@@ -959,6 +960,14 @@ class SupabaseBackend {
       if (f != null) return f;
     }
     return null;
+  }
+
+  Future<bool> toggleCommentLike(String commentId) async {
+    final res = await _client.rpc(
+      'toggle_comment_like',
+      params: {'p_comment_id': commentId},
+    );
+    return (res as bool?) ?? false;
   }
 
   // ===================================================================

@@ -335,6 +335,7 @@ class ThreadedComment {
   final String path;
   final int depth;
   final int likesCount;
+  final bool likedByMe;
   final DateTime createdAt;
   final List<ThreadedComment> children;
 
@@ -348,8 +349,25 @@ class ThreadedComment {
     required this.likesCount,
     required this.createdAt,
     this.parentId,
+    this.likedByMe = false,
     List<ThreadedComment>? children,
   }) : children = children ?? <ThreadedComment>[];
+
+  ThreadedComment copyWith({int? likesCount, bool? likedByMe}) {
+    return ThreadedComment(
+      commentId: commentId,
+      parentId: parentId,
+      authorPseudonym: authorPseudonym,
+      authorAvatarSeed: authorAvatarSeed,
+      content: content,
+      path: path,
+      depth: depth,
+      likesCount: likesCount ?? this.likesCount,
+      likedByMe: likedByMe ?? this.likedByMe,
+      createdAt: createdAt,
+      children: children,
+    );
+  }
 }
 
 class ChatRoom {
