@@ -70,6 +70,13 @@ dependency_overrides:
   # tree uses, breaking Dart kernel compilation. 1.3.0 implements the
   # current interface (hasPermission `request` parameter + startStream).
   record_linux: 1.3.0
+  # package_info_plus 9.x reads `flutter.compileSdkVersion` from its own
+  # android/build.gradle, which only works on Flutter 3.27+ (where the
+  # Flutter Gradle plugin propagates the `flutter` extension to all
+  # subprojects). This project is on 3.24.5 → Gradle fails with
+  # "Could not get unknown property 'flutter'". 8.3.0 is the last 8.x
+  # release and hardcodes compileSdk, so it builds cleanly.
+  package_info_plus: 8.3.0
 
 flutter:
   uses-material-design: true
