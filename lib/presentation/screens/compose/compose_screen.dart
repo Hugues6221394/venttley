@@ -6,6 +6,7 @@ import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../../data/services/moderation_service.dart';
 import '../../../domain/entities/entities.dart';
+import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/mood_chip.dart';
 
 class ComposeScreen extends ConsumerStatefulWidget {
@@ -68,11 +69,13 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       }
     }
     final tribe = ref.read(composeTargetTribeProvider);
+    final persona = ref.read(activePersonaProvider);
     final post = await ref.read(repositoryProvider).createPost(
           content: text,
           category: _category,
           mood: _mood,
           tribeId: tribe?.tribeId,
+          personaId: persona?.personaId,
           isWhisper: _isWhisper,
         );
     if (_includePoll) {
@@ -112,6 +115,8 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final Tribe? target = ref.watch(composeTargetTribeProvider);
+    final personas = ref.watch(myPersonasProvider).valueOrNull ?? const [];
+    final activePersona = ref.watch(activePersonaProvider);
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -163,6 +168,41 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                               .read(composeTargetTribeProvider.notifier)
                               .state = null,
                           tooltip: 'Post to general feed instead',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (personas.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: scheme.secondary.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: scheme.secondary.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.theater_comedy_outlined,
+                            size: 16, color: scheme.secondary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            activePersona == null
+                                ? 'Posting as your default handle'
+                                : 'Posting as @${activePersona.pseudonym}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: scheme.secondary,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _showPersonaPicker(
+                              context, personas, activePersona),
+                          child: const Text('Switch'),
                         ),
                       ],
                     ),
@@ -335,6 +375,58 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPersonaPicker(
+      BuildContext context, List<Persona> personas, Persona? active) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Post as',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 10),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.person_outline),
+                title: const Text('Default handle'),
+                trailing: active == null ? const Icon(Icons.check) : null,
+                onTap: () {
+                  ref.read(activePersonaProvider.notifier).state = null;
+                  Navigator.pop(ctx);
+                },
+              ),
+              for (final p in personas)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: AnonymousAvatar(
+                      seed: p.avatarSeed, label: p.pseudonym, size: 30),
+                  title: Text('@${p.pseudonym}'),
+                  trailing: active?.personaId == p.personaId
+                      ? const Icon(Icons.check)
+                      : null,
+                  onTap: () {
+                    ref.read(activePersonaProvider.notifier).state = p;
+                    Navigator.pop(ctx);
+                  },
+                ),
             ],
           ),
         ),

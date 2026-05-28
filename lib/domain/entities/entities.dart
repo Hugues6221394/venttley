@@ -326,6 +326,22 @@ class PostReactions {
   }
 }
 
+class Persona {
+  final String personaId;
+  final String pseudonym;
+  final String avatarSeed;
+  final String? bio;
+  final DateTime createdAt;
+
+  const Persona({
+    required this.personaId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.createdAt,
+    this.bio,
+  });
+}
+
 class ThreadedComment {
   final String commentId;
   final String? parentId;

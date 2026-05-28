@@ -345,6 +345,7 @@ class VentlyRepository {
     required String category,
     required String mood,
     String? tribeId,
+    String? personaId,
     bool isWhisper = false,
   }) {
     final live = _live;
@@ -354,6 +355,7 @@ class VentlyRepository {
         category: category,
         mood: mood,
         tribeId: tribeId,
+        personaId: personaId,
         isWhisper: isWhisper,
       );
     }
@@ -362,8 +364,59 @@ class VentlyRepository {
       category: category,
       mood: mood,
       tribeId: tribeId,
+      personaId: personaId,
       isWhisper: isWhisper,
     );
+  }
+
+  // ===================== Personas =====================
+  Future<List<Persona>> myPersonas() {
+    final live = _live;
+    if (live != null) return live.myPersonas();
+    return Future.value(_mock.myPersonas());
+  }
+
+  Future<Persona> createPersona({
+    required String pseudonym,
+    required String avatarSeed,
+    String? bio,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.createPersona(
+          pseudonym: pseudonym, avatarSeed: avatarSeed, bio: bio);
+    }
+    return _mock.createPersona(
+        pseudonym: pseudonym, avatarSeed: avatarSeed, bio: bio);
+  }
+
+  Future<Persona> updatePersona({
+    required String personaId,
+    required String pseudonym,
+    required String avatarSeed,
+    String? bio,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.updatePersona(
+        personaId: personaId,
+        pseudonym: pseudonym,
+        avatarSeed: avatarSeed,
+        bio: bio,
+      );
+    }
+    return _mock.updatePersona(
+      personaId: personaId,
+      pseudonym: pseudonym,
+      avatarSeed: avatarSeed,
+      bio: bio,
+    );
+  }
+
+  Future<bool> deletePersona(String personaId) {
+    final live = _live;
+    if (live != null) return live.deletePersona(personaId);
+    return _mock.deletePersona(personaId);
   }
 
   // ===================== User lookup =====================
@@ -595,14 +648,23 @@ class VentlyRepository {
     required String postId,
     String? parentId,
     required String content,
+    String? personaId,
   }) {
     final live = _live;
     if (live != null) {
       return live.addComment(
-          postId: postId, parentId: parentId, content: content);
+        postId: postId,
+        parentId: parentId,
+        content: content,
+        personaId: personaId,
+      );
     }
     return _mock.addComment(
-        postId: postId, parentId: parentId, content: content);
+      postId: postId,
+      parentId: parentId,
+      content: content,
+      personaId: personaId,
+    );
   }
 
   Future<bool> toggleCommentLike(String commentId) {

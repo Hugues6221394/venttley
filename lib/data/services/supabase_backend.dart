@@ -311,6 +311,7 @@ class SupabaseBackend {
     required String category,
     required String mood,
     String? tribeId,
+    String? personaId,
     bool isWhisper = false,
   }) async {
     final uid = _uid;
@@ -318,6 +319,7 @@ class SupabaseBackend {
     final inserted = await _client.from('posts').insert({
       'author_id':     uid,
       'tribe_id':      tribeId,
+      'persona_id':    personaId,
       'category_name': category,
       'post_type':     'user_post',
       'content':       content,
@@ -328,6 +330,65 @@ class SupabaseBackend {
     _emitPosts();
     return post!;
   }
+
+  // ===================================================================
+  // PERSONAS
+  // ===================================================================
+  Future<List<Persona>> myPersonas() async {
+    final rows = await _client
+        .from('personas')
+        .select('persona_id, pseudonym, avatar_seed, bio, created_at')
+        .filter('deleted_at', 'is', null)
+        .order('created_at');
+    return (rows as List)
+        .cast<Map<String, dynamic>>()
+        .map(_personaFromRow)
+        .toList();
+  }
+
+  Future<Persona> createPersona({
+    required String pseudonym,
+    required String avatarSeed,
+    String? bio,
+  }) async {
+    final row = await _client.rpc('create_persona', params: {
+      'p_pseudonym':   pseudonym,
+      'p_avatar_seed': avatarSeed,
+      'p_bio':         bio,
+    });
+    return _personaFromRow(row as Map<String, dynamic>);
+  }
+
+  Future<Persona> updatePersona({
+    required String personaId,
+    required String pseudonym,
+    required String avatarSeed,
+    String? bio,
+  }) async {
+    final row = await _client.rpc('update_persona', params: {
+      'p_persona_id':  personaId,
+      'p_pseudonym':   pseudonym,
+      'p_avatar_seed': avatarSeed,
+      'p_bio':         bio,
+    });
+    return _personaFromRow(row as Map<String, dynamic>);
+  }
+
+  Future<bool> deletePersona(String personaId) async {
+    final res = await _client.rpc(
+      'delete_persona',
+      params: {'p_persona_id': personaId},
+    );
+    return (res as bool?) ?? false;
+  }
+
+  Persona _personaFromRow(Map<String, dynamic> r) => Persona(
+        personaId: r['persona_id'] as String,
+        pseudonym: r['pseudonym'] as String,
+        avatarSeed: r['avatar_seed'] as String,
+        bio: r['bio'] as String?,
+        createdAt: DateTime.parse(r['created_at'] as String),
+      );
 
   Future<void> toggleLike(String postId) async => react(postId, 'like');
 
@@ -926,14 +987,16 @@ class SupabaseBackend {
     required String postId,
     String? parentId,
     required String content,
+    String? personaId,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
     final id = await _client.rpc('create_threaded_comment', params: {
-      'p_post_id':   postId,
-      'p_parent_id': parentId,
-      'p_author_id': uid,
-      'p_content':   content,
+      'p_post_id':    postId,
+      'p_parent_id':  parentId,
+      'p_author_id':  uid,
+      'p_content':    content,
+      'p_persona_id': personaId,
     }) as String;
     final me = _me;
     final tree = await comments(postId);

@@ -32,6 +32,7 @@ class MockBackend {
   final List<Post> _posts = [];
   final Map<String, List<ThreadedComment>> _commentsByPost = {};
   final Map<String, String> _myReactions = {};
+  final Map<String, List<Persona>> _personasByUser = {};
   final Set<String> _savedPosts = {};
   final Set<String> _joinedTribes = {};
   final List<ChatRoom> _rooms = [];
@@ -191,6 +192,7 @@ class MockBackend {
     required String category,
     required String mood,
     String? tribeId,
+    String? personaId,
     bool isWhisper = false,
   }) async {
     final me = _me;
@@ -198,10 +200,16 @@ class MockBackend {
     final tribe = tribeId == null
         ? null
         : _tribes.firstWhereOrNull((t) => t.tribeId == tribeId);
+    final persona = personaId == null
+        ? null
+        : _personasByUser[me.userId]
+            ?.firstWhereOrNull((p) => p.personaId == personaId);
     final post = Post(
       postId: _uuid.v4(),
-      authorPseudonym: '@${me.anonymousPseudonym}',
-      authorAvatarSeed: me.avatarSeed,
+      authorPseudonym: persona == null
+          ? '@${me.anonymousPseudonym}'
+          : '@${persona.pseudonym}',
+      authorAvatarSeed: persona?.avatarSeed ?? me.avatarSeed,
       authorIsVerified: me.isVerified,
       categoryName: category,
       postType: 'user_post',
@@ -613,9 +621,14 @@ class MockBackend {
     required String postId,
     String? parentId,
     required String content,
+    String? personaId,
   }) async {
     final me = _me;
     if (me == null) throw StateError('No active session');
+    final persona = personaId == null
+        ? null
+        : _personasByUser[me.userId]
+            ?.firstWhereOrNull((p) => p.personaId == personaId);
     final tree = _commentsByPost.putIfAbsent(postId, () => []);
     final parent = parentId == null ? null : _findInTree(tree, parentId);
     final depth = parent == null ? 0 : parent.depth + 1;
@@ -625,8 +638,10 @@ class MockBackend {
     final comment = ThreadedComment(
       commentId: _uuid.v4(),
       parentId: parentId,
-      authorPseudonym: '@${me.anonymousPseudonym}',
-      authorAvatarSeed: me.avatarSeed,
+      authorPseudonym: persona == null
+          ? '@${me.anonymousPseudonym}'
+          : '@${persona.pseudonym}',
+      authorAvatarSeed: persona?.avatarSeed ?? me.avatarSeed,
       content: content,
       path: path,
       depth: depth,
@@ -653,6 +668,69 @@ class MockBackend {
       if (found != null) return found;
     }
     return null;
+  }
+
+  // -------------------- Personas --------------------
+  List<Persona> myPersonas() {
+    final me = _me;
+    if (me == null) return const [];
+    return List.unmodifiable(_personasByUser[me.userId] ?? const []);
+  }
+
+  Future<Persona> createPersona({
+    required String pseudonym,
+    required String avatarSeed,
+    String? bio,
+  }) async {
+    final me = _me;
+    if (me == null) throw StateError('No active session');
+    final list = _personasByUser.putIfAbsent(me.userId, () => []);
+    if (list.length >= 5) throw StateError('max 5 personas per user');
+    final exists =
+        list.any((p) => p.pseudonym.toLowerCase() == pseudonym.toLowerCase());
+    if (exists) throw StateError('pseudonym already in use');
+    final persona = Persona(
+      personaId: _uuid.v4(),
+      pseudonym: pseudonym.trim(),
+      avatarSeed: avatarSeed,
+      bio: bio,
+      createdAt: DateTime.now(),
+    );
+    list.add(persona);
+    return persona;
+  }
+
+  Future<Persona> updatePersona({
+    required String personaId,
+    required String pseudonym,
+    required String avatarSeed,
+    String? bio,
+  }) async {
+    final me = _me;
+    if (me == null) throw StateError('No active session');
+    final list = _personasByUser[me.userId];
+    if (list == null) throw StateError('persona not found');
+    final i = list.indexWhere((p) => p.personaId == personaId);
+    if (i == -1) throw StateError('persona not found');
+    final updated = Persona(
+      personaId: personaId,
+      pseudonym: pseudonym.trim(),
+      avatarSeed: avatarSeed,
+      bio: bio,
+      createdAt: list[i].createdAt,
+    );
+    list[i] = updated;
+    return updated;
+  }
+
+  Future<bool> deletePersona(String personaId) async {
+    final me = _me;
+    if (me == null) return false;
+    final list = _personasByUser[me.userId];
+    if (list == null) return false;
+    final before = list.length;
+    list.removeWhere((p) => p.personaId == personaId);
+    return list.length < before;
   }
 
   Future<bool> toggleCommentLike(String commentId) async {

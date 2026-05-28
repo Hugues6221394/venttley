@@ -113,10 +113,12 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                 );
                 return;
               }
+              final persona = ref.read(activePersonaProvider);
               await repo.addComment(
                 postId: widget.postId,
                 parentId: _replyingToId,
                 content: text,
+                personaId: persona?.personaId,
               );
               ref.invalidate(commentsProvider(widget.postId));
               ref.invalidate(postByIdProvider(widget.postId));

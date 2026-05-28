@@ -85,6 +85,7 @@ class ProfileScreen extends ConsumerWidget {
               ),
             ),
             SliverToBoxAdapter(child: _BadgesStrip(userId: me.userId)),
+            const SliverToBoxAdapter(child: _PersonasStrip()),
             if (keptTribes.isNotEmpty)
               SliverToBoxAdapter(
                 child: _KeeperOverviewStrip(tribes: keptTribes),
@@ -1034,4 +1035,315 @@ Future<void> _showRecoveryPhrase(BuildContext context, WidgetRef ref) async {
       ],
     ),
   );
+}
+
+class _PersonasStrip extends ConsumerWidget {
+  const _PersonasStrip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final personas = ref.watch(myPersonasProvider).valueOrNull ?? const [];
+    final active = ref.watch(activePersonaProvider);
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.theater_comedy_outlined, size: 18),
+              const SizedBox(width: 6),
+              const Text('Personas',
+                  style: TextStyle(fontWeight: FontWeight.w800)),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () => _openPersonasSheet(context, ref),
+                icon: const Icon(Icons.tune, size: 16),
+                label: const Text('Manage'),
+              ),
+            ],
+          ),
+          if (personas.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Create up to 5 alternate handles to vent under without crossing streams.',
+                style: TextStyle(
+                  color: scheme.onSurface.withOpacity(0.65),
+                  fontSize: 12,
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              height: 44,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: const Text('Default'),
+                      selected: active == null,
+                      onSelected: (_) => ref
+                          .read(activePersonaProvider.notifier)
+                          .state = null,
+                    ),
+                  ),
+                  for (final p in personas)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text('@${p.pseudonym}'),
+                        selected: active?.personaId == p.personaId,
+                        onSelected: (_) => ref
+                            .read(activePersonaProvider.notifier)
+                            .state = p,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _openPersonasSheet(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) => const _PersonasSheet(),
+    );
+  }
+}
+
+class _PersonasSheet extends ConsumerStatefulWidget {
+  const _PersonasSheet();
+
+  @override
+  ConsumerState<_PersonasSheet> createState() => _PersonasSheetState();
+}
+
+class _PersonasSheetState extends ConsumerState<_PersonasSheet> {
+  final _nameController = TextEditingController();
+  String _avatarSeed = 'rose-orb-${DateTime.now().millisecond.toString().padLeft(4, '0')}';
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final personas = ref.watch(myPersonasProvider).valueOrNull ?? const [];
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (ctx, controller) => ListView(
+        controller: controller,
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: VentlyColors.softMauve,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Anonymous personas',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'One account, up to 5 handles. Switch the active persona to author the next post or reply under that identity.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.65),
+              fontSize: 12.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (personas.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('No personas yet.'),
+            ),
+          for (final p in personas) _PersonaRow(persona: p),
+          if (personas.length < 5) ...[
+            const SizedBox(height: 18),
+            const Divider(),
+            const SizedBox(height: 10),
+            Text(
+              'New persona',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _nameController,
+              maxLength: 40,
+              decoration: const InputDecoration(
+                labelText: 'Pseudonym',
+                hintText: 'e.g. NightlyJournal',
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                AnonymousAvatar(seed: _avatarSeed, label: '', size: 36),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Avatar seed: $_avatarSeed',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.shuffle, size: 18),
+                  onPressed: () => setState(() {
+                    final palettes = ['rose', 'mint', 'lavender', 'amber', 'teal'];
+                    final p = palettes[DateTime.now().microsecond % palettes.length];
+                    final n = (DateTime.now().millisecondsSinceEpoch % 10000)
+                        .toString()
+                        .padLeft(4, '0');
+                    _avatarSeed = '$p-orb-$n';
+                  }),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _busy ? null : _create,
+                child: _busy
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Create persona'),
+              ),
+            ),
+          ] else
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                'You\'ve reached the 5-persona limit. Delete one to make room.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _create() async {
+    final name = _nameController.text.trim();
+    if (name.length < 2) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(repositoryProvider).createPersona(
+            pseudonym: name,
+            avatarSeed: _avatarSeed,
+          );
+      ref.invalidate(myPersonasProvider);
+      if (!mounted) return;
+      _nameController.clear();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not create: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+}
+
+class _PersonaRow extends ConsumerWidget {
+  const _PersonaRow({required this.persona});
+  final Persona persona;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          AnonymousAvatar(seed: persona.avatarSeed, label: persona.pseudonym, size: 36),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('@${persona.pseudonym}',
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                if ((persona.bio ?? '').isNotEmpty)
+                  Text(
+                    persona.bio!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.65),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 20),
+            onPressed: () => _confirmDelete(context, ref),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete persona?'),
+        content: Text(
+            'Posts and comments under @${persona.pseudonym} will lose their persona label and revert to your default handle.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(repositoryProvider).deletePersona(persona.personaId);
+    final active = ref.read(activePersonaProvider);
+    if (active?.personaId == persona.personaId) {
+      ref.read(activePersonaProvider.notifier).state = null;
+    }
+    ref.invalidate(myPersonasProvider);
+  }
 }

@@ -189,6 +189,15 @@ final tribeBySlugProvider =
 /// Cleared by the compose screen after it picks it up.
 final composeTargetTribeProvider = StateProvider<Tribe?>((ref) => null);
 
+/// The user's personas (alternate anonymous handles).
+final myPersonasProvider = FutureProvider.autoDispose<List<Persona>>(
+    (ref) async => ref.watch(repositoryProvider).myPersonas());
+
+/// Client-only: which persona (if any) the user wants their next post or
+/// comment to author under. null = use the default profile. Never persisted —
+/// reset on every app launch so personas are an opt-in per-session choice.
+final activePersonaProvider = StateProvider<Persona?>((ref) => null);
+
 /// Reports filed against posts in a specific Tribe — Keeper-only.
 final tribeReportsProvider =
     FutureProvider.autoDispose.family<List<TribeReport>, String>(
