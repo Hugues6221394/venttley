@@ -390,6 +390,40 @@ class SupabaseBackend {
         createdAt: DateTime.parse(r['created_at'] as String),
       );
 
+  /// Tag a post the author just created with a crisis level so the helpline
+  /// banner shows for everyone who reads it later. Author-only on the DB.
+  Future<void> setPostCrisis(String postId, String level) async {
+    await _client.rpc('set_post_crisis', params: {
+      'p_post_id': postId,
+      'p_level': level,
+    });
+  }
+
+  /// Fetch active helplines. Pass `region` (ISO code) to bias the order —
+  /// matching region rows come first, then `'global'` falls in behind them.
+  Future<List<CrisisHelpline>> crisisResources({String? region}) async {
+    final rows = await _client
+        .from('crisis_resources')
+        .select()
+        .eq('is_active', true)
+        .order('sort_order');
+    final list = (rows as List)
+        .cast<Map<String, dynamic>>()
+        .map(_crisisFromRow)
+        .toList();
+    if (region == null || region.isEmpty) return list;
+    list.sort((a, b) {
+      int rank(CrisisHelpline c) {
+        if (c.region == region) return 0;
+        if (c.region == 'global') return 1;
+        return 2;
+      }
+      final r = rank(a).compareTo(rank(b));
+      return r != 0 ? r : a.sortOrder.compareTo(b.sortOrder);
+    });
+    return list;
+  }
+
   Future<void> toggleLike(String postId) async => react(postId, 'like');
 
   /// Returns the resulting reaction (`null` when the user toggled it off).
@@ -1469,6 +1503,19 @@ class SupabaseBackend {
       isWhisper: (r['is_whisper'] as bool?) ?? false,
       myReaction: _myReactions[r['post_id']],
       savedByMe: _savedPosts.contains(r['post_id']),
+      crisisLevel: r['crisis_level'] as String?,
+    );
+  }
+
+  CrisisHelpline _crisisFromRow(Map<String, dynamic> r) {
+    return CrisisHelpline(
+      resourceId: r['resource_id'] as String,
+      region: r['region'] as String,
+      label: r['label'] as String,
+      reach: r['reach'] as String,
+      url: r['url'] as String?,
+      hours: (r['hours'] as String?) ?? '24/7',
+      sortOrder: (r['sort_order'] as int?) ?? 100,
     );
   }
 

@@ -229,6 +229,10 @@ class Post {
   final DateTime createdAt;
   final String? myReaction; // null | like | relate | hug | stay_strong | been_there | crazy
   final bool savedByMe;
+  /// Null when the safety classifier saw nothing concerning. `'elevated'` for
+  /// Tier-2 (LLM) self-harm matches, `'high'` for Tier-1 keyword hits. Drives
+  /// the helpline banner on the post detail screen.
+  final String? crisisLevel;
 
   const Post({
     required this.postId,
@@ -249,6 +253,7 @@ class Post {
     this.isWhisper = false,
     this.myReaction,
     this.savedByMe = false,
+    this.crisisLevel,
   });
 
   /// True when the caller has any reaction on this post.
@@ -267,6 +272,7 @@ class Post {
     int? commentsCount,
     Object? myReaction = _unset,
     bool? savedByMe,
+    Object? crisisLevel = _unset,
   }) {
     return Post(
       postId: postId,
@@ -288,6 +294,8 @@ class Post {
       myReaction:
           myReaction == _unset ? this.myReaction : myReaction as String?,
       savedByMe: savedByMe ?? this.savedByMe,
+      crisisLevel:
+          crisisLevel == _unset ? this.crisisLevel : crisisLevel as String?,
     );
   }
 
@@ -324,6 +332,29 @@ class PostReactions {
       default:            return key;
     }
   }
+}
+
+/// A crisis helpline row sourced from the DB-backed `crisis_resources` table.
+/// Distinct from the legacy hard-coded list in moderation_service.dart so the
+/// founder can edit/expand resources without an app push.
+class CrisisHelpline {
+  final String resourceId;
+  final String region; // 'global' | ISO country code
+  final String label;
+  final String reach;
+  final String? url;
+  final String hours;
+  final int sortOrder;
+
+  const CrisisHelpline({
+    required this.resourceId,
+    required this.region,
+    required this.label,
+    required this.reach,
+    required this.hours,
+    required this.sortOrder,
+    this.url,
+  });
 }
 
 class Persona {

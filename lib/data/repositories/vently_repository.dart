@@ -419,6 +419,18 @@ class VentlyRepository {
     return _mock.deletePersona(personaId);
   }
 
+  Future<void> setPostCrisis(String postId, String level) {
+    final live = _live;
+    if (live != null) return live.setPostCrisis(postId, level);
+    return _mock.setPostCrisis(postId, level);
+  }
+
+  Future<List<CrisisHelpline>> crisisResources({String? region}) {
+    final live = _live;
+    if (live != null) return live.crisisResources(region: region);
+    return _mock.crisisResources(region: region);
+  }
+
   // ===================== User lookup =====================
   Future<({String userId, String pseudonym, String avatarSeed})?>
       findUserByPseudonym(String pseudonym) async {

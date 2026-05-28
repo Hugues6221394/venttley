@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -78,6 +80,20 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           personaId: persona?.personaId,
           isWhisper: _isWhisper,
         );
+    // Crisis tag — readers see the helpline banner if the safety classifier
+    // surfaced self-harm signals. 'high' = Tier-1 keyword match (more
+    // confident), 'elevated' = Tier-2 LLM-only signal. Best-effort: the post
+    // is already saved, we just decorate it.
+    if (moderation.surfaceCrisisHelpline) {
+      final level =
+          moderation.categories.contains(HazardCategory.selfHarm) &&
+                  moderation.reasons.any((r) => r.contains('care about you'))
+              ? 'high'
+              : 'elevated';
+      unawaited(
+        ref.read(repositoryProvider).setPostCrisis(post.postId, level),
+      );
+    }
     if (_includePoll) {
       try {
         await ref.read(repositoryProvider).createPoll(

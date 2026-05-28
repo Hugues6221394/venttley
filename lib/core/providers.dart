@@ -198,6 +198,19 @@ final myPersonasProvider = FutureProvider.autoDispose<List<Persona>>(
 /// reset on every app launch so personas are an opt-in per-session choice.
 final activePersonaProvider = StateProvider<Persona?>((ref) => null);
 
+/// Crisis helplines, region-biased by the current user's locationBucket
+/// (first two characters treated as ISO country code). Falls back to the
+/// global list when no session or no bucket is set.
+final crisisResourcesProvider =
+    FutureProvider.autoDispose<List<CrisisHelpline>>((ref) async {
+  final me = ref.watch(sessionProvider);
+  final bucket = me?.localBucket;
+  final region = (bucket != null && bucket.length >= 2)
+      ? bucket.substring(0, 2).toUpperCase()
+      : null;
+  return ref.watch(repositoryProvider).crisisResources(region: region);
+});
+
 /// Reports filed against posts in a specific Tribe — Keeper-only.
 final tribeReportsProvider =
     FutureProvider.autoDispose.family<List<TribeReport>, String>(

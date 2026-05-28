@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -61,6 +62,8 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
             child: ListView(
               padding: const EdgeInsets.only(bottom: 80),
               children: [
+                if (post.crisisLevel != null)
+                  _CrisisHelplineBanner(level: post.crisisLevel!),
                 PostCard(post: post),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
@@ -558,6 +561,104 @@ class _ReportSheet extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Soft-pink card with a leading heart, a one-line reassurance, and a
+/// region-aware helpline list. Pulled in on post detail when crisis_level
+/// is set. Never blocks the post — always reachable, never alarming.
+class _CrisisHelplineBanner extends ConsumerWidget {
+  const _CrisisHelplineBanner({required this.level});
+  final String level; // 'elevated' | 'high'
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final resources = ref.watch(crisisResourcesProvider).valueOrNull;
+    final accent = scheme.error;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: accent.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withOpacity(0.30)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.favorite, size: 18, color: accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  level == 'high'
+                      ? 'You\'re not alone. Help is one tap away.'
+                      : 'If you\'re struggling, support is here.',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: accent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (resources == null)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(minHeight: 2),
+            )
+          else
+            for (final r in resources.take(3))
+              InkWell(
+                onTap: () => _onTap(context, r),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Icon(
+                        r.url == null ? Icons.phone : Icons.public,
+                        size: 16,
+                        color: accent,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              r.label,
+                              style: const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            Text(
+                              r.reach,
+                              style: const TextStyle(color: Colors.black54),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right,
+                          size: 18, color: Colors.black38),
+                    ],
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
+  void _onTap(BuildContext context, CrisisHelpline r) {
+    // Copy the reach string to the clipboard so the user can paste it into
+    // their dialer / browser. We deliberately do NOT auto-dial: that would
+    // be alarming, and a misfired tap shouldn't ring an emergency line.
+    Clipboard.setData(ClipboardData(text: r.url ?? r.reach));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Copied: ${r.url ?? r.reach}')),
     );
   }
 }

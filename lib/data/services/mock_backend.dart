@@ -733,6 +733,63 @@ class MockBackend {
     return list.length < before;
   }
 
+  Future<void> setPostCrisis(String postId, String level) async {
+    final i = _posts.indexWhere((p) => p.postId == postId);
+    if (i == -1) return;
+    _posts[i] = _posts[i].copyWith(crisisLevel: level);
+  }
+
+  Future<List<CrisisHelpline>> crisisResources({String? region}) async {
+    final base = <CrisisHelpline>[
+      const CrisisHelpline(
+        resourceId: 'mock-rw-114',
+        region: 'RW',
+        label: 'Rwanda Mental Health Helpline',
+        reach: 'Call 114 (free, 24/7)',
+        hours: '24/7',
+        sortOrder: 10,
+      ),
+      const CrisisHelpline(
+        resourceId: 'mock-rw-3029',
+        region: 'RW',
+        label: 'Isange One Stop Centre',
+        reach: 'Call 3029 from any phone',
+        url: 'https://rib.gov.rw/isange',
+        hours: '24/7',
+        sortOrder: 20,
+      ),
+      const CrisisHelpline(
+        resourceId: 'mock-befrienders',
+        region: 'global',
+        label: 'International Befrienders',
+        reach: 'Find a local line',
+        url: 'https://befrienders.org',
+        hours: '24/7',
+        sortOrder: 30,
+      ),
+      const CrisisHelpline(
+        resourceId: 'mock-ctl',
+        region: 'global',
+        label: 'Crisis Text Line',
+        reach: 'Text CARE to 741741',
+        url: 'https://www.crisistextline.org',
+        hours: '24/7',
+        sortOrder: 40,
+      ),
+    ];
+    if (region == null || region.isEmpty) return base;
+    base.sort((a, b) {
+      int rank(CrisisHelpline c) {
+        if (c.region == region) return 0;
+        if (c.region == 'global') return 1;
+        return 2;
+      }
+      final r = rank(a).compareTo(rank(b));
+      return r != 0 ? r : a.sortOrder.compareTo(b.sortOrder);
+    });
+    return base;
+  }
+
   Future<bool> toggleCommentLike(String commentId) async {
     for (final tree in _commentsByPost.values) {
       if (_swapLike(tree, commentId)) {
