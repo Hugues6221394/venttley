@@ -52,7 +52,7 @@ async function createFlagAction(formData: FormData) {
     // Description isn't surfaced through the RPC; set it directly. The
     // admin_set_flag call above already wrote an audit row that captures
     // the creation. No second audit needed.
-    const db = createAdminClient();
+    const db = await createAdminClient();
     await db
       .from("feature_flags")
       .update({ description: desc })
@@ -62,7 +62,7 @@ async function createFlagAction(formData: FormData) {
 }
 
 export default async function FlagsPage() {
-  const db = createAdminClient();
+  const db = await createAdminClient();
   const { data, error } = await db
     .from("feature_flags")
     .select(

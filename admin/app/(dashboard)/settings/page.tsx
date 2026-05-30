@@ -30,7 +30,7 @@ async function setMaintenanceAction(formData: FormData) {
 }
 
 export default async function SettingsPage() {
-  const db = createAdminClient();
+  const db = await createAdminClient();
   const { data: maintenance } = await db
     .from("feature_flags")
     .select("enabled, updated_at, updated_by")

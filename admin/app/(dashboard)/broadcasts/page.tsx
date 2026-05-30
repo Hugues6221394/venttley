@@ -54,7 +54,7 @@ async function deactivateAction(formData: FormData) {
   "use server";
   const id = String(formData.get("broadcast_id") ?? "");
   if (!id) return;
-  const db = createAdminClient();
+  const db = await createAdminClient();
   await db.from("broadcasts").update({ is_active: false }).eq("broadcast_id", id);
   await audit("broadcast.deactivate", {
     targetType: "broadcast",
@@ -65,7 +65,7 @@ async function deactivateAction(formData: FormData) {
 }
 
 export default async function BroadcastsPage() {
-  const db = createAdminClient();
+  const db = await createAdminClient();
   const { data, error } = await db
     .from("broadcasts")
     .select(

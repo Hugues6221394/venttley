@@ -156,7 +156,7 @@ async function clearCrisisFlagAction(formData: FormData) {
   // The classifier wrote crisis_level; admin override here. We do a direct
   // UPDATE via the admin client because set_post_crisis is author-only; in
   // the rebuild we expose admin overrides via admin_log + a direct write.
-  const db = createAdminClient();
+  const db = await createAdminClient();
   const { data: before } = await db
     .from("posts")
     .select("crisis_level")
@@ -184,7 +184,7 @@ export default async function ModerationPage({
   const tab = params.tab ?? "pending";
   const reasonFilter = params.reason ?? "";
 
-  const db = createAdminClient();
+  const db = await createAdminClient();
 
   // Pull what we need for the tab badges (separate counts so the page chrome
   // stays accurate regardless of which tab is selected).

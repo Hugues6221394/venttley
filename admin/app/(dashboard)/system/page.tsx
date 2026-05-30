@@ -124,7 +124,7 @@ export default async function SystemHealthPage() {
 async function probeDatabase(): Promise<ProbeResult> {
   const t0 = performance.now();
   try {
-    const db = createAdminClient();
+    const db = await createAdminClient();
     const { error } = await db
       .from("admin_metrics_24h")
       .select("total_users")
@@ -225,7 +225,7 @@ async function probeGroq(): Promise<ProbeResult> {
 
 async function probePgStats(): Promise<ProbeResult> {
   try {
-    const db = createAdminClient();
+    const db = await createAdminClient();
     const { count } = await db
       .from("audit_log")
       .select("audit_id", { count: "exact", head: true })
@@ -250,7 +250,7 @@ async function probePgStats(): Promise<ProbeResult> {
 
 async function probeCron(): Promise<ProbeResult> {
   try {
-    const db = createAdminClient();
+    const db = await createAdminClient();
     const { data } = await db
       .from("mv_hot_posts")
       .select("post_id", { count: "exact", head: true })

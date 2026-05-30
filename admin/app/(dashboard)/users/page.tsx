@@ -70,7 +70,7 @@ export default async function UsersPage({
   const role = params.role ?? "";
   const country = params.country ?? "";
 
-  const db = createAdminClient();
+  const db = await createAdminClient();
   let query = db
     .from("users")
     .select(

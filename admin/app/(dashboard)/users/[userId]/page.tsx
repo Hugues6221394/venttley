@@ -61,7 +61,7 @@ export default async function UserDetailPage({
   params: Promise<{ userId: string }>;
 }) {
   const { userId } = await params;
-  const db = createAdminClient();
+  const db = await createAdminClient();
 
   const { data: user } = await db
     .from("users")

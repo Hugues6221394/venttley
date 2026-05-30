@@ -32,7 +32,7 @@ export default async function TribeDetailPage({
   params: Promise<{ tribeId: string }>;
 }) {
   const { tribeId } = await params;
-  const db = createAdminClient();
+  const db = await createAdminClient();
 
   const { data: tribe } = await db
     .from("tribes")

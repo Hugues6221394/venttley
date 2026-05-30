@@ -104,7 +104,7 @@ const CAPS: Cap[] = [
 ];
 
 export default async function RolesPage() {
-  const db = createAdminClient();
+  const db = await createAdminClient();
   const { data: staff } = await db
     .from("users")
     .select("user_id, anonymous_pseudonym, user_role, account_status, created_at")

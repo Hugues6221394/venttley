@@ -26,7 +26,7 @@ async function broadcastAction(formData: FormData) {
   } = await ssr.auth.getUser();
   if (!user) return;
 
-  const db = createAdminClient();
+  const db = await createAdminClient();
 
   // Fan out one notification row per active member.
   const { data: recipients } = await db
@@ -59,7 +59,7 @@ async function broadcastAction(formData: FormData) {
 }
 
 export default async function AdminNotificationsPage() {
-  const db = createAdminClient();
+  const db = await createAdminClient();
   const { data: broadcasts, error } = await db
     .from("admin_broadcasts")
     .select(

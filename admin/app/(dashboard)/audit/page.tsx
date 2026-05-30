@@ -60,7 +60,7 @@ export default async function AuditPage({
   const to = sp.to ?? "";
   const expand = sp.expand ?? "";
 
-  const db = createAdminClient();
+  const db = await createAdminClient();
   let q = db
     .from("audit_log")
     .select(

@@ -32,7 +32,7 @@ export default async function DashboardLayout({
   // Counters used to pin operational urgency in the sidebar / topbar.
   // Service-role client is intentional: the layout already gated the
   // caller's role, and these counts power the chrome on every page.
-  const db = createAdminClient();
+  const db = await createAdminClient();
   const [{ count: pendingReports }, { count: crisis24h }] = await Promise.all([
     db
       .from("reports")

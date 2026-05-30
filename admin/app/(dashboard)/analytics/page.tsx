@@ -19,7 +19,7 @@ export default async function AnalyticsPage({
   const sinceISO = new Date(Date.now() - days * 86400_000).toISOString();
   const prevSinceISO = new Date(Date.now() - 2 * days * 86400_000).toISOString();
 
-  const db = createAdminClient();
+  const db = await createAdminClient();
   const [
     metricsRes,
     signupsCurRes,
@@ -48,7 +48,7 @@ export default async function AnalyticsPage({
       .lt("created_at", sinceISO)
       .is("deleted_at", null),
     db.from("posts_comments").select("created_at").gte("created_at", sinceISO),
-    db.from("post_reactions").select("created_at").gte("created_at", sinceISO),
+    db.from("post_likes").select("created_at").gte("created_at", sinceISO),
     db
       .from("posts")
       .select("category_name")

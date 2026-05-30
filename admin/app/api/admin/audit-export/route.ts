@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   }
 
   const sp = req.nextUrl.searchParams;
-  const db = createAdminClient();
+  const db = await createAdminClient();
   let q = db
     .from("audit_log")
     .select(

@@ -51,7 +51,7 @@ export default async function TribesPage({
   const category = params.category ?? "";
   const featuredFilter = params.featured ?? "";
 
-  const db = createAdminClient();
+  const db = await createAdminClient();
   let query = db
     .from("tribes")
     .select(

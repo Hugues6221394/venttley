@@ -39,7 +39,7 @@ type AuditRow = {
 };
 
 export default async function OverviewPage() {
-  const db = createAdminClient();
+  const db = await createAdminClient();
 
   // One round-trip per dataset — kept narrow on purpose so the page
   // is fast and predictable.
