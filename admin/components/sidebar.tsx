@@ -2,68 +2,145 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
+import {
+  LayoutDashboard,
+  ShieldAlert,
+  Users,
+  Users2,
+  LineChart,
+  Megaphone,
+  ScrollText,
+  Activity,
+  Flag,
+  KeyRound,
+  SettingsIcon,
+  Heart,
+  Sparkles,
+} from "./ui/icons";
 
 type Item = {
   href: string;
   label: string;
-  icon: string;
-  ready?: boolean;
+  icon: LucideIcon;
+  badge?: number;
 };
 
-const items: Item[] = [
-  { href: "/overview",      label: "Overview",      icon: "▦", ready: true },
-  { href: "/moderation",    label: "Moderation",    icon: "▲", ready: true },
-  { href: "/users",         label: "Users",         icon: "◉", ready: true },
-  { href: "/tribes",        label: "Tribes",        icon: "◍", ready: true },
-  { href: "/analytics",     label: "Analytics",     icon: "◮", ready: true },
-  { href: "/notifications", label: "Notifications", icon: "✦", ready: true },
-  { href: "/settings",      label: "Settings",      icon: "❖", ready: true },
+type Group = {
+  label: string;
+  items: Item[];
+};
+
+const groups: Group[] = [
+  {
+    label: "Operate",
+    items: [
+      { href: "/overview",   label: "Control Center", icon: LayoutDashboard },
+      { href: "/moderation", label: "Moderation",     icon: ShieldAlert },
+      { href: "/broadcasts", label: "Broadcasts",     icon: Megaphone },
+    ],
+  },
+  {
+    label: "Manage",
+    items: [
+      { href: "/users",  label: "Users",  icon: Users },
+      { href: "/tribes", label: "Tribes", icon: Users2 },
+      { href: "/roles",  label: "Roles & permissions", icon: KeyRound },
+    ],
+  },
+  {
+    label: "Insight",
+    items: [
+      { href: "/analytics", label: "Analytics", icon: LineChart },
+      { href: "/audit",     label: "Audit log", icon: ScrollText },
+      { href: "/system",    label: "System health", icon: Activity },
+    ],
+  },
+  {
+    label: "Control",
+    items: [
+      { href: "/flags",    label: "Feature flags", icon: Flag },
+      { href: "/settings", label: "Settings",      icon: SettingsIcon },
+    ],
+  },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({
+  pendingReports = 0,
+  openIncidents = 0,
+}: {
+  pendingReports?: number;
+  openIncidents?: number;
+}) {
   const pathname = usePathname();
+  const isActive = (href: string) =>
+    href === "/overview"
+      ? pathname === "/" || pathname.startsWith("/overview")
+      : pathname.startsWith(href);
+
   return (
-    <aside className="w-60 shrink-0 hidden md:flex flex-col bg-white border-r border-mauve/30 px-4 py-6">
-      <Link href="/overview" className="flex items-center gap-2 mb-8">
-        <div className="h-9 w-9 rounded-xl bg-berry text-white flex items-center justify-center text-lg shadow-card">
-          ♡
+    <aside className="w-64 shrink-0 hidden md:flex flex-col bg-white border-r border-line">
+      <Link
+        href="/overview"
+        className="flex items-center gap-3 px-5 h-16 border-b border-line"
+      >
+        <div className="h-9 w-9 rounded-xl bg-berry text-white flex items-center justify-center shadow-soft">
+          <Heart size={18} fill="currentColor" />
         </div>
-        <div>
-          <p className="text-sm font-extrabold leading-none text-burgundy">
-            Venttly
-          </p>
-          <p className="text-[10px] uppercase tracking-widest text-burgundy/60">
-            Admin
-          </p>
+        <div className="leading-tight">
+          <p className="text-[15px] font-extrabold text-burgundy">Venttly</p>
+          <p className="h-eyebrow">Super Admin</p>
         </div>
       </Link>
-      <nav className="flex flex-col gap-1">
-        {items.map((it) => {
-          const active = pathname.startsWith(it.href);
-          return (
-            <Link
-              key={it.href}
-              href={it.href}
-              className={`flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                active
-                  ? "bg-berry/12 text-berry"
-                  : "text-burgundy/75 hover:bg-cardBlush"
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <span className="text-base leading-none">{it.icon}</span>
-                <span>{it.label}</span>
-              </span>
-              {!it.ready && (
-                <span className="pill bg-mauve/25 text-burgundy/70">soon</span>
-              )}
-            </Link>
-          );
-        })}
+
+      <nav className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-5">
+        {groups.map((g) => (
+          <div key={g.label}>
+            <p className="h-eyebrow px-3 mb-1.5">{g.label}</p>
+            <div className="flex flex-col gap-0.5">
+              {g.items.map((it) => {
+                const active = isActive(it.href);
+                const Icon = it.icon;
+                const badge =
+                  it.href === "/moderation"
+                    ? pendingReports
+                    : it.href === "/system"
+                      ? openIncidents
+                      : undefined;
+                return (
+                  <Link
+                    key={it.href}
+                    href={it.href}
+                    className={`nav-item ${active ? "nav-item-active" : ""}`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <Icon size={16} className={active ? "text-berry" : ""} />
+                      <span>{it.label}</span>
+                    </span>
+                    {badge !== undefined && badge > 0 && (
+                      <span className="pill bg-danger/15 text-danger">
+                        {badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
-      <p className="mt-auto text-[10px] text-burgundy/40">
-        v0.1 · Admin console
-      </p>
+
+      <div className="p-4 border-t border-line">
+        <div className="surface-flat p-3 flex items-start gap-2">
+          <Sparkles size={14} className="text-berry mt-0.5" />
+          <div>
+            <p className="text-xs font-bold text-burgundy">v0.2 console</p>
+            <p className="text-[11px] text-ink-muted leading-tight">
+              Every privileged action is audit-logged.
+            </p>
+          </div>
+        </div>
+      </div>
     </aside>
   );
 }

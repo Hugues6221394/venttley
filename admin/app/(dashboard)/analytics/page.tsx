@@ -1,268 +1,367 @@
+import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/section";
+import { StatCard } from "@/components/ui/stat-card";
 
 export const dynamic = "force-dynamic";
 
-const POSITIVE_MOODS = new Set(["happy", "healing", "hopeful", "grateful"]);
-const HEAVY_MOODS = new Set([
-  "sad",
-  "lonely",
-  "angry",
-  "broken",
-  "anxious",
-  "exhausted",
-]);
+type Range = "7d" | "30d" | "90d";
 
-const CATEGORY_LABELS: Record<string, string> = {
-  confessions: "Confessions",
-  testimonies: "Testimonies",
-  relationships: "Relationships",
-  family_issues: "Family",
-  mental_health: "Mental Health",
-  campus_life: "Campus",
-  adulting: "Adulting",
-  regrets: "Regrets",
-  trauma: "Trauma",
-  friendship: "Friendship",
-  faith_spirituality: "Faith",
-  questions: "Questions",
-  secrets: "Secrets",
-  vent_zone: "Vent Zone",
-  dark_thoughts: "Dark Thoughts",
-  funny_confessions: "Funny",
-  dreams_goals: "Dreams",
-  hot_takes: "Hot Takes",
-  late_night: "Late Night",
-  healing_corner: "Healing Corner",
-};
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string }>;
+}) {
+  const params = await searchParams;
+  const range: Range = (params.range as Range) ?? "30d";
+  const days = range === "7d" ? 7 : range === "90d" ? 90 : 30;
+  const sinceISO = new Date(Date.now() - days * 86400_000).toISOString();
+  const prevSinceISO = new Date(Date.now() - 2 * days * 86400_000).toISOString();
 
-function startOfUtcDay(d: Date) {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
-export default async function AnalyticsPage() {
   const db = createAdminClient();
-
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const sinceIso = since.toISOString();
-
   const [
-    { data: usersWindow },
-    { data: postsWindow },
-    { data: topTribes },
+    metricsRes,
+    signupsCurRes,
+    signupsPrevRes,
+    postsCurRes,
+    postsPrevRes,
+    commentsCurRes,
+    reactionsCurRes,
+    categoriesRes,
+    regionsRes,
+    moderationRes,
+    activeUsersRes,
   ] = await Promise.all([
+    db.from("admin_metrics_24h").select("*").maybeSingle(),
+    db.from("users").select("created_at").gte("created_at", sinceISO).order("created_at"),
     db
       .from("users")
-      .select("user_id, created_at")
-      .gte("created_at", sinceIso)
-      .order("created_at", { ascending: true })
-      .limit(5000),
+      .select("user_id", { count: "exact", head: true })
+      .gte("created_at", prevSinceISO)
+      .lt("created_at", sinceISO),
+    db.from("posts").select("created_at").gte("created_at", sinceISO).is("deleted_at", null),
     db
       .from("posts")
-      .select("post_id, category_name, post_mood, created_at")
-      .is("deleted_at", null)
-      .gte("created_at", sinceIso)
-      .limit(5000),
+      .select("post_id", { count: "exact", head: true })
+      .gte("created_at", prevSinceISO)
+      .lt("created_at", sinceISO)
+      .is("deleted_at", null),
+    db.from("posts_comments").select("created_at").gte("created_at", sinceISO),
+    db.from("post_reactions").select("created_at").gte("created_at", sinceISO),
     db
-      .from("tribes")
-      .select("tribe_id, name, slug, category, member_count")
-      .order("member_count", { ascending: false })
-      .limit(10),
+      .from("posts")
+      .select("category_name")
+      .gte("created_at", sinceISO)
+      .is("deleted_at", null),
+    db.from("admin_region_distribution").select("country, users").limit(10),
+    db
+      .from("reports")
+      .select("created_at, resolved_at, is_resolved")
+      .gte("created_at", sinceISO),
+    db
+      .from("posts")
+      .select("author_id")
+      .gte("created_at", sinceISO)
+      .is("deleted_at", null),
   ]);
 
-  // ------------------------- 30-day new-user series -------------------------
-  const userDayBuckets: { date: Date; count: number }[] = [];
-  for (let i = 29; i >= 0; i--) {
-    const day = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-    userDayBuckets.push({ date: startOfUtcDay(day), count: 0 });
-  }
-  for (const u of usersWindow ?? []) {
-    const d = startOfUtcDay(new Date(u.created_at as string));
-    const bucket = userDayBuckets.find(
-      (b) => b.date.getTime() === d.getTime()
-    );
-    if (bucket) bucket.count++;
-  }
-  const maxUsers = Math.max(1, ...userDayBuckets.map((b) => b.count));
-  const totalNewUsers = userDayBuckets.reduce((a, b) => a + b.count, 0);
+  const signupsByDay = bucketByDay(
+    ((signupsCurRes.data ?? []) as { created_at: string }[]).map((r) => r.created_at),
+    days
+  );
+  const postsByDay = bucketByDay(
+    ((postsCurRes.data ?? []) as { created_at: string }[]).map((r) => r.created_at),
+    days
+  );
+  const commentsByDay = bucketByDay(
+    ((commentsCurRes.data ?? []) as { created_at: string }[]).map((r) => r.created_at),
+    days
+  );
+  const reactionsByDay = bucketByDay(
+    ((reactionsCurRes.data ?? []) as { created_at: string }[]).map((r) => r.created_at),
+    days
+  );
 
-  // ------------------------- Category breakdown -------------------------
-  const categoryCounts = new Map<string, number>();
-  for (const p of postsWindow ?? []) {
-    const c = (p as { category_name: string }).category_name ?? "other";
-    categoryCounts.set(c, (categoryCounts.get(c) ?? 0) + 1);
-  }
-  const sortedCategories = Array.from(categoryCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8);
-  const maxCategoryCount = Math.max(1, ...sortedCategories.map(([, n]) => n));
+  const signupsTotal = signupsCurRes.data?.length ?? 0;
+  const postsTotal = postsCurRes.data?.length ?? 0;
+  const commentsTotal = commentsCurRes.data?.length ?? 0;
+  const reactionsTotal = reactionsCurRes.data?.length ?? 0;
 
-  // ------------------------- Sentiment per 7-day window -------------------
-  const weekBuckets: { label: string; pos: number; neu: number; heavy: number }[] = [];
-  for (let w = 3; w >= 0; w--) {
-    const from = new Date(Date.now() - (w + 1) * 7 * 24 * 60 * 60 * 1000);
-    const to = new Date(Date.now() - w * 7 * 24 * 60 * 60 * 1000);
-    let pos = 0, neu = 0, heavy = 0;
-    for (const p of postsWindow ?? []) {
-      const t = new Date(p.created_at as string).getTime();
-      if (t >= from.getTime() && t < to.getTime()) {
-        const mood = (p as { post_mood?: string }).post_mood ?? "";
-        if (POSITIVE_MOODS.has(mood)) pos++;
-        else if (HEAVY_MOODS.has(mood)) heavy++;
-        else neu++;
-      }
-    }
-    weekBuckets.push({
-      label: `${w === 0 ? "This wk" : `${w}w ago`}`,
-      pos,
-      neu,
-      heavy,
-    });
-  }
+  const categoryCounts = countBy(
+    ((categoriesRes.data ?? []) as { category_name: string }[]).map((r) => r.category_name)
+  );
+  const topCategories = [...categoryCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+  const dauWriters = new Set(
+    ((activeUsersRes.data ?? []) as { author_id: string }[]).map((r) => r.author_id)
+  ).size;
+
+  const reports = (moderationRes.data ?? []) as {
+    created_at: string;
+    resolved_at: string | null;
+    is_resolved: boolean;
+  }[];
+  const resolved = reports.filter((r) => r.is_resolved && r.resolved_at);
+  const avgResolutionMinutes =
+    resolved.length === 0
+      ? null
+      : Math.round(
+          resolved.reduce((s, r) => {
+            const a = new Date(r.created_at).getTime();
+            const b = new Date(r.resolved_at!).getTime();
+            return s + (b - a);
+          }, 0) /
+            resolved.length /
+            60000
+        );
 
   return (
-    <div className="flex flex-col gap-6 max-w-6xl">
-      <div>
-        <h1 className="text-2xl font-extrabold text-burgundy">Analytics</h1>
-        <p className="text-sm text-burgundy/65 mt-1">
-          Trailing 30 days of platform behaviour, drawn directly from posts +
-          users.
-        </p>
+    <div className="flex flex-col gap-6 max-w-[1400px]">
+      <PageHeader
+        eyebrow="Insight"
+        title="Analytics"
+        subtitle={`Platform behaviour over the last ${days} days. Compare against the prior ${days}-day window.`}
+        actions={<RangeSwitch active={range} />}
+      />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label={`Signups · ${range}`}
+          value={signupsTotal}
+          sub="Unique new accounts"
+          tone="ok"
+          trend={pctChange(signupsTotal, signupsPrevRes.count ?? 0)}
+          spark={signupsByDay}
+        />
+        <StatCard
+          label={`Posts · ${range}`}
+          value={postsTotal}
+          sub="Excludes deleted"
+          tone="info"
+          trend={pctChange(postsTotal, postsPrevRes.count ?? 0)}
+          spark={postsByDay}
+        />
+        <StatCard
+          label={`Comments · ${range}`}
+          value={commentsTotal}
+          sub={`${commentsTotal && postsTotal ? Math.round((commentsTotal / postsTotal) * 10) / 10 : 0} per post`}
+          spark={commentsByDay}
+        />
+        <StatCard
+          label={`Reactions · ${range}`}
+          value={reactionsTotal}
+          sub="Across all emoji types"
+          spark={reactionsByDay}
+        />
       </div>
 
-      {/* 30-day new users line/bars */}
-      <section className="card p-5">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-base font-extrabold text-burgundy">
-            New users · last 30 days
-          </h2>
-          <p className="text-xs text-burgundy/60">{totalNewUsers} joined</p>
-        </div>
-        <div className="mt-4 h-32 flex items-end gap-[3px]">
-          {userDayBuckets.map((b, i) => {
-            const h = (b.count / maxUsers) * 100;
-            return (
-              <div
-                key={i}
-                className="flex-1 rounded-sm bg-berry/80 transition"
-                style={{ height: `${Math.max(2, h)}%` }}
-                title={`${b.date.toISOString().slice(0, 10)} · ${b.count}`}
-              />
-            );
-          })}
-        </div>
-        <div className="mt-2 flex justify-between text-[10px] text-burgundy/55">
-          <span>{userDayBuckets[0].date.toISOString().slice(5, 10)}</span>
-          <span>
-            {userDayBuckets[userDayBuckets.length - 1].date
-              .toISOString()
-              .slice(5, 10)}
-          </span>
-        </div>
-      </section>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card title="Daily signups" hint={`Last ${days} days`}>
+          <BarChart data={signupsByDay} days={days} accent="#1F8F4D" />
+        </Card>
+        <Card title="Daily posts" hint={`Last ${days} days`}>
+          <BarChart data={postsByDay} days={days} accent="#D12E65" />
+        </Card>
+        <Card title="Daily comments" hint={`Last ${days} days`}>
+          <BarChart data={commentsByDay} days={days} accent="#3B6AB6" />
+        </Card>
+        <Card title="Daily reactions" hint={`Last ${days} days`}>
+          <BarChart data={reactionsByDay} days={days} accent="#C77A1A" />
+        </Card>
+      </div>
 
-      {/* Sentiment trend */}
-      <section className="card p-5">
-        <h2 className="text-base font-extrabold text-burgundy mb-1">
-          Sentiment trend
-        </h2>
-        <p className="text-xs text-burgundy/55">
-          Rolling 4-week breakdown of post moods.
-        </p>
-        <div className="mt-4 flex flex-col gap-3">
-          {weekBuckets.map((b) => {
-            const total = b.pos + b.neu + b.heavy || 1;
-            return (
-              <div key={b.label}>
-                <div className="flex justify-between text-[11px] font-semibold text-burgundy/65 mb-1">
-                  <span>{b.label}</span>
-                  <span>{b.pos + b.neu + b.heavy} posts</span>
-                </div>
-                <div className="h-3 rounded-full overflow-hidden flex">
-                  <div
-                    className="bg-ok"
-                    style={{ width: `${(b.pos / total) * 100}%` }}
-                    title={`${b.pos} hopeful`}
-                  />
-                  <div
-                    className="bg-warn"
-                    style={{ width: `${(b.neu / total) * 100}%` }}
-                    title={`${b.neu} pensive`}
-                  />
-                  <div
-                    className="bg-berry"
-                    style={{ width: `${(b.heavy / total) * 100}%` }}
-                    title={`${b.heavy} heavy`}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-4 flex gap-4 text-[11px] font-semibold">
-          <span className="inline-flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full bg-ok" /> Hopeful
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full bg-warn" /> Pensive
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full bg-berry" /> Heavy
-          </span>
-        </div>
-      </section>
-
-      {/* Category breakdown */}
-      <section className="card p-5">
-        <h2 className="text-base font-extrabold text-burgundy mb-1">
-          Top categories
-        </h2>
-        <p className="text-xs text-burgundy/55">
-          Posts in each channel, last 30 days.
-        </p>
-        <div className="mt-4 flex flex-col gap-2">
-          {sortedCategories.length === 0 && (
-            <p className="text-sm italic text-burgundy/55">
-              No posts in the last 30 days.
-            </p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card title="Top categories" hint={`Posts in last ${days}d`}>
+          {topCategories.length === 0 ? (
+            <p className="text-sm text-ink-muted italic">No posts yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-2.5">
+              {topCategories.map(([cat, n]) => {
+                const max = topCategories[0][1] || 1;
+                const pct = Math.round((n / max) * 100);
+                return (
+                  <li key={cat}>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-sm font-semibold text-burgundy">{cat}</p>
+                      <p className="text-xs text-ink-muted tabular">{n}</p>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-line overflow-hidden">
+                      <div
+                        className="h-full bg-berry rounded-full"
+                        style={{ width: `${Math.max(pct, 4)}%` }}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
-          {sortedCategories.map(([cat, count]) => (
-            <div key={cat} className="flex items-center gap-3">
-              <p className="w-32 text-sm font-semibold text-burgundy/80">
-                {CATEGORY_LABELS[cat] ?? cat}
-              </p>
-              <div className="flex-1 h-3 rounded-full bg-mauve/25 overflow-hidden">
-                <div
-                  className="h-full bg-berry"
-                  style={{ width: `${(count / maxCategoryCount) * 100}%` }}
-                />
-              </div>
-              <p className="w-10 text-right text-sm font-bold text-burgundy/80">
-                {count}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
+        </Card>
 
-      {/* Top tribes */}
-      <section className="card p-5">
-        <h2 className="text-base font-extrabold text-burgundy mb-3">
-          Top tribes by membership
-        </h2>
-        <ol className="flex flex-col gap-2 list-decimal pl-5">
-          {(topTribes ?? []).map((t) => (
-            <li
-              key={t.tribe_id as string}
-              className="flex items-center justify-between"
+        <Card title="Top regions" hint="By total user count">
+          {(regionsRes.data ?? []).length === 0 ? (
+            <p className="text-sm text-ink-muted italic">No location data.</p>
+          ) : (
+            <ul className="flex flex-col gap-2.5">
+              {((regionsRes.data ?? []) as { country: string; users: number }[]).map((r) => {
+                const total =
+                  ((regionsRes.data ?? []) as { users: number }[]).reduce(
+                    (s, x) => s + x.users,
+                    0
+                  ) || 1;
+                const pct = Math.round((r.users / total) * 100);
+                return (
+                  <li key={r.country}>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-sm font-semibold text-burgundy">{r.country}</p>
+                      <p className="text-xs text-ink-muted tabular">
+                        {r.users.toLocaleString()} · {pct}%
+                      </p>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-line overflow-hidden">
+                      <div
+                        className="h-full bg-info rounded-full"
+                        style={{ width: `${Math.max(pct, 4)}%` }}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+
+        <Card title="Moderation efficiency" hint={`Reports in last ${days}d`}>
+          <p className="h-eyebrow">Reports filed</p>
+          <p className="tabular text-2xl font-extrabold text-burgundy">{reports.length}</p>
+          <p className="h-eyebrow mt-3">Resolved</p>
+          <p className="tabular text-2xl font-extrabold text-ok">
+            {resolved.length}{" "}
+            <span className="text-xs text-ink-muted font-medium">
+              ({reports.length > 0 ? Math.round((resolved.length / reports.length) * 100) : 0}%)
+            </span>
+          </p>
+          <p className="h-eyebrow mt-3">Avg resolution time</p>
+          <p className="tabular text-lg font-extrabold text-burgundy">
+            {avgResolutionMinutes === null
+              ? "—"
+              : avgResolutionMinutes >= 60
+                ? `${Math.round(avgResolutionMinutes / 60)}h ${avgResolutionMinutes % 60}m`
+                : `${avgResolutionMinutes}m`}
+          </p>
+          <p className="h-eyebrow mt-3">Open right now</p>
+          <p className="tabular text-2xl font-extrabold text-warn">
+            {reports.filter((r) => !r.is_resolved).length}
+          </p>
+        </Card>
+      </div>
+
+      <Card title="Headline metrics" hint="Cross-window">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Metric label="Total users" value={Number(metricsRes.data?.total_users ?? 0)} />
+          <Metric label="DAU (writers, today)" value={dauWriters} />
+          <Metric label="Live posts" value={Number(metricsRes.data?.live_posts ?? 0)} />
+          <Metric label="Active tribes" value={Number(metricsRes.data?.total_tribes ?? 0)} />
+        </div>
+      </Card>
+
+      <p className="text-xs text-ink-muted">
+        Charts read directly from raw tables. For higher-volume time series,
+        wire these aggregates into a materialised view refreshed by pg_cron.
+      </p>
+    </div>
+  );
+}
+
+// ─────────────────────── helpers ───────────────────────
+
+function bucketByDay(timestamps: string[], days: number): number[] {
+  const buckets = new Array(days).fill(0);
+  const now = Date.now();
+  for (const t of timestamps) {
+    const dayIdx = days - 1 - Math.floor((now - new Date(t).getTime()) / 86400000);
+    if (dayIdx >= 0 && dayIdx < days) buckets[dayIdx]++;
+  }
+  return buckets;
+}
+
+function countBy(arr: string[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const x of arr) m.set(x, (m.get(x) ?? 0) + 1);
+  return m;
+}
+
+function pctChange(now: number, prev: number): number | null {
+  if (prev === 0) return now > 0 ? 100 : null;
+  return Math.round(((now - prev) / prev) * 100);
+}
+
+function BarChart({
+  data,
+  days,
+  accent,
+}: {
+  data: number[];
+  days: number;
+  accent: string;
+}) {
+  const max = Math.max(1, ...data);
+  const total = data.reduce((s, x) => s + x, 0);
+  return (
+    <>
+      <div className="flex items-end gap-[3px] h-36">
+        {data.map((v, i) => {
+          const h = Math.max(2, Math.round((v / max) * 100));
+          return (
+            <div
+              key={i}
+              className="flex-1 rounded-sm relative group"
+              style={{ height: `${h}%`, background: accent, opacity: 0.85 }}
+              title={`day -${days - 1 - i}: ${v}`}
             >
-              <span className="font-semibold text-burgundy">{String(t.name)}</span>
-              <span className="text-sm text-burgundy/70">
-                {Number(t.member_count).toLocaleString()} members
-              </span>
-            </li>
-          ))}
-        </ol>
-      </section>
+              {v > 0 && (
+                <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[10px] font-bold text-burgundy opacity-0 group-hover:opacity-100">
+                  {v}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-ink-muted mt-2 tabular">
+        Total: {total.toLocaleString()} · Peak: {max.toLocaleString()}/day
+      </p>
+    </>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <p className="h-eyebrow">{label}</p>
+      <p className="tabular text-2xl font-extrabold text-burgundy">
+        {value.toLocaleString()}
+      </p>
+    </div>
+  );
+}
+
+function RangeSwitch({ active }: { active: Range }) {
+  const ranges: Range[] = ["7d", "30d", "90d"];
+  return (
+    <div className="flex items-center gap-1.5 rounded-lg border border-line bg-white p-1">
+      {ranges.map((r) => (
+        <Link
+          key={r}
+          href={`/analytics?range=${r}`}
+          className={`px-3 py-1.5 rounded-md text-xs font-bold transition ${
+            r === active ? "bg-berry text-white" : "text-ink-muted hover:bg-canvas"
+          }`}
+        >
+          {r}
+        </Link>
+      ))}
     </div>
   );
 }

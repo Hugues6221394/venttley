@@ -3,32 +3,144 @@
 @tailwind utilities;
 
 @layer base {
-  html { color-scheme: light; }
-  body {
-    @apply bg-blush text-burgundy font-sans antialiased;
+  html {
+    color-scheme: light;
   }
-  /* Focus outline that matches the brand without being harsh. */
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+  }
   *:focus-visible {
-    @apply outline-none ring-2 ring-berry/50 ring-offset-2 ring-offset-blush;
+    @apply outline-none ring-2 ring-berry/50 ring-offset-2 ring-offset-canvas;
+  }
+  /* Tabular numbers for tables and counters. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 }
 
 @layer components {
-  .card {
-    @apply rounded-2xl bg-white border border-mauve/30 shadow-card;
+  /* Surfaces */
+  .surface {
+    @apply rounded-2xl bg-white border border-line shadow-soft;
   }
+  .surface-flat {
+    @apply rounded-xl bg-white border border-line;
+  }
+  .card {
+    @apply rounded-2xl bg-white border border-line shadow-soft;
+  }
+  .card-hover {
+    @apply transition hover:border-mauve/50 hover:shadow-lift;
+  }
+
+  /* Typography */
+  .h-display {
+    @apply text-3xl font-extrabold tracking-tight text-burgundy;
+  }
+  .h-page {
+    @apply text-2xl font-extrabold tracking-tight text-burgundy;
+  }
+  .h-section {
+    @apply text-base font-extrabold text-burgundy;
+  }
+  .h-eyebrow {
+    @apply text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-muted;
+  }
+
+  /* Buttons */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full
-           bg-berry px-4 py-2 text-sm font-semibold text-white
+    @apply inline-flex items-center justify-center gap-2 rounded-lg
+           bg-berry px-3.5 py-2 text-sm font-semibold text-white
            transition hover:bg-burgundy disabled:opacity-50;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full
-           border border-mauve/60 px-4 py-2 text-sm font-semibold
-           text-burgundy transition hover:bg-cardBlush;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg
+           border border-line bg-white px-3.5 py-2 text-sm font-semibold
+           text-burgundy transition hover:bg-canvas disabled:opacity-50;
   }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg
+           bg-danger px-3.5 py-2 text-sm font-semibold text-white
+           transition hover:bg-danger/90 disabled:opacity-50;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg
+           px-2.5 py-1.5 text-sm font-semibold text-ink-muted
+           transition hover:bg-canvas hover:text-burgundy;
+  }
+  .icon-btn {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg
+           border border-line bg-white text-ink-muted transition
+           hover:bg-canvas hover:text-burgundy;
+  }
+
+  /* Pills / badges */
   .pill {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5
-           text-xs font-bold;
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5
+           text-[11px] font-bold uppercase tracking-wider;
+  }
+  .pill-ok      { @apply pill bg-ok/10   text-ok; }
+  .pill-warn    { @apply pill bg-warn/15 text-warn; }
+  .pill-danger  { @apply pill bg-danger/10 text-danger; }
+  .pill-info    { @apply pill bg-berry/10 text-berry; }
+  .pill-muted   { @apply pill bg-line text-ink-muted; }
+  .pill-crisis  { @apply pill bg-danger text-white shadow-lift; }
+
+  /* Inputs */
+  .input {
+    @apply h-9 w-full rounded-lg border border-line bg-white px-3 text-sm
+           text-burgundy placeholder:text-ink-muted/70
+           focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/30;
+  }
+  .input-lg {
+    @apply h-10 w-full rounded-xl border border-line bg-white px-3.5 text-sm
+           text-burgundy placeholder:text-ink-muted/70
+           focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/30;
+  }
+  .select {
+    @apply h-9 rounded-lg border border-line bg-white px-2.5 text-sm
+           text-burgundy focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/30;
+  }
+  .textarea {
+    @apply w-full rounded-lg border border-line bg-white px-3 py-2 text-sm
+           text-burgundy placeholder:text-ink-muted/70
+           focus:border-berry focus:outline-none focus:ring-2 focus:ring-berry/30;
+  }
+
+  /* Tables */
+  .t-row {
+    @apply border-t border-line transition hover:bg-canvas/70;
+  }
+  .t-th {
+    @apply h-eyebrow text-left px-4 py-3;
+  }
+  .t-td {
+    @apply px-4 py-3 text-sm text-burgundy;
+  }
+
+  /* Sidebar nav */
+  .nav-item {
+    @apply flex items-center justify-between gap-2 rounded-lg
+           px-3 py-2 text-sm font-semibold text-ink-muted
+           transition hover:bg-canvas hover:text-burgundy;
+  }
+  .nav-item-active {
+    @apply bg-berry/10 text-berry;
+  }
+
+  /* Stat surface */
+  .stat {
+    @apply surface p-5 flex flex-col gap-1.5;
+  }
+
+  /* Section title row used across pages */
+  .section-row {
+    @apply flex items-center justify-between gap-3 mb-3;
+  }
+
+  /* Empty-state */
+  .empty {
+    @apply flex flex-col items-center justify-center text-center
+           py-12 text-ink-muted gap-2;
   }
 }
