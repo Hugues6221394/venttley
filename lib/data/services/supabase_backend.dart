@@ -1612,6 +1612,7 @@ class SupabaseBackend {
   Post _postFromRow(Map<String, dynamic> r) {
     return Post(
       postId: r['post_id'] as String,
+      authorId: r['author_id'] as String?,
       authorPseudonym: (r['author_pseudonym'] as String?) ?? '@anonymous',
       authorAvatarSeed: (r['author_avatar_seed'] as String?) ?? 'default-orb',
       authorIsVerified: (r['author_is_verified'] as bool?) ?? false,

@@ -212,6 +212,10 @@ class Tribe {
 
 class Post {
   final String postId;
+  /// Stable author identity. Always present, but the UI should treat it
+  /// as opaque — never display the raw UUID. Used by the friend-action
+  /// chip and report flows to identify the author.
+  final String? authorId;
   final String authorPseudonym;
   final String authorAvatarSeed;
   final bool authorIsVerified;
@@ -245,6 +249,7 @@ class Post {
     required this.likesCount,
     required this.commentsCount,
     required this.createdAt,
+    this.authorId,
     this.authorIsVerified = false,
     this.authorKarma = 0,
     this.tribeId,
@@ -276,6 +281,7 @@ class Post {
   }) {
     return Post(
       postId: postId,
+      authorId: authorId,
       authorPseudonym: authorPseudonym,
       authorAvatarSeed: authorAvatarSeed,
       authorIsVerified: authorIsVerified,

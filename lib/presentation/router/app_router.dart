@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../screens/compose/compose_screen.dart';
 import '../screens/feed/feed_screen.dart';
 import '../screens/feed/post_detail_screen.dart';
+import '../screens/friends/friends_screen.dart';
 import '../screens/home/home_shell.dart';
 import '../screens/inbox/chat_screen.dart';
 import '../screens/inbox/inbox_screen.dart';
@@ -122,6 +123,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (ctx, st) => ChatScreen(roomId: st.pathParameters['roomId']!),
       ),
       GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+      GoRoute(path: '/friends', builder: (_, __) => const FriendsScreen()),
       GoRoute(
         path: '/notifications',
         builder: (_, __) => const NotificationsScreen(),

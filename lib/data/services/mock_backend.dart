@@ -211,6 +211,7 @@ class MockBackend {
             ?.firstWhereOrNull((p) => p.personaId == personaId);
     final post = Post(
       postId: _uuid.v4(),
+      authorId: me.userId,
       authorPseudonym: persona == null
           ? '@${me.anonymousPseudonym}'
           : '@${persona.pseudonym}',

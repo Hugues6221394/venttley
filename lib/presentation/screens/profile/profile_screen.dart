@@ -85,6 +85,7 @@ class ProfileScreen extends ConsumerWidget {
               ),
             ),
             SliverToBoxAdapter(child: _BadgesStrip(userId: me.userId)),
+            const SliverToBoxAdapter(child: _FriendsStrip()),
             const SliverToBoxAdapter(child: _PersonasStrip()),
             if (keptTribes.isNotEmpty)
               SliverToBoxAdapter(
@@ -1345,5 +1346,87 @@ class _PersonaRow extends ConsumerWidget {
       ref.read(activePersonaProvider.notifier).state = null;
     }
     ref.invalidate(myPersonasProvider);
+  }
+}
+
+/// "Friends" tile on the profile — shows live count + pending requests
+/// badge, taps through to the dedicated /friends screen.
+class _FriendsStrip extends ConsumerWidget {
+  const _FriendsStrip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final friends = ref.watch(myFriendsProvider);
+    final incoming = ref.watch(incomingFriendRequestsProvider);
+    final outgoing = ref.watch(outgoingFriendRequestsProvider);
+    final friendCount = friends.valueOrNull?.length ?? 0;
+    final pending = (incoming.valueOrNull?.length ?? 0) +
+        (outgoing.valueOrNull?.length ?? 0);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+      child: Material(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => context.push('/friends'),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: scheme.outline.withOpacity(0.25)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.diversity_3, color: scheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Friends',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        friendCount == 0
+                            ? 'No friends yet'
+                            : '$friendCount accepted',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (pending > 0)
+                  Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '$pending pending',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                const Icon(Icons.chevron_right, size: 18),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

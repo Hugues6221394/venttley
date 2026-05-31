@@ -7,6 +7,7 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
+import '../../widgets/friend_action_button.dart';
 import '../../widgets/post_card.dart';
 
 class PostDetailScreen extends ConsumerStatefulWidget {
@@ -65,6 +66,21 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                 if (post.crisisLevel != null)
                   _CrisisHelplineBanner(level: post.crisisLevel!),
                 PostCard(post: post),
+                if (post.authorId != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        FriendActionButton(
+                          otherUserId: post.authorId!,
+                          otherPseudonym:
+                              post.authorPseudonym.replaceFirst('@', ''),
+                          dense: true,
+                        ),
+                      ],
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
                   child: Text(
