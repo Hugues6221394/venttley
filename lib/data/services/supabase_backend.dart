@@ -424,6 +424,132 @@ class SupabaseBackend {
     return list;
   }
 
+  // ──────────────────── Friends graph ────────────────────
+
+  Future<FriendStatus> friendStatus(String otherUserId) async {
+    final result = await _client.rpc(
+      'friend_status',
+      params: {'p_target': otherUserId},
+    );
+    return FriendStatus.parse(result as String?);
+  }
+
+  Future<String> sendFriendRequest(String otherUserId, {String? note}) async {
+    final res = await _client.rpc(
+      'send_friend_request',
+      params: {'p_target': otherUserId, 'p_note': note},
+    );
+    return res as String;
+  }
+
+  Future<void> acceptFriendRequest(String friendshipId) async {
+    await _client.rpc(
+      'accept_friend_request',
+      params: {'p_friendship': friendshipId},
+    );
+  }
+
+  Future<void> declineFriendRequest(String friendshipId) async {
+    await _client.rpc(
+      'decline_friend_request',
+      params: {'p_friendship': friendshipId},
+    );
+  }
+
+  Future<void> unfriend(String otherUserId) async {
+    await _client.rpc('unfriend', params: {'p_target': otherUserId});
+  }
+
+  Future<void> blockUser(String otherUserId, {String? reason}) async {
+    await _client.rpc(
+      'block_user',
+      params: {'p_target': otherUserId, 'p_reason': reason},
+    );
+  }
+
+  Future<void> unblockUser(String otherUserId) async {
+    await _client.rpc('unblock_user', params: {'p_target': otherUserId});
+  }
+
+  Future<List<FriendSummary>> myFriends() async {
+    final rows = await _client
+        .from('my_friends')
+        .select()
+        .order('accepted_at', ascending: false);
+    return (rows as List)
+        .cast<Map<String, dynamic>>()
+        .map((r) => FriendSummary(
+              friendshipId: r['friendship_id'] as String,
+              userId: r['friend_user_id'] as String,
+              pseudonym: r['friend_pseudonym'] as String,
+              avatarSeed:
+                  (r['friend_avatar_seed'] as String?) ?? 'default-orb',
+              karma: (r['friend_karma'] as int?) ?? 0,
+              isVerified: (r['friend_is_verified'] as bool?) ?? false,
+              acceptedAt: DateTime.parse(r['accepted_at'] as String),
+            ))
+        .toList();
+  }
+
+  Future<List<FriendRequest>> incomingFriendRequests() async {
+    final rows = await _client
+        .from('friend_requests_inbox')
+        .select()
+        .order('created_at', ascending: false);
+    return (rows as List)
+        .cast<Map<String, dynamic>>()
+        .map((r) => FriendRequest(
+              friendshipId: r['friendship_id'] as String,
+              otherUserId: r['from_user_id'] as String,
+              otherPseudonym: r['from_pseudonym'] as String,
+              otherAvatarSeed:
+                  (r['from_avatar_seed'] as String?) ?? 'default-orb',
+              otherKarma: (r['from_karma'] as int?) ?? 0,
+              note: r['note'] as String?,
+              createdAt: DateTime.parse(r['created_at'] as String),
+              isOutgoing: false,
+            ))
+        .toList();
+  }
+
+  Future<List<FriendRequest>> outgoingFriendRequests() async {
+    final rows = await _client
+        .from('friend_requests_outbox')
+        .select()
+        .order('created_at', ascending: false);
+    return (rows as List)
+        .cast<Map<String, dynamic>>()
+        .map((r) => FriendRequest(
+              friendshipId: r['friendship_id'] as String,
+              otherUserId: r['to_user_id'] as String,
+              otherPseudonym: r['to_pseudonym'] as String,
+              otherAvatarSeed:
+                  (r['to_avatar_seed'] as String?) ?? 'default-orb',
+              otherKarma: (r['to_karma'] as int?) ?? 0,
+              note: r['note'] as String?,
+              createdAt: DateTime.parse(r['created_at'] as String),
+              isOutgoing: true,
+            ))
+        .toList();
+  }
+
+  Future<List<BlockedUser>> myBlocks() async {
+    final rows = await _client
+        .from('my_blocks')
+        .select()
+        .order('created_at', ascending: false);
+    return (rows as List)
+        .cast<Map<String, dynamic>>()
+        .map((r) => BlockedUser(
+              userId: r['user_id'] as String,
+              pseudonym: r['pseudonym'] as String,
+              avatarSeed: (r['avatar_seed'] as String?) ?? 'default-orb',
+              reason: r['reason'] as String?,
+              createdAt: DateTime.parse(r['created_at'] as String),
+            ))
+        .toList();
+  }
+
   Future<void> toggleLike(String postId) async => react(postId, 'like');
 
   /// Returns the resulting reaction (`null` when the user toggled it off).

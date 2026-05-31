@@ -211,6 +211,36 @@ final crisisResourcesProvider =
   return ref.watch(repositoryProvider).crisisResources(region: region);
 });
 
+// ----------------------------------------------------------------------
+// Friend graph (migration 0024)
+// ----------------------------------------------------------------------
+
+/// All accepted friendships of the current user.
+final myFriendsProvider = FutureProvider.autoDispose<List<FriendSummary>>(
+    (ref) async => ref.watch(repositoryProvider).myFriends());
+
+/// Incoming pending requests addressed to the current user.
+final incomingFriendRequestsProvider =
+    FutureProvider.autoDispose<List<FriendRequest>>(
+        (ref) async => ref.watch(repositoryProvider).incomingFriendRequests());
+
+/// Outgoing pending requests the current user sent.
+final outgoingFriendRequestsProvider =
+    FutureProvider.autoDispose<List<FriendRequest>>(
+        (ref) async => ref.watch(repositoryProvider).outgoingFriendRequests());
+
+/// Users the current user has blocked.
+final myBlocksProvider = FutureProvider.autoDispose<List<BlockedUser>>(
+    (ref) async => ref.watch(repositoryProvider).myBlocks());
+
+/// Friend status between the current user and a target. Used by every
+/// friend-action button across the app so the chip rewrites itself
+/// after each tap without screen-level state-management plumbing.
+final friendStatusProvider =
+    FutureProvider.autoDispose.family<FriendStatus, String>(
+        (ref, otherUserId) async =>
+            ref.watch(repositoryProvider).friendStatus(otherUserId));
+
 /// Reports filed against posts in a specific Tribe — Keeper-only.
 final tribeReportsProvider =
     FutureProvider.autoDispose.family<List<TribeReport>, String>(

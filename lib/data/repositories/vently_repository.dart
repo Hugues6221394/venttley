@@ -431,6 +431,74 @@ class VentlyRepository {
     return _mock.crisisResources(region: region);
   }
 
+  // ===================== Friends graph =====================
+
+  Future<FriendStatus> friendStatus(String otherUserId) {
+    final live = _live;
+    if (live != null) return live.friendStatus(otherUserId);
+    return _mock.friendStatus(otherUserId);
+  }
+
+  Future<String> sendFriendRequest(String otherUserId, {String? note}) {
+    final live = _live;
+    if (live != null) return live.sendFriendRequest(otherUserId, note: note);
+    return _mock.sendFriendRequest(otherUserId, note: note);
+  }
+
+  Future<void> acceptFriendRequest(String friendshipId) {
+    final live = _live;
+    if (live != null) return live.acceptFriendRequest(friendshipId);
+    return _mock.acceptFriendRequest(friendshipId);
+  }
+
+  Future<void> declineFriendRequest(String friendshipId) {
+    final live = _live;
+    if (live != null) return live.declineFriendRequest(friendshipId);
+    return _mock.declineFriendRequest(friendshipId);
+  }
+
+  Future<void> unfriend(String otherUserId) {
+    final live = _live;
+    if (live != null) return live.unfriend(otherUserId);
+    return _mock.unfriend(otherUserId);
+  }
+
+  Future<void> blockUser(String otherUserId, {String? reason}) {
+    final live = _live;
+    if (live != null) return live.blockUser(otherUserId, reason: reason);
+    return _mock.blockUser(otherUserId, reason: reason);
+  }
+
+  Future<void> unblockUser(String otherUserId) {
+    final live = _live;
+    if (live != null) return live.unblockUser(otherUserId);
+    return _mock.unblockUser(otherUserId);
+  }
+
+  Future<List<FriendSummary>> myFriends() {
+    final live = _live;
+    if (live != null) return live.myFriends();
+    return _mock.myFriends();
+  }
+
+  Future<List<FriendRequest>> incomingFriendRequests() {
+    final live = _live;
+    if (live != null) return live.incomingFriendRequests();
+    return _mock.incomingFriendRequests();
+  }
+
+  Future<List<FriendRequest>> outgoingFriendRequests() {
+    final live = _live;
+    if (live != null) return live.outgoingFriendRequests();
+    return _mock.outgoingFriendRequests();
+  }
+
+  Future<List<BlockedUser>> myBlocks() {
+    final live = _live;
+    if (live != null) return live.myBlocks();
+    return _mock.myBlocks();
+  }
+
   // ===================== User lookup =====================
   Future<({String userId, String pseudonym, String avatarSeed})?>
       findUserByPseudonym(String pseudonym) async {

@@ -40,6 +40,11 @@ class MockBackend {
   final List<PlugPrompt> _prompts = [];
   final List<NotificationItem> _notifications = [];
 
+  /// Friend graph. Each tuple is (a, b, status, requestedBy, createdAt,
+  /// note) with a < b lexically. Mirrors migration 0024's `friendships`.
+  final List<_MockFriendship> _friendships = [];
+  final List<_MockBlock> _blocks = [];
+
   // Stream controllers for live UI updates.
   final _postsController = StreamController<List<Post>>.broadcast();
   final _roomsController = StreamController<List<ChatRoom>>.broadcast();
@@ -790,6 +795,218 @@ class MockBackend {
     return base;
   }
 
+  // ──────────────────── Friends graph ────────────────────
+
+  ({String a, String b}) _pair(String u1, String u2) {
+    return u1.compareTo(u2) < 0 ? (a: u1, b: u2) : (a: u2, b: u1);
+  }
+
+  bool _isBlocked(String u1, String u2) => _blocks.any(
+        (b) =>
+            (b.blockerId == u1 && b.blockedId == u2) ||
+            (b.blockerId == u2 && b.blockedId == u1),
+      );
+
+  AppUser? _findUser(String id) {
+    for (final u in _users) {
+      if (u.userId == id) return u;
+    }
+    return null;
+  }
+
+  Future<FriendStatus> friendStatus(String otherUserId) async {
+    final me = _me;
+    if (me == null) return FriendStatus.none;
+    if (me.userId == otherUserId) return FriendStatus.self;
+    final blockedByMe = _blocks.any(
+        (b) => b.blockerId == me.userId && b.blockedId == otherUserId);
+    if (blockedByMe) return FriendStatus.blockedByMe;
+    final blockedMe = _blocks.any(
+        (b) => b.blockerId == otherUserId && b.blockedId == me.userId);
+    if (blockedMe) return FriendStatus.blockedMe;
+    final pair = _pair(me.userId, otherUserId);
+    final row = _friendships.firstWhereOrNull(
+        (f) => f.userA == pair.a && f.userB == pair.b);
+    if (row == null) return FriendStatus.none;
+    if (row.status == 'accepted') return FriendStatus.friends;
+    return row.requestedBy == me.userId
+        ? FriendStatus.pendingOutgoing
+        : FriendStatus.pendingIncoming;
+  }
+
+  Future<String> sendFriendRequest(String otherUserId, {String? note}) async {
+    final me = _me;
+    if (me == null) throw StateError('not signed in');
+    if (me.userId == otherUserId) {
+      throw StateError('cannot friend yourself');
+    }
+    if (_isBlocked(me.userId, otherUserId)) {
+      throw StateError('a block prevents this request');
+    }
+    final pair = _pair(me.userId, otherUserId);
+    var row = _friendships.firstWhereOrNull(
+        (f) => f.userA == pair.a && f.userB == pair.b);
+    if (row != null) return row.friendshipId;
+    row = _MockFriendship(
+      friendshipId: _uuid.v4(),
+      userA: pair.a,
+      userB: pair.b,
+      status: 'pending',
+      requestedBy: me.userId,
+      note: note,
+      createdAt: DateTime.now(),
+    );
+    _friendships.add(row);
+    return row.friendshipId;
+  }
+
+  Future<void> acceptFriendRequest(String friendshipId) async {
+    final me = _me;
+    if (me == null) return;
+    final row = _friendships
+        .firstWhereOrNull((f) => f.friendshipId == friendshipId);
+    if (row == null) return;
+    if (row.requestedBy == me.userId) {
+      throw StateError('cannot accept your own request');
+    }
+    if (row.status != 'pending') return;
+    row.status = 'accepted';
+    row.acceptedAt = DateTime.now();
+  }
+
+  Future<void> declineFriendRequest(String friendshipId) async {
+    _friendships.removeWhere(
+        (f) => f.friendshipId == friendshipId && f.status == 'pending');
+  }
+
+  Future<void> unfriend(String otherUserId) async {
+    final me = _me;
+    if (me == null) return;
+    final pair = _pair(me.userId, otherUserId);
+    _friendships.removeWhere((f) =>
+        f.userA == pair.a && f.userB == pair.b && f.status == 'accepted');
+  }
+
+  Future<void> blockUser(String otherUserId, {String? reason}) async {
+    final me = _me;
+    if (me == null) return;
+    if (me.userId == otherUserId) return;
+    _blocks.removeWhere(
+        (b) => b.blockerId == me.userId && b.blockedId == otherUserId);
+    _blocks.add(_MockBlock(
+      blockerId: me.userId,
+      blockedId: otherUserId,
+      reason: reason,
+      createdAt: DateTime.now(),
+    ));
+    // Blocks tear down any existing friendship in either status.
+    final pair = _pair(me.userId, otherUserId);
+    _friendships
+        .removeWhere((f) => f.userA == pair.a && f.userB == pair.b);
+  }
+
+  Future<void> unblockUser(String otherUserId) async {
+    final me = _me;
+    if (me == null) return;
+    _blocks.removeWhere(
+        (b) => b.blockerId == me.userId && b.blockedId == otherUserId);
+  }
+
+  Future<List<FriendSummary>> myFriends() async {
+    final me = _me;
+    if (me == null) return const [];
+    final rows = _friendships
+        .where((f) =>
+            f.status == 'accepted' &&
+            (f.userA == me.userId || f.userB == me.userId))
+        .toList()
+      ..sort((a, b) =>
+          (b.acceptedAt ?? b.createdAt).compareTo(a.acceptedAt ?? a.createdAt));
+    return rows.map((f) {
+      final otherId = f.userA == me.userId ? f.userB : f.userA;
+      final u = _findUser(otherId);
+      return FriendSummary(
+        friendshipId: f.friendshipId,
+        userId: otherId,
+        pseudonym: u?.anonymousPseudonym ?? 'anonymous',
+        avatarSeed: u?.avatarSeed ?? 'default-orb',
+        karma: 0,
+        isVerified: u?.isVerified ?? false,
+        acceptedAt: f.acceptedAt ?? f.createdAt,
+      );
+    }).toList();
+  }
+
+  Future<List<FriendRequest>> incomingFriendRequests() async {
+    final me = _me;
+    if (me == null) return const [];
+    final rows = _friendships
+        .where((f) =>
+            f.status == 'pending' &&
+            (f.userA == me.userId || f.userB == me.userId) &&
+            f.requestedBy != me.userId)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return rows.map((f) {
+      final u = _findUser(f.requestedBy);
+      return FriendRequest(
+        friendshipId: f.friendshipId,
+        otherUserId: f.requestedBy,
+        otherPseudonym: u?.anonymousPseudonym ?? 'anonymous',
+        otherAvatarSeed: u?.avatarSeed ?? 'default-orb',
+        otherKarma: 0,
+        note: f.note,
+        createdAt: f.createdAt,
+        isOutgoing: false,
+      );
+    }).toList();
+  }
+
+  Future<List<FriendRequest>> outgoingFriendRequests() async {
+    final me = _me;
+    if (me == null) return const [];
+    final rows = _friendships
+        .where((f) =>
+            f.status == 'pending' &&
+            (f.userA == me.userId || f.userB == me.userId) &&
+            f.requestedBy == me.userId)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return rows.map((f) {
+      final otherId = f.userA == me.userId ? f.userB : f.userA;
+      final u = _findUser(otherId);
+      return FriendRequest(
+        friendshipId: f.friendshipId,
+        otherUserId: otherId,
+        otherPseudonym: u?.anonymousPseudonym ?? 'anonymous',
+        otherAvatarSeed: u?.avatarSeed ?? 'default-orb',
+        otherKarma: 0,
+        note: f.note,
+        createdAt: f.createdAt,
+        isOutgoing: true,
+      );
+    }).toList();
+  }
+
+  Future<List<BlockedUser>> myBlocks() async {
+    final me = _me;
+    if (me == null) return const [];
+    return _blocks
+        .where((b) => b.blockerId == me.userId)
+        .map((b) {
+          final u = _findUser(b.blockedId);
+          return BlockedUser(
+            userId: b.blockedId,
+            pseudonym: u?.anonymousPseudonym ?? 'anonymous',
+            avatarSeed: u?.avatarSeed ?? 'default-orb',
+            reason: b.reason,
+            createdAt: b.createdAt,
+          );
+        })
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
   Future<bool> toggleCommentLike(String commentId) async {
     for (final tree in _commentsByPost.values) {
       if (_swapLike(tree, commentId)) {
@@ -1483,4 +1700,39 @@ class MockBackend {
 
     _commentsByPost[firstPost.postId] = [c1, c4];
   }
+}
+
+class _MockFriendship {
+  final String friendshipId;
+  final String userA;
+  final String userB;
+  String status;
+  final String requestedBy;
+  final String? note;
+  final DateTime createdAt;
+  DateTime? acceptedAt;
+
+  _MockFriendship({
+    required this.friendshipId,
+    required this.userA,
+    required this.userB,
+    required this.status,
+    required this.requestedBy,
+    required this.createdAt,
+    this.note,
+  }) : acceptedAt = null;
+}
+
+class _MockBlock {
+  final String blockerId;
+  final String blockedId;
+  final String? reason;
+  final DateTime createdAt;
+
+  const _MockBlock({
+    required this.blockerId,
+    required this.blockedId,
+    required this.createdAt,
+    this.reason,
+  });
 }

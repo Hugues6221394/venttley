@@ -610,3 +610,104 @@ class NotificationItem {
     required this.isRead,
   });
 }
+
+/// Friend graph state between the current user and a target user. Used
+/// by the friend-action button on any screen that surfaces a stranger.
+/// Mirrors the `friend_status` SQL RPC (migration 0024).
+enum FriendStatus {
+  /// You are looking at yourself — no action.
+  self,
+
+  /// No edge, no block. The friend-action chip shows "Add friend".
+  none,
+
+  /// You sent a request, awaiting acceptance. Chip shows "Requested".
+  pendingOutgoing,
+
+  /// They sent you a request. Chip shows "Accept · Decline".
+  pendingIncoming,
+
+  /// Accepted in both directions. Chip shows "Friends".
+  friends,
+
+  /// You blocked them. Chip shows "Blocked".
+  blockedByMe,
+
+  /// They blocked you. UI hides the friend chip entirely; this user
+  /// shouldn't normally appear in your feed at all.
+  blockedMe;
+
+  static FriendStatus parse(String? raw) => switch (raw) {
+        'self' => FriendStatus.self,
+        'friends' => FriendStatus.friends,
+        'pending_outgoing' => FriendStatus.pendingOutgoing,
+        'pending_incoming' => FriendStatus.pendingIncoming,
+        'blocked_by_me' => FriendStatus.blockedByMe,
+        'blocked_me' => FriendStatus.blockedMe,
+        _ => FriendStatus.none,
+      };
+}
+
+/// A friend (from the `my_friends` view).
+class FriendSummary {
+  final String friendshipId;
+  final String userId;
+  final String pseudonym;
+  final String avatarSeed;
+  final int karma;
+  final bool isVerified;
+  final DateTime acceptedAt;
+
+  const FriendSummary({
+    required this.friendshipId,
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.karma,
+    required this.isVerified,
+    required this.acceptedAt,
+  });
+}
+
+/// A pending friend request (incoming or outgoing).
+class FriendRequest {
+  final String friendshipId;
+  final String otherUserId;
+  final String otherPseudonym;
+  final String otherAvatarSeed;
+  final int otherKarma;
+  final String? note;
+  final DateTime createdAt;
+
+  /// True when the current user initiated the request (outgoing).
+  /// False when they are the recipient awaiting their own decision.
+  final bool isOutgoing;
+
+  const FriendRequest({
+    required this.friendshipId,
+    required this.otherUserId,
+    required this.otherPseudonym,
+    required this.otherAvatarSeed,
+    required this.otherKarma,
+    required this.createdAt,
+    required this.isOutgoing,
+    this.note,
+  });
+}
+
+/// A user the current user has blocked.
+class BlockedUser {
+  final String userId;
+  final String pseudonym;
+  final String avatarSeed;
+  final String? reason;
+  final DateTime createdAt;
+
+  const BlockedUser({
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.createdAt,
+    this.reason,
+  });
+}
