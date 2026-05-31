@@ -499,6 +499,12 @@ class VentlyRepository {
     return _mock.myBlocks();
   }
 
+  Future<UserProfileView?> userProfile(String otherUserId) {
+    final live = _live;
+    if (live != null) return live.userProfile(otherUserId);
+    return _mock.userProfile(otherUserId);
+  }
+
   // ===================== User lookup =====================
   Future<({String userId, String pseudonym, String avatarSeed})?>
       findUserByPseudonym(String pseudonym) async {

@@ -533,6 +533,125 @@ class SupabaseBackend {
         .toList();
   }
 
+  Future<UserProfileView?> userProfile(String otherUserId) async {
+    final result = await _client.rpc(
+      'user_profile_summary',
+      params: {'p_target': otherUserId},
+    );
+    if (result == null) return null;
+    return _profileFromJson(result as Map<String, dynamic>);
+  }
+
+  UserProfileView _profileFromJson(Map<String, dynamic> j) {
+    final user = j['user'] as Map<String, dynamic>;
+    final stats = (j['stats'] as Map<String, dynamic>?) ?? const {};
+    final mutuals = (j['mutuals'] as Map<String, dynamic>?) ?? const {};
+    final highlights = (j['highlights'] as Map<String, dynamic>?) ?? const {};
+
+    List<MoodCount> moods = [];
+    final rawMoods = stats['top_moods'];
+    if (rawMoods is List) {
+      moods = rawMoods
+          .cast<Map<String, dynamic>>()
+          .map((m) => MoodCount(
+                mood: m['mood'] as String,
+                count: (m['count'] as num).toInt(),
+              ))
+          .toList();
+    }
+
+    List<MutualFriend> mutualFriendSample = [];
+    final rawFriends = mutuals['mutual_friend_sample'];
+    if (rawFriends is List) {
+      mutualFriendSample = rawFriends
+          .cast<Map<String, dynamic>>()
+          .map((m) => MutualFriend(
+                userId: m['user_id'] as String,
+                pseudonym: m['pseudonym'] as String,
+                avatarSeed:
+                    (m['avatar_seed'] as String?) ?? 'default-orb',
+              ))
+          .toList();
+    }
+    List<MutualTribe> mutualTribes = [];
+    final rawTribes = mutuals['mutual_tribes'];
+    if (rawTribes is List) {
+      mutualTribes = rawTribes
+          .cast<Map<String, dynamic>>()
+          .map((m) => MutualTribe(
+                tribeId: m['tribe_id'] as String,
+                name: m['name'] as String,
+                slug: m['slug'] as String,
+              ))
+          .toList();
+    }
+
+    ProfileHighlightPost? toPost(Map<String, dynamic>? p) {
+      if (p == null) return null;
+      return ProfileHighlightPost(
+        postId: p['post_id'] as String,
+        content: p['content'] as String? ?? '',
+        likes: (p['likes'] as num?)?.toInt() ?? 0,
+        comments: (p['comments'] as num?)?.toInt() ?? 0,
+        createdAt: DateTime.parse(p['created_at'] as String),
+        category: (p['category'] as String?) ?? 'confessions',
+        mood: p['mood'] as String?,
+        crisisLevel: p['crisis_level'] as String?,
+      );
+    }
+
+    List<ProfileHighlightPost> recent = [];
+    final rawRecent = highlights['recent_posts'];
+    if (rawRecent is List) {
+      recent = rawRecent
+          .cast<Map<String, dynamic>>()
+          .map((p) => toPost(p)!)
+          .toList();
+    }
+
+    List<UserBadge> badges = [];
+    final rawBadges = highlights['badges'];
+    if (rawBadges is List) {
+      badges = rawBadges
+          .cast<Map<String, dynamic>>()
+          .map((b) => UserBadge(
+                key: b['badge_key'] as String,
+                awardedAt: DateTime.parse(b['awarded_at'] as String),
+              ))
+          .toList();
+    }
+
+    return UserProfileView(
+      relation: FriendStatus.parse(j['viewer_relation'] as String?),
+      userId: user['user_id'] as String,
+      pseudonym: user['pseudonym'] as String,
+      avatarSeed: (user['avatar_seed'] as String?) ?? 'default-orb',
+      karma: (user['karma'] as num?)?.toInt() ?? 0,
+      isVerified: (user['is_verified'] as bool?) ?? false,
+      joinedAt: DateTime.parse(user['joined_at'] as String),
+      currentMood: user['current_mood'] as String?,
+      accountStatus: (user['account_status'] as String?) ?? 'active',
+      safetyTier: (user['safety_tier'] as String?) ?? 'standard',
+      vents: (stats['vents'] as num?)?.toInt() ?? 0,
+      comments: (stats['comments'] as num?)?.toInt(),
+      reactionsReceived: (stats['reactions_received'] as num?)?.toInt(),
+      activeTribes: (stats['active_tribes'] as num?)?.toInt() ?? 0,
+      badgesCount: (stats['badges_count'] as num?)?.toInt(),
+      currentStreak: (stats['current_streak'] as num?)?.toInt(),
+      bestStreak: (stats['best_streak'] as num?)?.toInt(),
+      topMoods: moods,
+      mutualFriendsCount:
+          (mutuals['mutual_friends_count'] as num?)?.toInt() ?? 0,
+      mutualFriendSample: mutualFriendSample,
+      mutualTribes: mutualTribes,
+      mostLiked: toPost(highlights['most_liked'] as Map<String, dynamic>?),
+      mostCommented:
+          toPost(highlights['most_commented'] as Map<String, dynamic>?),
+      recentPosts: recent,
+      badges: badges,
+    );
+  }
+
   Future<List<BlockedUser>> myBlocks() async {
     final rows = await _client
         .from('my_blocks')

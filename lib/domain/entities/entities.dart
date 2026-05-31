@@ -701,6 +701,131 @@ class FriendRequest {
   });
 }
 
+/// One mood bucket in the friend-profile distribution.
+class MoodCount {
+  final String mood;
+  final int count;
+  const MoodCount({required this.mood, required this.count});
+}
+
+/// A high-engagement post surfaced on a friend's profile.
+class ProfileHighlightPost {
+  final String postId;
+  final String content;
+  final int likes;
+  final int comments;
+  final DateTime createdAt;
+  final String category;
+  final String? mood;
+  final String? crisisLevel;
+
+  const ProfileHighlightPost({
+    required this.postId,
+    required this.content,
+    required this.likes,
+    required this.comments,
+    required this.createdAt,
+    required this.category,
+    this.mood,
+    this.crisisLevel,
+  });
+}
+
+/// A small slice of a mutual friend, used for the "you have N friends
+/// in common" row on a friend's profile.
+class MutualFriend {
+  final String userId;
+  final String pseudonym;
+  final String avatarSeed;
+  const MutualFriend({
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+  });
+}
+
+class MutualTribe {
+  final String tribeId;
+  final String name;
+  final String slug;
+  const MutualTribe({
+    required this.tribeId,
+    required this.name,
+    required this.slug,
+  });
+}
+
+/// A friend's profile (or stranger's stripped-down view), returned in
+/// one round-trip by the `user_profile_summary` RPC. The `relation`
+/// field controls how much of this is populated — `stats` is sparse
+/// and `highlights` is empty when the viewer is not a friend.
+class UserProfileView {
+  final FriendStatus relation;
+
+  // user
+  final String userId;
+  final String pseudonym;
+  final String avatarSeed;
+  final int karma;
+  final bool isVerified;
+  final DateTime joinedAt;
+  final String? currentMood;
+  final String accountStatus;
+  final String safetyTier;
+
+  // stats (sparse for non-friends)
+  final int vents;
+  final int? comments;
+  final int? reactionsReceived;
+  final int activeTribes;
+  final int? badgesCount;
+  final int? currentStreak;
+  final int? bestStreak;
+  final List<MoodCount> topMoods;
+
+  // mutuals
+  final int mutualFriendsCount;
+  final List<MutualFriend> mutualFriendSample;
+  final List<MutualTribe> mutualTribes;
+
+  // highlights (empty for non-friends)
+  final ProfileHighlightPost? mostLiked;
+  final ProfileHighlightPost? mostCommented;
+  final List<ProfileHighlightPost> recentPosts;
+  final List<UserBadge> badges;
+
+  const UserProfileView({
+    required this.relation,
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.karma,
+    required this.isVerified,
+    required this.joinedAt,
+    required this.accountStatus,
+    required this.safetyTier,
+    required this.vents,
+    required this.activeTribes,
+    required this.mutualFriendsCount,
+    required this.mutualFriendSample,
+    required this.mutualTribes,
+    required this.topMoods,
+    required this.recentPosts,
+    required this.badges,
+    this.currentMood,
+    this.comments,
+    this.reactionsReceived,
+    this.badgesCount,
+    this.currentStreak,
+    this.bestStreak,
+    this.mostLiked,
+    this.mostCommented,
+  });
+
+  bool get isFriend => relation == FriendStatus.friends;
+  bool get isSelf => relation == FriendStatus.self;
+}
+
 /// A user the current user has blocked.
 class BlockedUser {
   final String userId;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/providers.dart';
@@ -70,8 +71,27 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () =>
+                              context.push('/user/${post.authorId}'),
+                          child: Text(
+                            'View profile',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
                         FriendActionButton(
                           otherUserId: post.authorId!,
                           otherPseudonym:

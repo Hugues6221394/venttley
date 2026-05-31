@@ -989,6 +989,99 @@ class MockBackend {
     }).toList();
   }
 
+  Future<UserProfileView?> userProfile(String otherUserId) async {
+    final me = _me;
+    if (me == null) return null;
+    final u = _findUser(otherUserId);
+    if (u == null) return null;
+    final relation = await friendStatus(otherUserId);
+    final theirPosts = _posts
+        .where((p) => p.authorId == otherUserId)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final theirTribesIds = _joinedTribes; // mock doesn't track per-user
+
+    // Mutual tribes: joined by me intersected with target's. Mock doesn't
+    // model per-user memberships beyond _joinedTribes, so we treat both
+    // sides as the current viewer's joined set for a plausible-looking
+    // dev experience.
+    final mutualTribesList = _tribes
+        .where((t) => theirTribesIds.contains(t.tribeId))
+        .map((t) => MutualTribe(
+              tribeId: t.tribeId,
+              name: t.name,
+              slug: t.slug,
+            ))
+        .toList();
+
+    final isFriend =
+        relation == FriendStatus.friends || relation == FriendStatus.self;
+
+    final moodCounts = <String, int>{};
+    for (final p in theirPosts) {
+      moodCounts[p.postMood] = (moodCounts[p.postMood] ?? 0) + 1;
+    }
+    final topMoods = moodCounts.entries.map((e) => MoodCount(
+          mood: e.key,
+          count: e.value,
+        )).toList()
+      ..sort((a, b) => b.count.compareTo(a.count));
+
+    final mostLiked = theirPosts.isEmpty
+        ? null
+        : (theirPosts.toList()..sort((a, b) => b.likesCount.compareTo(a.likesCount)))
+            .first;
+    final mostCommented = theirPosts.isEmpty
+        ? null
+        : (theirPosts.toList()..sort((a, b) => b.commentsCount.compareTo(a.commentsCount)))
+            .first;
+    ProfileHighlightPost? toHl(Post? p) => p == null
+        ? null
+        : ProfileHighlightPost(
+            postId: p.postId,
+            content: p.content,
+            likes: p.likesCount,
+            comments: p.commentsCount,
+            createdAt: p.createdAt,
+            category: p.categoryName,
+            mood: p.postMood,
+            crisisLevel: p.crisisLevel,
+          );
+
+    return UserProfileView(
+      relation: relation,
+      userId: u.userId,
+      pseudonym: u.anonymousPseudonym,
+      avatarSeed: u.avatarSeed,
+      karma: 0,
+      isVerified: u.isVerified,
+      // Mock users don't carry a joined-at; pin to today for plausibility.
+      joinedAt: DateTime.now().subtract(const Duration(days: 7)),
+      currentMood: u.currentMood,
+      accountStatus: 'active',
+      safetyTier: 'standard',
+      vents: theirPosts.length,
+      comments: isFriend ? 0 : null,
+      reactionsReceived: isFriend
+          ? theirPosts.fold<int>(0, (s, p) => s + p.likesCount)
+          : null,
+      activeTribes: mutualTribesList.length,
+      badgesCount: isFriend ? 0 : null,
+      currentStreak: isFriend ? 0 : null,
+      bestStreak: isFriend ? 0 : null,
+      topMoods: isFriend ? topMoods.take(5).toList() : const [],
+      mutualFriendsCount: 0,
+      mutualFriendSample: const [],
+      mutualTribes: mutualTribesList,
+      mostLiked: isFriend ? toHl(mostLiked) : null,
+      mostCommented: isFriend ? toHl(mostCommented) : null,
+      recentPosts: isFriend
+          ? theirPosts.take(6).map((p) => toHl(p)!).toList()
+          : const [],
+      badges: const [],
+    );
+  }
+
   Future<List<BlockedUser>> myBlocks() async {
     final me = _me;
     if (me == null) return const [];

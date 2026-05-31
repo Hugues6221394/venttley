@@ -241,6 +241,13 @@ final friendStatusProvider =
         (ref, otherUserId) async =>
             ref.watch(repositoryProvider).friendStatus(otherUserId));
 
+/// Single-roundtrip Friend Profile read. Null = blocked-by-them or
+/// user doesn't exist; the screen renders a 404 in that case.
+final userProfileProvider =
+    FutureProvider.autoDispose.family<UserProfileView?, String>(
+        (ref, userId) async =>
+            ref.watch(repositoryProvider).userProfile(userId));
+
 /// Reports filed against posts in a specific Tribe — Keeper-only.
 final tribeReportsProvider =
     FutureProvider.autoDispose.family<List<TribeReport>, String>(

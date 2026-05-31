@@ -107,8 +107,11 @@ class _FriendsTab extends ConsumerWidget {
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 subtitle: Text(_relative(f.acceptedAt)),
-                trailing: const Icon(Icons.chevron_right, size: 18),
-                onTap: () => _showFriendActions(ctx, ref, f),
+                trailing: IconButton(
+                  icon: const Icon(Icons.more_vert, size: 18),
+                  onPressed: () => _showFriendActions(ctx, ref, f),
+                ),
+                onTap: () => ctx.push('/user/${f.userId}'),
               );
             },
           ),
@@ -291,6 +294,7 @@ class _IncomingRequestTile extends ConsumerWidget {
               maxLines: 2, overflow: TextOverflow.ellipsis)
           : Text(_relative(request.createdAt),
               style: const TextStyle(color: Colors.black54)),
+      onTap: () => context.push('/user/${request.otherUserId}'),
       trailing: Wrap(
         spacing: 4,
         children: [
@@ -334,6 +338,7 @@ class _OutgoingRequestTile extends ConsumerWidget {
       ),
       title: Text('@${request.otherPseudonym}'),
       subtitle: Text(_relative(request.createdAt)),
+      onTap: () => context.push('/user/${request.otherUserId}'),
       trailing: TextButton(
         child: const Text('Cancel'),
         onPressed: () async {
