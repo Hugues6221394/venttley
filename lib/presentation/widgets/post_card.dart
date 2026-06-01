@@ -9,6 +9,7 @@ import '../theme/colors.dart';
 import 'anonymous_avatar.dart';
 import 'mood_chip.dart';
 import 'poll_card.dart';
+import 'share_post_to_friend_sheet.dart';
 
 class PostCard extends ConsumerWidget {
   const PostCard({
@@ -182,9 +183,27 @@ class PostCard extends ConsumerWidget {
                     icon: Icon(Icons.more_horiz, color: muted),
                     tooltip: 'More',
                     onSelected: (v) {
-                      if (v == 'report') _openReportSheet(context, ref, post.postId);
+                      if (v == 'report') {
+                        _openReportSheet(context, ref, post.postId);
+                      } else if (v == 'share_friend') {
+                        showSharePostToFriendSheet(
+                          context,
+                          postId: post.postId,
+                          previewSnippet: post.content,
+                        );
+                      }
                     },
                     itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'share_friend',
+                        child: Row(
+                          children: [
+                            Icon(Icons.send_rounded, size: 16),
+                            SizedBox(width: 8),
+                            Text('Share to a friend'),
+                          ],
+                        ),
+                      ),
                       PopupMenuItem(
                         value: 'report',
                         child: Row(

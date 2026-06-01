@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
@@ -250,39 +252,62 @@ class _Bubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final mine = message.sentByMe;
+    final snapshot = message.attachedPostSnapshot;
+    final hasText = message.plaintext.trim().isNotEmpty;
+
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
         crossAxisAlignment:
             mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-            decoration: BoxDecoration(
-              color: mine
-                  ? scheme.primary
-                  : Theme.of(context).cardColor,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(18),
-                topRight: const Radius.circular(18),
-                bottomLeft: Radius.circular(mine ? 18 : 4),
-                bottomRight: Radius.circular(mine ? 4 : 18),
+          // Shared-post card — rendered as its own bubble above any
+          // accompanying text so the conversation reads "they sent me
+          // this vent" then "their thought about it" in order.
+          if (snapshot != null)
+            Container(
+              margin: EdgeInsets.only(
+                top: 4,
+                bottom: hasText ? 2 : 4,
               ),
-              border: mine
-                  ? null
-                  : Border.all(
-                      color: VentlyColors.softMauve.withOpacity(0.4)),
-            ),
-            child: Text(
-              message.plaintext,
-              style: TextStyle(
-                color: mine ? Colors.white : null,
-                height: 1.35,
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.78,
+              ),
+              child: _SharedPostCard(
+                snapshot: snapshot,
+                attachedPostId: message.attachedPostId,
+                mine: mine,
               ),
             ),
-          ),
+
+          if (hasText)
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+              decoration: BoxDecoration(
+                color: mine
+                    ? scheme.primary
+                    : Theme.of(context).cardColor,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(18),
+                  topRight: const Radius.circular(18),
+                  bottomLeft: Radius.circular(mine ? 18 : 4),
+                  bottomRight: Radius.circular(mine ? 4 : 18),
+                ),
+                border: mine
+                    ? null
+                    : Border.all(
+                        color: VentlyColors.softMauve.withOpacity(0.4)),
+              ),
+              child: Text(
+                message.plaintext,
+                style: TextStyle(
+                  color: mine ? Colors.white : null,
+                  height: 1.35,
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text(
@@ -330,6 +355,119 @@ class _Composer extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shared-post bubble rendered inside the chat thread. Reads from the
+/// snapshot the sender captured at share time (migration 0027) so the
+/// card still renders if the original post was later deleted.
+///
+/// Tapping deep-links to /post/<id> when the original still exists.
+class _SharedPostCard extends StatelessWidget {
+  const _SharedPostCard({
+    required this.snapshot,
+    required this.attachedPostId,
+    required this.mine,
+  });
+
+  final SharedPostSnapshot snapshot;
+  final String? attachedPostId;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final deleted = attachedPostId == null; // FK was nulled on post delete
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: deleted
+            ? null
+            : () => context.push('/post/${snapshot.postId}'),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: mine ? scheme.primary.withOpacity(0.10) : scheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: scheme.primary.withOpacity(0.35),
+              width: 1.2,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    snapshot.isWhisper
+                        ? Icons.nightlight_round
+                        : Icons.format_quote,
+                    size: 14,
+                    color: scheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      snapshot.authorPseudonym ?? '@anonymous',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.primary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (snapshot.mood != null) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      Moods.emoji(snapshot.mood!),
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                deleted
+                    ? '[Original post deleted]\n\n${snapshot.content}'
+                    : snapshot.content,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  fontStyle: deleted ? FontStyle.italic : FontStyle.normal,
+                  color: deleted
+                      ? Theme.of(context).colorScheme.onSurface.withOpacity(0.7)
+                      : null,
+                ),
+                maxLines: 6,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(
+                    Icons.open_in_new,
+                    size: 11,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    deleted ? 'Original no longer available' : 'Open original',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
