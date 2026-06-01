@@ -451,6 +451,12 @@ class ChatMessage {
   final DateTime createdAt;
   final bool sentByMe;
 
+  /// When set, this message carries a shared post. The snapshot is
+  /// authoritative — the original may have been soft-deleted later, but
+  /// the conversation can still render the card from the snapshot.
+  final String? attachedPostId;
+  final SharedPostSnapshot? attachedPostSnapshot;
+
   const ChatMessage({
     required this.messageId,
     required this.roomId,
@@ -458,7 +464,52 @@ class ChatMessage {
     required this.plaintext,
     required this.createdAt,
     required this.sentByMe,
+    this.attachedPostId,
+    this.attachedPostSnapshot,
   });
+
+  bool get hasAttachedPost => attachedPostSnapshot != null;
+}
+
+/// Captured at the moment a friend shared a post into a chat. Survives
+/// the original being deleted, expired (whispers), or moved private.
+class SharedPostSnapshot {
+  final String postId;
+  final String content;
+  final String? authorPseudonym;
+  final String? authorAvatarSeed;
+  final String? category;
+  final String? mood;
+  final bool isWhisper;
+  final DateTime createdAt;
+
+  const SharedPostSnapshot({
+    required this.postId,
+    required this.content,
+    required this.createdAt,
+    this.authorPseudonym,
+    this.authorAvatarSeed,
+    this.category,
+    this.mood,
+    this.isWhisper = false,
+  });
+
+  static SharedPostSnapshot? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final m = raw.cast<String, dynamic>();
+    final postId = m['post_id'] as String?;
+    if (postId == null) return null;
+    return SharedPostSnapshot(
+      postId: postId,
+      content: (m['content'] as String?) ?? '',
+      authorPseudonym: m['author_pseudonym'] as String?,
+      authorAvatarSeed: m['author_avatar_seed'] as String?,
+      category: m['category'] as String?,
+      mood: m['mood'] as String?,
+      isWhisper: (m['is_whisper'] as bool?) ?? false,
+      createdAt: DateTime.parse(m['created_at'] as String),
+    );
+  }
 }
 
 /// A two-option (or more) poll attached to a Post.

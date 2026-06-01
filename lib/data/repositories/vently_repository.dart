@@ -930,16 +930,24 @@ class VentlyRepository {
 
   /// Private DM send. V1 is plaintext server-side so moderators can review
   /// reported chats; we do not advertise end-to-end encryption.
-  Future<ChatMessage> sendMessage({required String roomId, required String plaintext}) {
+  Future<ChatMessage> sendMessage({
+    required String roomId,
+    required String plaintext,
+    String? attachedPostId,
+  }) {
     final live = _live;
     if (live != null) {
       return live.sendMessage(
         roomId: roomId,
         payload: plaintext,
+        attachedPostId: attachedPostId,
       );
     }
-    return Future.value(
-        _mock.sendMessage(roomId: roomId, plaintext: plaintext));
+    return Future.value(_mock.sendMessage(
+      roomId: roomId,
+      plaintext: plaintext,
+      attachedPostId: attachedPostId,
+    ));
   }
 
   // ===================== Prompts =====================

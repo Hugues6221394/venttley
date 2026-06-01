@@ -1284,7 +1284,24 @@ class MockBackend {
   ChatMessage sendMessage({
     required String roomId,
     required String plaintext,
+    String? attachedPostId,
   }) {
+    SharedPostSnapshot? snapshot;
+    if (attachedPostId != null) {
+      final p = _posts.firstWhereOrNull((x) => x.postId == attachedPostId);
+      if (p != null) {
+        snapshot = SharedPostSnapshot(
+          postId: p.postId,
+          content: p.content,
+          authorPseudonym: p.authorPseudonym,
+          authorAvatarSeed: p.authorAvatarSeed,
+          category: p.categoryName,
+          mood: p.postMood,
+          isWhisper: p.isWhisper,
+          createdAt: p.createdAt,
+        );
+      }
+    }
     final msg = ChatMessage(
       messageId: _uuid.v4(),
       roomId: roomId,
@@ -1292,6 +1309,8 @@ class MockBackend {
       plaintext: plaintext,
       createdAt: DateTime.now(),
       sentByMe: true,
+      attachedPostId: attachedPostId,
+      attachedPostSnapshot: snapshot,
     );
     _messages.putIfAbsent(roomId, () => []).add(msg);
     // Add a soft auto-reply so the conversation breathes.

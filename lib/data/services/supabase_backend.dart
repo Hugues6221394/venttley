@@ -1536,22 +1536,27 @@ class SupabaseBackend {
   }
 
   Future<List<ChatMessage>> messages(String roomId) async {
-    final uid = _uid;
     final rows = await _client
         .from('chat_messages')
         .select()
         .eq('room_id', roomId)
         .order('created_at', ascending: true);
-    return rows
-        .map<ChatMessage>((r) => ChatMessage(
-              messageId: r['message_id'] as String,
-              roomId: r['room_id'] as String,
-              senderId: (r['sender_id'] as String?) ?? 'unknown',
-              plaintext: r['encrypted_payload'] as String,
-              createdAt: DateTime.parse(r['created_at'] as String),
-              sentByMe: r['sender_id'] == uid,
-            ))
-        .toList();
+    return rows.map<ChatMessage>(_messageFromRow).toList();
+  }
+
+  ChatMessage _messageFromRow(Map<String, dynamic> r) {
+    final uid = _uid;
+    return ChatMessage(
+      messageId: r['message_id'] as String,
+      roomId: r['room_id'] as String,
+      senderId: (r['sender_id'] as String?) ?? 'unknown',
+      plaintext: (r['encrypted_payload'] as String?) ?? '',
+      createdAt: DateTime.parse(r['created_at'] as String),
+      sentByMe: r['sender_id'] == uid,
+      attachedPostId: r['attached_post_id'] as String?,
+      attachedPostSnapshot:
+          SharedPostSnapshot.fromJson(r['attached_post_snapshot']),
+    );
   }
 
   /// Realtime stream of messages for a single room. Re-fetches on every
@@ -1584,30 +1589,40 @@ class SupabaseBackend {
     return controller.stream;
   }
 
+  /// Send a plain chat message OR attach a shared post via the
+  /// `send_chat_message` RPC. The RPC enforces room participation +
+  /// active status, and captures the post snapshot at send time so
+  /// the receiver can still see the card if the original gets deleted.
   Future<ChatMessage> sendMessage({
     required String roomId,
     required String payload,
+    String? attachedPostId,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
-    final row = await _client
-        .from('chat_messages')
-        .insert({
-          'room_id':           roomId,
-          'sender_id':         uid,
-          // Column name is historical from the E2EE plan we cut for v1.
-          'encrypted_payload': payload,
-          'nonce_iv':          'v1-plaintext',
-        })
-        .select()
-        .single();
+    final res = await _client.rpc(
+      'send_chat_message',
+      params: {
+        'p_room_id': roomId,
+        'p_payload': payload,
+        'p_attached_post_id': attachedPostId,
+      },
+    );
+    final rows = res as List;
+    if (rows.isEmpty) {
+      throw StateError('send_chat_message returned no row');
+    }
+    final r = (rows.first as Map).cast<String, dynamic>();
     return ChatMessage(
-      messageId: row['message_id'] as String,
-      roomId: roomId,
+      messageId: r['message_id'] as String,
+      roomId: r['room_id'] as String,
       senderId: uid,
-      plaintext: payload,
-      createdAt: DateTime.parse(row['created_at'] as String),
+      plaintext: (r['payload'] as String?) ?? payload,
+      createdAt: DateTime.parse(r['created_at'] as String),
       sentByMe: true,
+      attachedPostId: r['attached_post_id'] as String?,
+      attachedPostSnapshot:
+          SharedPostSnapshot.fromJson(r['attached_post_snapshot']),
     );
   }
 
