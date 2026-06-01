@@ -887,22 +887,39 @@ class VentlyRepository {
     return _mock.roomsStream.map((_) => _mock.roomMessages(roomId));
   }
 
+  /// Returns true when the current user is allowed to DM [peerUserId].
+  /// Used by UI to show/hide the Message CTA on Friend Profile and
+  /// inbox surfaces. Mock backend returns true if mutually friends.
+  Future<bool> canDm(String peerUserId) async {
+    final live = _live;
+    if (live != null) return live.canDm(peerUserId);
+    final s = await _mock.friendStatus(peerUserId);
+    return s == FriendStatus.friends || s == FriendStatus.self;
+  }
+
+  /// Open-or-create the DM with [peerUserId]. Throws
+  /// [DmGatingException] when the pair isn't friends (migration 0026).
   Future<ChatRoom> sendMessageRequest({
+    required String peerUserId,
     required String peerPseudonym,
     required String peerAvatarSeed,
     required String preview,
+    String? originPostId,
   }) async {
     final live = _live;
     if (live != null) {
-      // For the live demo we ping a random known peer because we don't yet
-      // surface their UUID through the UI. The post detail screen will pass
-      // the author's user_id directly once user→user routing ships.
-      final peer = await live.randomPeer();
-      final peerId = peer?['user_id'] as String?;
-      if (peerId == null) {
-        throw StateError('No peer available to message');
-      }
-      return live.sendMessageRequest(peerUserId: peerId, preview: preview);
+      return live.sendMessageRequest(
+        peerUserId: peerUserId,
+        preview: preview,
+        originPostId: originPostId,
+      );
+    }
+    // Mock path: enforce the same gate locally so the UX is consistent.
+    final s = await _mock.friendStatus(peerUserId);
+    if (s != FriendStatus.friends && s != FriendStatus.self) {
+      throw const DmGatingException(
+        'Send a friend request first — you can only message friends.',
+      );
     }
     return _mock.sendMessageRequest(
       peerPseudonym: peerPseudonym,

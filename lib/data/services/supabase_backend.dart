@@ -1446,6 +1446,18 @@ class SupabaseBackend {
         .toList();
   }
 
+  Future<bool> canDm(String peerUserId) async {
+    final result = await _client.rpc(
+      'can_dm',
+      params: {'p_target': peerUserId},
+    );
+    return (result as bool?) ?? false;
+  }
+
+  /// Open-or-create the chat room with a friend. Routes through the
+  /// `start_chat_room` SECURITY DEFINER RPC, which gates on friendship
+  /// (migration 0026). Throws [DmGatingException] when the caller is
+  /// not friends with the target.
   Future<ChatRoom> sendMessageRequest({
     required String peerUserId,
     required String preview,
@@ -1453,27 +1465,48 @@ class SupabaseBackend {
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
-    final row = await _client
-        .from('chat_rooms')
-        .insert({
-          'initiated_by':    uid,
-          'received_by':     peerUserId,
-          'origin_post_id':  originPostId,
-          'request_preview': preview,
-          'room_status':     'pending_request',
-        })
-        .select(
-            'room_id, request_preview, room_status, created_at, peer:received_by(anonymous_pseudonym, avatar_seed)')
-        .single();
-    final peer = row['peer'] as Map<String, dynamic>?;
+    final List rows;
+    try {
+      final res = await _client.rpc(
+        'start_chat_room',
+        params: {
+          'p_target': peerUserId,
+          'p_preview': preview,
+          'p_origin_post_id': originPostId,
+        },
+      );
+      rows = res as List;
+    } on PostgrestException catch (e) {
+      // The RPC raises a friendly message when the caller isn't a
+      // friend. Anything else bubbles untouched.
+      if (e.message.contains('DM blocked')) {
+        throw const DmGatingException(
+          'Send a friend request first — you can only message friends.',
+        );
+      }
+      rethrow;
+    }
+    if (rows.isEmpty) {
+      throw StateError('start_chat_room returned no row');
+    }
+    final row = rows.first as Map<String, dynamic>;
+
+    // The RPC doesn't join the peer profile — fetch it separately so the
+    // returned ChatRoom has a pseudonym/avatar for immediate render.
+    final peer = await _client
+        .from('users')
+        .select('anonymous_pseudonym, avatar_seed')
+        .eq('user_id', peerUserId)
+        .maybeSingle();
     return ChatRoom(
       roomId: row['room_id'] as String,
-      peerPseudonym: peer == null ? '@anonymous' : '@${peer['anonymous_pseudonym']}',
+      peerPseudonym:
+          peer == null ? '@anonymous' : '@${peer['anonymous_pseudonym']}',
       peerAvatarSeed: (peer?['avatar_seed'] as String?) ?? 'default-orb',
       requestPreview: (row['request_preview'] as String?) ?? '',
       roomStatus: row['room_status'] as String,
       createdAt: DateTime.parse(row['created_at'] as String),
-      initiatedByMe: true,
+      initiatedByMe: (row['initiated_by_me'] as bool?) ?? true,
     );
   }
 

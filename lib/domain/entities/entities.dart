@@ -826,6 +826,17 @@ class UserProfileView {
   bool get isSelf => relation == FriendStatus.self;
 }
 
+/// Thrown by [VentlyRepository.sendMessageRequest] when DM gating
+/// rejects a chat-room creation (caller is not friends with target).
+/// The UI catches this to swap the snackbar for a "send a friend
+/// request first" prompt instead of leaking the raw error.
+class DmGatingException implements Exception {
+  final String message;
+  const DmGatingException(this.message);
+  @override
+  String toString() => message;
+}
+
 /// A user the current user has blocked.
 class BlockedUser {
   final String userId;
