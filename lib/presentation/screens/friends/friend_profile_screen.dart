@@ -92,12 +92,12 @@ class FriendProfileScreen extends ConsumerWidget {
 
 // ─────────────────────── Hero ───────────────────────
 
-class _Hero extends StatelessWidget {
+class _Hero extends ConsumerWidget {
   const _Hero({required this.profile});
   final UserProfileView profile;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final daysSince =
         DateTime.now().difference(profile.joinedAt).inDays.clamp(0, 999999);
@@ -157,11 +157,119 @@ class _Hero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          FriendActionButton(
-            otherUserId: profile.userId,
-            otherPseudonym: profile.pseudonym,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              FriendActionButton(
+                otherUserId: profile.userId,
+                otherPseudonym: profile.pseudonym,
+              ),
+              if (profile.isFriend) ...[
+                const SizedBox(width: 8),
+                _MessageButton(profile: profile),
+              ],
+            ],
           ),
+          if (!profile.isFriend && profile.relation != FriendStatus.self)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Friends can DM. Send a request to unlock messaging.',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: scheme.onSurface.withOpacity(0.55),
+                ),
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+class _MessageButton extends ConsumerStatefulWidget {
+  const _MessageButton({required this.profile});
+  final UserProfileView profile;
+
+  @override
+  ConsumerState<_MessageButton> createState() => _MessageButtonState();
+}
+
+class _MessageButtonState extends ConsumerState<_MessageButton> {
+  bool _busy = false;
+
+  Future<void> _openOrCreateRoom() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final repo = ref.read(repositoryProvider);
+    try {
+      final room = await repo.sendMessageRequest(
+        peerUserId: widget.profile.userId,
+        peerPseudonym: '@${widget.profile.pseudonym}',
+        peerAvatarSeed: widget.profile.avatarSeed,
+        preview: '', // friends-only DM: no preview gate needed
+      );
+      if (!mounted) return;
+      context.push('/chat/${room.roomId}');
+    } on DmGatingException catch (e) {
+      // Shouldn't happen (we only render this button when isFriend),
+      // but defensive: friendship can change between render and tap.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not start chat: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: _busy ? null : _openOrCreateRoom,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: scheme.primary.withOpacity(0.6)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_busy)
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: scheme.primary,
+                  ),
+                )
+              else
+                Icon(Icons.chat_bubble_outline,
+                    size: 15, color: scheme.primary),
+              const SizedBox(width: 6),
+              Text(
+                'Message',
+                style: TextStyle(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
