@@ -791,6 +791,12 @@ class NotificationItem {
   final DateTime createdAt;
   final bool isRead;
 
+  /// Raw payload from the DB row. Tile renderers read kind-specific
+  /// fields out of here (e.g. tribe_slug + prompt_id for tribe_prompt
+  /// from migration 0036) so the screen can route on tap without a
+  /// second fetch.
+  final Map<String, dynamic> payload;
+
   const NotificationItem({
     required this.id,
     required this.kind,
@@ -798,6 +804,7 @@ class NotificationItem {
     required this.body,
     required this.createdAt,
     required this.isRead,
+    this.payload = const {},
   });
 }
 

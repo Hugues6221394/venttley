@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/providers.dart';
@@ -230,6 +231,10 @@ class _NotificationTile extends ConsumerWidget {
           await ref.read(repositoryProvider).markNotificationRead(item.id);
           ref.invalidate(notificationsProvider);
         }
+        // Route by kind. Whatever each notification "is about" should
+        // open the right surface so taps feel resolved, not silent.
+        final dest = _destinationFor(item);
+        if (dest != null && context.mounted) context.push(dest);
       },
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -323,6 +328,28 @@ class _NotificationTile extends ConsumerWidget {
       case 'tribe_invite':    return Icons.group_add_outlined;
       case 'post_like':       return Icons.favorite_border;
       default:                return Icons.notifications_outlined;
+    }
+  }
+
+  /// Where tapping a notification should land. Returns null when there
+  /// isn't a meaningful destination (we still mark-as-read in that case).
+  String? _destinationFor(NotificationItem item) {
+    switch (item.kind) {
+      case 'tribe_prompt':
+        final slug = item.payload['tribe_slug'] as String?;
+        return slug != null ? '/tribe/$slug' : null;
+      case 'tribe_invite':
+        final slug = item.payload['tribe_slug'] as String?;
+        return slug != null ? '/tribe/$slug' : null;
+      case 'comment_reply':
+      case 'post_like':
+        final postId = item.payload['post_id'] as String?;
+        return postId != null ? '/post/$postId' : null;
+      case 'message_request':
+        final roomId = item.payload['room_id'] as String?;
+        return roomId != null ? '/chat/$roomId' : null;
+      default:
+        return null;
     }
   }
 }

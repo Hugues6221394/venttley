@@ -2069,16 +2069,30 @@ class SupabaseBackend {
         .order('created_at', ascending: false)
         .limit(50);
     return rows.map<NotificationItem>((r) {
-      final payload = r['payload'] as Map<String, dynamic>;
+      final payload =
+          (r['payload'] as Map?)?.cast<String, dynamic>() ?? const {};
       return NotificationItem(
         id: r['notification_id'] as String,
         kind: r['kind'] as String,
-        title: (payload['title'] as String?) ?? r['kind'] as String,
+        title: (payload['title'] as String?) ?? _kindLabel(r['kind'] as String),
         body: (payload['body'] as String?) ?? '',
         createdAt: DateTime.parse(r['created_at'] as String),
         isRead: r['is_read'] as bool,
+        payload: payload,
       );
     }).toList();
+  }
+
+  String _kindLabel(String kind) {
+    switch (kind) {
+      case 'tribe_prompt':    return 'New tribe prompt';
+      case 'tribe_invite':    return 'Tribe invitation';
+      case 'message_request': return 'Message request';
+      case 'comment_reply':   return 'New reply';
+      case 'post_like':       return 'Reaction on your vent';
+      case 'admin_broadcast': return 'Announcement';
+      default:                return kind;
+    }
   }
 
   // ===================================================================
