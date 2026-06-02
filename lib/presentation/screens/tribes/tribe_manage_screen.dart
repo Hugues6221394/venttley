@@ -87,9 +87,12 @@ class TribeManageScreen extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
             _HeaderCard(tribe: tribe, posts: posts),
+            _BrandingCard(tribe: tribe),
             _AnalyticsGrid(tribe: tribe, posts: posts),
             _SentimentCard(posts: posts),
             _ActivityCard(posts: posts),
+            _PinnedPostsCard(tribe: tribe, tribePosts: posts),
+            _ScheduledPromptsCard(tribe: tribe),
             const _QuickActions(),
             _MembersCard(tribe: tribe, meId: me.userId),
             Padding(
@@ -1529,6 +1532,668 @@ class _MemberRow extends ConsumerWidget {
             child: Text(confirm),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// PLUGZ STUDIO — Branding card
+// =========================================================================
+
+class _BrandingCard extends ConsumerStatefulWidget {
+  const _BrandingCard({required this.tribe});
+  final Tribe tribe;
+
+  @override
+  ConsumerState<_BrandingCard> createState() => _BrandingCardState();
+}
+
+class _BrandingCardState extends ConsumerState<_BrandingCard> {
+  late final _welcome = TextEditingController(text: widget.tribe.welcomeMessage ?? '');
+  late String? _color = widget.tribe.themeColor;
+  bool _saving = false;
+  bool _dirty = false;
+
+  static const _palette = <String>[
+    '#D12E65', // berry
+    '#7C3AED', // violet
+    '#0EA5E9', // sky
+    '#10B981', // teal
+    '#F59E0B', // amber
+    '#EF4444', // red
+    '#475569', // slate
+  ];
+
+  @override
+  void dispose() {
+    _welcome.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await ref.read(repositoryProvider).setTribeBranding(
+            tribeId: widget.tribe.tribeId,
+            welcomeMessage: _welcome.text.trim().isEmpty ? null : _welcome.text.trim(),
+            themeColor: _color,
+          );
+      ref.invalidate(tribeBySlugProvider(widget.tribe.slug));
+      if (mounted) {
+        _dirty = false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Branding saved.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return _StudioCard(
+      title: 'Branding',
+      subtitle: 'A welcome message and accent colour for members.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _welcome,
+            maxLines: 3,
+            maxLength: 240,
+            onChanged: (_) => setState(() => _dirty = true),
+            decoration: const InputDecoration(
+              labelText: 'Welcome message',
+              hintText: 'Set the tone — this shows above the feed for everyone.',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Accent colour',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              color: scheme.onSurface.withOpacity(0.6),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final hex in _palette)
+                GestureDetector(
+                  onTap: () => setState(() {
+                    _color = hex;
+                    _dirty = true;
+                  }),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: Color(int.parse(hex.replaceFirst('#', '0xff'))),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _color == hex
+                            ? scheme.onSurface
+                            : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                ),
+              if (_color != null)
+                IconButton(
+                  icon: const Icon(Icons.close, size: 16),
+                  tooltip: 'Use brand default',
+                  onPressed: () => setState(() {
+                    _color = null;
+                    _dirty = true;
+                  }),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: (!_dirty || _saving) ? null : _save,
+              child: _saving
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Save branding'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// PLUGZ STUDIO — Pinned posts
+// =========================================================================
+
+class _PinnedPostsCard extends ConsumerWidget {
+  const _PinnedPostsCard({required this.tribe, required this.tribePosts});
+  final Tribe tribe;
+  final List<Post> tribePosts;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(tribePinnedPostsProvider(tribe.tribeId));
+    return _StudioCard(
+      title: 'Pinned posts',
+      subtitle: 'Surface the vents you want every visitor to see first.',
+      action: TextButton.icon(
+        icon: const Icon(Icons.push_pin_outlined, size: 16),
+        label: const Text('Pin from feed'),
+        onPressed: () => _showPicker(context, ref),
+      ),
+      child: async.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.symmetric(vertical: 10),
+          child: LinearProgressIndicator(minHeight: 2),
+        ),
+        error: (e, _) => Text('Could not load pins: $e'),
+        data: (list) {
+          if (list.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'Nothing pinned yet. Tap "Pin from feed" to curate.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  fontSize: 13,
+                ),
+              ),
+            );
+          }
+          return Column(
+            children: [
+              for (final p in list)
+                _PinnedRow(post: p, tribeId: tribe.tribeId),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showPicker(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _PinPickerSheet(
+        tribeId: tribe.tribeId,
+        tribePosts: tribePosts,
+      ),
+    );
+  }
+}
+
+class _PinnedRow extends ConsumerWidget {
+  const _PinnedRow({required this.post, required this.tribeId});
+  final Post post;
+  final String tribeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.push_pin,
+              size: 16, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => context.push('/post/${post.postId}'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    post.content,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13, height: 1.35),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${post.authorPseudonym} · ♡ ${post.likesCount} · 💬 ${post.commentsCount}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Unpin',
+            icon: const Icon(Icons.close, size: 16),
+            onPressed: () async {
+              await ref.read(repositoryProvider).unpinPost(tribeId, post.postId);
+              ref.invalidate(tribePinnedPostsProvider(tribeId));
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PinPickerSheet extends ConsumerWidget {
+  const _PinPickerSheet({required this.tribeId, required this.tribePosts});
+  final String tribeId;
+  final List<Post> tribePosts;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pinned = ref.watch(tribePinnedPostsProvider(tribeId)).valueOrNull ?? const [];
+    final pinnedIds = pinned.map((p) => p.postId).toSet();
+    final candidates =
+        tribePosts.where((p) => !pinnedIds.contains(p.postId)).toList();
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.75,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 6),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Pick a post to pin',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: candidates.isEmpty
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text(
+                            'No more posts to pin. Reload after a member vents.',
+                            style: TextStyle(color: Colors.black54),
+                            textAlign: TextAlign.center),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: candidates.length,
+                      separatorBuilder: (_, __) => const Divider(height: 0),
+                      itemBuilder: (ctx, i) {
+                        final p = candidates[i];
+                        return ListTile(
+                          title: Text(
+                            p.content,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          subtitle: Text(
+                            '${p.authorPseudonym} · ♡ ${p.likesCount} · 💬 ${p.commentsCount}',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          trailing: const Icon(Icons.push_pin_outlined, size: 18),
+                          onTap: () async {
+                            await ref
+                                .read(repositoryProvider)
+                                .pinPost(tribeId, p.postId);
+                            ref.invalidate(tribePinnedPostsProvider(tribeId));
+                            if (context.mounted) Navigator.of(ctx).pop();
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// PLUGZ STUDIO — Scheduled prompts
+// =========================================================================
+
+class _ScheduledPromptsCard extends ConsumerWidget {
+  const _ScheduledPromptsCard({required this.tribe});
+  final Tribe tribe;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(tribePromptsProvider(tribe.tribeId));
+    return _StudioCard(
+      title: 'Prompts',
+      subtitle: 'Spark conversation now or schedule for later.',
+      action: TextButton.icon(
+        icon: const Icon(Icons.add, size: 16),
+        label: const Text('New prompt'),
+        onPressed: () => _showComposer(context, ref),
+      ),
+      child: async.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.symmetric(vertical: 10),
+          child: LinearProgressIndicator(minHeight: 2),
+        ),
+        error: (e, _) => Text('Could not load prompts: $e'),
+        data: (list) {
+          if (list.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'No prompts yet. Try "What\'s been on your mind this week?"',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  fontSize: 13,
+                ),
+              ),
+            );
+          }
+          return Column(
+            children: [
+              for (final p in list) _PromptRow(prompt: p),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showComposer(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _PromptComposerSheet(tribeId: tribe.tribeId),
+    );
+  }
+}
+
+class _PromptRow extends ConsumerWidget {
+  const _PromptRow({required this.prompt});
+  final ScheduledPrompt prompt;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final scheduled = prompt.scheduledFor;
+    final canCancel = prompt.publishedAt == null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            prompt.isLive ? Icons.check_circle : Icons.schedule,
+            size: 16,
+            color: prompt.isLive ? Colors.green : scheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(prompt.text,
+                    style: const TextStyle(fontSize: 13, height: 1.35)),
+                const SizedBox(height: 2),
+                Text(
+                  scheduled == null
+                      ? (prompt.isLive ? 'Posted now' : 'Draft')
+                      : prompt.isLive
+                          ? 'Live · ${DateFormat('MMM d').format(scheduled)}'
+                          : 'Scheduled · ${DateFormat('MMM d · HH:mm').format(scheduled)}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurface.withOpacity(0.55),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (canCancel)
+            IconButton(
+              tooltip: 'Cancel',
+              icon: const Icon(Icons.close, size: 16),
+              onPressed: () async {
+                await ref
+                    .read(repositoryProvider)
+                    .cancelPrompt(prompt.tribeId, prompt.promptId);
+                ref.invalidate(tribePromptsProvider(prompt.tribeId));
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PromptComposerSheet extends ConsumerStatefulWidget {
+  const _PromptComposerSheet({required this.tribeId});
+  final String tribeId;
+
+  @override
+  ConsumerState<_PromptComposerSheet> createState() =>
+      _PromptComposerSheetState();
+}
+
+class _PromptComposerSheetState extends ConsumerState<_PromptComposerSheet> {
+  final _ctrl = TextEditingController();
+  DateTime? _when;
+  bool _busy = false;
+
+  Future<void> _pickTime() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 90)),
+      initialDate: _when ?? now.add(const Duration(days: 1)),
+    );
+    if (date == null) return;
+    if (!mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 9, minute: 0),
+    );
+    if (time == null) return;
+    setState(() => _when = DateTime(
+        date.year, date.month, date.day, time.hour, time.minute));
+  }
+
+  Future<void> _submit() async {
+    final text = _ctrl.text.trim();
+    if (text.length < 4) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(repositoryProvider).schedulePrompt(
+            tribeId: widget.tribeId,
+            text: text,
+            scheduledFor: _when,
+          );
+      ref.invalidate(tribePromptsProvider(widget.tribeId));
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not schedule: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final whenLabel = _when == null
+        ? 'Post now'
+        : DateFormat('MMM d · HH:mm').format(_when!);
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 14,
+        bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            alignment: Alignment.center,
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: scheme.onSurface.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const Text('New prompt',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _ctrl,
+            maxLines: 4,
+            maxLength: 240,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: 'e.g. What\'s the most you\'ve grown this month?',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: _pickTime,
+            icon: const Icon(Icons.schedule, size: 16),
+            label: Text(whenLabel),
+          ),
+          if (_when != null)
+            TextButton(
+              onPressed: () => setState(() => _when = null),
+              child: const Text('Post immediately instead'),
+            ),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: _busy ? null : _submit,
+            child: _busy
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : Text(_when == null ? 'Post now' : 'Schedule'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// PLUGZ STUDIO — shared card chrome
+// =========================================================================
+
+class _StudioCard extends StatelessWidget {
+  const _StudioCard({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+    this.action,
+  });
+  final String title;
+  final String subtitle;
+  final Widget child;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: scheme.outline.withOpacity(0.25)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (action != null) action!,
+              ],
+            ),
+            const SizedBox(height: 10),
+            child,
+          ],
+        ),
       ),
     );
   }

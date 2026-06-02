@@ -235,6 +235,9 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                 ],
               ),
             ),
+            if (tribe.welcomeMessage != null)
+              _TribeWelcomeBanner(message: tribe.welcomeMessage!, accent: tribe.themeColor),
+            _PinnedStrip(tribeId: tribe.tribeId),
             if (postsAsync.isLoading && posts.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(24),
@@ -317,3 +320,89 @@ class _JoinAction extends ConsumerWidget {
 final _tribePostsProvider =
     FutureProvider.autoDispose.family<List<Post>, String>(
         (ref, slug) async => ref.watch(repositoryProvider).feed(tribeSlug: slug));
+
+class _TribeWelcomeBanner extends StatelessWidget {
+  const _TribeWelcomeBanner({required this.message, this.accent});
+  final String message;
+  final String? accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = accent != null
+        ? Color(int.parse(accent!.replaceFirst('#', '0xff')))
+        : scheme.primary;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withOpacity(0.30)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.waving_hand, color: color, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: scheme.onSurface.withOpacity(0.85),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PinnedStrip extends ConsumerWidget {
+  const _PinnedStrip({required this.tribeId});
+  final String tribeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(tribePinnedPostsProvider(tribeId));
+    final list = async.valueOrNull ?? const <Post>[];
+    if (list.isEmpty) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            child: Row(
+              children: [
+                Icon(Icons.push_pin, size: 14, color: scheme.primary),
+                const SizedBox(width: 6),
+                Text(
+                  'Pinned',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                    color: scheme.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (final p in list)
+            PostCard(
+              post: p,
+              onTap: () => context.push('/post/${p.postId}'),
+            ),
+        ],
+      ),
+    );
+  }
+}
