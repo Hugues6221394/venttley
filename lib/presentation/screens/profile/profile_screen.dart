@@ -1,13 +1,17 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
+import '../../../domain/avatar/avatar_design.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/post_card.dart';
+import 'avatar_builder_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -170,10 +174,27 @@ class _HeroCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          AnonymousAvatar(
-            seed: me.avatarSeed,
-            label: me.anonymousPseudonym,
-            size: 96,
+          Stack(
+            alignment: Alignment.bottomRight,
+            children: [
+              AnonymousAvatar(
+                seed: me.avatarSeed,
+                label: me.anonymousPseudonym,
+                size: 96,
+              ),
+              Material(
+                color: Theme.of(context).colorScheme.primary,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => context.push('/profile/avatar'),
+                  child: const Padding(
+                    padding: EdgeInsets.all(7),
+                    child: Icon(Icons.edit, size: 14, color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Text(
@@ -1132,8 +1153,24 @@ class _PersonasSheet extends ConsumerStatefulWidget {
 
 class _PersonasSheetState extends ConsumerState<_PersonasSheet> {
   final _nameController = TextEditingController();
-  String _avatarSeed = 'rose-orb-${DateTime.now().millisecond.toString().padLeft(4, '0')}';
+  // New personas get a fresh randomised v2 avatar by default — the
+  // "Customize" button opens the full builder so the user can shape it.
+  String _avatarSeed = _initialPersonaSeed();
   bool _busy = false;
+
+  static String _initialPersonaSeed() {
+    final r = math.Random();
+    return AvatarDesign(
+      silhouette:
+          AvatarSilhouette.values[r.nextInt(AvatarSilhouette.values.length)],
+      palette:
+          AvatarPalette.values[r.nextInt(AvatarPalette.values.length)],
+      hair: AvatarHair.values[r.nextInt(AvatarHair.values.length)],
+      accessory:
+          AvatarAccessory.values[r.nextInt(AvatarAccessory.values.length)],
+      aura: AvatarAura.values[r.nextInt(AvatarAura.values.length)],
+    ).toSeed();
+  }
 
   @override
   void dispose() {
@@ -1207,27 +1244,29 @@ class _PersonasSheetState extends ConsumerState<_PersonasSheet> {
             const SizedBox(height: 8),
             Row(
               children: [
-                AnonymousAvatar(seed: _avatarSeed, label: '', size: 36),
-                const SizedBox(width: 10),
+                AnonymousAvatar(seed: _avatarSeed, label: _nameController.text, size: 48),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Avatar seed: $_avatarSeed',
+                    'Design an abstract avatar for this persona.',
                     style: TextStyle(
                       fontSize: 12,
                       color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                     ),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.shuffle, size: 18),
-                  onPressed: () => setState(() {
-                    final palettes = ['rose', 'mint', 'lavender', 'amber', 'teal'];
-                    final p = palettes[DateTime.now().microsecond % palettes.length];
-                    final n = (DateTime.now().millisecondsSinceEpoch % 10000)
-                        .toString()
-                        .padLeft(4, '0');
-                    _avatarSeed = '$p-orb-$n';
-                  }),
+                TextButton.icon(
+                  icon: const Icon(Icons.tune, size: 16),
+                  label: const Text('Customize'),
+                  onPressed: () async {
+                    final seed = await openAvatarBuilderForPersona(
+                      context,
+                      initialSeed: _avatarSeed,
+                    );
+                    if (seed != null && mounted) {
+                      setState(() => _avatarSeed = seed);
+                    }
+                  },
                 ),
               ],
             ),

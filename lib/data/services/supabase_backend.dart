@@ -766,6 +766,15 @@ class SupabaseBackend {
     return refreshed!;
   }
 
+  /// Persist a new avatar_seed for the current user (migration 0030).
+  /// The RPC validates the seed format server-side; we still re-fetch
+  /// the AppUser so the session in memory reflects the new look.
+  Future<AppUser> updateMyAvatar(String seed) async {
+    await _client.rpc('update_user_avatar', params: {'p_seed': seed});
+    final refreshed = await restore();
+    return refreshed!;
+  }
+
   // -------------------- Co-mod hierarchy (migration 0012) ---------------
 
   /// Member roster of a tribe with role + join date. Reads through RLS so

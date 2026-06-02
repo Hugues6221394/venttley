@@ -47,6 +47,7 @@ class AppUser {
 
   AppUser copyWith({
     String? anonymousPseudonym,
+    String? avatarSeed,
     String? currentMood,
     String? safetyTier,
     String? userRole,
@@ -59,7 +60,7 @@ class AppUser {
     return AppUser(
       userId: userId,
       anonymousPseudonym: anonymousPseudonym ?? this.anonymousPseudonym,
-      avatarSeed: avatarSeed,
+      avatarSeed: avatarSeed ?? this.avatarSeed,
       currentMood: currentMood ?? this.currentMood,
       userRole: userRole ?? this.userRole,
       isVerified: isVerified ?? this.isVerified,

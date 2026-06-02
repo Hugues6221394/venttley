@@ -382,6 +382,17 @@ class MockBackend {
   }
 
   // -------------------- Profile location --------------------
+  AppUser updateMyAvatar(String seed) {
+    final me = _me;
+    if (me == null) throw StateError('Not signed in');
+    final updated = me.copyWith(avatarSeed: seed);
+    _me = updated;
+    final i = _users.indexWhere((u) => u.userId == me.userId);
+    if (i != -1) _users[i] = updated;
+    _emitAll();
+    return updated;
+  }
+
   AppUser updateMyLocation({
     String? homeCity,
     String? homeCountry,

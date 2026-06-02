@@ -17,6 +17,7 @@ import '../screens/onboarding/recovery_key_screen.dart';
 import '../screens/notifications/notifications_screen.dart';
 import '../screens/onboarding/welcome_screen.dart';
 import '../screens/plugz/plug_profile_screen.dart';
+import '../screens/profile/avatar_builder_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/questions/questions_screen.dart';
 import '../screens/share/share_card_screen.dart';
@@ -124,6 +125,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (ctx, st) => ChatScreen(roomId: st.pathParameters['roomId']!),
       ),
       GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+      GoRoute(
+        path: '/profile/avatar',
+        builder: (_, __) => const AvatarBuilderScreen(),
+      ),
       GoRoute(path: '/friends', builder: (_, __) => const FriendsScreen()),
       GoRoute(
         path: '/user/:userId',

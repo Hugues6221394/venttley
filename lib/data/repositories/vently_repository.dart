@@ -241,6 +241,12 @@ class VentlyRepository {
   }
 
   // ===================== Profile location =====================
+  Future<AppUser> updateMyAvatar(String seed) {
+    final live = _live;
+    if (live != null) return live.updateMyAvatar(seed);
+    return Future.value(_mock.updateMyAvatar(seed));
+  }
+
   Future<AppUser> updateMyLocation({
     String? homeCity,
     String? homeCountry,
