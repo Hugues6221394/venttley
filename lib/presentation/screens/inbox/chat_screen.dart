@@ -311,7 +311,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
-class _Bubble extends StatelessWidget {
+class _Bubble extends ConsumerWidget {
   const _Bubble({required this.message, this.showSeen = false});
   final ChatMessage message;
 
@@ -320,12 +320,33 @@ class _Bubble extends StatelessWidget {
   /// indicator stays single, anchored, and unobtrusive.
   final bool showSeen;
 
+  Future<void> _react(BuildContext context, WidgetRef ref) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ReactionPalette(current: message.myReaction),
+    );
+    if (picked == null) return;
+    try {
+      await ref
+          .read(repositoryProvider)
+          .setMessageReaction(message.messageId, picked);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not react: $e')),
+        );
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final mine = message.sentByMe;
     final snapshot = message.attachedPostSnapshot;
     final hasText = message.plaintext.trim().isNotEmpty;
+    final reactions = message.reactionCounts;
 
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
@@ -353,31 +374,59 @@ class _Bubble extends StatelessWidget {
             ),
 
           if (hasText)
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-              decoration: BoxDecoration(
-                color: mine
-                    ? scheme.primary
-                    : Theme.of(context).cardColor,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(18),
-                  topRight: const Radius.circular(18),
-                  bottomLeft: Radius.circular(mine ? 18 : 4),
-                  bottomRight: Radius.circular(mine ? 4 : 18),
+            GestureDetector(
+              onLongPress: () => _react(context, ref),
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+                decoration: BoxDecoration(
+                  color: mine
+                      ? scheme.primary
+                      : Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(18),
+                    topRight: const Radius.circular(18),
+                    bottomLeft: Radius.circular(mine ? 18 : 4),
+                    bottomRight: Radius.circular(mine ? 4 : 18),
+                  ),
+                  border: mine
+                      ? null
+                      : Border.all(
+                          color: VentlyColors.softMauve.withOpacity(0.4)),
                 ),
-                border: mine
-                    ? null
-                    : Border.all(
-                        color: VentlyColors.softMauve.withOpacity(0.4)),
+                child: Text(
+                  message.plaintext,
+                  style: TextStyle(
+                    color: mine ? Colors.white : null,
+                    height: 1.35,
+                  ),
+                ),
               ),
-              child: Text(
-                message.plaintext,
-                style: TextStyle(
-                  color: mine ? Colors.white : null,
-                  height: 1.35,
-                ),
+            ),
+          if (reactions.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(
+                top: 2,
+                left: mine ? 0 : 6,
+                right: mine ? 6 : 0,
+              ),
+              child: Wrap(
+                spacing: 4,
+                children: [
+                  for (final entry in reactions.entries)
+                    _ReactionChip(
+                      emoji: PostReactions.emoji(entry.key),
+                      count: entry.value,
+                      mine: message.myReaction == entry.key,
+                      onTap: () => ref
+                          .read(repositoryProvider)
+                          .setMessageReaction(
+                            message.messageId,
+                            entry.key,
+                          ),
+                    ),
+                ],
               ),
             ),
           Padding(
@@ -659,6 +708,148 @@ class _SharedPostCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Floating emoji palette shown on long-press of a bubble. Returns the
+/// chosen reaction key to the caller via Navigator.pop.
+class _ReactionPalette extends StatelessWidget {
+  const _ReactionPalette({required this.current});
+  final String? current;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.12),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              for (final key in PostReactions.all)
+                _PaletteEmoji(
+                  emoji: PostReactions.emoji(key),
+                  label: PostReactions.label(key),
+                  selected: key == current,
+                  onTap: () => Navigator.of(context).pop(key),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaletteEmoji extends StatelessWidget {
+  const _PaletteEmoji({
+    required this.emoji,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+  final String emoji;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkResponse(
+      onTap: onTap,
+      radius: 28,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? scheme.primary.withOpacity(0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 26)),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Small pill below a bubble showing one reaction type + count. Tappable
+/// to toggle/swap; highlighted when it's the caller's reaction.
+class _ReactionChip extends StatelessWidget {
+  const _ReactionChip({
+    required this.emoji,
+    required this.count,
+    required this.mine,
+    required this.onTap,
+  });
+  final String emoji;
+  final int count;
+  final bool mine;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: mine
+              ? scheme.primary.withOpacity(0.18)
+              : scheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: mine
+                ? scheme.primary.withOpacity(0.6)
+                : scheme.outline.withOpacity(0.25),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 12)),
+            if (count > 1) ...[
+              const SizedBox(width: 3),
+              Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: mine ? scheme.primary : scheme.onSurface.withOpacity(0.75),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

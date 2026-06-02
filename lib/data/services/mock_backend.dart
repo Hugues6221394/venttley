@@ -1393,6 +1393,36 @@ class MockBackend {
   Stream<bool> watchTyping(String roomId) =>
       Stream<bool>.value(false);
 
+  /// Toggle/swap/clear a reaction on a message in-memory. Mirrors the
+  /// `set_chat_message_reaction` RPC semantic so the dev experience
+  /// matches the live one when both are loaded.
+  Future<String?> setMessageReaction(String messageId, String? reaction) async {
+    for (final list in _messages.values) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].messageId != messageId) continue;
+        final m = list[i];
+        final counts = Map<String, int>.from(m.reactionCounts);
+        // Clear existing
+        if (m.myReaction != null) {
+          counts[m.myReaction!] = (counts[m.myReaction!] ?? 1) - 1;
+          if ((counts[m.myReaction!] ?? 0) <= 0) counts.remove(m.myReaction!);
+        }
+        String? next;
+        if (reaction != null && reaction != m.myReaction) {
+          counts[reaction] = (counts[reaction] ?? 0) + 1;
+          next = reaction;
+        }
+        list[i] = m.copyWith(
+          reactionCounts: counts,
+          myReaction: next,
+        );
+        _emitRooms();
+        return next;
+      }
+    }
+    return null;
+  }
+
   Future<int> markRoomRead(String roomId) async {
     final msgs = _messages[roomId];
     if (msgs == null) return 0;

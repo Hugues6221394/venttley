@@ -1036,6 +1036,15 @@ class VentlyRepository {
     return _mock.markRoomRead(roomId);
   }
 
+  /// Toggle/swap/clear an emoji reaction on a chat message. Mirrors
+  /// the post-reaction semantic: same emoji again clears, different
+  /// emoji swaps, null clears. Returns the resulting reaction.
+  Future<String?> setMessageReaction(String messageId, String? reaction) {
+    final live = _live;
+    if (live != null) return live.setMessageReaction(messageId, reaction);
+    return _mock.setMessageReaction(messageId, reaction);
+  }
+
   /// Best-effort ephemeral "I'm typing" ping. UI debounces. No DB write.
   void broadcastTyping(String roomId) {
     final live = _live;

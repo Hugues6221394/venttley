@@ -1685,7 +1685,47 @@ class SupabaseBackend {
         .select()
         .eq('room_id', roomId)
         .order('created_at', ascending: true);
-    return rows.map<ChatMessage>(_messageFromRow).toList();
+    final base = rows.map<ChatMessage>(_messageFromRow).toList();
+    if (base.isEmpty) return base;
+
+    // Reaction summary in a second small round-trip. View is keyed by
+    // message_id so we filter for just this room's ids.
+    final ids = base.map((m) => m.messageId).toList();
+    final summary = await _client
+        .from('chat_message_reactions_summary')
+        .select()
+        .inFilter('message_id', ids);
+    final byId = <String, Map<String, dynamic>>{
+      for (final r in summary as List)
+        (r as Map<String, dynamic>)['message_id'] as String: r,
+    };
+
+    return [
+      for (final m in base)
+        () {
+          final row = byId[m.messageId];
+          if (row == null) return m;
+          final counts =
+              (row['reaction_counts'] as Map?)?.cast<String, dynamic>() ?? {};
+          return m.copyWith(
+            reactionCounts: {
+              for (final e in counts.entries)
+                e.key: (e.value as num).toInt(),
+            },
+            myReaction: row['my_reaction'] as String?,
+          );
+        }(),
+    ];
+  }
+
+  /// Toggle/swap/clear semantics (mirrors post reactions). Returns the
+  /// resulting reaction, or null when cleared.
+  Future<String?> setMessageReaction(String messageId, String? reaction) async {
+    final res = await _client.rpc('set_chat_message_reaction', params: {
+      'p_message_id': messageId,
+      'p_reaction_type': reaction,
+    });
+    return res as String?;
   }
 
   ChatMessage _messageFromRow(Map<String, dynamic> r) {

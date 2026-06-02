@@ -543,6 +543,13 @@ class ChatMessage {
   /// for messages the caller didn't send.
   final DateTime? readAt;
 
+  /// Per-reaction tallies from chat_message_reactions_summary. Empty
+  /// map = no reactions. Keys are the same six values as PostReactions.
+  final Map<String, int> reactionCounts;
+
+  /// The caller's own reaction on this message, if any.
+  final String? myReaction;
+
   const ChatMessage({
     required this.messageId,
     required this.roomId,
@@ -553,9 +560,34 @@ class ChatMessage {
     this.attachedPostId,
     this.attachedPostSnapshot,
     this.readAt,
+    this.reactionCounts = const {},
+    this.myReaction,
   });
 
+  ChatMessage copyWith({
+    Map<String, int>? reactionCounts,
+    Object? myReaction = _unsetReaction,
+  }) {
+    return ChatMessage(
+      messageId: messageId,
+      roomId: roomId,
+      senderId: senderId,
+      plaintext: plaintext,
+      createdAt: createdAt,
+      sentByMe: sentByMe,
+      attachedPostId: attachedPostId,
+      attachedPostSnapshot: attachedPostSnapshot,
+      readAt: readAt,
+      reactionCounts: reactionCounts ?? this.reactionCounts,
+      myReaction: myReaction == _unsetReaction
+          ? this.myReaction
+          : myReaction as String?,
+    );
+  }
+
   bool get hasAttachedPost => attachedPostSnapshot != null;
+
+  static const Object _unsetReaction = Object();
 }
 
 /// Captured at the moment a friend shared a post into a chat. Survives
