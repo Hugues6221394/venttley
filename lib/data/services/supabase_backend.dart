@@ -1690,6 +1690,7 @@ class SupabaseBackend {
 
   ChatMessage _messageFromRow(Map<String, dynamic> r) {
     final uid = _uid;
+    final rawRead = r['read_at'] as String?;
     return ChatMessage(
       messageId: r['message_id'] as String,
       roomId: r['room_id'] as String,
@@ -1700,7 +1701,17 @@ class SupabaseBackend {
       attachedPostId: r['attached_post_id'] as String?,
       attachedPostSnapshot:
           SharedPostSnapshot.fromJson(r['attached_post_snapshot']),
+      readAt: rawRead == null ? null : DateTime.parse(rawRead),
     );
+  }
+
+  /// Stamp read_at on every message in [roomId] not sent by the caller.
+  /// Returns the count of newly-marked messages. Safe to call on every
+  /// chat-screen open + every new-message arrival — idempotent.
+  Future<int> markRoomRead(String roomId) async {
+    final res =
+        await _client.rpc('mark_chat_room_read', params: {'p_room_id': roomId});
+    return (res as int?) ?? 0;
   }
 
   /// Realtime stream of messages for a single room. Re-fetches on every
@@ -1730,6 +1741,69 @@ class SupabaseBackend {
 
     controller.onListen = emit;
     controller.onCancel = () => channel.unsubscribe();
+    return controller.stream;
+  }
+
+  // ──────────────────── Typing indicators (broadcast) ────────────────────
+
+  /// Per-room Realtime broadcast channel. Cached so we don't
+  /// resubscribe on every keystroke. Closed when the chat screen exits.
+  final Map<String, RealtimeChannel> _typingChannels = {};
+
+  RealtimeChannel _typingChannel(String roomId) {
+    return _typingChannels.putIfAbsent(roomId, () {
+      final c = _client.channel('typing:room=$roomId');
+      c.subscribe();
+      return c;
+    });
+  }
+
+  /// Tell the room you're typing. UI should debounce this to ~once per
+  /// 1.5 seconds. Pure broadcast — no DB row written.
+  void broadcastTyping(String roomId) {
+    final uid = _uid;
+    if (uid == null) return;
+    _typingChannel(roomId).sendBroadcastMessage(
+      event: 'typing',
+      payload: {
+        'user_id': uid,
+        'at': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
+  }
+
+  /// Stream of "is the *peer* currently typing?" for [roomId]. Emits
+  /// `true` immediately on a typing broadcast from a non-self user,
+  /// and `false` ~3 seconds after the most recent broadcast goes quiet.
+  Stream<bool> watchTyping(String roomId) {
+    final controller = StreamController<bool>();
+    Timer? idle;
+    void clearIdle() {
+      idle?.cancel();
+      idle = Timer(const Duration(seconds: 3), () {
+        if (!controller.isClosed) controller.add(false);
+      });
+    }
+
+    final channel = _client
+        .channel('typing:room=$roomId:listen')
+        .onBroadcast(
+          event: 'typing',
+          callback: (payload) {
+            final from = payload['user_id'] as String?;
+            if (from == null || from == _uid) return;
+            if (!controller.isClosed) controller.add(true);
+            clearIdle();
+          },
+        )
+        .subscribe();
+
+    controller.onCancel = () {
+      idle?.cancel();
+      channel.unsubscribe();
+    };
+    // Seed with false so consumers don't see a null in tab switches.
+    controller.onListen = () => controller.add(false);
     return controller.stream;
   }
 

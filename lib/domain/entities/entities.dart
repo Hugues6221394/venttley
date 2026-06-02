@@ -538,6 +538,11 @@ class ChatMessage {
   final String? attachedPostId;
   final SharedPostSnapshot? attachedPostSnapshot;
 
+  /// When the recipient marked this message as read. Stamped by the
+  /// mark_chat_room_read RPC on every screen-open / new-message arrival
+  /// for messages the caller didn't send.
+  final DateTime? readAt;
+
   const ChatMessage({
     required this.messageId,
     required this.roomId,
@@ -547,6 +552,7 @@ class ChatMessage {
     required this.sentByMe,
     this.attachedPostId,
     this.attachedPostSnapshot,
+    this.readAt,
   });
 
   bool get hasAttachedPost => attachedPostSnapshot != null;

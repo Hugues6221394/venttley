@@ -346,6 +346,13 @@ final messagesProvider =
         (ref, roomId) =>
             ref.watch(repositoryProvider).watchMessages(roomId));
 
+/// True while the peer in [roomId] is actively typing. Flips false ~3s
+/// after the last broadcast. Pure ephemeral signal — no DB read.
+final typingProvider =
+    StreamProvider.autoDispose.family<bool, String>(
+        (ref, roomId) =>
+            ref.watch(repositoryProvider).watchTyping(roomId));
+
 final roomByIdProvider =
     FutureProvider.autoDispose.family<ChatRoom?, String>((ref, roomId) async {
   final repo = ref.watch(repositoryProvider);

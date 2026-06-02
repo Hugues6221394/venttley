@@ -1028,6 +1028,32 @@ class VentlyRepository {
 
   /// Private DM send. V1 is plaintext server-side so moderators can review
   /// reported chats; we do not advertise end-to-end encryption.
+  /// Stamp the room as read for the current user. Returns the count of
+  /// newly-marked messages (zero when the room is already up to date).
+  Future<int> markRoomRead(String roomId) {
+    final live = _live;
+    if (live != null) return live.markRoomRead(roomId);
+    return _mock.markRoomRead(roomId);
+  }
+
+  /// Best-effort ephemeral "I'm typing" ping. UI debounces. No DB write.
+  void broadcastTyping(String roomId) {
+    final live = _live;
+    if (live != null) {
+      live.broadcastTyping(roomId);
+    } else {
+      _mock.broadcastTyping(roomId);
+    }
+  }
+
+  /// True when the peer is currently typing in [roomId]; flips false
+  /// ~3 seconds after the last typing signal.
+  Stream<bool> watchTyping(String roomId) {
+    final live = _live;
+    if (live != null) return live.watchTyping(roomId);
+    return _mock.watchTyping(roomId);
+  }
+
   Future<ChatMessage> sendMessage({
     required String roomId,
     required String plaintext,

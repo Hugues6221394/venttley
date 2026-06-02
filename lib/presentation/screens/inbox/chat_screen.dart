@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,8 +22,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
 
+  /// Debounce typing broadcasts so each keystroke doesn't ping Realtime.
+  Timer? _typingDebounce;
+  DateTime _lastTypingSent = DateTime.fromMillisecondsSinceEpoch(0);
+
+  @override
+  void initState() {
+    super.initState();
+    // Mark the room as read the moment the screen opens.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref
+            .read(repositoryProvider)
+            .markRoomRead(widget.roomId)
+            .catchError((_) => 0);
+      }
+    });
+    _controller.addListener(_handleTyping);
+  }
+
+  void _handleTyping() {
+    // Throttle: emit at most once every 1.5 seconds while typing.
+    final now = DateTime.now();
+    if (now.difference(_lastTypingSent).inMilliseconds < 1500) return;
+    _lastTypingSent = now;
+    ref.read(repositoryProvider).broadcastTyping(widget.roomId);
+    _typingDebounce?.cancel();
+    _typingDebounce = Timer(const Duration(milliseconds: 1500), () {});
+  }
+
   @override
   void dispose() {
+    _typingDebounce?.cancel();
+    _controller.removeListener(_handleTyping);
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -46,6 +79,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final messages =
         ref.watch(messagesProvider(widget.roomId)).valueOrNull ?? const [];
     final scheme = Theme.of(context).colorScheme;
+    final peerTyping = ref.watch(typingProvider(widget.roomId)).valueOrNull ?? false;
+
+    // Mark unread peer messages as read whenever the messages list ticks
+    // forward (new arrivals while the screen is open).
+    ref.listen<AsyncValue<List<ChatMessage>>>(
+      messagesProvider(widget.roomId),
+      (prev, next) {
+        final list = next.valueOrNull;
+        if (list == null) return;
+        final hasUnreadFromPeer =
+            list.any((m) => !m.sentByMe && m.readAt == null);
+        if (hasUnreadFromPeer) {
+          ref.read(repositoryProvider).markRoomRead(widget.roomId);
+        }
+      },
+    );
+
+    // The last own-message that the peer has read. We show "Seen" on
+    // exactly this bubble so the indicator doesn't pollute every message.
+    String? lastSeenOwnId;
+    for (var i = messages.length - 1; i >= 0; i--) {
+      final m = messages[i];
+      if (m.sentByMe && m.readAt != null) {
+        lastSeenOwnId = m.messageId;
+        break;
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -125,9 +185,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   );
                 }
                 final m = messages[i - 1];
-                return _Bubble(message: m);
+                return _Bubble(
+                  message: m,
+                  showSeen: m.messageId == lastSeenOwnId,
+                );
               },
             ),
+          ),
+          _TypingChip(
+            peerPseudonym: r.peerPseudonym,
+            visible: peerTyping,
           ),
           _Composer(
             controller: _controller,
@@ -245,8 +312,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message});
+  const _Bubble({required this.message, this.showSeen = false});
   final ChatMessage message;
+
+  /// Render the "Seen" footer under this bubble. The chat screen only
+  /// sets this on the latest own-message that the peer has read so the
+  /// indicator stays single, anchored, and unobtrusive.
+  final bool showSeen;
 
   @override
   Widget build(BuildContext context) {
@@ -310,16 +382,135 @@ class _Bubble extends StatelessWidget {
             ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              DateFormat.jm().format(message.createdAt),
-              style: TextStyle(
-                fontSize: 10,
-                color: scheme.onSurface.withOpacity(0.55),
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  DateFormat.jm().format(message.createdAt),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: scheme.onSurface.withOpacity(0.55),
+                  ),
+                ),
+                if (showSeen) ...[
+                  const SizedBox(width: 6),
+                  Icon(Icons.done_all,
+                      size: 12, color: scheme.primary.withOpacity(0.85)),
+                  const SizedBox(width: 2),
+                  Text(
+                    'Seen',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.primary.withOpacity(0.85),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _TypingChip extends StatelessWidget {
+  const _TypingChip({required this.peerPseudonym, required this.visible});
+  final String peerPseudonym;
+  final bool visible;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      alignment: Alignment.topCenter,
+      child: !visible
+          ? const SizedBox.shrink()
+          : Padding(
+              padding:
+                  const EdgeInsets.only(left: 16, right: 16, bottom: 4),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardColor,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: VentlyColors.softMauve.withOpacity(0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _TypingDots(color: scheme.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$peerPseudonym is typing…',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+/// Three pulsing dots — pure-Flutter typing affordance.
+class _TypingDots extends StatefulWidget {
+  const _TypingDots({required this.color});
+  final Color color;
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, __) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (i) {
+            final t = (_c.value * 3 - i) % 1.0;
+            final opacity = (t < 0.5) ? 0.3 + t : 1.3 - t;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1.5),
+              child: Container(
+                width: 5,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: widget.color
+                      .withOpacity(opacity.clamp(0.25, 1.0)),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            );
+          }),
+        );
+      },
     );
   }
 }

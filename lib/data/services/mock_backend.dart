@@ -1388,6 +1388,35 @@ class MockBackend {
     return r;
   }
 
+  // No-ops for typing indicators in mock — broadcast lives on Supabase.
+  void broadcastTyping(String roomId) {}
+  Stream<bool> watchTyping(String roomId) =>
+      Stream<bool>.value(false);
+
+  Future<int> markRoomRead(String roomId) async {
+    final msgs = _messages[roomId];
+    if (msgs == null) return 0;
+    var count = 0;
+    for (var i = 0; i < msgs.length; i++) {
+      final m = msgs[i];
+      if (!m.sentByMe && m.readAt == null) {
+        msgs[i] = ChatMessage(
+          messageId: m.messageId,
+          roomId: m.roomId,
+          senderId: m.senderId,
+          plaintext: m.plaintext,
+          createdAt: m.createdAt,
+          sentByMe: m.sentByMe,
+          attachedPostId: m.attachedPostId,
+          attachedPostSnapshot: m.attachedPostSnapshot,
+          readAt: DateTime.now(),
+        );
+        count++;
+      }
+    }
+    return count;
+  }
+
   ChatMessage sendMessage({
     required String roomId,
     required String plaintext,
