@@ -505,6 +505,98 @@ class VentlyRepository {
     return _mock.userProfile(otherUserId);
   }
 
+  // ===================== Plugz Creator Studio =====================
+
+  Future<TribeStudioStats?> tribeStudioStats(String tribeId) {
+    final live = _live;
+    if (live != null) return live.tribeStudioStats(tribeId);
+    return _mock.tribeStudioStats(tribeId);
+  }
+
+  Future<List<Post>> pinnedPosts(String tribeId) {
+    final live = _live;
+    if (live != null) return live.pinnedPosts(tribeId);
+    return _mock.pinnedPosts(tribeId);
+  }
+
+  Future<void> pinPost(String tribeId, String postId) {
+    final live = _live;
+    if (live != null) return live.pinPost(tribeId, postId);
+    return _mock.pinPost(tribeId, postId);
+  }
+
+  Future<void> unpinPost(String tribeId, String postId) {
+    final live = _live;
+    if (live != null) return live.unpinPost(tribeId, postId);
+    return _mock.unpinPost(tribeId, postId);
+  }
+
+  Future<List<ScheduledPrompt>> tribePrompts(String tribeId) {
+    final live = _live;
+    if (live != null) return live.tribePrompts(tribeId);
+    return _mock.tribePrompts(tribeId);
+  }
+
+  Future<String> schedulePrompt({
+    required String tribeId,
+    required String text,
+    DateTime? scheduledFor,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.schedulePrompt(
+        tribeId: tribeId,
+        text: text,
+        scheduledFor: scheduledFor,
+      );
+    }
+    return _mock.schedulePrompt(
+      tribeId: tribeId,
+      text: text,
+      scheduledFor: scheduledFor,
+    );
+  }
+
+  Future<void> cancelPrompt(String tribeId, String promptId) {
+    final live = _live;
+    if (live != null) return live.cancelPrompt(tribeId, promptId);
+    return _mock.cancelPrompt(tribeId, promptId);
+  }
+
+  Future<void> setTribeBranding({
+    required String tribeId,
+    String? welcomeMessage,
+    String? themeColor,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.setTribeBranding(
+        tribeId: tribeId,
+        welcomeMessage: welcomeMessage,
+        themeColor: themeColor,
+      );
+    }
+    return _mock.setTribeBranding(
+      tribeId: tribeId,
+      welcomeMessage: welcomeMessage,
+      themeColor: themeColor,
+    );
+  }
+
+  Future<void> spotlightMember({
+    required String tribeId,
+    required String? userId,
+    String? note,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.spotlightMember(
+          tribeId: tribeId, userId: userId, note: note);
+    }
+    return _mock.spotlightMember(
+        tribeId: tribeId, userId: userId, note: note);
+  }
+
   // ===================== User lookup =====================
   Future<({String userId, String pseudonym, String avatarSeed})?>
       findUserByPseudonym(String pseudonym) async {

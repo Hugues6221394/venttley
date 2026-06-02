@@ -248,6 +248,25 @@ final userProfileProvider =
         (ref, userId) async =>
             ref.watch(repositoryProvider).userProfile(userId));
 
+// ----------------------------------------------------------------------
+// Plugz Creator Studio (migration 0028)
+// ----------------------------------------------------------------------
+
+final tribeStudioStatsProvider =
+    FutureProvider.autoDispose.family<TribeStudioStats?, String>(
+        (ref, tribeId) async =>
+            ref.watch(repositoryProvider).tribeStudioStats(tribeId));
+
+final tribePinnedPostsProvider =
+    FutureProvider.autoDispose.family<List<Post>, String>(
+        (ref, tribeId) async =>
+            ref.watch(repositoryProvider).pinnedPosts(tribeId));
+
+final tribePromptsProvider =
+    FutureProvider.autoDispose.family<List<ScheduledPrompt>, String>(
+        (ref, tribeId) async =>
+            ref.watch(repositoryProvider).tribePrompts(tribeId));
+
 /// Reports filed against posts in a specific Tribe — Keeper-only.
 final tribeReportsProvider =
     FutureProvider.autoDispose.family<List<TribeReport>, String>(

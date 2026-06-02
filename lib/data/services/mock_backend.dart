@@ -989,6 +989,102 @@ class MockBackend {
     }).toList();
   }
 
+  // ──────────────────── Plugz Creator Studio (mock) ────────────────────
+
+  final Map<String, List<String>> _pinnedByTribe = {};
+  final Map<String, List<ScheduledPrompt>> _promptsByTribe = {};
+  final Map<String, ({String? welcome, String? theme})> _brandingByTribe = {};
+
+  Future<TribeStudioStats?> tribeStudioStats(String tribeId) async {
+    final t = _tribes.firstWhereOrNull((x) => x.tribeId == tribeId);
+    if (t == null) return null;
+    final posts = _posts.where((p) => p.tribeId == tribeId).toList();
+    final since7d = DateTime.now().subtract(const Duration(days: 7));
+    final since24h = DateTime.now().subtract(const Duration(hours: 24));
+    return TribeStudioStats(
+      tribeId: tribeId,
+      memberCount: t.memberCount,
+      members7d: 0,
+      members30d: 0,
+      posts24h: posts.where((p) => p.createdAt.isAfter(since24h)).length,
+      posts7d: posts.where((p) => p.createdAt.isAfter(since7d)).length,
+      comments7d: 0,
+      activePosters7d: posts
+          .where((p) => p.createdAt.isAfter(since7d))
+          .map((p) => p.authorId ?? p.authorPseudonym)
+          .toSet()
+          .length,
+      pinnedCount: (_pinnedByTribe[tribeId] ?? const []).length,
+      scheduledPrompts: (_promptsByTribe[tribeId] ?? const [])
+          .where((p) => p.publishedAt == null)
+          .length,
+      openReports: 0,
+    );
+  }
+
+  Future<List<Post>> pinnedPosts(String tribeId) async {
+    final ids = _pinnedByTribe[tribeId] ?? const <String>[];
+    return [
+      for (final id in ids)
+        ..._posts.where((p) => p.postId == id),
+    ];
+  }
+
+  Future<void> pinPost(String tribeId, String postId) async {
+    final list = _pinnedByTribe.putIfAbsent(tribeId, () => <String>[]);
+    if (!list.contains(postId)) list.insert(0, postId);
+  }
+
+  Future<void> unpinPost(String tribeId, String postId) async {
+    _pinnedByTribe[tribeId]?.remove(postId);
+  }
+
+  Future<List<ScheduledPrompt>> tribePrompts(String tribeId) async {
+    return List.unmodifiable(_promptsByTribe[tribeId] ?? const []);
+  }
+
+  Future<String> schedulePrompt({
+    required String tribeId,
+    required String text,
+    DateTime? scheduledFor,
+  }) async {
+    final id = _uuid.v4();
+    final live = scheduledFor == null || !scheduledFor.isAfter(DateTime.now());
+    _promptsByTribe.putIfAbsent(tribeId, () => []).add(ScheduledPrompt(
+          promptId: id,
+          tribeId: tribeId,
+          text: text,
+          answersCount: 0,
+          isActive: true,
+          scheduledFor: scheduledFor,
+          publishedAt: live ? (scheduledFor ?? DateTime.now()) : null,
+        ));
+    return id;
+  }
+
+  Future<void> cancelPrompt(String tribeId, String promptId) async {
+    _promptsByTribe[tribeId]
+        ?.removeWhere((p) => p.promptId == promptId && p.publishedAt == null);
+  }
+
+  Future<void> setTribeBranding({
+    required String tribeId,
+    String? welcomeMessage,
+    String? themeColor,
+  }) async {
+    _brandingByTribe[tribeId] =
+        (welcome: welcomeMessage, theme: themeColor);
+  }
+
+  Future<void> spotlightMember({
+    required String tribeId,
+    required String? userId,
+    String? note,
+  }) async {
+    // No-op in mock; the directory list isn't keeper-aware enough to
+    // surface a spotlight without restructuring the seed data.
+  }
+
   Future<UserProfileView?> userProfile(String otherUserId) async {
     final me = _me;
     if (me == null) return null;

@@ -994,6 +994,141 @@ class SupabaseBackend {
 
   /// Reports filed against posts in a given Tribe. Visible only to the
   /// Tribe's Keeper (and super_admins) via the migration-0008 RLS policy.
+  // ──────────────────── Plugz Creator Studio (0028) ────────────────────
+
+  Future<TribeStudioStats?> tribeStudioStats(String tribeId) async {
+    final r = await _client
+        .from('tribe_studio_stats')
+        .select()
+        .eq('tribe_id', tribeId)
+        .maybeSingle();
+    if (r == null) return null;
+    return TribeStudioStats(
+      tribeId: r['tribe_id'] as String,
+      memberCount: (r['member_count'] as int?) ?? 0,
+      members7d: (r['members_7d'] as int?) ?? 0,
+      members30d: (r['members_30d'] as int?) ?? 0,
+      posts24h: (r['posts_24h'] as int?) ?? 0,
+      posts7d: (r['posts_7d'] as int?) ?? 0,
+      comments7d: (r['comments_7d'] as int?) ?? 0,
+      activePosters7d: (r['active_posters_7d'] as int?) ?? 0,
+      pinnedCount: (r['pinned_count'] as int?) ?? 0,
+      scheduledPrompts: (r['scheduled_prompts'] as int?) ?? 0,
+      openReports: (r['open_reports'] as int?) ?? 0,
+    );
+  }
+
+  Future<List<Post>> pinnedPosts(String tribeId) async {
+    // Pull the pinned post ids, then resolve via feed_posts (already
+    // joins author + persona + tribe). Two round-trips but small lists.
+    final pins = await _client
+        .from('tribe_pinned_posts')
+        .select('post_id, sort_idx, pinned_at')
+        .eq('tribe_id', tribeId)
+        .order('sort_idx', ascending: true)
+        .order('pinned_at', ascending: false);
+    if ((pins as List).isEmpty) return const [];
+    final ids = pins.map((r) => r['post_id'] as String).toList();
+    final rows = await _client
+        .from('feed_posts')
+        .select()
+        .inFilter('post_id', ids)
+        .filter('deleted_at', 'is', null);
+    final byId = <String, Post>{
+      for (final r in rows as List)
+        ((r as Map<String, dynamic>)['post_id'] as String):
+            _postFromRow(r)
+    };
+    // Preserve pinned order
+    return [
+      for (final id in ids)
+        if (byId[id] != null) byId[id]!,
+    ];
+  }
+
+  Future<void> pinPost(String tribeId, String postId) async {
+    await _client.rpc(
+      'tribe_pin_post',
+      params: {'p_tribe': tribeId, 'p_post': postId},
+    );
+  }
+
+  Future<void> unpinPost(String tribeId, String postId) async {
+    await _client.rpc(
+      'tribe_unpin_post',
+      params: {'p_tribe': tribeId, 'p_post': postId},
+    );
+  }
+
+  Future<List<ScheduledPrompt>> tribePrompts(String tribeId) async {
+    final rows = await _client
+        .from('plug_prompts')
+        .select(
+          'prompt_id, tribe_id, prompt_text, scheduled_for, published_at, is_active, answers_count')
+        .eq('tribe_id', tribeId)
+        .order('scheduled_for', ascending: true, nullsFirst: false);
+    return (rows as List)
+        .cast<Map<String, dynamic>>()
+        .map((r) => ScheduledPrompt(
+              promptId: r['prompt_id'] as String,
+              tribeId: r['tribe_id'] as String,
+              text: r['prompt_text'] as String,
+              answersCount: (r['answers_count'] as int?) ?? 0,
+              isActive: (r['is_active'] as bool?) ?? true,
+              scheduledFor: r['scheduled_for'] == null
+                  ? null
+                  : DateTime.parse(r['scheduled_for'] as String),
+              publishedAt: r['published_at'] == null
+                  ? null
+                  : DateTime.parse(r['published_at'] as String),
+            ))
+        .toList();
+  }
+
+  Future<String> schedulePrompt({
+    required String tribeId,
+    required String text,
+    DateTime? scheduledFor,
+  }) async {
+    final res = await _client.rpc('tribe_schedule_prompt', params: {
+      'p_tribe': tribeId,
+      'p_prompt_text': text,
+      'p_scheduled_for': scheduledFor?.toUtc().toIso8601String(),
+    });
+    return res as String;
+  }
+
+  Future<void> cancelPrompt(String tribeId, String promptId) async {
+    await _client.rpc('tribe_cancel_prompt', params: {
+      'p_tribe': tribeId,
+      'p_prompt': promptId,
+    });
+  }
+
+  Future<void> setTribeBranding({
+    required String tribeId,
+    String? welcomeMessage,
+    String? themeColor,
+  }) async {
+    await _client.rpc('tribe_set_branding', params: {
+      'p_tribe': tribeId,
+      'p_welcome_message': welcomeMessage,
+      'p_theme_color': themeColor,
+    });
+  }
+
+  Future<void> spotlightMember({
+    required String tribeId,
+    required String? userId,
+    String? note,
+  }) async {
+    await _client.rpc('tribe_spotlight_member', params: {
+      'p_tribe': tribeId,
+      'p_user': userId,
+      'p_note': note,
+    });
+  }
+
   Future<List<TribeReport>> tribeReports(String tribeId) async {
     final rows = await _client
         .from('reports')
@@ -1814,6 +1949,10 @@ class SupabaseBackend {
   }
 
   Tribe _tribeFromRow(Map<String, dynamic> r) {
+    // The studio fields (welcome_message, theme_color, spotlight_*) may
+    // not be present in older callers' SELECT lists. tribeBySlug fetches
+    // them explicitly; the directory and feed views don't.
+    final spotlightSetAtRaw = r['spotlight_set_at'] as String?;
     return Tribe(
       tribeId: r['tribe_id'] as String,
       name: r['name'] as String,
@@ -1830,6 +1969,14 @@ class SupabaseBackend {
       keeperIsVerified: (r['keeper_is_verified'] as bool?) ?? false,
       createdAt: DateTime.parse(r['created_at'] as String),
       joinedByMe: _joinedTribes.contains(r['tribe_id']),
+      welcomeMessage: r['welcome_message'] as String?,
+      themeColor: r['theme_color'] as String?,
+      spotlightUserId: r['spotlight_user_id'] as String?,
+      spotlightPseudonym: r['spotlight_pseudonym'] as String?,
+      spotlightAvatarSeed: r['spotlight_avatar_seed'] as String?,
+      spotlightNote: r['spotlight_note'] as String?,
+      spotlightSetAt:
+          spotlightSetAtRaw == null ? null : DateTime.parse(spotlightSetAtRaw),
     );
   }
 

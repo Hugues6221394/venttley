@@ -166,6 +166,15 @@ class Tribe {
   final DateTime createdAt;
   final bool joinedByMe;
 
+  // Studio additions (migration 0028)
+  final String? welcomeMessage;
+  final String? themeColor;
+  final String? spotlightUserId;
+  final String? spotlightPseudonym;
+  final String? spotlightAvatarSeed;
+  final String? spotlightNote;
+  final DateTime? spotlightSetAt;
+
   const Tribe({
     required this.tribeId,
     required this.name,
@@ -182,6 +191,13 @@ class Tribe {
     this.keeperAvatarSeed,
     this.keeperIsVerified = false,
     this.joinedByMe = false,
+    this.welcomeMessage,
+    this.themeColor,
+    this.spotlightUserId,
+    this.spotlightPseudonym,
+    this.spotlightAvatarSeed,
+    this.spotlightNote,
+    this.spotlightSetAt,
   });
 
   Tribe copyWith({
@@ -189,6 +205,8 @@ class Tribe {
     bool? joinedByMe,
     String? avatarUrl,
     String? bannerUrl,
+    String? welcomeMessage,
+    String? themeColor,
   }) {
     return Tribe(
       tribeId: tribeId,
@@ -206,8 +224,70 @@ class Tribe {
       keeperIsVerified: keeperIsVerified,
       createdAt: createdAt,
       joinedByMe: joinedByMe ?? this.joinedByMe,
+      welcomeMessage: welcomeMessage ?? this.welcomeMessage,
+      themeColor: themeColor ?? this.themeColor,
+      spotlightUserId: spotlightUserId,
+      spotlightPseudonym: spotlightPseudonym,
+      spotlightAvatarSeed: spotlightAvatarSeed,
+      spotlightNote: spotlightNote,
+      spotlightSetAt: spotlightSetAt,
     );
   }
+}
+
+/// Aggregated metrics for the Plugz Creator Studio dashboard.
+/// One round-trip read from `tribe_studio_stats` view (migration 0028).
+class TribeStudioStats {
+  final String tribeId;
+  final int memberCount;
+  final int members7d;
+  final int members30d;
+  final int posts24h;
+  final int posts7d;
+  final int comments7d;
+  final int activePosters7d;
+  final int pinnedCount;
+  final int scheduledPrompts;
+  final int openReports;
+
+  const TribeStudioStats({
+    required this.tribeId,
+    required this.memberCount,
+    required this.members7d,
+    required this.members30d,
+    required this.posts24h,
+    required this.posts7d,
+    required this.comments7d,
+    required this.activePosters7d,
+    required this.pinnedCount,
+    required this.scheduledPrompts,
+    required this.openReports,
+  });
+}
+
+/// A keeper-curated scheduled prompt for a tribe.
+class ScheduledPrompt {
+  final String promptId;
+  final String tribeId;
+  final String text;
+  final DateTime? scheduledFor;
+  final DateTime? publishedAt;
+  final int answersCount;
+  final bool isActive;
+
+  const ScheduledPrompt({
+    required this.promptId,
+    required this.tribeId,
+    required this.text,
+    required this.answersCount,
+    required this.isActive,
+    this.scheduledFor,
+    this.publishedAt,
+  });
+
+  bool get isLive => publishedAt != null;
+  bool get isFuture =>
+      scheduledFor != null && scheduledFor!.isAfter(DateTime.now());
 }
 
 class Post {
