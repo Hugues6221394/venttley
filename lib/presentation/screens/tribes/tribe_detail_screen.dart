@@ -237,6 +237,9 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
             ),
             if (tribe.welcomeMessage != null)
               _TribeWelcomeBanner(message: tribe.welcomeMessage!, accent: tribe.themeColor),
+            if (tribe.spotlightUserId != null &&
+                tribe.spotlightPseudonym != null)
+              _SpotlightBanner(tribe: tribe),
             _PinnedStrip(tribeId: tribe.tribeId),
             if (postsAsync.isLoading && posts.isEmpty)
               const Padding(
@@ -402,6 +405,105 @@ class _PinnedStrip extends ConsumerWidget {
               onTap: () => context.push('/post/${p.postId}'),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Public-facing spotlight strip — the keeper chose a member to
+/// celebrate; this is where members see it.
+class _SpotlightBanner extends StatelessWidget {
+  const _SpotlightBanner({required this.tribe});
+  final Tribe tribe;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final accent = tribe.themeColor != null
+        ? Color(int.parse(tribe.themeColor!.replaceFirst('#', '0xff')))
+        : scheme.primary;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => context.push('/user/${tribe.spotlightUserId}'),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                accent.withOpacity(0.16),
+                accent.withOpacity(0.04),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: accent.withOpacity(0.30)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AnonymousAvatar(
+                    seed: tribe.spotlightAvatarSeed ?? 'default-orb',
+                    label: tribe.spotlightPseudonym ?? 'Member',
+                    size: 44,
+                  ),
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: accent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: scheme.surface, width: 2),
+                      ),
+                      child: const Icon(Icons.star,
+                          size: 11, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Spotlight · @${tribe.spotlightPseudonym}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: accent,
+                      ),
+                    ),
+                    if (tribe.spotlightNote != null &&
+                        tribe.spotlightNote!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          '"${tribe.spotlightNote}"',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.35,
+                            color: scheme.onSurface.withOpacity(0.75),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right,
+                  size: 18, color: scheme.onSurface.withOpacity(0.5)),
+            ],
+          ),
+        ),
       ),
     );
   }

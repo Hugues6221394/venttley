@@ -91,6 +91,7 @@ class TribeManageScreen extends ConsumerWidget {
             _AnalyticsGrid(tribe: tribe, posts: posts),
             _SentimentCard(posts: posts),
             _ActivityCard(posts: posts),
+            _SpotlightCard(tribe: tribe),
             _PinnedPostsCard(tribe: tribe, tribePosts: posts),
             _ScheduledPromptsCard(tribe: tribe),
             const _QuickActions(),
@@ -2192,6 +2193,336 @@ class _StudioCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// PLUGZ STUDIO — Spotlight member
+// =========================================================================
+
+class _SpotlightCard extends ConsumerWidget {
+  const _SpotlightCard({required this.tribe});
+  final Tribe tribe;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasSpotlight = tribe.spotlightUserId != null &&
+        tribe.spotlightPseudonym != null;
+
+    return _StudioCard(
+      title: 'Spotlight',
+      subtitle:
+          'Celebrate one member this week. Shown above the tribe feed for everyone.',
+      action: hasSpotlight
+          ? TextButton(
+              onPressed: () => _confirmClear(context, ref),
+              child: const Text('Clear'),
+            )
+          : null,
+      child: hasSpotlight
+          ? _SpotlightRow(tribe: tribe, onChange: () => _showPicker(context, ref))
+          : OutlinedButton.icon(
+              icon: const Icon(Icons.star_outline, size: 16),
+              label: const Text('Set spotlight'),
+              onPressed: () => _showPicker(context, ref),
+            ),
+    );
+  }
+
+  Future<void> _confirmClear(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear spotlight?'),
+        content: Text(
+          'Remove @${tribe.spotlightPseudonym ?? "this member"} from the spotlight. You can set a new one any time.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(repositoryProvider).spotlightMember(
+          tribeId: tribe.tribeId,
+          userId: null,
+          note: null,
+        );
+    ref.invalidate(tribeBySlugProvider(tribe.slug));
+  }
+
+  void _showPicker(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _SpotlightPickerSheet(tribe: tribe),
+    );
+  }
+}
+
+class _SpotlightRow extends StatelessWidget {
+  const _SpotlightRow({required this.tribe, required this.onChange});
+  final Tribe tribe;
+  final VoidCallback onChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AnonymousAvatar(
+          seed: tribe.spotlightAvatarSeed ?? 'default-orb',
+          label: tribe.spotlightPseudonym ?? 'Member',
+          size: 44,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '@${tribe.spotlightPseudonym}',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w800, fontSize: 14),
+              ),
+              if (tribe.spotlightNote != null &&
+                  tribe.spotlightNote!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    '"${tribe.spotlightNote}"',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      height: 1.35,
+                      color: scheme.onSurface.withOpacity(0.7),
+                    ),
+                  ),
+                ),
+              if (tribe.spotlightSetAt != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Spotlighted ${_relative(tribe.spotlightSetAt!)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurface.withOpacity(0.5),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        TextButton(
+          onPressed: onChange,
+          child: const Text('Change'),
+        ),
+      ],
+    );
+  }
+
+  static String _relative(DateTime when) {
+    final d = DateTime.now().difference(when);
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    if (d.inDays < 7) return '${d.inDays}d ago';
+    return '${(d.inDays / 7).floor()}w ago';
+  }
+}
+
+class _SpotlightPickerSheet extends ConsumerStatefulWidget {
+  const _SpotlightPickerSheet({required this.tribe});
+  final Tribe tribe;
+
+  @override
+  ConsumerState<_SpotlightPickerSheet> createState() =>
+      _SpotlightPickerSheetState();
+}
+
+class _SpotlightPickerSheetState
+    extends ConsumerState<_SpotlightPickerSheet> {
+  final _noteCtrl = TextEditingController();
+  String? _selectedId;
+  String? _selectedPseudonym;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-select current spotlight if any so editing-the-note is a
+    // one-tap operation.
+    if (widget.tribe.spotlightUserId != null) {
+      _selectedId = widget.tribe.spotlightUserId;
+      _selectedPseudonym = widget.tribe.spotlightPseudonym;
+      _noteCtrl.text = widget.tribe.spotlightNote ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_selectedId == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(repositoryProvider).spotlightMember(
+            tribeId: widget.tribe.tribeId,
+            userId: _selectedId,
+            note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+          );
+      ref.invalidate(tribeBySlugProvider(widget.tribe.slug));
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final members =
+        ref.watch(tribeMembersProvider(widget.tribe.tribeId));
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 14,
+        bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.78,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text('Spotlight a member',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(height: 4),
+            Text(
+              'Pick one member to celebrate. Add a short note about why — it shows above the tribe feed.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              child: members.when(
+                loading: () =>
+                    const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Text('Could not load members: $e'),
+                data: (rows) {
+                  if (rows.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Text(
+                        'No members yet — invite people to your Tribe first.',
+                        style: TextStyle(color: Colors.black54),
+                      ),
+                    );
+                  }
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: rows.length,
+                    separatorBuilder: (_, __) => const Divider(height: 0),
+                    itemBuilder: (ctx, i) {
+                      final m = rows[i];
+                      final selected = _selectedId == m.userId;
+                      return ListTile(
+                        leading: AnonymousAvatar(
+                          seed: m.avatarSeed,
+                          label: m.pseudonym,
+                          size: 36,
+                        ),
+                        title: Text(
+                          '@${m.pseudonym}',
+                          style: TextStyle(
+                            fontWeight: selected
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                          ),
+                        ),
+                        subtitle: Text(
+                          m.role,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        trailing: selected
+                            ? Icon(
+                                Icons.check_circle,
+                                color: Theme.of(context).colorScheme.primary,
+                              )
+                            : const Icon(Icons.radio_button_unchecked,
+                                color: Colors.black26),
+                        onTap: () => setState(() {
+                          _selectedId = m.userId;
+                          _selectedPseudonym = m.pseudonym;
+                        }),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            if (_selectedId != null) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _noteCtrl,
+                maxLength: 140,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  hintText: 'Why @${_selectedPseudonym ?? "this member"}?',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: (_busy || _selectedId == null) ? null : _save,
+              child: _busy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Spotlight'),
+            ),
           ],
         ),
       ),
