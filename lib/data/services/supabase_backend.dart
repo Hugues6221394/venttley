@@ -1933,8 +1933,16 @@ class SupabaseBackend {
   // PROMPTS
   // ===================================================================
   Future<List<PlugPrompt>> prompts() async {
-    final rows = await _client.from('plug_prompts').select(
-        'prompt_id, prompt_text, answers_count, plug_profiles(display_name, users(avatar_seed))').eq('is_active', true);
+    // Filter on published_at so scheduled-future prompts (migration 0028)
+    // stay hidden until the cron fanout (migration 0034) flips them.
+    // is_active still gates manual disable.
+    final rows = await _client
+        .from('plug_prompts')
+        .select(
+            'prompt_id, prompt_text, answers_count, plug_profiles(display_name, users(avatar_seed))')
+        .eq('is_active', true)
+        .not('published_at', 'is', null)
+        .lte('published_at', DateTime.now().toUtc().toIso8601String());
     return rows.map<PlugPrompt>((r) {
       final pp = r['plug_profiles'] as Map<String, dynamic>?;
       final users = pp?['users'] as Map<String, dynamic>?;
