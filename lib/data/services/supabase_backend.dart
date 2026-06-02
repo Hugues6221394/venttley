@@ -623,6 +623,18 @@ class SupabaseBackend {
           .toList();
     }
 
+    List<ActivityHeatmapDay> heatmap = const [];
+    final rawHeatmap = highlights['heatmap'];
+    if (rawHeatmap is List) {
+      heatmap = rawHeatmap
+          .cast<Map<String, dynamic>>()
+          .map((d) => ActivityHeatmapDay(
+                day: DateTime.parse(d['day'] as String),
+                count: (d['count'] as num?)?.toInt() ?? 0,
+              ))
+          .toList();
+    }
+
     return UserProfileView(
       relation: FriendStatus.parse(j['viewer_relation'] as String?),
       userId: user['user_id'] as String,
@@ -651,6 +663,7 @@ class SupabaseBackend {
           toPost(highlights['most_commented'] as Map<String, dynamic>?),
       recentPosts: recent,
       badges: badges,
+      heatmap: heatmap,
     );
   }
 

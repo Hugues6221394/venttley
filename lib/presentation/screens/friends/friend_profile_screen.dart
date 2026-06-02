@@ -73,6 +73,8 @@ class FriendProfileScreen extends ConsumerWidget {
                     if (profile.mostLiked != null ||
                         profile.mostCommented != null)
                       _Highlights(profile: profile),
+                    if (profile.heatmap.isNotEmpty)
+                      _ActivityHeatmap(days: profile.heatmap),
                     if (profile.recentPosts.isNotEmpty)
                       _RecentVents(posts: profile.recentPosts),
                   ] else
@@ -119,6 +121,7 @@ class _Hero extends ConsumerWidget {
             seed: profile.avatarSeed,
             label: profile.pseudonym,
             size: 96,
+            animate: true,
           ),
           const SizedBox(height: 12),
           Row(
@@ -1017,4 +1020,240 @@ String _rel(DateTime when) {
   if (d.inHours < 24) return '${d.inHours}h ago';
   if (d.inDays < 7) return '${d.inDays}d ago';
   return '${(d.inDays / 7).floor()}w ago';
+}
+
+/// GitHub-style 13-week activity heatmap. Rows = day-of-week (Mon→Sun),
+/// columns = weeks (oldest left, today right). Cell intensity scales
+/// log-like against the friend's own max so a quieter friend's grid
+/// still reads. Tap a cell for a tooltip.
+class _ActivityHeatmap extends StatelessWidget {
+  const _ActivityHeatmap({required this.days});
+  final List<ActivityHeatmapDay> days;
+
+  static const _dayLabels = ['Mon', 'Wed', 'Fri'];
+
+  @override
+  Widget build(BuildContext context) {
+    if (days.isEmpty) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+
+    // Sort ascending (DB already returns asc, but defensive).
+    final sorted = [...days]..sort((a, b) => a.day.compareTo(b.day));
+
+    // Align so the rightmost column is "today". Pad the leading column
+    // so its first cell falls on the actual day-of-week of the oldest
+    // day in the dataset.
+    final first = sorted.first.day;
+    // Dart DateTime.weekday: Mon=1..Sun=7 → grid row 0..6
+    final leadingPad = first.weekday - 1;
+    final cells = <_HeatmapCell>[];
+    for (var i = 0; i < leadingPad; i++) {
+      cells.add(const _HeatmapCell.empty());
+    }
+    for (final d in sorted) {
+      cells.add(_HeatmapCell(day: d.day, count: d.count));
+    }
+
+    final max = sorted.fold<int>(0, (m, d) => d.count > m ? d.count : m);
+    final total = sorted.fold<int>(0, (s, d) => s + d.count);
+
+    // Group into 7-row columns.
+    final columns = <List<_HeatmapCell>>[];
+    for (var i = 0; i < cells.length; i += 7) {
+      columns.add(cells.sublist(i, (i + 7).clamp(0, cells.length)));
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: scheme.outline.withOpacity(0.25)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('Activity', style: TextStyle(fontWeight: FontWeight.w800)),
+                const Spacer(),
+                Text(
+                  '$total in 90 days',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurface.withOpacity(0.55),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Day labels strip
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(7, (i) {
+                    final label = _dayLabels.contains(_weekdayName(i))
+                        ? _weekdayName(i)
+                        : '';
+                    return SizedBox(
+                      width: 24,
+                      height: 14,
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          color: scheme.onSurface.withOpacity(0.5),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    reverse: true, // newest week sticks to the right
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (final col in columns.reversed)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 2),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (final c in col)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 2),
+                                    child: _HeatmapDot(
+                                      cell: c,
+                                      max: max,
+                                      accent: scheme.primary,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  'Less',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: scheme.onSurface.withOpacity(0.55),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                for (final t in [0.0, 0.25, 0.5, 0.75, 1.0])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 3),
+                    child: Container(
+                      width: 11,
+                      height: 11,
+                      decoration: BoxDecoration(
+                        color: _heatmapColor(t, scheme.primary, scheme),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                Text(
+                  'More',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: scheme.onSurface.withOpacity(0.55),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _weekdayName(int i) => switch (i) {
+        0 => 'Mon',
+        1 => 'Tue',
+        2 => 'Wed',
+        3 => 'Thu',
+        4 => 'Fri',
+        5 => 'Sat',
+        6 => 'Sun',
+        _ => '',
+      };
+}
+
+class _HeatmapCell {
+  final DateTime? day;
+  final int count;
+  const _HeatmapCell({required this.day, required this.count});
+  const _HeatmapCell.empty()
+      : day = null,
+        count = 0;
+}
+
+class _HeatmapDot extends StatelessWidget {
+  const _HeatmapDot({
+    required this.cell,
+    required this.max,
+    required this.accent,
+  });
+  final _HeatmapCell cell;
+  final int max;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final empty = cell.day == null;
+    final intensity = (max == 0 || cell.count == 0)
+        ? 0.0
+        : (cell.count / max).clamp(0.0, 1.0);
+
+    final dot = Container(
+      width: 12,
+      height: 12,
+      decoration: BoxDecoration(
+        color: empty
+            ? Colors.transparent
+            : _heatmapColor(intensity, accent, scheme),
+        borderRadius: BorderRadius.circular(3),
+      ),
+    );
+    if (empty) return dot;
+    return Tooltip(
+      message:
+          '${cell.day!.toIso8601String().substring(0, 10)} · ${cell.count} ${cell.count == 1 ? "vent/comment" : "vents/comments"}',
+      child: dot,
+    );
+  }
+}
+
+Color _heatmapColor(double intensity, Color accent, ColorScheme scheme) {
+  // 0 → empty grid color; 1 → full accent. Blend through opacity so
+  // the colour stays consistent with the friend's accent.
+  if (intensity <= 0) {
+    return scheme.surfaceContainerHighest.withOpacity(0.6);
+  }
+  // Stepped buckets so adjacent cells read.
+  final step = intensity < 0.25
+      ? 0.25
+      : intensity < 0.5
+          ? 0.5
+          : intensity < 0.75
+              ? 0.75
+              : 1.0;
+  return accent.withOpacity(0.18 + step * 0.65);
 }

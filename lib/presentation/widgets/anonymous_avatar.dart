@@ -23,6 +23,7 @@ class AnonymousAvatar extends StatelessWidget {
     required this.label,
     this.size = 44,
     this.showVerifiedBadge = false,
+    this.animate = false,
   });
 
   final String seed;
@@ -30,11 +31,16 @@ class AnonymousAvatar extends StatelessWidget {
   final double size;
   final bool showVerifiedBadge;
 
+  /// Enable the aura animation on this avatar. Default false — small
+  /// avatars (lists, comments, bubbles) are static for perf. Only the
+  /// big hero on Friend Profile + the Avatar Builder preview opt in.
+  final bool animate;
+
   @override
   Widget build(BuildContext context) {
     final design = AvatarDesign.tryParse(seed);
     final core = design != null
-        ? _DesignedAvatar(design: design, size: size, label: label)
+        ? _DesignedAvatar(design: design, size: size, label: label, animate: animate)
         : _LegacyAvatar(seed: seed, label: label, size: size);
 
     if (!showVerifiedBadge) return core;
@@ -119,37 +125,108 @@ class _LegacyAvatar extends StatelessWidget {
 
 // ───────────────────────── v2 designed renderer ─────────────────────────
 
-class _DesignedAvatar extends StatelessWidget {
+class _DesignedAvatar extends StatefulWidget {
   const _DesignedAvatar({
     required this.design,
     required this.size,
     required this.label,
+    this.animate = false,
   });
 
   final AvatarDesign design;
   final double size;
   final String label;
+  final bool animate;
+
+  @override
+  State<_DesignedAvatar> createState() => _DesignedAvatarState();
+}
+
+class _DesignedAvatarState extends State<_DesignedAvatar>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _maybeStart();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesignedAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.animate != oldWidget.animate ||
+        widget.design.aura != oldWidget.design.aura) {
+      _maybeStart();
+    }
+  }
+
+  /// Only spin the AnimationController when both `animate` is on AND
+  /// the chosen aura actually has motion to show — saves a tick per
+  /// frame for "animate + aura.none" avatars.
+  void _maybeStart() {
+    final wantsTicker =
+        widget.animate && widget.design.aura != AvatarAura.none;
+    if (wantsTicker && _ctrl == null) {
+      _ctrl = AnimationController(
+        vsync: this,
+        duration: const Duration(seconds: 3),
+      )..repeat();
+    } else if (!wantsTicker && _ctrl != null) {
+      _ctrl?.dispose();
+      _ctrl = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final initial = label.isNotEmpty
-        ? label.replaceAll('@', '').characters.first.toUpperCase()
+    final initial = widget.label.isNotEmpty
+        ? widget.label.replaceAll('@', '').characters.first.toUpperCase()
         : 'V';
-
+    if (_ctrl == null) {
+      return SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: CustomPaint(
+          painter: _AvatarPainter(design: widget.design, initial: initial),
+        ),
+      );
+    }
     return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(
-        painter: _AvatarPainter(design: design, initial: initial),
+      width: widget.size,
+      height: widget.size,
+      child: AnimatedBuilder(
+        animation: _ctrl!,
+        builder: (_, __) => CustomPaint(
+          painter: _AvatarPainter(
+            design: widget.design,
+            initial: initial,
+            phase: _ctrl!.value,
+          ),
+        ),
       ),
     );
   }
 }
 
 class _AvatarPainter extends CustomPainter {
-  _AvatarPainter({required this.design, required this.initial});
+  _AvatarPainter({
+    required this.design,
+    required this.initial,
+    this.phase = 0,
+  });
   final AvatarDesign design;
   final String initial;
+
+  /// Animation phase in [0, 1). 0 == static. Read by _paintAura to
+  /// modulate opacity / rotation. Static layers ignore it.
+  final double phase;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -290,27 +367,53 @@ class _AvatarPainter extends CustomPainter {
       case AvatarAura.none:
         break;
       case AvatarAura.glow:
+        // Animated glow: pulse the opacity in a sine wave, expand the
+        // radius slightly so it visibly breathes.
+        final t = (math.sin(phase * math.pi * 2) + 1) / 2; // 0..1
+        final opacity = 0.30 + 0.30 * t;
+        final radius = r.width * (0.44 + 0.04 * t);
         final glow = Paint()
-          ..color = colors.accent.withOpacity(0.45)
+          ..color = colors.accent.withOpacity(opacity)
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, r.width * 0.10);
-        canvas.drawCircle(r.center, r.width * 0.46, glow);
+        canvas.drawCircle(r.center, radius, glow);
       case AvatarAura.sparkle:
-        // Three small sparkle dots around the silhouette.
-        final paint = Paint()..color = colors.accent.withOpacity(0.9);
+        // Slow-rotate three sparkles around the avatar. Each sparkle's
+        // brightness varies slightly out-of-phase so they twinkle.
+        final paint = Paint()..color = colors.accent;
         final w = r.width;
-        for (final angle in [0.35, 1.85, 3.7]) {
+        for (var i = 0; i < 3; i++) {
+          final base = i * (math.pi * 2 / 3); // even spread
+          final angle = base + phase * math.pi * 2;
           final x = r.center.dx + math.cos(angle) * w * 0.48;
           final y = r.center.dy + math.sin(angle) * w * 0.48;
+          final twinkle =
+              (math.sin(phase * math.pi * 4 + i * 1.7) + 1) / 2;
+          paint.color = colors.accent.withOpacity(0.55 + 0.35 * twinkle);
           canvas.drawCircle(Offset(x, y), w * 0.045, paint);
           canvas.drawCircle(
               Offset(x, y), w * 0.015, Paint()..color = Colors.white);
         }
       case AvatarAura.pulse:
-        final ring = Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = math.max(1.5, r.width * 0.025)
-          ..color = colors.accent.withOpacity(0.55);
-        canvas.drawCircle(r.center, r.width * 0.49, ring);
+        // Two concentric rings expanding outward + fading. When static
+        // (phase=0) we draw the inner ring at its base radius.
+        if (phase == 0) {
+          final ring = Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = math.max(1.5, r.width * 0.025)
+            ..color = colors.accent.withOpacity(0.55);
+          canvas.drawCircle(r.center, r.width * 0.49, ring);
+        } else {
+          for (var i = 0; i < 2; i++) {
+            final p = (phase + i * 0.5) % 1.0; // staggered phase
+            final radius = r.width * (0.42 + 0.16 * p);
+            final opacity = 0.55 * (1 - p);
+            final ring = Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = math.max(1.5, r.width * 0.025)
+              ..color = colors.accent.withOpacity(opacity);
+            canvas.drawCircle(r.center, radius, ring);
+          }
+        }
       case AvatarAura.shadow:
         final shadow = Paint()
           ..color = colors.detail.withOpacity(0.30)
@@ -450,5 +553,5 @@ class _AvatarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _AvatarPainter old) =>
-      old.design != design || old.initial != initial;
+      old.design != design || old.initial != initial || old.phase != phase;
 }

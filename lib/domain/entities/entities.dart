@@ -892,6 +892,14 @@ class MoodCount {
   const MoodCount({required this.mood, required this.count});
 }
 
+/// One day in a friend's 90-day activity heatmap. Count = authored
+/// posts + comments that day.
+class ActivityHeatmapDay {
+  final DateTime day;
+  final int count;
+  const ActivityHeatmapDay({required this.day, required this.count});
+}
+
 /// A high-engagement post surfaced on a friend's profile.
 class ProfileHighlightPost {
   final String postId;
@@ -978,6 +986,9 @@ class UserProfileView {
   final List<ProfileHighlightPost> recentPosts;
   final List<UserBadge> badges;
 
+  /// 90-day daily activity for friends-tier views. Empty for strangers.
+  final List<ActivityHeatmapDay> heatmap;
+
   const UserProfileView({
     required this.relation,
     required this.userId,
@@ -996,6 +1007,7 @@ class UserProfileView {
     required this.topMoods,
     required this.recentPosts,
     required this.badges,
+    this.heatmap = const [],
     this.currentMood,
     this.comments,
     this.reactionsReceived,

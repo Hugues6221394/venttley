@@ -144,6 +144,7 @@ class _AvatarBuilderScreenState extends ConsumerState<AvatarBuilderScreen> {
                 seed: _design.toSeed(),
                 label: label,
                 size: 156,
+                animate: true,
               ),
             ),
           ),
