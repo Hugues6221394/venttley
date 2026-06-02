@@ -1067,6 +1067,8 @@ class VentlyRepository {
     required String roomId,
     required String plaintext,
     String? attachedPostId,
+    String? attachedMediaPath,
+    String? attachedMediaType,
   }) {
     final live = _live;
     if (live != null) {
@@ -1074,13 +1076,51 @@ class VentlyRepository {
         roomId: roomId,
         payload: plaintext,
         attachedPostId: attachedPostId,
+        attachedMediaPath: attachedMediaPath,
+        attachedMediaType: attachedMediaType,
       );
     }
     return Future.value(_mock.sendMessage(
       roomId: roomId,
       plaintext: plaintext,
       attachedPostId: attachedPostId,
+      attachedMediaPath: attachedMediaPath,
+      attachedMediaType: attachedMediaType,
     ));
+  }
+
+  /// Upload an image to the room's chat-media folder. Returns the
+  /// storage path which can then be passed into [sendMessage] as
+  /// `attachedMediaPath`. Voice deliberately unsupported.
+  Future<({String path, String messageId})> uploadChatImage({
+    required String roomId,
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.uploadChatImage(
+        roomId: roomId,
+        bytes: bytes,
+        extension: extension,
+        contentType: contentType,
+      );
+    }
+    return _mock.uploadChatImage(
+      roomId: roomId,
+      bytes: bytes,
+      extension: extension,
+      contentType: contentType,
+    );
+  }
+
+  /// Resolve a chat-media storage path into a signed URL the UI can
+  /// pass to Image.network / CachedNetworkImage.
+  Future<String> chatImageSignedUrl(String path) {
+    final live = _live;
+    if (live != null) return live.chatImageSignedUrl(path);
+    return _mock.chatImageSignedUrl(path);
   }
 
   // ===================== Prompts =====================

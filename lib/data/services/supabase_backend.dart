@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../domain/entities/entities.dart';
 import 'identity_service.dart';
@@ -1742,6 +1744,8 @@ class SupabaseBackend {
       attachedPostSnapshot:
           SharedPostSnapshot.fromJson(r['attached_post_snapshot']),
       readAt: rawRead == null ? null : DateTime.parse(rawRead),
+      attachedMediaPath: r['attached_media_path'] as String?,
+      attachedMediaType: r['attached_media_type'] as String?,
     );
   }
 
@@ -1847,6 +1851,41 @@ class SupabaseBackend {
     return controller.stream;
   }
 
+  /// Upload an image file to the room's chat-media folder. Returns the
+  /// storage path (`<roomId>/<messageId>.<ext>`) ready to be passed
+  /// into [sendMessage] as `attachedMediaPath`.
+  ///
+  /// We pre-generate the message id client-side so the storage object
+  /// name is stable and the receiver can fetch it independently of
+  /// the chat_messages row arriving (small race window otherwise).
+  Future<({String path, String messageId})> uploadChatImage({
+    required String roomId,
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) async {
+    final messageId = const Uuid().v4();
+    final path = '$roomId/$messageId.$extension';
+    await _client.storage.from('chat-media').uploadBinary(
+          path,
+          Uint8List.fromList(bytes),
+          fileOptions: FileOptions(
+            contentType: contentType,
+            upsert: false,
+          ),
+        );
+    return (path: path, messageId: messageId);
+  }
+
+  /// Short-lived signed URL for an image stored under the chat-media
+  /// bucket. The path comes from `chat_messages.attached_media_path`.
+  Future<String> chatImageSignedUrl(String path) async {
+    return await _client.storage.from('chat-media').createSignedUrl(
+          path,
+          3600, // 1 hour — plenty for a chat session render
+        );
+  }
+
   /// Send a plain chat message OR attach a shared post via the
   /// `send_chat_message` RPC. The RPC enforces room participation +
   /// active status, and captures the post snapshot at send time so
@@ -1855,6 +1894,8 @@ class SupabaseBackend {
     required String roomId,
     required String payload,
     String? attachedPostId,
+    String? attachedMediaPath,
+    String? attachedMediaType,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
@@ -1864,6 +1905,8 @@ class SupabaseBackend {
         'p_room_id': roomId,
         'p_payload': payload,
         'p_attached_post_id': attachedPostId,
+        'p_media_path': attachedMediaPath,
+        'p_media_type': attachedMediaType,
       },
     );
     final rows = res as List;
@@ -1881,6 +1924,8 @@ class SupabaseBackend {
       attachedPostId: r['attached_post_id'] as String?,
       attachedPostSnapshot:
           SharedPostSnapshot.fromJson(r['attached_post_snapshot']),
+      attachedMediaPath: r['attached_media_path'] as String?,
+      attachedMediaType: r['attached_media_type'] as String?,
     );
   }
 

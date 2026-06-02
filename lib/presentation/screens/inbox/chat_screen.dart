@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants.dart';
@@ -25,6 +28,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Debounce typing broadcasts so each keystroke doesn't ping Realtime.
   Timer? _typingDebounce;
   DateTime _lastTypingSent = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Bytes of an image the user picked but hasn't sent yet, plus its
+  /// extension. Cleared on send or on the discard button.
+  Uint8List? _pendingImageBytes;
+  String _pendingImageExt = 'jpg';
+  String _pendingImageMime = 'image/jpeg';
+
+  Future<void> _pickImage() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 82,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      final ext = picked.path.split('.').last.toLowerCase();
+      setState(() {
+        _pendingImageBytes = bytes;
+        _pendingImageExt = ext == 'jpeg' ? 'jpg' : ext;
+        _pendingImageMime = picked.mimeType ?? 'image/jpeg';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not pick image: $e')),
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -198,28 +232,58 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
           _Composer(
             controller: _controller,
+            pendingImageBytes: _pendingImageBytes,
+            onAttachImage: _pickImage,
+            onClearImage: () => setState(() => _pendingImageBytes = null),
             onSend: () async {
               final t = _controller.text.trim();
-              if (t.isEmpty) return;
-              final moderation =
-                  await ref.read(moderationServiceProvider).review(t);
-              if (!context.mounted) return;
-              if (moderation.isBlocked) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(moderation.reasons.isEmpty
-                        ? 'Held back by safety AI.'
-                        : moderation.reasons.first),
-                  ),
-                );
-                return;
+              final pending = _pendingImageBytes;
+              if (t.isEmpty && pending == null) return;
+              if (t.isNotEmpty) {
+                final moderation =
+                    await ref.read(moderationServiceProvider).review(t);
+                if (!context.mounted) return;
+                if (moderation.isBlocked) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(moderation.reasons.isEmpty
+                          ? 'Held back by safety AI.'
+                          : moderation.reasons.first),
+                    ),
+                  );
+                  return;
+                }
+              }
+              String? mediaPath;
+              String? mediaType;
+              if (pending != null) {
+                try {
+                  final up = await ref
+                      .read(repositoryProvider)
+                      .uploadChatImage(
+                        roomId: widget.roomId,
+                        bytes: pending,
+                        extension: _pendingImageExt,
+                        contentType: _pendingImageMime,
+                      );
+                  mediaPath = up.path;
+                  mediaType = 'image';
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Upload failed: $e')),
+                  );
+                  return;
+                }
               }
               await ref.read(repositoryProvider).sendMessage(
                     roomId: widget.roomId,
                     plaintext: t,
+                    attachedMediaPath: mediaPath,
+                    attachedMediaType: mediaType,
                   );
               _controller.clear();
-              setState(() {});
+              if (mounted) setState(() => _pendingImageBytes = null);
             },
           ),
         ],
@@ -370,6 +434,20 @@ class _Bubble extends ConsumerWidget {
                 snapshot: snapshot,
                 attachedPostId: message.attachedPostId,
                 mine: mine,
+              ),
+            ),
+          if (message.attachedMediaPath != null &&
+              message.attachedMediaType == 'image')
+            Container(
+              margin: EdgeInsets.only(
+                top: 4,
+                bottom: hasText ? 2 : 4,
+              ),
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.72,
+              ),
+              child: _ChatImage(
+                storagePath: message.attachedMediaPath!,
               ),
             ),
 
@@ -565,9 +643,22 @@ class _TypingDotsState extends State<_TypingDots>
 }
 
 class _Composer extends StatelessWidget {
-  const _Composer({required this.controller, required this.onSend});
+  const _Composer({
+    required this.controller,
+    required this.onSend,
+    required this.onAttachImage,
+    this.pendingImageBytes,
+    this.onClearImage,
+  });
+
   final TextEditingController controller;
   final VoidCallback onSend;
+  final VoidCallback onAttachImage;
+
+  /// When non-null, shows a small preview chip above the composer with
+  /// a clear button. The send action will upload + attach this image.
+  final Uint8List? pendingImageBytes;
+  final VoidCallback? onClearImage;
 
   @override
   Widget build(BuildContext context) {
@@ -575,24 +666,71 @@ class _Composer extends StatelessWidget {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                minLines: 1,
-                maxLines: 5,
-                decoration: const InputDecoration(hintText: 'Message'),
+            if (pendingImageBytes != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 6),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.memory(
+                          pendingImageBytes!,
+                          width: 56,
+                          height: 56,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Image attached. Hit send to share.',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: onClearImage,
+                        tooltip: 'Discard image',
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              decoration: BoxDecoration(
-                  color: scheme.primary, shape: BoxShape.circle),
-              child: IconButton(
-                icon: const Icon(Icons.send_rounded, color: Colors.white),
-                onPressed: onSend,
-              ),
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.image_outlined),
+                  tooltip: 'Attach image',
+                  onPressed: onAttachImage,
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    minLines: 1,
+                    maxLines: 5,
+                    decoration: const InputDecoration(hintText: 'Message'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  decoration: BoxDecoration(
+                      color: scheme.primary, shape: BoxShape.circle),
+                  child: IconButton(
+                    icon: const Icon(Icons.send_rounded, color: Colors.white),
+                    onPressed: onSend,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -798,6 +936,101 @@ class _PaletteEmoji extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Image attachment in a chat bubble. Resolves the storage path to a
+/// short-lived signed URL via the repo, then renders via
+/// CachedNetworkImage. Tap → fullscreen InteractiveViewer.
+class _ChatImage extends ConsumerStatefulWidget {
+  const _ChatImage({required this.storagePath});
+  final String storagePath;
+
+  @override
+  ConsumerState<_ChatImage> createState() => _ChatImageState();
+}
+
+class _ChatImageState extends ConsumerState<_ChatImage> {
+  late Future<String> _urlFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlFuture =
+        ref.read(repositoryProvider).chatImageSignedUrl(widget.storagePath);
+  }
+
+  void _openFullscreen(BuildContext context, String url) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              maxScale: 5,
+              child: CachedNetworkImage(
+                imageUrl: url,
+                fit: BoxFit.contain,
+                placeholder: (_, __) => const Center(
+                  child: CircularProgressIndicator(),
+                ),
+                errorWidget: (_, __, ___) => const Icon(
+                    Icons.broken_image,
+                    color: Colors.white54,
+                    size: 48),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _urlFuture,
+      builder: (ctx, snap) {
+        if (!snap.hasData) {
+          return Container(
+            height: 160,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        final url = snap.data!;
+        return GestureDetector(
+          onTap: () => _openFullscreen(context, url),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: CachedNetworkImage(
+              imageUrl: url,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => Container(
+                height: 200,
+                color: Theme.of(context).colorScheme.surface,
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+              errorWidget: (_, __, ___) => Container(
+                height: 100,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: const Center(
+                  child: Icon(Icons.broken_image, color: Colors.black45),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

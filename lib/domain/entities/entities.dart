@@ -550,6 +550,14 @@ class ChatMessage {
   /// The caller's own reaction on this message, if any.
   final String? myReaction;
 
+  /// Supabase Storage path of an attached image, e.g. `<room>/<msg>.jpg`.
+  /// Read via short-lived signed URL — bucket is private.
+  final String? attachedMediaPath;
+
+  /// Currently always 'image' when [attachedMediaPath] is set. Reserved
+  /// for future media types if/when voice is unlocked.
+  final String? attachedMediaType;
+
   const ChatMessage({
     required this.messageId,
     required this.roomId,
@@ -562,6 +570,8 @@ class ChatMessage {
     this.readAt,
     this.reactionCounts = const {},
     this.myReaction,
+    this.attachedMediaPath,
+    this.attachedMediaType,
   });
 
   ChatMessage copyWith({
@@ -582,8 +592,12 @@ class ChatMessage {
       myReaction: myReaction == _unsetReaction
           ? this.myReaction
           : myReaction as String?,
+      attachedMediaPath: attachedMediaPath,
+      attachedMediaType: attachedMediaType,
     );
   }
+
+  bool get hasAttachedMedia => attachedMediaPath != null;
 
   bool get hasAttachedPost => attachedPostSnapshot != null;
 

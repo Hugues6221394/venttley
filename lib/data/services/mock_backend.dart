@@ -1447,10 +1447,28 @@ class MockBackend {
     return count;
   }
 
+  // Image uploads in the mock just hand back a deterministic placeholder
+  // URL — there's no real bucket. Bubble UI renders a "preview" stub.
+  Future<({String path, String messageId})> uploadChatImage({
+    required String roomId,
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) async {
+    final messageId = _uuid.v4();
+    return (path: '$roomId/$messageId.$extension', messageId: messageId);
+  }
+
+  Future<String> chatImageSignedUrl(String path) async {
+    return 'mock://chat-media/$path';
+  }
+
   ChatMessage sendMessage({
     required String roomId,
     required String plaintext,
     String? attachedPostId,
+    String? attachedMediaPath,
+    String? attachedMediaType,
   }) {
     SharedPostSnapshot? snapshot;
     if (attachedPostId != null) {
@@ -1477,6 +1495,8 @@ class MockBackend {
       sentByMe: true,
       attachedPostId: attachedPostId,
       attachedPostSnapshot: snapshot,
+      attachedMediaPath: attachedMediaPath,
+      attachedMediaType: attachedMediaType,
     );
     _messages.putIfAbsent(roomId, () => []).add(msg);
     // Add a soft auto-reply so the conversation breathes.
