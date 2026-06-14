@@ -8,10 +8,10 @@ import '../../../core/providers.dart';
 import '../../../domain/avatar/avatar_design.dart';
 import '../../widgets/anonymous_avatar.dart';
 
-/// Avatar Builder — composes a v2 avatar_seed from five axes
-/// (silhouette / palette / hair / accessory / aura). Saves through
-/// the `update_user_avatar` RPC. No real-face uploads, no biometric
-/// imagery — the customisation surface is intentionally abstract.
+/// Avatar Builder — composes a v2 avatar_seed from six axes
+/// (silhouette / palette / hair / accessory / aura / outfit). Saves through
+/// the `update_user_avatar` RPC. Real profile photos are handled separately
+/// from the main Profile screen so anonymous personas stay abstract.
 ///
 /// Reachable both standalone (`/profile/avatar`, edits the signed-in
 /// user) and as a sheet for personas via [openAvatarBuilder].
@@ -64,6 +64,7 @@ class _AvatarBuilderScreenState extends ConsumerState<AvatarBuilderScreen> {
         accessory:
             AvatarAccessory.values[r.nextInt(AvatarAccessory.values.length)],
         aura: AvatarAura.values[r.nextInt(AvatarAura.values.length)],
+        outfit: AvatarOutfit.values[r.nextInt(AvatarOutfit.values.length)],
       );
 
   Future<void> _save() async {
@@ -197,11 +198,21 @@ class _AvatarBuilderScreenState extends ConsumerState<AvatarBuilderScreen> {
             previewLabel: label,
             onPick: (v) => setState(() => _design = _design.copyWith(aura: v)),
           ),
+          _AxisPicker<AvatarOutfit>(
+            title: 'Outfit',
+            current: _design.outfit,
+            values: AvatarOutfit.values,
+            labels: {for (final v in AvatarOutfit.values) v: v.label},
+            previewFor: (v) => _design.copyWith(outfit: v).toSeed(),
+            previewLabel: label,
+            onPick: (v) =>
+                setState(() => _design = _design.copyWith(outfit: v)),
+          ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
             child: Text(
-              'Venttly avatars are intentionally abstract. We never accept real-face uploads.',
+              'Avatars stay playful and abstract. Profile photos are optional from your profile.',
               style: TextStyle(
                 fontSize: 11,
                 color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),

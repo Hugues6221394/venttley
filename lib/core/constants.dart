@@ -101,16 +101,25 @@ class FeedCategories {
   static String label(String key) {
     switch (key) {
       case 'family_issues':     return 'Family Issues';
-      case 'mental_health':     return 'Mental Health';
+      case 'mental_health':     return 'Mind & Mood';
       case 'campus_life':       return 'Campus Life';
       case 'faith_spirituality':return 'Faith & Beliefs';
-      case 'vent_zone':         return 'Vent Zone';
-      case 'dark_thoughts':     return 'Dark Thoughts';
+      case 'vent_zone':         return 'Rant Room';
+      case 'dark_thoughts':     return 'Late Thoughts';
       case 'funny_confessions': return 'Funny Moments';
       case 'dreams_goals':      return 'Dreams & Goals';
       case 'hot_takes':         return 'Hot Takes';
       case 'late_night':        return 'Late Night';
-      case 'healing_corner':    return 'Healing Corner';
+      case 'healing_corner':    return 'Glow Up';
+      case 'testimonies':       return 'Stories';
+      case 'relationships':     return 'Dating & Love';
+      case 'trauma':            return 'Comebacks';
+      case 'questions':         return 'Ask';
+      case 'friendship':        return 'Friends';
+      case 'adulting':          return 'Adulting';
+      case 'regrets':           return 'Regrets';
+      case 'secrets':           return 'Secrets';
+      case 'confessions':       return 'Confessions';
       default:
         return key[0].toUpperCase() + key.substring(1);
     }

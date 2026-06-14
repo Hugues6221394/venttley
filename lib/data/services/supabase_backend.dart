@@ -106,6 +106,7 @@ class SupabaseBackend {
       safetyTier: safetyTier,
       accountStatus: 'active',
       birthYear: birthYear,
+      profilePhotoUrl: null,
     );
     await _hydrateRealtime();
     return _me!;
@@ -160,7 +161,7 @@ class SupabaseBackend {
         .select(
           'user_id, anonymous_pseudonym, avatar_seed, current_mood, '
           'user_role, is_verified, account_status, safety_tier, birth_year, '
-          'karma_points, home_city, home_country, home_campus',
+          'karma_points, home_city, home_country, home_campus, profile_photo_url',
         )
         .eq('user_id', uid)
         .maybeSingle();
@@ -786,6 +787,52 @@ class SupabaseBackend {
   /// the AppUser so the session in memory reflects the new look.
   Future<AppUser> updateMyAvatar(String seed) async {
     await _client.rpc('update_user_avatar', params: {'p_seed': seed});
+    final refreshed = await restore();
+    return refreshed!;
+  }
+
+  Future<AppUser> uploadMyProfilePhoto({
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    final safeExt = extension
+        .replaceAll('.', '')
+        .toLowerCase()
+        .replaceAll(RegExp('[^a-z0-9]'), '');
+    final path = '$uid/profile-${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
+    await _client.storage.from('profile-photos').uploadBinary(
+          path,
+          Uint8List.fromList(bytes),
+          fileOptions: FileOptions(
+            contentType: contentType,
+            upsert: false,
+          ),
+        );
+    final url = _client.storage.from('profile-photos').getPublicUrl(path);
+    final oldPath = await _client.rpc(
+      'set_user_profile_photo',
+      params: {
+        'p_path': path,
+        'p_url': url,
+      },
+    ) as String?;
+    if (oldPath != null && oldPath.isNotEmpty && oldPath != path) {
+      unawaited(_client.storage.from('profile-photos').remove([oldPath]));
+    }
+    final refreshed = await restore();
+    return refreshed!;
+  }
+
+  Future<AppUser> removeMyProfilePhoto() async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    final oldPath = await _client.rpc('clear_user_profile_photo') as String?;
+    if (oldPath != null && oldPath.isNotEmpty) {
+      unawaited(_client.storage.from('profile-photos').remove([oldPath]));
+    }
     final refreshed = await restore();
     return refreshed!;
   }
@@ -2120,6 +2167,7 @@ class SupabaseBackend {
       authorId: r['author_id'] as String?,
       authorPseudonym: (r['author_pseudonym'] as String?) ?? '@anonymous',
       authorAvatarSeed: (r['author_avatar_seed'] as String?) ?? 'default-orb',
+      authorProfilePhotoUrl: r['author_profile_photo_url'] as String?,
       authorIsVerified: (r['author_is_verified'] as bool?) ?? false,
       categoryName: r['category_name'] as String,
       postType: r['post_type'] as String,
@@ -2210,6 +2258,7 @@ class SupabaseBackend {
       homeCity: r['home_city'] as String?,
       homeCountry: r['home_country'] as String?,
       homeCampus: r['home_campus'] as String?,
+      profilePhotoUrl: r['profile_photo_url'] as String?,
     );
   }
 
@@ -2261,4 +2310,3 @@ class EmailConfirmationStillOnException implements Exception {
       '"Confirm email" in Authentication → Providers → Email so the '
       'zero-PII username handles can sign up.';
 }
-

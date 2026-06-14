@@ -10,10 +10,10 @@ class HomeShell extends ConsumerWidget {
 
   static const _tabs = [
     _Tab('/feed',      Icons.home_outlined,             Icons.home_rounded,         'Home'),
-    _Tab('/tribes',    Icons.diversity_3_outlined,      Icons.diversity_3,          'Tribes'),
+    _Tab('/discover',  Icons.explore_outlined,          Icons.explore,              'Discover'),
     _Tab('/compose',   Icons.add_circle_outline,        Icons.add_circle,           'Post'),
-    _Tab('/questions', Icons.help_outline,              Icons.help_rounded,         'Questions'),
-    _Tab('/inbox',     Icons.notifications_none,        Icons.notifications,        'Inbox'),
+    _Tab('/tribes',    Icons.groups_outlined,           Icons.groups,               'Tribes'),
+    _Tab('/profile',   Icons.person_outline,            Icons.person,               'Profile'),
   ];
 
   @override
@@ -74,25 +74,30 @@ class _CustomNavBar extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          width: isPost ? 38 : 32,
-                          height: isPost ? 38 : 32,
+                          width: selected || isPost ? 44 : 32,
+                          height: selected || isPost ? 44 : 32,
                           decoration: BoxDecoration(
-                            color: isPost
+                            color: selected || isPost
                                 ? scheme.primary
-                                : selected
-                                    ? scheme.primary.withOpacity(0.14)
-                                    : Colors.transparent,
+                                : Colors.transparent,
                             shape: BoxShape.circle,
+                            boxShadow: selected || isPost
+                                ? [
+                                    BoxShadow(
+                                      color: scheme.primary.withOpacity(0.24),
+                                      blurRadius: 14,
+                                      offset: const Offset(0, 7),
+                                    ),
+                                  ]
+                                : null,
                           ),
                           alignment: Alignment.center,
                           child: Icon(
                             selected ? tab.activeIcon : tab.icon,
-                            color: isPost
+                            color: selected || isPost
                                 ? Colors.white
-                                : selected
-                                    ? scheme.primary
-                                    : scheme.onSurface.withOpacity(0.6),
-                            size: 22,
+                                : scheme.onSurface.withOpacity(0.48),
+                            size: selected || isPost ? 21 : 19,
                           ),
                         ),
                         const SizedBox(height: 2),

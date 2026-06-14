@@ -216,6 +216,7 @@ class MockBackend {
           ? '@${me.anonymousPseudonym}'
           : '@${persona.pseudonym}',
       authorAvatarSeed: persona?.avatarSeed ?? me.avatarSeed,
+      authorProfilePhotoUrl: persona == null ? me.profilePhotoUrl : null,
       authorIsVerified: me.isVerified,
       categoryName: category,
       postType: 'user_post',
@@ -386,6 +387,36 @@ class MockBackend {
     final me = _me;
     if (me == null) throw StateError('Not signed in');
     final updated = me.copyWith(avatarSeed: seed);
+    _me = updated;
+    final i = _users.indexWhere((u) => u.userId == me.userId);
+    if (i != -1) _users[i] = updated;
+    _emitAll();
+    return updated;
+  }
+
+  AppUser uploadMyProfilePhoto({
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) {
+    final me = _me;
+    if (me == null) throw StateError('Not signed in');
+    final safeExt = extension.replaceAll('.', '').toLowerCase();
+    final updated = me.copyWith(
+      profilePhotoUrl:
+          'mock://profile-photos/${me.userId}-${bytes.length}.${safeExt.isEmpty ? 'jpg' : safeExt}',
+    );
+    _me = updated;
+    final i = _users.indexWhere((u) => u.userId == me.userId);
+    if (i != -1) _users[i] = updated;
+    _emitAll();
+    return updated;
+  }
+
+  AppUser removeMyProfilePhoto() {
+    final me = _me;
+    if (me == null) throw StateError('Not signed in');
+    final updated = me.copyWith(profilePhotoUrl: null);
     _me = updated;
     final i = _users.indexWhere((u) => u.userId == me.userId);
     if (i != -1) _users[i] = updated;
@@ -1814,7 +1845,7 @@ class MockBackend {
       Post(
         postId: _uuid.v4(),
         authorPseudonym: '@SecretAdmirer',
-        authorAvatarSeed: 'plum-bloom-3322',
+        authorAvatarSeed: 'plum-glow-3322',
         categoryName: 'confessions',
         postType: 'user_post',
         content:

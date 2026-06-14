@@ -247,6 +247,32 @@ class VentlyRepository {
     return Future.value(_mock.updateMyAvatar(seed));
   }
 
+  Future<AppUser> uploadMyProfilePhoto({
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.uploadMyProfilePhoto(
+        bytes: bytes,
+        extension: extension,
+        contentType: contentType,
+      );
+    }
+    return Future.value(_mock.uploadMyProfilePhoto(
+      bytes: bytes,
+      extension: extension,
+      contentType: contentType,
+    ));
+  }
+
+  Future<AppUser> removeMyProfilePhoto() {
+    final live = _live;
+    if (live != null) return live.removeMyProfilePhoto();
+    return Future.value(_mock.removeMyProfilePhoto());
+  }
+
   Future<AppUser> updateMyLocation({
     String? homeCity,
     String? homeCountry,
@@ -666,6 +692,39 @@ class VentlyRepository {
   }
 
   Future<void> toggleLike(String postId) => react(postId, 'like');
+
+  Future<String?> reactToStory(String postId, String reaction) =>
+      react(postId, reaction);
+
+  Future<ChatRoom> replyToStory({
+    required String authorId,
+    required String authorPseudonym,
+    required String authorAvatarSeed,
+    required String storyPostId,
+    required String reply,
+  }) async {
+    final room = await sendMessageRequest(
+      peerUserId: authorId,
+      peerPseudonym: authorPseudonym,
+      peerAvatarSeed: authorAvatarSeed,
+      preview: _trimPreview('Replied to your story: $reply'),
+      originPostId: storyPostId,
+    );
+    if (room.roomStatus == 'active') {
+      await sendMessage(
+        roomId: room.roomId,
+        plaintext: reply,
+        attachedPostId: storyPostId,
+      );
+    }
+    return room;
+  }
+
+  String _trimPreview(String value) {
+    final text = value.trim();
+    if (text.length <= 280) return text;
+    return '${text.substring(0, 277)}...';
+  }
 
   /// Set / switch / clear the caller's emotional reaction on a post.
   /// Returns the resulting reaction (`null` when the user toggled the

@@ -6,9 +6,9 @@ import '../../core/constants.dart';
 import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
-import 'anonymous_avatar.dart';
 import 'mood_chip.dart';
 import 'poll_card.dart';
+import 'profile_avatar.dart';
 import 'share_post_to_friend_sheet.dart';
 
 class PostCard extends ConsumerWidget {
@@ -45,9 +45,10 @@ class PostCard extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  AnonymousAvatar(
-                    seed: post.authorAvatarSeed,
+                  ProfileAvatar(
+                    avatarSeed: post.authorAvatarSeed,
                     label: post.authorPseudonym,
+                    profilePhotoUrl: post.authorProfilePhotoUrl,
                     size: 36,
                   ),
                   const SizedBox(width: 10),

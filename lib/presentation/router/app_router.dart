@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../screens/compose/compose_screen.dart';
+import '../screens/discover/discover_screen.dart';
 import '../screens/feed/feed_screen.dart';
 import '../screens/feed/post_detail_screen.dart';
 import '../screens/friends/friend_profile_screen.dart';
@@ -61,16 +62,16 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/feed',      builder: (_, __) => const FeedScreen()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/tribes',    builder: (_, __) => const TribesDirectoryScreen()),
+            GoRoute(path: '/discover',  builder: (_, __) => const DiscoverScreen()),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(path: '/compose',   builder: (_, __) => const ComposeScreen()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/questions', builder: (_, __) => const QuestionsScreen()),
+            GoRoute(path: '/tribes',    builder: (_, __) => const TribesDirectoryScreen()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/inbox',     builder: (_, __) => const InboxScreen()),
+            GoRoute(path: '/profile',   builder: (_, __) => const ProfileScreen()),
           ]),
         ],
       ),
@@ -124,7 +125,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/chat/:roomId',
         builder: (ctx, st) => ChatScreen(roomId: st.pathParameters['roomId']!),
       ),
-      GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+      GoRoute(path: '/questions', builder: (_, __) => const QuestionsScreen()),
+      GoRoute(path: '/inbox', builder: (_, __) => const InboxScreen()),
       GoRoute(
         path: '/profile/avatar',
         builder: (_, __) => const AvatarBuilderScreen(),

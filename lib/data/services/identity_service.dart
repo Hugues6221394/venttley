@@ -158,7 +158,7 @@ class PseudonymGenerator {
 
   static const _nouns = [
     'Soul', 'Mind', 'Echo', 'Flower', 'King', 'Storm', 'Pulse', 'Thinker',
-    'Whisper', 'Bloom', 'Wave', 'Petal', 'Ember', 'Vessel', 'Wanderer',
+    'Whisper', 'Glow', 'Wave', 'Petal', 'Ember', 'Vessel', 'Wanderer',
     'Cloud', 'Heart', 'Voice', 'Tide', 'Light', 'Moon', 'Ghost', 'Phoenix',
     'River', 'Pearl', 'Lyric', 'Spark',
   ];

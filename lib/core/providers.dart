@@ -90,20 +90,20 @@ class ThemeModeController extends StateNotifier<ThemeMode> {
 
 /// Feed filter state.
 ///
-/// `scope` controls global vs local. `sort` controls fresh vs hot.
+/// `scope` controls global vs local. `sort` controls foryou vs hot vs fresh.
 /// `tribeSlug` overrides scope when set.
 class FeedFilter {
   final String? category;
   final String? mood;
   final String? tribeSlug;
   final String scope; // 'global' | 'local'
-  final String sort;  // 'fresh'  | 'hot'
+  final String sort;  // 'foryou' | 'hot' | 'fresh'
   const FeedFilter({
-    this.category = 'confessions',
+    this.category,
     this.mood,
     this.tribeSlug,
     this.scope = 'global',
-    this.sort = 'fresh',
+    this.sort = 'foryou',
   });
 
   FeedFilter copyWith({
@@ -141,6 +141,15 @@ final feedPostsProvider = StreamProvider<List<Post>>((ref) {
     locationBucket: bucket,
     sort: filter.sort,
   );
+});
+
+/// Broad hot sample for Home discovery modules. It intentionally ignores the
+/// active category/mood filters so Trending Topics and Stories keep showing
+/// the whole app pulse while the main feed list can be narrowed.
+final homeDiscoveryPostsProvider =
+    FutureProvider.autoDispose<List<Post>>((ref) async {
+  ref.watch(feedPostsProvider);
+  return ref.watch(repositoryProvider).feed(sort: 'hot');
 });
 
 final inboxTabProvider = StateProvider<String>((ref) => 'requests');
@@ -188,6 +197,13 @@ final tribeBySlugProvider =
 /// Transient: when set, the next compose-screen open pre-fills this Tribe.
 /// Cleared by the compose screen after it picks it up.
 final composeTargetTribeProvider = StateProvider<Tribe?>((ref) => null);
+
+/// When true, the next compose-screen open starts as a 24h Vent Story.
+/// Cleared by the compose screen after it reads the flag.
+final composeStoryModeProvider = StateProvider<bool>((ref) => false);
+
+/// Optional category for the next compose-screen open.
+final composeInitialCategoryProvider = StateProvider<String?>((ref) => null);
 
 /// The user's personas (alternate anonymous handles).
 final myPersonasProvider = FutureProvider.autoDispose<List<Persona>>(

@@ -8,6 +8,7 @@ import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../../data/services/moderation_service.dart';
 import '../../../domain/entities/entities.dart';
+import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/mood_chip.dart';
 
@@ -28,6 +29,16 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   bool _busy = false;
   bool _includePoll = false;
   bool _isWhisper = false;
+  bool _storyFriendsOnly = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _isWhisper = ref.read(composeStoryModeProvider);
+    _category = ref.read(composeInitialCategoryProvider) ?? _category;
+    ref.read(composeStoryModeProvider.notifier).state = false;
+    ref.read(composeInitialCategoryProvider.notifier).state = null;
+  }
 
   @override
   void dispose() {
@@ -111,6 +122,8 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       }
     }
     ref.read(composeTargetTribeProvider.notifier).state = null;
+    ref.read(composeStoryModeProvider.notifier).state = false;
+    ref.read(composeInitialCategoryProvider.notifier).state = null;
     if (!mounted) return;
     setState(() => _busy = false);
     if (tribe != null) {
@@ -121,7 +134,9 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(tribe == null
-            ? 'Vent posted anonymously.'
+            ? (_isWhisper
+                ? 'Story posted for 24 hours.'
+                : 'Vent posted anonymously.')
             : 'Posted to ${tribe.name}.'),
       ),
     );
@@ -130,6 +145,9 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    if (_isWhisper) {
+      return _buildStoryComposer(context);
+    }
     final Tribe? target = ref.watch(composeTargetTribeProvider);
     final personas = ref.watch(myPersonasProvider).valueOrNull ?? const [];
     final activePersona = ref.watch(activePersonaProvider);
@@ -139,7 +157,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           icon: const Icon(Icons.close),
           onPressed: () => context.go('/feed'),
         ),
-        title: const Text('New Vent'),
+        title: Text(_isWhisper ? 'New Story' : 'New Vent'),
         actions: [
           TextButton(
             onPressed: _busy ? null : _submit,
@@ -289,7 +307,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                       expands: true,
                       textAlignVertical: TextAlignVertical.top,
                       decoration: const InputDecoration(
-                        hintText: 'What would you like to vent about?\nNo names. No links. Pure feelings.',
+                        hintText: 'Drop the thought. Keep names out, keep it real.',
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
@@ -319,7 +337,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                       size: 18,
                       color: scheme.primary,
                     ),
-                    label: Text(_isWhisper ? 'Whisper · 24h' : 'Whisper'),
+                    label: Text(_isWhisper ? 'Story - 24h' : '24h Story'),
                   ),
                   const Spacer(),
                   MoodChip(mood: _mood, dense: true),
@@ -396,6 +414,317 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildStoryComposer(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFFF8F8),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    color: VentlyColors.berryMagenta,
+                    onPressed: () => context.go('/feed'),
+                  ),
+                  const SizedBox(width: 4),
+                  const Text(
+                    'Venttly',
+                    style: TextStyle(
+                      color: Color(0xFFB91452),
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.settings_outlined),
+                    color: VentlyColors.deepBurgundy,
+                    onPressed: () {},
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                child: Column(
+                  children: [
+                    Container(
+                      height: 430,
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 22),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Color(0xFFFFB8CD),
+                            Color(0xFFE56F9B),
+                            Color(0xFFBD0E53),
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: VentlyColors.berryMagenta.withOpacity(0.20),
+                            blurRadius: 24,
+                            offset: const Offset(0, 16),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: VentlyColors.deepBurgundy.withOpacity(0.16),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'LIVE PREVIEW',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Center(
+                            child: Container(
+                              width: 106,
+                              height: 106,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.18),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.22),
+                                ),
+                              ),
+                              child: const Icon(Icons.favorite_rounded,
+                                  color: Colors.white, size: 48),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          TextField(
+                            controller: _controller,
+                            maxLength: 220,
+                            maxLines: 4,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              height: 1.28,
+                            ),
+                            decoration: InputDecoration(
+                              counterText: '',
+                              hintText: 'Share your mood today...',
+                              hintStyle: TextStyle(
+                                color: Colors.white.withOpacity(0.88),
+                                fontWeight: FontWeight.w800,
+                              ),
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                            ),
+                          ),
+                          const Spacer(),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    GridView.count(
+                      crossAxisCount: 2,
+                      childAspectRatio: 1.2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [
+                        _StoryCreateOption(
+                          icon: Icons.camera_alt_outlined,
+                          label: 'Capture Photo',
+                          color: VentlyColors.berryMagenta,
+                          onTap: () => _selectStoryPreset(
+                            category: 'funny_confessions',
+                            mood: 'happy',
+                          ),
+                        ),
+                        _StoryCreateOption(
+                          icon: Icons.image_outlined,
+                          label: 'Gallery',
+                          color: const Color(0xFFF79ABD),
+                          onTap: () => _selectStoryPreset(
+                            category: 'healing_corner',
+                            mood: 'healing',
+                          ),
+                        ),
+                        _StoryCreateOption(
+                          icon: Icons.edit_note_rounded,
+                          label: 'Text Only',
+                          color: const Color(0xFF008F4C),
+                          onTap: () => _selectStoryPreset(
+                            category: 'late_night',
+                            mood: 'overthinking',
+                          ),
+                        ),
+                        _StoryCreateOption(
+                          icon: Icons.mic_none_rounded,
+                          label: 'Audio Note',
+                          color: VentlyColors.berryMagenta,
+                          pale: true,
+                          onTap: () => _selectStoryPreset(
+                            category: 'late_night',
+                            mood: 'hopeful',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.74),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: VentlyColors.softMauve.withOpacity(0.38),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.visibility_outlined,
+                                  color: VentlyColors.berryMagenta),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Privacy Settings',
+                                      style: TextStyle(
+                                        color: VentlyColors.deepBurgundy,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Friends only',
+                                      style: TextStyle(
+                                        color: VentlyColors.deepBurgundy,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Switch(
+                                value: _storyFriendsOnly,
+                                onChanged: (value) =>
+                                    setState(() => _storyFriendsOnly = value),
+                                activeColor: VentlyColors.berryMagenta,
+                              ),
+                            ],
+                          ),
+                          Divider(
+                            color: VentlyColors.softMauve.withOpacity(0.22),
+                          ),
+                          const Row(
+                            children: [
+                              Icon(Icons.timer_outlined,
+                                  color: VentlyColors.berryMagenta),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Story Duration',
+                                  style: TextStyle(
+                                    color: VentlyColors.deepBurgundy,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '24 Hours',
+                                style: TextStyle(
+                                  color: VentlyColors.softMauve,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+              child: SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: FilledButton(
+                  onPressed: _busy ? null : _submit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFB91452),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                    elevation: 8,
+                    shadowColor: VentlyColors.berryMagenta.withOpacity(0.26),
+                  ),
+                  child: _busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Share to Story',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Icon(Icons.send_rounded, color: Colors.white),
+                          ],
+                        ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _selectStoryPreset({
+    required String category,
+    required String mood,
+  }) {
+    setState(() {
+      _category = category;
+      _mood = mood;
+    });
   }
 
   void _showPersonaPicker(
@@ -521,5 +850,67 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           ),
         ) ??
         false;
+  }
+}
+
+class _StoryCreateOption extends StatelessWidget {
+  const _StoryCreateOption({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.pale = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  final bool pale;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.68),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.38)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                color: pale ? const Color(0xFFFFEAF1) : color,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: pale ? color : Colors.white,
+                size: 26,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: VentlyColors.deepBurgundy,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

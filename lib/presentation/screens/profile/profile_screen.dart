@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/providers.dart';
 import '../../../domain/avatar/avatar_design.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
+import '../../widgets/profile_avatar.dart';
 import '../../widgets/post_card.dart';
 import 'avatar_builder_screen.dart';
 
@@ -78,6 +80,7 @@ class ProfileScreen extends ConsumerWidget {
                 me: me,
                 onShowPhrase: () => _showRecoveryPhrase(context, ref),
                 onEditLocation: () => _showLocationSheet(context, ref, me),
+                onPhotoAction: () => _showProfilePhotoSheet(context, ref, me),
               ),
             ),
             SliverToBoxAdapter(
@@ -137,10 +140,12 @@ class _HeroCard extends StatelessWidget {
     required this.me,
     required this.onShowPhrase,
     required this.onEditLocation,
+    required this.onPhotoAction,
   });
   final AppUser me;
   final VoidCallback onShowPhrase;
   final VoidCallback onEditLocation;
+  final VoidCallback onPhotoAction;
 
   @override
   Widget build(BuildContext context) {
@@ -177,20 +182,23 @@ class _HeroCard extends StatelessWidget {
           Stack(
             alignment: Alignment.bottomRight,
             children: [
-              AnonymousAvatar(
-                seed: me.avatarSeed,
+              ProfileAvatar(
+                avatarSeed: me.avatarSeed,
                 label: me.anonymousPseudonym,
+                profilePhotoUrl: me.profilePhotoUrl,
                 size: 96,
+                animate: me.profilePhotoUrl == null,
               ),
               Material(
                 color: Theme.of(context).colorScheme.primary,
                 shape: const CircleBorder(),
                 child: InkWell(
                   customBorder: const CircleBorder(),
-                  onTap: () => context.push('/profile/avatar'),
+                  onTap: onPhotoAction,
                   child: const Padding(
                     padding: EdgeInsets.all(7),
-                    child: Icon(Icons.edit, size: 14, color: Colors.white),
+                    child:
+                        Icon(Icons.add_a_photo, size: 14, color: Colors.white),
                   ),
                 ),
               ),
@@ -269,10 +277,22 @@ class _HeroCard extends StatelessWidget {
           const SizedBox(height: 14),
           SizedBox(
             width: 240,
-            child: OutlinedButton.icon(
-              onPressed: onShowPhrase,
-              icon: const Icon(Icons.key_outlined, size: 16),
-              label: const Text('Show recovery phrase'),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => context.push('/profile/avatar'),
+                  icon: const Icon(Icons.face_retouching_natural, size: 16),
+                  label: const Text('Avatar'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onShowPhrase,
+                  icon: const Icon(Icons.key_outlined, size: 16),
+                  label: const Text('Recovery'),
+                ),
+              ],
             ),
           ),
         ],
@@ -958,6 +978,118 @@ Future<void> _showLocationSheet(
       );
     },
   );
+}
+
+// =========================================================================
+// PROFILE PHOTO SHEET - optional, user-controlled visual identity
+// =========================================================================
+
+Future<void> _showProfilePhotoSheet(
+  BuildContext context,
+  WidgetRef ref,
+  AppUser me,
+) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) {
+      Future<void> upload() async {
+        final picked = await ImagePicker().pickImage(
+          source: ImageSource.gallery,
+          imageQuality: 88,
+          maxWidth: 1400,
+        );
+        if (picked == null) return;
+        final bytes = await picked.readAsBytes();
+        final ext = picked.name.contains('.')
+            ? picked.name.split('.').last
+            : 'jpg';
+        try {
+          await ref.read(repositoryProvider).uploadMyProfilePhoto(
+                bytes: bytes,
+                extension: ext,
+                contentType: _contentTypeFor(ext),
+              );
+          await ref.read(sessionProvider.notifier).restore();
+          if (!ctx.mounted) return;
+          Navigator.pop(ctx);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile photo updated.')),
+          );
+        } catch (e) {
+          if (!ctx.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not upload photo: $e')),
+          );
+        }
+      }
+
+      Future<void> remove() async {
+        try {
+          await ref.read(repositoryProvider).removeMyProfilePhoto();
+          await ref.read(sessionProvider.notifier).restore();
+          if (!ctx.mounted) return;
+          Navigator.pop(ctx);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile photo removed.')),
+          );
+        } catch (e) {
+          if (!ctx.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not remove photo: $e')),
+          );
+        }
+      }
+
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Choose profile photo'),
+                subtitle: const Text('Optional. Your avatar stays available.'),
+                onTap: upload,
+              ),
+              ListTile(
+                leading: const Icon(Icons.face_retouching_natural),
+                title: const Text('Edit avatar outfit'),
+                subtitle: const Text('Build a clothed anonymous avatar.'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  context.push('/profile/avatar');
+                },
+              ),
+              if ((me.profilePhotoUrl ?? '').isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline),
+                  title: const Text('Remove profile photo'),
+                  onTap: remove,
+                ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+String _contentTypeFor(String ext) {
+  switch (ext.toLowerCase().replaceAll('.', '')) {
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
+    case 'gif':
+      return 'image/gif';
+    case 'heic':
+    case 'heif':
+      return 'image/heic';
+    default:
+      return 'image/jpeg';
+  }
 }
 
 // =========================================================================

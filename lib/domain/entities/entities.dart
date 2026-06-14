@@ -16,6 +16,7 @@ class AppUser {
   final String? homeCity;
   final String? homeCountry;
   final String? homeCampus;
+  final String? profilePhotoUrl;
 
   const AppUser({
     required this.userId,
@@ -31,6 +32,7 @@ class AppUser {
     this.homeCity,
     this.homeCountry,
     this.homeCampus,
+    this.profilePhotoUrl,
   });
 
   bool get isRestrictedMinor => safetyTier == 'restricted_minor';
@@ -56,6 +58,7 @@ class AppUser {
     String? homeCity,
     String? homeCountry,
     String? homeCampus,
+    Object? profilePhotoUrl = _unset,
   }) {
     return AppUser(
       userId: userId,
@@ -71,8 +74,13 @@ class AppUser {
       homeCity: homeCity ?? this.homeCity,
       homeCountry: homeCountry ?? this.homeCountry,
       homeCampus: homeCampus ?? this.homeCampus,
+      profilePhotoUrl: profilePhotoUrl == _unset
+          ? this.profilePhotoUrl
+          : profilePhotoUrl as String?,
     );
   }
+
+  static const Object _unset = Object();
 }
 
 /// A member of a Tribe — joins tribe_members + users for the manage view.
@@ -299,6 +307,7 @@ class Post {
   final String? authorId;
   final String authorPseudonym;
   final String authorAvatarSeed;
+  final String? authorProfilePhotoUrl;
   final bool authorIsVerified;
   final int authorKarma;
   final String? tribeId;
@@ -331,6 +340,7 @@ class Post {
     required this.commentsCount,
     required this.createdAt,
     this.authorId,
+    this.authorProfilePhotoUrl,
     this.authorIsVerified = false,
     this.authorKarma = 0,
     this.tribeId,
@@ -365,6 +375,7 @@ class Post {
       authorId: authorId,
       authorPseudonym: authorPseudonym,
       authorAvatarSeed: authorAvatarSeed,
+      authorProfilePhotoUrl: authorProfilePhotoUrl,
       authorIsVerified: authorIsVerified,
       authorKarma: authorKarma,
       categoryName: categoryName,

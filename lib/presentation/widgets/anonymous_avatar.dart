@@ -261,6 +261,12 @@ class _AvatarPainter extends CustomPainter {
     );
     canvas.restore();
 
+    // ── Outfit layer, clipped inside the silhouette ─────────────────
+    canvas.save();
+    canvas.clipPath(basePath);
+    _paintOutfit(canvas, rect, colors);
+    canvas.restore();
+
     // ── Initial letter ───────────────────────────────────────────────
     final hasMask = design.accessory == AvatarAccessory.mask;
     final tp = TextPainter(
@@ -473,6 +479,115 @@ class _AvatarPainter extends CustomPainter {
             Offset(r.right - r.width * 0.16, r.top + r.height * 0.22),
             r.width * 0.09,
             paint);
+    }
+  }
+
+  void _paintOutfit(Canvas canvas, Rect r, AvatarColors colors) {
+    if (design.outfit == AvatarOutfit.none) return;
+    final w = r.width;
+    final h = r.height;
+    final top = r.top + h * 0.64;
+    final body = Rect.fromLTRB(
+      r.left + w * 0.16,
+      top,
+      r.right - w * 0.16,
+      r.bottom + h * 0.04,
+    );
+    final outfitPaint = Paint()..color = colors.detail.withOpacity(0.86);
+    final accentPaint = Paint()..color = Colors.white.withOpacity(0.72);
+    final trimPaint = Paint()
+      ..color = colors.base.withOpacity(0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(1.2, w * 0.022)
+      ..strokeCap = StrokeCap.round;
+
+    switch (design.outfit) {
+      case AvatarOutfit.none:
+        break;
+      case AvatarOutfit.hoodie:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(body, Radius.circular(w * 0.16)),
+          outfitPaint,
+        );
+        final hood = Path()
+          ..moveTo(r.left + w * 0.28, top + h * 0.06)
+          ..quadraticBezierTo(r.center.dx, top - h * 0.16,
+              r.right - w * 0.28, top + h * 0.06)
+          ..lineTo(r.right - w * 0.34, top + h * 0.18)
+          ..quadraticBezierTo(
+              r.center.dx, top + h * 0.05, r.left + w * 0.34, top + h * 0.18)
+          ..close();
+        canvas.drawPath(hood, Paint()..color = colors.accent.withOpacity(0.92));
+        canvas.drawLine(
+          Offset(r.center.dx - w * 0.035, top + h * 0.12),
+          Offset(r.center.dx - w * 0.035, r.bottom - h * 0.08),
+          trimPaint,
+        );
+        canvas.drawLine(
+          Offset(r.center.dx + w * 0.035, top + h * 0.12),
+          Offset(r.center.dx + w * 0.035, r.bottom - h * 0.08),
+          trimPaint,
+        );
+      case AvatarOutfit.varsity:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(body, Radius.circular(w * 0.12)),
+          Paint()..color = colors.accent.withOpacity(0.90),
+        );
+        canvas.drawPath(
+          Path()
+            ..moveTo(r.left + w * 0.22, top + h * 0.02)
+            ..lineTo(r.center.dx, r.bottom - h * 0.02)
+            ..lineTo(r.right - w * 0.22, top + h * 0.02),
+          trimPaint,
+        );
+        canvas.drawRect(
+          Rect.fromLTRB(r.left + w * 0.18, top + h * 0.13,
+              r.right - w * 0.18, top + h * 0.18),
+          accentPaint,
+        );
+      case AvatarOutfit.jacket:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(body, Radius.circular(w * 0.10)),
+          outfitPaint,
+        );
+        final lapel = Path()
+          ..moveTo(r.left + w * 0.24, top)
+          ..lineTo(r.center.dx, r.bottom - h * 0.04)
+          ..lineTo(r.right - w * 0.24, top);
+        canvas.drawPath(lapel, trimPaint);
+      case AvatarOutfit.tee:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(body, Radius.circular(w * 0.18)),
+          Paint()..color = colors.accent.withOpacity(0.78),
+        );
+        canvas.drawCircle(
+          Offset(r.center.dx, top + h * 0.08),
+          w * 0.08,
+          Paint()..color = colors.base.withOpacity(0.95),
+        );
+      case AvatarOutfit.scarf:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(body, Radius.circular(w * 0.14)),
+          Paint()..color = colors.detail.withOpacity(0.66),
+        );
+        final scarf = Rect.fromLTRB(
+          r.left + w * 0.22,
+          top - h * 0.03,
+          r.right - w * 0.22,
+          top + h * 0.11,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(scarf, Radius.circular(w * 0.08)),
+          Paint()..color = colors.accent.withOpacity(0.96),
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTRB(r.center.dx, top + h * 0.06,
+                r.center.dx + w * 0.12, r.bottom - h * 0.02),
+            Radius.circular(w * 0.05),
+          ),
+          Paint()..color = colors.accent.withOpacity(0.90),
+        );
     }
   }
 

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// The five customisation axes for the v2 anonymous avatar (social
+/// The six customisation axes for the v2 anonymous avatar (social
 /// spec §3). Every axis has a small enumerated set of options so the
 /// space stays expressive without ever rendering a real human face.
 ///
 /// Storage shape lives in `users.avatar_seed` (and `personas.avatar_seed`)
-/// as `v2:silhouette=blob;palette=berry;hair=wave;accessory=glasses;aura=glow`.
+/// as `v2:silhouette=blob;palette=berry;hair=wave;accessory=glasses;aura=glow;outfit=hoodie`.
 /// Legacy seeds (e.g. "rose-orb-test1", random hash strings, or old
 /// "default-orb") are still rendered via the legacy code path so nothing
 /// in the existing dataset breaks.
@@ -54,6 +54,15 @@ enum AvatarAura {
   shadow,   // Anchored bottom shadow
 }
 
+enum AvatarOutfit {
+  none,
+  hoodie,
+  varsity,
+  jacket,
+  tee,
+  scarf,
+}
+
 /// Immutable customisation snapshot.
 class AvatarDesign {
   final AvatarSilhouette silhouette;
@@ -61,6 +70,7 @@ class AvatarDesign {
   final AvatarHair hair;
   final AvatarAccessory accessory;
   final AvatarAura aura;
+  final AvatarOutfit outfit;
 
   const AvatarDesign({
     this.silhouette = AvatarSilhouette.orb,
@@ -68,6 +78,7 @@ class AvatarDesign {
     this.hair = AvatarHair.none,
     this.accessory = AvatarAccessory.none,
     this.aura = AvatarAura.none,
+    this.outfit = AvatarOutfit.none,
   });
 
   AvatarDesign copyWith({
@@ -76,6 +87,7 @@ class AvatarDesign {
     AvatarHair? hair,
     AvatarAccessory? accessory,
     AvatarAura? aura,
+    AvatarOutfit? outfit,
   }) =>
       AvatarDesign(
         silhouette: silhouette ?? this.silhouette,
@@ -83,11 +95,12 @@ class AvatarDesign {
         hair: hair ?? this.hair,
         accessory: accessory ?? this.accessory,
         aura: aura ?? this.aura,
+        outfit: outfit ?? this.outfit,
       );
 
   /// Serialise to the v2 seed format the DB stores.
   String toSeed() =>
-      'v2:silhouette=${silhouette.name};palette=${palette.name};hair=${hair.name};accessory=${accessory.name};aura=${aura.name}';
+      'v2:silhouette=${silhouette.name};palette=${palette.name};hair=${hair.name};accessory=${accessory.name};aura=${aura.name};outfit=${outfit.name}';
 
   /// Parse a seed string into a design. Returns null when the seed
   /// isn't v2-shaped — caller should fall back to legacy rendering.
@@ -117,6 +130,7 @@ class AvatarDesign {
       accessory:
           parse(AvatarAccessory.values, 'accessory', AvatarAccessory.none),
       aura: parse(AvatarAura.values, 'aura', AvatarAura.none),
+      outfit: parse(AvatarOutfit.values, 'outfit', AvatarOutfit.none),
     );
   }
 }
@@ -210,5 +224,16 @@ extension AvatarAuraUI on AvatarAura {
         AvatarAura.sparkle => 'Sparkle',
         AvatarAura.pulse => 'Pulse',
         AvatarAura.shadow => 'Shadow',
+      };
+}
+
+extension AvatarOutfitUI on AvatarOutfit {
+  String get label => switch (this) {
+        AvatarOutfit.none => 'None',
+        AvatarOutfit.hoodie => 'Hoodie',
+        AvatarOutfit.varsity => 'Varsity',
+        AvatarOutfit.jacket => 'Jacket',
+        AvatarOutfit.tee => 'Tee',
+        AvatarOutfit.scarf => 'Scarf',
       };
 }
