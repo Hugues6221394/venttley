@@ -1,10 +1,28 @@
 import Link from "next/link";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createSsrClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { StatCard } from "@/components/ui/stat-card";
 
 export const dynamic = "force-dynamic";
+
+type ActiveDay = { day: string; active_users: number; new_users: number };
+type EngagementTotals = {
+  total_users: number;
+  active_1d: number;
+  active_7d: number;
+  active_30d: number;
+  new_7d: number;
+  new_30d: number;
+  stickiness: number;
+};
+type RetentionRow = {
+  cohort_week: string;
+  cohort_size: number;
+  week_offset: number;
+  retained: number;
+};
+type GeoRow = { country: string; users: number };
 
 type Range = "7d" | "30d" | "90d";
 
@@ -29,7 +47,6 @@ export default async function AnalyticsPage({
     commentsCurRes,
     reactionsCurRes,
     categoriesRes,
-    regionsRes,
     moderationRes,
     activeUsersRes,
   ] = await Promise.all([
@@ -54,7 +71,6 @@ export default async function AnalyticsPage({
       .select("category_name")
       .gte("created_at", sinceISO)
       .is("deleted_at", null),
-    db.from("admin_region_distribution").select("country, users").limit(10),
     db
       .from("reports")
       .select("created_at, resolved_at, is_resolved")
@@ -65,6 +81,33 @@ export default async function AnalyticsPage({
       .gte("created_at", sinceISO)
       .is("deleted_at", null),
   ]);
+
+  // Real active-user + retention + geo metrics come from the SECURITY DEFINER
+  // RPCs (migration 0084), which are gated by is_staff(auth.uid()) — so they
+  // must go through the logged-in (SSR) client, not the service-role client.
+  const ssr = await createSsrClient();
+  const [engagementRpc, activeDailyRpc, retentionRpc, geoRpc] =
+    await Promise.all([
+      ssr.rpc("admin_engagement_totals"),
+      ssr.rpc("admin_active_users_daily", { p_days: days }),
+      ssr.rpc("admin_new_user_retention", { p_weeks: 6 }),
+      ssr.rpc("admin_geo_distribution", { p_limit: 12 }),
+    ]);
+
+  const totals = ((engagementRpc.data as EngagementTotals[] | null) ?? [])[0] ?? {
+    total_users: 0,
+    active_1d: 0,
+    active_7d: 0,
+    active_30d: 0,
+    new_7d: 0,
+    new_30d: 0,
+    stickiness: 0,
+  };
+  const activeDaily = (activeDailyRpc.data as ActiveDay[] | null) ?? [];
+  const activeUsersByDay = activeDaily.map((d) => d.active_users);
+  const retention = (retentionRpc.data as RetentionRow[] | null) ?? [];
+  const geo = (geoRpc.data as GeoRow[] | null) ?? [];
+  const stickinessPct = Math.round((Number(totals.stickiness) || 0) * 100);
 
   const signupsByDay = bucketByDay(
     ((signupsCurRes.data ?? []) as { created_at: string }[]).map((r) => r.created_at),
@@ -156,6 +199,43 @@ export default async function AnalyticsPage({
         />
       </div>
 
+      {/* Real active-user engagement — distinct people who actually did
+          something (posted, chatted, reacted, whispered). Not signups. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Total users" value={totals.total_users} tone="info" />
+        <StatCard label="DAU · active today" value={totals.active_1d} tone="ok" />
+        <StatCard label="WAU · last 7d" value={totals.active_7d} />
+        <StatCard
+          label="Stickiness"
+          value={`${stickinessPct}%`}
+          sub="DAU ÷ MAU"
+          tone={stickinessPct >= 20 ? "ok" : "neutral"}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card
+          className="lg:col-span-2"
+          title="Active users / day"
+          hint={`Distinct people who posted, chatted, reacted or whispered · last ${days}d`}
+        >
+          <BarChart data={activeUsersByDay} days={days} accent="#7A3FB0" />
+        </Card>
+        <Card title="Engagement mix" hint="Rolling windows">
+          <Metric label="MAU · last 30d" value={totals.active_30d} />
+          <p className="h-eyebrow mt-3">New users · 7d / 30d</p>
+          <p className="tabular text-lg font-extrabold text-burgundy">
+            {totals.new_7d.toLocaleString()}{" "}
+            <span className="text-ink-muted font-medium">/</span>{" "}
+            {totals.new_30d.toLocaleString()}
+          </p>
+          <p className="h-eyebrow mt-3">MAU that&rsquo;s active daily</p>
+          <p className="tabular text-2xl font-extrabold text-berry">
+            {stickinessPct}%
+          </p>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card title="Daily signups" hint={`Last ${days} days`}>
           <BarChart data={signupsByDay} days={days} accent="#1F8F4D" />
@@ -199,22 +279,20 @@ export default async function AnalyticsPage({
           )}
         </Card>
 
-        <Card title="Top regions" hint="By total user count">
-          {(regionsRes.data ?? []).length === 0 ? (
-            <p className="text-sm text-ink-muted italic">No location data.</p>
+        <Card title="Where users come from" hint="Country from IP, with profile fallback">
+          {geo.length === 0 ? (
+            <p className="text-sm text-ink-muted italic">No location data yet.</p>
           ) : (
             <ul className="flex flex-col gap-2.5">
-              {((regionsRes.data ?? []) as { country: string; users: number }[]).map((r) => {
-                const total =
-                  ((regionsRes.data ?? []) as { users: number }[]).reduce(
-                    (s, x) => s + x.users,
-                    0
-                  ) || 1;
+              {geo.map((r) => {
+                const total = geo.reduce((s, x) => s + x.users, 0) || 1;
                 const pct = Math.round((r.users / total) * 100);
                 return (
                   <li key={r.country}>
                     <div className="flex items-center justify-between mb-1">
-                      <p className="text-sm font-semibold text-burgundy">{r.country}</p>
+                      <p className="text-sm font-semibold text-burgundy">
+                        {countryLabel(r.country)}
+                      </p>
                       <p className="text-xs text-ink-muted tabular">
                         {r.users.toLocaleString()} · {pct}%
                       </p>
@@ -256,6 +334,13 @@ export default async function AnalyticsPage({
           </p>
         </Card>
       </div>
+
+      <Card
+        title="New-user retention"
+        hint="Of each week's new signups, the share still active N weeks later"
+      >
+        <RetentionTriangle rows={retention} />
+      </Card>
 
       <Card title="Headline metrics" hint="Cross-window">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -333,6 +418,92 @@ function BarChart({
         Total: {total.toLocaleString()} · Peak: {max.toLocaleString()}/day
       </p>
     </>
+  );
+}
+
+function countryLabel(code: string): string {
+  const c = (code ?? "").toUpperCase();
+  if (!/^[A-Z]{2}$/.test(c)) return code || "Unknown";
+  // ISO alpha-2 → flag emoji (regional indicators) + code.
+  const flag = String.fromCodePoint(
+    ...[...c].map((ch) => 0x1f1e6 + (ch.charCodeAt(0) - 65))
+  );
+  return `${flag} ${c}`;
+}
+
+// Cohort retention triangle: one row per signup-week, one cell per week offset,
+// shaded by the % of that cohort still active. Reads left→right as decay.
+function RetentionTriangle({ rows }: { rows: RetentionRow[] }) {
+  if (rows.length === 0) {
+    return <p className="text-sm text-ink-muted italic">Not enough data yet.</p>;
+  }
+  const cohorts = new Map<string, { size: number; cells: Map<number, number> }>();
+  let maxOffset = 0;
+  for (const r of rows) {
+    if (!cohorts.has(r.cohort_week)) {
+      cohorts.set(r.cohort_week, { size: r.cohort_size, cells: new Map() });
+    }
+    cohorts.get(r.cohort_week)!.cells.set(r.week_offset, r.retained);
+    if (r.week_offset > maxOffset) maxOffset = r.week_offset;
+  }
+  const offsets = Array.from({ length: maxOffset + 1 }, (_, i) => i);
+  const ordered = [...cohorts.entries()].sort((a, b) =>
+    a[0] < b[0] ? 1 : -1
+  );
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs border-separate border-spacing-1">
+        <thead>
+          <tr className="text-ink-muted">
+            <th className="text-left font-semibold px-2">Cohort</th>
+            <th className="text-right font-semibold px-2">Size</th>
+            {offsets.map((o) => (
+              <th key={o} className="text-center font-semibold px-1">
+                W{o}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {ordered.map(([week, data]) => (
+            <tr key={week}>
+              <td className="px-2 font-semibold text-burgundy whitespace-nowrap">
+                {new Date(week).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                })}
+              </td>
+              <td className="px-2 text-right tabular text-ink-muted">
+                {data.size.toLocaleString()}
+              </td>
+              {offsets.map((o) => {
+                const retained = data.cells.get(o);
+                if (retained === undefined) {
+                  return <td key={o} className="text-center text-ink-muted/40">·</td>;
+                }
+                const pct = data.size > 0 ? retained / data.size : 0;
+                const shown = Math.round(pct * 100);
+                // Berry with opacity proportional to retention.
+                const bg = `rgba(209, 46, 101, ${0.12 + pct * 0.8})`;
+                const fg = pct > 0.45 ? "#fff" : "#7A1533";
+                return (
+                  <td key={o} className="text-center">
+                    <span
+                      className="inline-block w-full rounded-md py-1 font-bold tabular"
+                      style={{ background: bg, color: fg }}
+                      title={`${retained} of ${data.size}`}
+                    >
+                      {shown}%
+                    </span>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

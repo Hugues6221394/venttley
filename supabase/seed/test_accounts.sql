@@ -45,10 +45,15 @@ WHERE NOT EXISTS (
     SELECT 1 FROM auth.users WHERE email = s.pseudonym || '@id.venttly.app'
 );
 
--- 2) Promote tester_admin to super_admin (default role from trigger is 'normal').
+-- 2) Promote tester_admin to super_admin; tester_keeper to plug (Creator Studio).
 UPDATE public.users
    SET user_role = 'super_admin'
  WHERE anonymous_pseudonym = 'tester_admin';
+
+UPDATE public.users
+   SET user_role = 'plug',
+       is_verified = true
+ WHERE anonymous_pseudonym = 'tester_keeper';
 
 -- 3) Give tester_keeper a real Tribe to keep, so the manage dashboard is
 --    reachable end-to-end. Skipped if they already keep one.

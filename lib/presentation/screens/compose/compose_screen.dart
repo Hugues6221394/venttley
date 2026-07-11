@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../../animation/widgets/animated_button.dart';
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../../data/services/moderation_service.dart';
@@ -11,9 +14,14 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/mood_chip.dart';
+import '../../widgets/glass_card.dart';
+import '../../widgets/vently_premium_background.dart';
 
 class ComposeScreen extends ConsumerStatefulWidget {
-  const ComposeScreen({super.key});
+  const ComposeScreen({super.key, this.queryParams = const {}});
+
+  /// Deep-link query params, e.g. `format=poll`, `category=questions`.
+  final Map<String, String> queryParams;
 
   @override
   ConsumerState<ComposeScreen> createState() => _ComposeScreenState();
@@ -27,17 +35,60 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   String _category = 'confessions';
   String _mood = 'healing';
   bool _busy = false;
+  bool _success = false;
   bool _includePoll = false;
   bool _isWhisper = false;
   bool _storyFriendsOnly = true;
 
+  // Optional attached photo. Bytes live in memory until submit; we
+  // only upload on send so a discard costs zero network.
+  Uint8List? _pendingImageBytes;
+  String _pendingImageExt = 'jpg';
+  String _pendingImageMime = 'image/jpeg';
+
   @override
   void initState() {
     super.initState();
+    // Reading providers here is safe; WRITING them is not — initState runs
+    // during the route's first build and Riverpod throws "tried to modify a
+    // provider while the widget tree was building". So: consume the one-shot
+    // intents locally, and defer the resets to after the first frame.
     _isWhisper = ref.read(composeStoryModeProvider);
-    _category = ref.read(composeInitialCategoryProvider) ?? _category;
-    ref.read(composeStoryModeProvider.notifier).state = false;
-    ref.read(composeInitialCategoryProvider.notifier).state = null;
+    _includePoll = ref.read(composeIncludePollProvider);
+    String? initialCategory = ref.read(composeInitialCategoryProvider);
+    String? initialDraft = ref.read(composeInitialDraftProvider);
+
+    // Deep-link query params (/compose?format=poll&category=…) override the
+    // sheet-set intents — applied locally, no provider round-trip.
+    final q = widget.queryParams;
+    if (q.isNotEmpty) {
+      if (q['format'] == 'poll') {
+        _includePoll = true;
+        initialCategory = 'questions';
+      }
+      final qCategory = q['category'];
+      if (qCategory != null && FeedCategories.all.contains(qCategory)) {
+        initialCategory = qCategory;
+      }
+      final qDraft = q['draft'];
+      if (qDraft != null && qDraft.isNotEmpty) initialDraft = qDraft;
+    }
+
+    if (initialCategory != null &&
+        FeedCategories.all.contains(initialCategory)) {
+      _category = initialCategory;
+    }
+    if (initialDraft != null && initialDraft.isNotEmpty) {
+      _controller.text = initialDraft;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(composeStoryModeProvider.notifier).state = false;
+      ref.read(composeIncludePollProvider.notifier).state = false;
+      ref.read(composeInitialCategoryProvider.notifier).state = null;
+      ref.read(composeInitialDraftProvider.notifier).state = null;
+    });
   }
 
   @override
@@ -49,9 +100,71 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     super.dispose();
   }
 
+  Future<void> _pickPhoto({required ImageSource source}) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 82,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      final ext = picked.path.split('.').last.toLowerCase();
+      setState(() {
+        _pendingImageBytes = bytes;
+        _pendingImageExt = ext == 'jpeg' ? 'jpg' : ext;
+        _pendingImageMime = picked.mimeType ?? 'image/jpeg';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not pick image: $e')),
+      );
+    }
+  }
+
+  Future<void> _openPhotoSourceSheet() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.photo_library_outlined,
+                    color: VentlyColors.berryMagenta),
+                title: const Text('Choose from library',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.photo_camera_outlined,
+                    color: VentlyColors.berryMagenta),
+                title: const Text('Take a photo',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (source != null) await _pickPhoto(source: source);
+  }
+
   Future<void> _submit() async {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && _pendingImageBytes == null) return;
     if (_includePoll) {
       if (_pollQ.text.trim().length < 4 ||
           _pollA.text.trim().isEmpty ||
@@ -81,15 +194,46 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         return;
       }
     }
+    final space = ref.read(composeTargetSpaceProvider);
     final tribe = ref.read(composeTargetTribeProvider);
+    final effectiveTribeId = space?.tribeId ?? tribe?.tribeId;
+    final effectiveTribeSlug = tribe?.slug;
     final persona = ref.read(activePersonaProvider);
+
+    // Upload the attached photo first so we can stamp the post row
+    // with a permanent URL. Failed uploads abort the send — we'd
+    // rather block than ship a vent with a missing image.
+    String? imagePath;
+    String? imageUrl;
+    if (_pendingImageBytes != null) {
+      try {
+        final up = await ref.read(repositoryProvider).uploadPostImage(
+              bytes: _pendingImageBytes!,
+              extension: _pendingImageExt,
+              contentType: _pendingImageMime,
+            );
+        imagePath = up.path;
+        imageUrl = up.url;
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Photo upload failed: $e')),
+        );
+        return;
+      }
+    }
+
     final post = await ref.read(repositoryProvider).createPost(
-          content: text,
+          content: text.isEmpty ? '' : text,
           category: _category,
           mood: _mood,
-          tribeId: tribe?.tribeId,
+          tribeId: effectiveTribeId,
+          spaceId: space?.spaceId,
           personaId: persona?.personaId,
           isWhisper: _isWhisper,
+          imagePath: imagePath,
+          imageUrl: imageUrl,
         );
     // Crisis tag — readers see the helpline banner if the safety classifier
     // surfaced self-harm signals. 'high' = Tier-1 keyword match (more
@@ -122,12 +266,37 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       }
     }
     ref.read(composeTargetTribeProvider.notifier).state = null;
+    ref.read(composeTargetSpaceProvider.notifier).state = null;
     ref.read(composeStoryModeProvider.notifier).state = false;
+    ref.read(composeIncludePollProvider.notifier).state = false;
     ref.read(composeInitialCategoryProvider.notifier).state = null;
+    // Live insertion: bump every feed the new vent might appear in
+    // so SpaceHome / Tribe / global Feed pick up the row immediately
+    // without waiting for the realtime tick.
+    ref.invalidate(feedPostsProvider);
+    if (space != null) {
+      for (final s in [
+        'fresh', 'trending', 'helpful', 'unanswered', 'keeper'
+      ]) {
+        ref.invalidate(spacePostsProvider(
+            SpaceFeedQuery(spaceId: space.spaceId, sort: s)));
+      }
+      ref.invalidate(spaceByIdProvider(space.spaceId));
+      ref.invalidate(spacesByTribeProvider(space.tribeId));
+    }
     if (!mounted) return;
-    setState(() => _busy = false);
-    if (tribe != null) {
-      context.go('/tribe/${tribe.slug}');
+    // Success beat: the button morphs to a check for a moment before the
+    // route changes, so posting feels acknowledged rather than abrupt.
+    setState(() {
+      _busy = false;
+      _success = true;
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 550));
+    if (!mounted) return;
+    if (space != null) {
+      context.go('/tribe/${space.tribeSlug}/space/${space.spaceId}');
+    } else if (effectiveTribeSlug != null) {
+      context.go('/tribe/$effectiveTribeSlug');
     } else {
       context.go('/feed');
     }
@@ -152,7 +321,11 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     final personas = ref.watch(myPersonasProvider).valueOrNull ?? const [];
     final activePersona = ref.watch(activePersonaProvider);
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => context.go('/feed'),
@@ -165,24 +338,19 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           ),
         ],
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (target != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
+      body: VentlyPremiumBackground(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (target != null)
+                  GlassCard(
+                    margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: scheme.primary.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(14),
-                      border:
-                          Border.all(color: scheme.primary.withOpacity(0.3)),
-                    ),
+                    borderRadius: 14,
                     child: Row(
                       children: [
                         Icon(Icons.diversity_3,
@@ -206,17 +374,11 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                       ],
                     ),
                   ),
-                ),
-              if (personas.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
+                if (personas.isNotEmpty)
+                  GlassCard(
+                    margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: scheme.secondary.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: scheme.secondary.withOpacity(0.3)),
-                    ),
+                    borderRadius: 14,
                     child: Row(
                       children: [
                         Icon(Icons.theater_comedy_outlined,
@@ -241,7 +403,6 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                       ],
                     ),
                   ),
-                ),
               Row(
                 children: [
                   const Text('Category',
@@ -296,22 +457,27 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 ],
               ),
               const SizedBox(height: 12),
+              if (_pendingImageBytes != null)
+                _PendingImageChip(
+                  bytes: _pendingImageBytes!,
+                  onClear: () =>
+                      setState(() => _pendingImageBytes = null),
+                ),
               Expanded(
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: TextField(
-                      controller: _controller,
-                      maxLength: 1000,
-                      maxLines: null,
-                      expands: true,
-                      textAlignVertical: TextAlignVertical.top,
-                      decoration: const InputDecoration(
-                        hintText: 'Drop the thought. Keep names out, keep it real.',
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                      ),
+                child: GlassCard(
+                  padding: const EdgeInsets.all(12),
+                  borderRadius: 20,
+                  child: TextField(
+                    controller: _controller,
+                    maxLength: 1000,
+                    maxLines: null,
+                    expands: true,
+                    textAlignVertical: TextAlignVertical.top,
+                    decoration: const InputDecoration(
+                      hintText: 'Drop the thought. Keep names out, keep it real.',
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
                     ),
                   ),
                 ),
@@ -319,6 +485,18 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
+                  TextButton.icon(
+                    onPressed: _openPhotoSourceSheet,
+                    icon: Icon(
+                      _pendingImageBytes != null
+                          ? Icons.image
+                          : Icons.image_outlined,
+                      size: 18,
+                      color: scheme.primary,
+                    ),
+                    label: Text(
+                        _pendingImageBytes != null ? 'Photo on' : 'Photo'),
+                  ),
                   TextButton.icon(
                     onPressed: () =>
                         setState(() => _includePoll = !_includePoll),
@@ -344,15 +522,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 ],
               ),
               if (_includePoll)
-                Container(
+                GlassCard(
                   margin: const EdgeInsets.only(top: 4),
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withOpacity(0.06),
-                    border:
-                        Border.all(color: scheme.primary.withOpacity(0.25)),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  borderRadius: 16,
                   child: Column(
                     children: [
                       TextField(
@@ -394,33 +567,30 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 ),
               SafeArea(
                 top: false,
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _busy ? null : _submit,
-                    child: _busy
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2),
-                          )
-                        : const Text('Post Anonymously'),
-                  ),
+                child: AnimatedButton(
+                  label: 'Post Anonymously',
+                  state: _success
+                      ? VentlyButtonState.success
+                      : _busy
+                          ? VentlyButtonState.loading
+                          : VentlyButtonState.idle,
+                  onPressed: _submit,
                 ),
               ),
             ],
           ),
         ),
       ),
+    ),
     );
   }
 
   Widget _buildStoryComposer(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF8F8),
-      body: SafeArea(
-        child: Column(
+      extendBodyBehindAppBar: true,
+      body: VentlyPremiumBackground(
+        child: SafeArea(
+          child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
@@ -618,7 +788,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                                       ),
                                     ),
                                     Text(
-                                      'Friends only',
+                                      'Connections only',
                                       style: TextStyle(
                                         color: VentlyColors.deepBurgundy,
                                         fontWeight: FontWeight.w600,
@@ -714,6 +884,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -910,6 +1081,51 @@ class _StoryCreateOption extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Small preview chip rendered above the editor when a photo is
+/// staged. Tap "✕" to discard before sending.
+class _PendingImageChip extends StatelessWidget {
+  const _PendingImageChip({required this.bytes, required this.onClear});
+  final Uint8List bytes;
+  final VoidCallback onClear;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Image.memory(
+              bytes,
+              height: 160,
+              width: double.infinity,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned(
+            right: 8,
+            top: 8,
+            child: InkWell(
+              onTap: onClear,
+              customBorder: const CircleBorder(),
+              child: Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.55),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close_rounded,
+                    color: Colors.white, size: 18),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

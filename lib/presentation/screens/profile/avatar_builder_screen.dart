@@ -103,6 +103,7 @@ class _AvatarBuilderScreenState extends ConsumerState<AvatarBuilderScreen> {
     final label = me?.anonymousPseudonym ?? 'You';
     final dirty = _design.toSeed() != _initial.toSeed();
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text(widget.title),
         actions: [

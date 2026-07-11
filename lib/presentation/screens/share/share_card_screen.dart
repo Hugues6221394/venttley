@@ -22,12 +22,14 @@ class ShareCardScreen extends ConsumerWidget {
     final post = postAsync.valueOrNull;
     if (postAsync.isLoading && post == null) {
       return Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
     if (post == null) {
       return Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: const Center(child: Text('Post not found')),
       );
@@ -36,6 +38,7 @@ class ShareCardScreen extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         leading: IconButton(
             icon: const Icon(Icons.arrow_back),

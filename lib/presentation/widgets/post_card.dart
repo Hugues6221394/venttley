@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/constants.dart';
 import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
+import 'anonymous_avatar.dart';
 import 'mood_chip.dart';
 import 'poll_card.dart';
 import 'profile_avatar.dart';
+import 'user_profile_link.dart';
 import 'share_post_to_friend_sheet.dart';
+import 'tribe_avatar.dart';
 
 class PostCard extends ConsumerWidget {
   const PostCard({
@@ -32,6 +36,46 @@ class PostCard extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final muted = scheme.onSurface.withOpacity(0.55);
     final dmDisabled = FeedCategories.dmRestricted.contains(post.categoryName);
+    final me = ref.watch(sessionProvider);
+    final isMine = post.ownedBy(me?.userId);
+    // Is the current user the keeper of the tribe this vent lives in?
+    // Drives the Keeper's Pick toggle in the overflow menu.
+    final iAmKeeper = () {
+      final slug = post.tribeSlug;
+      if (slug == null || me == null) return false;
+      final tribe =
+          ref.watch(tribeBySlugProvider(slug)).valueOrNull;
+      return tribe?.keeperId != null && tribe!.keeperId == me.userId;
+    }();
+    final tribeForPost = post.tribeSlug == null
+        ? null
+        : ref.watch(tribeBySlugProvider(post.tribeSlug!)).valueOrNull;
+
+    // Tombstone — render a minimal "removed" card so reply threads
+    // don't orphan when the parent vent is soft-deleted.
+    if (post.isDeleted) {
+      return Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.do_not_disturb_on_outlined,
+                  size: 14, color: muted),
+              const SizedBox(width: 8),
+              Text(
+                'Vent removed by author',
+                style: TextStyle(
+                  color: muted,
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return InkWell(
       onTap: onTap,
@@ -45,12 +89,21 @@ class PostCard extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  ProfileAvatar(
-                    avatarSeed: post.authorAvatarSeed,
-                    label: post.authorPseudonym,
-                    profilePhotoUrl: post.authorProfilePhotoUrl,
-                    size: 36,
-                  ),
+                  if (post.authorId != null)
+                    UserProfileLink(
+                      userId: post.authorId!,
+                      pseudonym: post.authorPseudonym,
+                      avatarSeed: post.authorAvatarSeed,
+                      profilePhotoUrl: post.authorProfilePhotoUrl,
+                      size: 36,
+                    )
+                  else
+                    ProfileAvatar(
+                      avatarSeed: post.authorAvatarSeed,
+                      label: post.authorPseudonym,
+                      profilePhotoUrl: post.authorProfilePhotoUrl,
+                      size: 36,
+                    ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -59,13 +112,25 @@ class PostCard extends ConsumerWidget {
                         Row(
                           children: [
                             Flexible(
-                              child: Text(
-                                post.authorPseudonym,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                              child: post.authorId != null
+                                  ? InkWell(
+                                      onTap: () => context.push(
+                                          '/user/${post.authorId}'),
+                                      child: Text(
+                                        post.authorPseudonym,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    )
+                                  : Text(
+                                      post.authorPseudonym,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                             ),
                             if (post.authorKarma >= 10) ...[
                               const SizedBox(width: 4),
@@ -86,27 +151,83 @@ class PostCard extends ConsumerWidget {
                               _ago(post.createdAt),
                               style: TextStyle(color: muted, fontSize: 12),
                             ),
+                            if (post.isKeeperPick) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: VentlyColors.berryMagenta
+                                      .withOpacity(0.14),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.star,
+                                        size: 10,
+                                        color: VentlyColors.berryMagenta),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'KEEPER\'S PICK',
+                                      style: TextStyle(
+                                        color: VentlyColors.berryMagenta,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            if (post.isLocked) ...[
+                              const SizedBox(width: 6),
+                              Icon(Icons.lock_outline,
+                                  size: 12,
+                                  color: muted),
+                            ],
+                            if (post.isEdited) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                '· edited',
+                                style: TextStyle(
+                                  color: muted,
+                                  fontSize: 11,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                         if (post.tribeName != null)
                           Padding(
-                            padding: const EdgeInsets.only(top: 2),
+                            padding: const EdgeInsets.only(top: 4),
                             child: GestureDetector(
                               onTap: post.tribeSlug == null || onTap == null
                                   ? null
-                                  : () {
-                                      // Tribe-name tap is handled by the parent
-                                      // screen via [onTap]; specific tribe-detail
-                                      // routing lives in the home feed/list.
-                                      onTap!.call();
-                                    },
-                              child: Text(
-                                'in ${post.tribeName!}',
-                                style: TextStyle(
-                                  color: scheme.primary,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                  : onTap!.call,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  TribeAvatar(
+                                    avatarUrl: tribeForPost?.avatarUrl,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      post.tribeName!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: scheme.primary,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -183,19 +304,37 @@ class PostCard extends ConsumerWidget {
                   PopupMenuButton<String>(
                     icon: Icon(Icons.more_horiz, color: muted),
                     tooltip: 'More',
-                    onSelected: (v) {
+                    onSelected: (v) async {
                       if (v == 'report') {
-                        _openReportSheet(context, ref, post.postId);
+                        openReportPostSheet(context, ref, post.postId);
                       } else if (v == 'share_friend') {
                         showSharePostToFriendSheet(
                           context,
                           postId: post.postId,
                           previewSnippet: post.content,
                         );
+                      } else if (v == 'edit') {
+                        openEditPostDialog(context, ref, post);
+                      } else if (v == 'delete') {
+                        confirmDeletePost(context, ref, post);
+                      } else if (v == 'lock' || v == 'unlock') {
+                        await ref
+                            .read(repositoryProvider)
+                            .setPostCommentsLock(
+                                postId: post.postId,
+                                locked: v == 'lock');
+                        ref.invalidate(postByIdProvider(post.postId));
+                        ref.invalidate(feedPostsProvider);
+                      } else if (v == 'keeper_pick') {
+                        await ref
+                            .read(repositoryProvider)
+                            .toggleKeeperPick(post.postId);
+                        ref.invalidate(postByIdProvider(post.postId));
+                        ref.invalidate(feedPostsProvider);
                       }
                     },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
                         value: 'share_friend',
                         child: Row(
                           children: [
@@ -205,16 +344,74 @@ class PostCard extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      PopupMenuItem(
-                        value: 'report',
-                        child: Row(
-                          children: [
-                            Icon(Icons.flag_outlined, size: 16),
-                            SizedBox(width: 8),
-                            Text('Report'),
-                          ],
+                      if (isMine)
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit_outlined, size: 16),
+                              SizedBox(width: 8),
+                              Text('Edit'),
+                            ],
+                          ),
                         ),
-                      ),
+                      if (isMine)
+                        PopupMenuItem(
+                          value: post.isLocked ? 'unlock' : 'lock',
+                          child: Row(
+                            children: [
+                              Icon(
+                                  post.isLocked
+                                      ? Icons.lock_open_outlined
+                                      : Icons.lock_outline,
+                                  size: 16),
+                              const SizedBox(width: 8),
+                              Text(post.isLocked
+                                  ? 'Unlock comments'
+                                  : 'Lock comments'),
+                            ],
+                          ),
+                        ),
+                      if (isMine)
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline, size: 16),
+                              SizedBox(width: 8),
+                              Text('Delete'),
+                            ],
+                          ),
+                        ),
+                      if (iAmKeeper)
+                        PopupMenuItem(
+                          value: 'keeper_pick',
+                          child: Row(
+                            children: [
+                              Icon(
+                                  post.isKeeperPick
+                                      ? Icons.star
+                                      : Icons.star_outline,
+                                  size: 16,
+                                  color: VentlyColors.berryMagenta),
+                              const SizedBox(width: 8),
+                              Text(post.isKeeperPick
+                                  ? 'Unpick from Plug\'s'
+                                  : 'Mark as Plug\'s Pick'),
+                            ],
+                          ),
+                        ),
+                      if (!isMine)
+                        const PopupMenuItem(
+                          value: 'report',
+                          child: Row(
+                            children: [
+                              Icon(Icons.flag_outlined, size: 16),
+                              SizedBox(width: 8),
+                              Text('Report'),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ],
@@ -265,7 +462,7 @@ class PostCard extends ConsumerWidget {
   }
 }
 
-Future<void> _openReportSheet(
+Future<void> openReportPostSheet(
     BuildContext context, WidgetRef ref, String postId) async {
   const reasons = <(String, String)>[
     ('self_harm',       'Self-harm or suicide concern'),
@@ -569,8 +766,11 @@ class _ReactionButton extends ConsumerWidget {
     return GestureDetector(
       onLongPress: () => _openPicker(context, ref),
       child: InkWell(
-        onTap: () =>
-            ref.read(repositoryProvider).react(post.postId, r ?? 'like'),
+        onTap: () async {
+          await ref.read(repositoryProvider).react(post.postId, r ?? 'like');
+          ref.invalidate(feedPostsProvider);
+          ref.invalidate(postByIdProvider(post.postId));
+        },
         borderRadius: BorderRadius.circular(16),
         child: Row(
           children: [
@@ -629,6 +829,8 @@ class _ReactionButton extends ConsumerWidget {
     );
     if (picked == null) return;
     await ref.read(repositoryProvider).react(post.postId, picked);
+    ref.invalidate(feedPostsProvider);
+    ref.invalidate(postByIdProvider(post.postId));
   }
 }
 
@@ -677,4 +879,129 @@ class _ReactionChoice extends StatelessWidget {
       ),
     );
   }
+}
+
+// =========================================================================
+// AUTHOR CRUD HELPERS — used from the PostCard popup menu
+// =========================================================================
+
+/// Inline edit dialog. The RPC enforces a 15-minute edit window; we
+/// surface a friendly error when that's exceeded.
+Future<void> openEditPostDialog(
+  BuildContext context,
+  WidgetRef ref,
+  Post post,
+) async {
+  final controller = TextEditingController(text: post.content);
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Edit vent'),
+      content: TextField(
+        controller: controller,
+        maxLength: 1000,
+        maxLines: 6,
+        minLines: 3,
+        autofocus: true,
+        decoration: const InputDecoration(
+          hintText: 'Reword your thought…',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  if (saved != true) return;
+
+  final next = controller.text.trim();
+  if (next.isEmpty) return;
+  try {
+    await ref.read(repositoryProvider).editPost(
+          postId: post.postId,
+          newContent: next,
+        );
+    ref.invalidate(postByIdProvider(post.postId));
+    ref.invalidate(feedPostsProvider);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Vent updated.')),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_friendlyError(e))),
+    );
+  }
+}
+
+/// Confirm + soft-delete the vent. Once removed, the feed swaps the
+/// card for a tombstone.
+Future<void> confirmDeletePost(
+  BuildContext context,
+  WidgetRef ref,
+  Post post,
+) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Delete this vent?'),
+      content: const Text(
+        'Replies stay anchored, but the body will be hidden behind a '
+        '"removed by author" tombstone. This can\'t be undone.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(ctx).colorScheme.error,
+          ),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true) return;
+  try {
+    await ref.read(repositoryProvider).deletePost(post.postId);
+    ref.invalidate(postByIdProvider(post.postId));
+    ref.invalidate(feedPostsProvider);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Vent deleted.')),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_friendlyError(e))),
+    );
+  }
+}
+
+/// Translates Postgres exception messages into something a user can
+/// act on. Keeps the failure path quiet.
+String _friendlyError(Object e) {
+  final s = e.toString();
+  if (s.contains('edit window expired')) {
+    return 'The 15-minute edit window has passed.';
+  }
+  if (s.contains('not your post')) {
+    return "You can only edit your own vents.";
+  }
+  if (s.contains('not signed in')) {
+    return 'Please sign in again.';
+  }
+  return 'Something went wrong. Try again.';
 }

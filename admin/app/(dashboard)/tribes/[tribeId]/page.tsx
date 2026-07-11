@@ -7,8 +7,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card, Row as KV } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
 import {
+  Ban,
+  CheckCircle2,
   ChevronLeft,
   Sparkles,
+  Trash2,
   Users2,
 } from "@/components/ui/icons";
 
@@ -26,6 +29,55 @@ async function toggleFeatured(formData: FormData) {
   revalidatePath(`/tribes/${id}`);
 }
 
+async function setActive(formData: FormData) {
+  "use server";
+  const id = String(formData.get("tribe_id") ?? "");
+  const active = String(formData.get("active") ?? "") === "true";
+  await rpc("admin_set_tribe_active", {
+    p_tribe: id,
+    p_active: active,
+    p_reason: null,
+  });
+  revalidatePath(`/tribes/${id}`);
+}
+
+async function setKeeper(formData: FormData) {
+  "use server";
+  const id = String(formData.get("tribe_id") ?? "");
+  const keeper = String(formData.get("new_keeper") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "");
+  await rpc("admin_set_tribe_keeper", {
+    p_tribe: id,
+    p_new_keeper: keeper,
+    p_reason: reason || null,
+  });
+  revalidatePath(`/tribes/${id}`);
+}
+
+async function addMember(formData: FormData) {
+  "use server";
+  const id = String(formData.get("tribe_id") ?? "");
+  const uid = String(formData.get("user_id") ?? "").trim();
+  await rpc("admin_add_tribe_member", {
+    p_tribe: id,
+    p_user: uid,
+    p_reason: null,
+  });
+  revalidatePath(`/tribes/${id}`);
+}
+
+async function removeMember(formData: FormData) {
+  "use server";
+  const id = String(formData.get("tribe_id") ?? "");
+  const uid = String(formData.get("user_id") ?? "");
+  await rpc("admin_remove_tribe_member", {
+    p_tribe: id,
+    p_user: uid,
+    p_reason: null,
+  });
+  revalidatePath(`/tribes/${id}`);
+}
+
 export default async function TribeDetailPage({
   params,
 }: {
@@ -37,12 +89,19 @@ export default async function TribeDetailPage({
   const { data: tribe } = await db
     .from("tribes")
     .select(
-      "tribe_id, name, slug, description, category, is_private, is_featured, member_count, keeper_id, created_at"
+      "tribe_id, name, slug, description, category, is_private, is_featured, is_active, member_count, keeper_id, created_at"
     )
     .eq("tribe_id", tribeId)
     .maybeSingle();
 
   if (!tribe) notFound();
+
+  const { data: members } = await db
+    .from("tribe_members")
+    .select("user_id, role, joined_at, users(anonymous_pseudonym)")
+    .eq("tribe_id", tribeId)
+    .order("role", { ascending: true })
+    .limit(250);
 
   const since30d = new Date(Date.now() - 30 * 86400 * 1000).toISOString();
   const [
@@ -119,21 +178,45 @@ export default async function TribeDetailPage({
                   </Badge>
                 )}
                 {tribe.is_private && <Badge tone="warn">private</Badge>}
+                <Badge tone={tribe.is_active ? "ok" : "danger"}>
+                  {tribe.is_active ? "active" : "deactivated"}
+                </Badge>
               </div>
             </div>
           </div>
-          <form action={toggleFeatured}>
-            <input type="hidden" name="tribe_id" value={tribeId} />
-            <input
-              type="hidden"
-              name="featured"
-              value={tribe.is_featured ? "false" : "true"}
-            />
-            <button type="submit" className="btn-secondary">
-              <Sparkles size={14} />
-              {tribe.is_featured ? "Unfeature" : "Feature"}
-            </button>
-          </form>
+          <div className="flex items-center gap-2">
+            <form action={setActive}>
+              <input type="hidden" name="tribe_id" value={tribeId} />
+              <input
+                type="hidden"
+                name="active"
+                value={tribe.is_active ? "false" : "true"}
+              />
+              <button
+                type="submit"
+                className={
+                  tribe.is_active
+                    ? "btn-secondary text-red-600 border-red-300 hover:bg-red-50 inline-flex items-center gap-1"
+                    : "btn-secondary text-green-700 border-green-300 hover:bg-green-50 inline-flex items-center gap-1"
+                }
+              >
+                {tribe.is_active ? <Ban size={14} /> : <CheckCircle2 size={14} />}
+                {tribe.is_active ? "Deactivate" : "Activate"}
+              </button>
+            </form>
+            <form action={toggleFeatured}>
+              <input type="hidden" name="tribe_id" value={tribeId} />
+              <input
+                type="hidden"
+                name="featured"
+                value={tribe.is_featured ? "false" : "true"}
+              />
+              <button type="submit" className="btn-secondary">
+                <Sparkles size={14} />
+                {tribe.is_featured ? "Unfeature" : "Feature"}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
 
@@ -197,6 +280,28 @@ export default async function TribeDetailPage({
             ) : (
               <p className="text-sm text-ink-muted italic">No keeper assigned.</p>
             )}
+            <form action={setKeeper} className="flex flex-col gap-2 mt-4 pt-4 border-t border-line">
+              <label className="h-eyebrow">Change keeper (new keeper user ID)</label>
+              <input
+                type="text"
+                name="new_keeper"
+                placeholder="user_id of new keeper"
+                className="input font-mono text-xs"
+                required
+              />
+              <input type="hidden" name="tribe_id" value={tribeId} />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  name="reason"
+                  placeholder="reason"
+                  className="input flex-1"
+                />
+                <button type="submit" className="btn-secondary">
+                  Reassign
+                </button>
+              </div>
+            </form>
           </Card>
 
           <Card title="Facts" padded>
@@ -244,7 +349,70 @@ export default async function TribeDetailPage({
           </Card>
         </div>
 
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 flex flex-col gap-6">
+          <Card
+            title={`Members · ${tribe.member_count}`}
+            hint="Add, remove, or promote to keeper. Every change is audited."
+            padded={false}
+          >
+            <div className="px-5 py-3 border-b border-line">
+              <form action={addMember} className="flex gap-2">
+                <input type="hidden" name="tribe_id" value={tribeId} />
+                <input
+                  type="text"
+                  name="user_id"
+                  placeholder="user_id to add as member"
+                  className="input flex-1 font-mono text-xs"
+                  required
+                />
+                <button type="submit" className="btn-secondary inline-flex items-center gap-1">
+                  <Users2 size={14} /> Add
+                </button>
+              </form>
+            </div>
+            {((members ?? []) as unknown[]).length === 0 ? (
+              <div className="px-5 py-8 text-sm text-ink-muted italic">
+                No members.
+              </div>
+            ) : (
+              <ul className="divide-y divide-line max-h-[420px] overflow-auto">
+                {((members ?? []) as unknown as {
+                  user_id: string;
+                  role: string;
+                  users: { anonymous_pseudonym: string } | null;
+                }[]).map((m) => (
+                  <li
+                    key={m.user_id}
+                    className="px-5 py-2.5 flex items-center gap-3"
+                  >
+                    <Link
+                      href={`/users/${m.user_id}`}
+                      className="text-sm font-semibold text-burgundy hover:text-berry flex-1 min-w-0 truncate"
+                    >
+                      @{m.users?.anonymous_pseudonym ?? "—"}
+                    </Link>
+                    <Badge tone={m.role === "keeper" ? "info" : "neutral"}>
+                      {m.role}
+                    </Badge>
+                    {m.role !== "keeper" && (
+                      <form action={removeMember}>
+                        <input type="hidden" name="tribe_id" value={tribeId} />
+                        <input type="hidden" name="user_id" value={m.user_id} />
+                        <button
+                          type="submit"
+                          title="Remove from tribe"
+                          className="btn-ghost text-red-600 hover:bg-red-50 inline-flex items-center gap-1"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </form>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
           <Card title="Recent posts" hint="Last 10 posts in this tribe" padded={false}>
             {((recentPosts ?? []) as unknown[]).length === 0 ? (
               <div className="px-5 py-10 text-sm text-ink-muted italic">

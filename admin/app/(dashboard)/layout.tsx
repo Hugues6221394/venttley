@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Sidebar from "@/components/sidebar";
 import Topbar from "@/components/topbar";
 import { createAdminClient, createSsrClient } from "@/lib/supabase/server";
+import { isStaffRole } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,9 @@ export default async function DashboardLayout({
   if (error || !row) {
     return <NotAuthorized pseudonym={user.email ?? "unknown"} />;
   }
-  if (row.user_role !== "super_admin" && row.user_role !== "admin") {
+  // Any staff role may enter; middleware (lib/roles) enforces which *sections*
+  // each role can actually open. Non-staff are turned away here.
+  if (!isStaffRole(row.user_role)) {
     return <NotAuthorized pseudonym={row.anonymous_pseudonym} />;
   }
 
@@ -48,13 +51,19 @@ export default async function DashboardLayout({
       ),
   ]);
 
+  // Open safety-queue count via the SSR (logged-in) client — the RPC is gated
+  // by is_staff(auth.uid()), which the service-role client can't satisfy.
+  const { data: openSafety } = await supabase.rpc("admin_safety_open_count");
+
   const env = resolveEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
 
   return (
     <div className="min-h-screen flex bg-canvas">
       <Sidebar
+        role={row.user_role}
         pendingReports={pendingReports ?? 0}
         openIncidents={crisis24h ?? 0}
+        openSafety={typeof openSafety === "number" ? openSafety : 0}
       />
       <div className="flex flex-col flex-1 min-w-0">
         <Topbar

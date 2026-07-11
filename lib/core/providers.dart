@@ -1,16 +1,52 @@
+import 'package:collection/collection.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/repositories/vently_repository.dart';
+import '../data/services/analytics_service.dart';
+import '../data/services/feature_flags_service.dart';
 import '../data/services/moderation_service.dart';
+import '../data/services/whisper_player.dart';
 import '../domain/entities/entities.dart';
+import '../domain/home/home_discovery.dart';
+import '../domain/tribe/tribe_chat_hub.dart';
+import '../domain/keeper/keeper_overview.dart';
+import '../domain/keeper/keeper_mode.dart';
+import '../domain/keeper/keeper_studio_v2.dart';
+import 'analytics_events.dart';
 
 final repositoryProvider = Provider<VentlyRepository>((ref) {
   return VentlyRepository();
 });
 
-final moderationServiceProvider =
-    Provider<ModerationService>((ref) => ModerationService());
+/// Active staff-managed automod keyword rules (migration 0085). Loaded once
+/// and kept until the app restarts; safe to fail (empty = built-ins only).
+final automodRulesProvider = FutureProvider<List<AutomodRule>>((ref) async {
+  // Rules are RLS-scoped to authenticated users, so refetch when auth changes.
+  ref.watch(sessionProvider);
+  try {
+    return await ref.watch(repositoryProvider).automodRules();
+  } catch (_) {
+    return const <AutomodRule>[];
+  }
+});
+
+final moderationServiceProvider = Provider<ModerationService>((ref) {
+  final repo = ref.watch(repositoryProvider);
+  // Tier-2 runs server-side via the `moderate` edge function (key off-device +
+  // trusted verdict cache). If it fails, Tier-2 fails open to 'safe' — Tier-1
+  // on-device still applies — rather than falling back to an on-device key.
+  final service = ModerationService(
+    remoteGuard: (text) => repo.moderateRemote(text),
+  );
+  // Feed in dynamic automod rules as they resolve; until then the service
+  // runs on its built-in dictionaries.
+  final rules = ref.watch(automodRulesProvider).valueOrNull;
+  if (rules != null) service.setDynamicRules(rules);
+  return service;
+});
 
 /// Reactive session — null when logged out.
 final sessionProvider = StateNotifierProvider<SessionController, AppUser?>((ref) {
@@ -19,11 +55,32 @@ final sessionProvider = StateNotifierProvider<SessionController, AppUser?>((ref)
 });
 
 class SessionController extends StateNotifier<AppUser?> {
-  SessionController(this._repo) : super(_repo.currentUser);
+  SessionController(this._repo) : super(_repo.currentUser) {
+    // If the repo already has a cached user (warm app start), tell
+    // analytics + flags immediately so the first event is attributed.
+    final cached = _repo.currentUser;
+    if (cached != null) _identifyDownstream(cached);
+  }
   final VentlyRepository _repo;
+
+  /// Identify the user on every downstream service that needs it.
+  /// Idempotent — safe to call on every restore() / register / signIn.
+  void _identifyDownstream(AppUser user) {
+    final traits = <String, Object?>{
+      'safety_tier': user.safetyTier,
+      'user_role':   user.userRole,
+      'is_verified': user.isVerified,
+      // Pseudonym + birth year are PII-adjacent — leave them out so we
+      // never end up grouping people by anonymous handle in PostHog.
+    };
+    AnalyticsService.instance.identify(user.userId, traits: traits);
+    FeatureFlagsService.instance.identify(user.userId, traits: traits);
+  }
 
   Future<void> restore() async {
     state = await _repo.restoreSession();
+    final user = state;
+    if (user != null) _identifyDownstream(user);
   }
 
   /// Sign up. Returns the user *and* the freshly generated 12-word recovery
@@ -42,7 +99,142 @@ class SessionController extends StateNotifier<AppUser?> {
       avatarSeed: avatarSeed,
     );
     state = result.user;
+    _identifyDownstream(result.user);
+    AnalyticsService.instance.track(Events.signupAnonymous);
     return result;
+  }
+
+  /// Email-based sign-up. `user` is null when the Supabase project
+  /// requires email confirmation — caller surfaces a "check your inbox"
+  /// state until the confirmation link is clicked.
+  Future<({AppUser? user, String recoveryPhrase})> registerWithEmail({
+    required DateTime birthDate,
+    required String email,
+    required String username,
+    required String password,
+    required String avatarSeed,
+  }) async {
+    final result = await _repo.registerAccountWithEmail(
+      birthDate: birthDate,
+      email: email,
+      username: username,
+      password: password,
+      avatarSeed: avatarSeed,
+    );
+    if (result.user != null) {
+      state = result.user;
+      _identifyDownstream(result.user!);
+      AnalyticsService.instance.track(Events.signupEmail);
+    } else {
+      // Email confirmation pending — track the funnel step but don't
+      // identify (we don't have a stable user id yet).
+      AnalyticsService.instance.track(
+        Events.signupEmail,
+        props: {'state': 'awaiting_confirmation'},
+      );
+    }
+    return result;
+  }
+
+  Future<AppUser> signInEmail({
+    required String email,
+    required String password,
+  }) async {
+    final user = await _repo.signInWithEmail(email: email, password: password);
+    await _repo.reactivateMyAccount(); // restore if deactivated / cancel deletion
+    state = user;
+    _identifyDownstream(user);
+    AnalyticsService.instance.track(Events.signinEmail);
+    return user;
+  }
+
+  // ---- Optional real-email verification ---------------------------------
+
+  bool get hasRealEmail => _repo.hasRealEmail;
+  String? get currentEmail => _repo.currentEmail;
+  bool get isEmailVerified => state?.emailVerified ?? false;
+
+  Future<void> sendEmailVerification() => _repo.sendEmailVerification();
+
+  /// Confirm the 6-digit [code]; on success flips `emailVerified` in session.
+  Future<bool> confirmEmailVerification(String code) async {
+    final ok = await _repo.confirmEmailVerification(code);
+    if (ok) state = state?.copyWith(emailVerified: true);
+    return ok;
+  }
+
+  /// Re-read the verified flag (e.g. after returning to the app).
+  Future<bool> refreshEmailVerified() async {
+    final ok = await _repo.refreshEmailVerified();
+    if (ok && state != null) state = state!.copyWith(emailVerified: true);
+    return ok;
+  }
+
+  // ---- Password & security ----------------------------------------------
+
+  /// Rotate the account password (re-auths with the current one first).
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) =>
+      _repo.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+
+  /// Attach / change a real recovery email; Supabase emails a confirm link.
+  /// The auth-email change only finalises once the user confirms.
+  Future<void> setRecoveryEmail(String email) =>
+      _repo.setRecoveryEmail(email);
+
+  /// Sign out of every device (revokes all refresh tokens), then clear state.
+  Future<void> signOutEverywhere() async {
+    AnalyticsService.instance.track(Events.logout);
+    await _repo.signOutEverywhere();
+    state = null;
+    await AnalyticsService.instance.reset();
+  }
+
+  /// Save edits to the signed-in user's public profile and refresh session
+  /// state so every screen re-renders with the new username/photo/bio/pronouns.
+  Future<void> updateProfile({
+    String? pseudonym,
+    String? bio,
+    String? pronouns,
+    String? profilePhotoUrl,
+    String? homeCity,
+    bool clearPhoto = false,
+    bool clearBio = false,
+    bool clearPronouns = false,
+  }) async {
+    final updated = await _repo.updateMyProfile(
+      pseudonym: pseudonym,
+      bio: bio,
+      pronouns: pronouns,
+      profilePhotoUrl: profilePhotoUrl,
+      homeCity: homeCity,
+      clearPhoto: clearPhoto,
+      clearBio: clearBio,
+      clearPronouns: clearPronouns,
+    );
+    if (updated != null) state = updated;
+  }
+
+  // ---- Optional social / phone sign-in ----------------------------------
+
+  Future<bool> signInWithGoogle() => _repo.signInWithGoogle();
+
+  Future<void> startPhoneOtp(String phone) => _repo.startPhoneOtp(phone);
+
+  Future<AppUser> verifyPhoneOtp({
+    required String phone,
+    required String token,
+  }) async {
+    final user = await _repo.verifyPhoneOtp(phone: phone, token: token);
+    await _repo.reactivateMyAccount(); // restore if deactivated / cancel deletion
+    state = user;
+    _identifyDownstream(user);
+    return user;
   }
 
   /// Username + password sign-in for returning users.
@@ -51,8 +243,25 @@ class SessionController extends StateNotifier<AppUser?> {
     required String password,
   }) async {
     final user = await _repo.signIn(username: username, password: password);
+    await _repo.reactivateMyAccount(); // restore if deactivated / cancel deletion
     state = user;
+    _identifyDownstream(user);
+    AnalyticsService.instance.track(Events.signinAnonymous);
     return user;
+  }
+
+  /// Reversible: hide the account app-wide, then sign out. Logging back in
+  /// (any method) reactivates it automatically.
+  Future<void> deactivateAccount() async {
+    await _repo.deactivateMyAccount();
+    await logout();
+  }
+
+  /// Start the 30-day deletion grace period, then sign out. Logging back in
+  /// within the window cancels the deletion; after 30 days data is purged.
+  Future<void> deleteAccount() async {
+    await _repo.requestAccountDeletion();
+    await logout();
   }
 
   /// Restore an account on a fresh install using the 12-word phrase.
@@ -65,13 +274,19 @@ class SessionController extends StateNotifier<AppUser?> {
       username: username,
       phrase: phrase,
     );
-    if (user != null) state = user;
+    if (user != null) {
+      state = user;
+      _identifyDownstream(user);
+      AnalyticsService.instance.track(Events.recoveryUsed);
+    }
     return user;
   }
 
   Future<void> logout() async {
+    AnalyticsService.instance.track(Events.logout);
     await _repo.logout();
     state = null;
+    await AnalyticsService.instance.reset();
   }
 }
 
@@ -144,12 +359,44 @@ final feedPostsProvider = StreamProvider<List<Post>>((ref) {
 });
 
 /// Broad hot sample for Home discovery modules. It intentionally ignores the
-/// active category/mood filters so Trending Topics and Stories keep showing
-/// the whole app pulse while the main feed list can be narrowed.
+/// active category/mood filters so Trending Topics and Tribes keep showing the
+/// whole app pulse while the main feed list can be narrowed.
 final homeDiscoveryPostsProvider =
     FutureProvider.autoDispose<List<Post>>((ref) async {
   ref.watch(feedPostsProvider);
   return ref.watch(repositoryProvider).feed(sort: 'hot');
+});
+
+/// Friend-scoped 24h story posts for Home + the full story viewer.
+final friendStoryPostsProvider =
+    FutureProvider.autoDispose<List<Post>>((ref) async {
+  final me = ref.watch(sessionProvider);
+  if (me == null) return const [];
+  final friends = await ref.watch(myFriendsProvider.future);
+  final friendIds = friends.map((f) => f.userId).toSet();
+  final posts = await ref.watch(repositoryProvider).friendStories(limit: 36);
+  final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+  return posts
+      .where((p) =>
+          p.isWhisper &&
+          p.authorId != null &&
+          p.createdAt.isAfter(cutoff) &&
+          (p.authorId == me.userId || friendIds.contains(p.authorId)))
+      .toList();
+});
+
+/// Friend-scoped 24h stories for the Home rail (self + accepted friends).
+final homeFriendStoriesProvider =
+    FutureProvider.autoDispose<List<VentStory>>((ref) async {
+  final me = ref.watch(sessionProvider);
+  final friends = await ref.watch(myFriendsProvider.future);
+  final posts = await ref.watch(friendStoryPostsProvider.future);
+  final friendIds = friends.map((f) => f.userId).toSet();
+  return HomeDiscovery.friendStories(
+    posts: posts,
+    myUserId: me?.userId,
+    friendUserIds: friendIds,
+  );
 });
 
 final inboxTabProvider = StateProvider<String>((ref) => 'requests');
@@ -157,6 +404,11 @@ final inboxStreamProvider = StreamProvider<List<ChatRoom>>((ref) {
   final repo = ref.watch(repositoryProvider);
   final tab = ref.watch(inboxTabProvider);
   return repo.watchInbox(tab);
+});
+
+/// Full inbox list for badges + foreground notification diffing.
+final allInboxRoomsStreamProvider = StreamProvider<List<ChatRoom>>((ref) {
+  return ref.watch(repositoryProvider).watchInbox('all');
 });
 
 // ----------------------------------------------------------------------
@@ -170,6 +422,22 @@ final plugzListProvider = FutureProvider.autoDispose<List<PlugProfile>>(
 final plugByNameProvider =
     FutureProvider.autoDispose.family<PlugProfile?, String>(
         (ref, name) async => ref.watch(repositoryProvider).plug(name));
+
+final plugTribesProvider =
+    FutureProvider.autoDispose.family<List<Tribe>, String>(
+        (ref, plugId) async =>
+            ref.watch(repositoryProvider).tribesByKeeper(plugId));
+
+final plugPostsProvider =
+    FutureProvider.autoDispose.family<List<Post>, String>(
+        (ref, plugId) async => ref
+            .watch(repositoryProvider)
+            .postsByKeeper(plugId, limit: 12));
+
+final userPostsProvider =
+    FutureProvider.autoDispose.family<List<Post>, String>(
+        (ref, userId) async =>
+            ref.watch(repositoryProvider).postsByAuthor(userId, limit: 12));
 
 /// Directory of Tribes — filtered by [TribeQuery.category] / .search.
 class TribeQuery {
@@ -194,9 +462,120 @@ final tribeBySlugProvider =
     FutureProvider.autoDispose.family<Tribe?, String>(
         (ref, slug) async => ref.watch(repositoryProvider).tribeBySlug(slug));
 
+/// Tribes the current user keeps (manages). Plug Dashboard data source.
+final tribesIKeepProvider = FutureProvider.autoDispose<List<Tribe>>(
+    (ref) async => ref.watch(repositoryProvider).tribesIKeep());
+
+/// Authoritative keeper mode from `is_keeper_mode` RPC (0062).
+final keeperModeProvider = FutureProvider.autoDispose<KeeperMode>((ref) async {
+  ref.watch(sessionProvider);
+  return ref.watch(repositoryProvider).keeperMode();
+});
+
+/// True when the user operates in Keeper / Plug / Creator mode.
+///
+/// Uses server RPC first; falls back to client checks if RPC unavailable.
+final isKeeperProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final me = ref.watch(sessionProvider);
+  if (me == null) return false;
+
+  try {
+    final mode = await ref.watch(keeperModeProvider.future);
+    return mode.isKeeper;
+  } catch (_) {
+    if (me.isPlug) return true;
+    final tribes = await ref.watch(tribesIKeepProvider.future);
+    return tribes.isNotEmpty;
+  }
+});
+
+/// Primary tribe for studio dashboards (highest member count among kept).
+final primaryKeeperTribeProvider =
+    Provider.autoDispose<Tribe?>((ref) {
+  final tribes = ref.watch(tribesIKeepProvider).valueOrNull;
+  if (tribes == null || tribes.isEmpty) return null;
+  return tribes.first;
+});
+
+/// When true, keepers see the normal member feed instead of Control Center.
+final keeperMemberViewProvider = StateProvider<bool>((ref) => false);
+
+/// Studio stats rolled up across all kept tribes — one parallel fetch.
+final keeperOverviewProvider =
+    FutureProvider.autoDispose<KeeperOverview>((ref) async {
+  final tribes = await ref.watch(tribesIKeepProvider.future);
+  if (tribes.isEmpty) return KeeperOverview.empty();
+  final repo = ref.read(repositoryProvider);
+  final statsList = await Future.wait(
+    tribes.map((t) => repo.tribeStudioStats(t.tribeId)),
+  );
+  final byId = <String, TribeStudioStats?>{};
+  for (var i = 0; i < tribes.length; i++) {
+    byId[tribes[i].tribeId] = statsList[i];
+  }
+  return KeeperOverview(tribes: tribes, statsByTribeId: byId);
+});
+
+final keeperModerationQueueProvider = FutureProvider.autoDispose
+    .family<KeeperModerationQueue, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).keeperModerationQueue(tribeId));
+
+final keeperEngagementCalendarProvider = FutureProvider.autoDispose
+    .family<KeeperEngagementCalendar, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).keeperEngagementCalendar(tribeId));
+
+final keeperAiInsightsProvider = FutureProvider.autoDispose
+    .family<KeeperAiInsights, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).keeperAiInsights(tribeId));
+
+final keeperComodMatrixProvider = FutureProvider.autoDispose
+    .family<KeeperComodMatrix, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).keeperComodMatrix(tribeId));
+
+// ─── Spaces (Tribe → Space → Vent, migration 0050) ───────────────────
+
+final spacesByTribeProvider =
+    FutureProvider.autoDispose.family<List<Space>, String>(
+        (ref, tribeId) async =>
+            ref.watch(repositoryProvider).spacesByTribe(tribeId));
+
+final spaceByIdProvider =
+    FutureProvider.autoDispose.family<Space?, String>(
+        (ref, spaceId) async =>
+            ref.watch(repositoryProvider).spaceById(spaceId));
+
+class SpaceFeedQuery {
+  final String spaceId;
+  final String sort; // fresh | trending | helpful | unanswered
+  const SpaceFeedQuery({required this.spaceId, this.sort = 'fresh'});
+  @override
+  bool operator ==(Object other) =>
+      other is SpaceFeedQuery &&
+      other.spaceId == spaceId &&
+      other.sort == sort;
+  @override
+  int get hashCode => Object.hash(spaceId, sort);
+}
+
+final spacePostsProvider =
+    FutureProvider.autoDispose.family<List<Post>, SpaceFeedQuery>(
+        (ref, q) async => ref
+            .watch(repositoryProvider)
+            .postsInSpace(spaceId: q.spaceId, sort: q.sort));
+
+final spaceSummaryProvider =
+    FutureProvider.autoDispose.family<SpaceSummary?, String>(
+        (ref, spaceId) async =>
+            ref.watch(repositoryProvider).latestSpaceSummary(spaceId));
+
 /// Transient: when set, the next compose-screen open pre-fills this Tribe.
 /// Cleared by the compose screen after it picks it up.
 final composeTargetTribeProvider = StateProvider<Tribe?>((ref) => null);
+
+/// Transient: when set, the next compose-screen open pre-fills this Space
+/// (and its parent Tribe). Cleared by the compose screen after it picks
+/// it up. Drives the Tribe → Space → Vent flow from migration 0050.
+final composeTargetSpaceProvider = StateProvider<Space?>((ref) => null);
 
 /// When true, the next compose-screen open starts as a 24h Vent Story.
 /// Cleared by the compose screen after it reads the flag.
@@ -204,6 +583,13 @@ final composeStoryModeProvider = StateProvider<bool>((ref) => false);
 
 /// Optional category for the next compose-screen open.
 final composeInitialCategoryProvider = StateProvider<String?>((ref) => null);
+
+/// Optional draft text the next compose-screen open should pre-fill.
+/// Used by the AI Space Assistant's "Use this prompt" CTA.
+final composeInitialDraftProvider = StateProvider<String?>((ref) => null);
+
+/// When true, the next compose-screen open enables the poll composer.
+final composeIncludePollProvider = StateProvider<bool>((ref) => false);
 
 /// The user's personas (alternate anonymous handles).
 final myPersonasProvider = FutureProvider.autoDispose<List<Persona>>(
@@ -263,6 +649,18 @@ final userProfileProvider =
     FutureProvider.autoDispose.family<UserProfileView?, String>(
         (ref, userId) async =>
             ref.watch(repositoryProvider).userProfile(userId));
+
+/// 🫂 total hugs received for a user (own-profile banner). Migration 0107.
+final hugsReceivedProvider = FutureProvider.autoDispose.family<int, String>(
+    (ref, userId) async =>
+        ref.watch(repositoryProvider).hugsReceivedFor(userId));
+
+/// Caller's verification standing: 'verified' | 'pending' | 'denied' | 'none'.
+/// Migration 0109 — powers the "Apply for verified" affordance.
+final myVerificationStatusProvider = FutureProvider.autoDispose<String>((ref) {
+  ref.watch(sessionProvider);
+  return ref.watch(repositoryProvider).myVerificationStatus();
+});
 
 // ----------------------------------------------------------------------
 // Plugz Creator Studio (migration 0028)
@@ -346,6 +744,34 @@ final mySavedProvider = FutureProvider.autoDispose<List<Post>>((ref) async {
   return ref.watch(repositoryProvider).mySaved();
 });
 
+final mySavedWhispersProvider =
+    FutureProvider.autoDispose<List<Whisper>>((ref) async {
+  ref.watch(whispersFeedProvider);
+  return ref.watch(repositoryProvider).mySavedWhispers();
+});
+
+/// Current user's published whispers — drives the Profile Whispers tab.
+final myWhispersProvider = FutureProvider.autoDispose<List<Whisper>>((ref) async {
+  final me = ref.watch(sessionProvider);
+  if (me == null) return const [];
+  ref.watch(whispersFeedProvider);
+  return ref.watch(repositoryProvider).whispersForAuthor(me.userId, limit: 48);
+});
+
+/// Trending whispers for the home discovery rail — ranked by engagement.
+final popularWhispersProvider =
+    FutureProvider.autoDispose<List<Whisper>>((ref) async {
+  ref.watch(whispersFeedProvider);
+  final list = await ref.read(repositoryProvider).listWhispers(limit: 24);
+  final ranked = list.toList()
+    ..sort((a, b) {
+      final scoreA = a.playsCount + a.likesCount * 2 + a.commentsCount;
+      final scoreB = b.playsCount + b.likesCount * 2 + b.commentsCount;
+      return scoreB.compareTo(scoreA);
+    });
+  return ranked.take(10).toList();
+});
+
 final postByIdProvider =
     FutureProvider.autoDispose.family<Post?, String>((ref, postId) async {
   ref.watch(feedPostsProvider);
@@ -361,6 +787,17 @@ final messagesProvider =
     StreamProvider.autoDispose.family<List<ChatMessage>, String>(
         (ref, roomId) =>
             ref.watch(repositoryProvider).watchMessages(roomId));
+
+/// Per-user DM room preferences (mute, nickname, theme).
+final dmRoomPrefsProvider =
+    FutureProvider.autoDispose.family<DmRoomPrefs, String>(
+        (ref, roomId) => ref.watch(repositoryProvider).dmRoomPrefs(roomId));
+
+/// Conversation-level disappearing-message TTL in seconds (0 = off, shared by
+/// both participants — migration 0099).
+final roomDisappearingProvider =
+    FutureProvider.autoDispose.family<int, String>((ref, roomId) =>
+        ref.watch(repositoryProvider).roomDisappearingSeconds(roomId));
 
 /// True while the peer in [roomId] is actively typing. Flips false ~3s
 /// after the last broadcast. Pure ephemeral signal — no DB read.
@@ -391,4 +828,247 @@ final inboxCountsProvider =
     'requests': pending.length,
     'active': active.length,
   };
+});
+
+/// Aggregated inbox badge count — pending requests + unread peer messages.
+/// Prefer [navInboxBadgeCountProvider] for the tab badge (also folds in
+/// incoming friend requests).
+final unreadInboxCountProvider =
+    FutureProvider.autoDispose<int>((ref) async {
+  ref.watch(inboxStreamProvider);
+  final repo = ref.watch(repositoryProvider);
+  final unreadChats = await repo.unreadChatMessageCount();
+  final pending = await repo.inbox('requests');
+  return unreadChats + pending.length;
+});
+
+/// Inbox tab badge: pending chat requests + unread peer messages +
+/// incoming friend requests.
+final navInboxBadgeCountProvider =
+    FutureProvider.autoDispose<int>((ref) async {
+  ref.watch(inboxStreamProvider);
+  ref.watch(incomingFriendRequestsProvider);
+  final repo = ref.watch(repositoryProvider);
+  final unreadChats = await repo.unreadChatMessageCount();
+  final pending = await repo.inbox('requests');
+  final incoming = await repo.incomingFriendRequests();
+  return unreadChats + pending.length + incoming.length;
+});
+
+// ----------------------------------------------------------------------
+// Premium home (migration 0038)
+// ----------------------------------------------------------------------
+
+final homeStatsProvider = FutureProvider.autoDispose<HomeStats>((ref) async {
+  // Keep stats fresh when the feed reloads.
+  ref.watch(feedPostsProvider);
+  return ref.watch(repositoryProvider).homeStats();
+});
+
+final trendingCategoriesProvider =
+    FutureProvider.autoDispose<List<TrendingCategory>>((ref) async {
+  ref.watch(feedPostsProvider);
+  return ref.watch(repositoryProvider).trendingCategories(limit: 6);
+});
+
+final trendingVoicesProvider =
+    FutureProvider.autoDispose<List<TrendingVoice>>((ref) async {
+  return ref.watch(repositoryProvider).trendingVoices(limit: 6);
+});
+
+/// Quick Suggestions for the Friends screen — mutual-tribe acquaintances
+/// minus current friends + blocks.
+final friendSuggestionsProvider =
+    FutureProvider.autoDispose<List<FriendSuggestion>>((ref) async {
+  ref.watch(myFriendsProvider);
+  return ref.watch(repositoryProvider).friendSuggestions(limit: 8);
+});
+
+/// Realtime stream of group-chat messages in a single tribe (migration 0041).
+final tribeMessagesProvider =
+    StreamProvider.autoDispose.family<List<TribeMessage>, String>(
+  (ref, tribeId) =>
+      ref.watch(repositoryProvider).watchTribeMessages(tribeId),
+);
+
+/// Snapshot of how many tribe members are present (proxy: total members
+/// until presence channel ships).
+final tribeChatPresenceProvider =
+    FutureProvider.autoDispose.family<int, String>(
+  (ref, tribeId) async =>
+      ref.watch(repositoryProvider).tribeChatPresence(tribeId),
+);
+
+/// Online/active members for the tribe chat hub.
+final tribeOnlineMembersProvider =
+    FutureProvider.autoDispose.family<List<TribeOnlineMember>, String>(
+  (ref, tribeId) async =>
+      ref.watch(repositoryProvider).tribeOnlineMembers(tribeId),
+);
+
+/// Who is typing in a tribe group chat (Realtime broadcast).
+final tribeTypingProvider =
+    StreamProvider.autoDispose.family<List<TribeTypingUser>, String>(
+  (ref, tribeId) => ref.watch(repositoryProvider).watchTribeTyping(tribeId),
+);
+
+/// Inbox summaries for joined tribe group chats (unread + preview).
+final tribeChatInboxProvider = FutureProvider.autoDispose<List<TribeChatInboxSummary>>(
+  (ref) => ref.watch(repositoryProvider).tribeChatInbox(),
+);
+
+/// Shared media in a tribe chat (photos + voice notes).
+final tribeChatMediaProvider =
+    FutureProvider.autoDispose.family<List<TribeChatMediaItem>, String>(
+  (ref, tribeId) => ref.watch(repositoryProvider).tribeChatMedia(tribeId),
+);
+
+/// True when the current user can manage this tribe (keeper or mod).
+final canManageTribeProvider =
+    Provider.autoDispose.family<bool, String>((ref, tribeId) {
+  final me = ref.watch(sessionProvider);
+  if (me == null) return false;
+  final members = ref.watch(tribeMembersProvider(tribeId)).valueOrNull;
+  if (members != null) {
+    final row = members.where((m) => m.userId == me.userId).firstOrNull;
+    if (row != null && (row.role == 'keeper' || row.role == 'mod')) {
+      return true;
+    }
+  }
+  final kept = ref.watch(tribesIKeepProvider).valueOrNull ?? const [];
+  return kept.any((t) => t.tribeId == tribeId);
+});
+
+/// Active category filter on the Whispers feed.
+final whispersCategoryProvider =
+    StateProvider.autoDispose<String?>((ref) => null);
+
+/// Paginated Whispers feed — infinite vertical scroll (Reels-style).
+class WhispersFeedNotifier extends AutoDisposeAsyncNotifier<List<Whisper>> {
+  static const pageSize = 12;
+
+  int _offset = 0;
+  bool _hasMore = true;
+  bool _loadingMore = false;
+  String? _categoryKey;
+
+  bool get hasMore => _hasMore;
+  bool get isLoadingMore => _loadingMore;
+
+  @override
+  Future<List<Whisper>> build() async {
+    final category = ref.watch(whispersCategoryProvider);
+    _categoryKey = category;
+    _offset = 0;
+    _hasMore = true;
+    _loadingMore = false;
+    final first = await _fetch(category: category, offset: 0);
+    _offset = first.length;
+    _hasMore = first.length >= pageSize;
+    return first;
+  }
+
+  Future<List<Whisper>> _fetch({
+    required String? category,
+    required int offset,
+  }) {
+    return ref.read(repositoryProvider).listWhispers(
+          limit: pageSize,
+          offset: offset,
+          category: category,
+        );
+  }
+
+  Future<void> loadMore() async {
+    if (!_hasMore || _loadingMore) return;
+    final current = state.valueOrNull;
+    if (current == null) return;
+
+    _loadingMore = true;
+    try {
+      final category = ref.read(whispersCategoryProvider);
+      if (category != _categoryKey) return;
+      final next = await _fetch(category: category, offset: _offset);
+      if (next.isEmpty) {
+        _hasMore = false;
+        return;
+      }
+      _offset += next.length;
+      _hasMore = next.length >= pageSize;
+      final seen = current.map((w) => w.whisperId).toSet();
+      final merged = [
+        ...current,
+        for (final w in next)
+          if (!seen.contains(w.whisperId)) w,
+      ];
+      state = AsyncData(merged);
+    } finally {
+      _loadingMore = false;
+    }
+  }
+
+  Future<void> refresh() async {
+    ref.invalidateSelf();
+    await future;
+  }
+}
+
+final whispersFeedProvider =
+    AsyncNotifierProvider.autoDispose<WhispersFeedNotifier, List<Whisper>>(
+  WhispersFeedNotifier.new,
+);
+
+/// Whispers scoped to a single user — drives the "Whispers" card on
+/// the friend profile screen.
+final userWhispersProvider =
+    FutureProvider.autoDispose.family<List<Whisper>, String>(
+  (ref, userId) =>
+      ref.watch(repositoryProvider).whispersForAuthor(userId, limit: 12),
+);
+
+/// Public tribes a user belongs to — drives the "Tribes" section on the
+/// friend profile screen. Private tribes are only returned to fellow members.
+final userPublicTribesProvider =
+    FutureProvider.autoDispose.family<List<Tribe>, String>(
+  (ref, userId) => ref.watch(repositoryProvider).userPublicTribes(userId),
+);
+
+/// Flat comments on a Whisper (migration 0059).
+final whisperCommentsProvider =
+    FutureProvider.autoDispose.family<List<WhisperComment>, String>(
+  (ref, whisperId) =>
+      ref.watch(repositoryProvider).listWhisperComments(whisperId),
+);
+
+/// Shared audio player for the Whispers feed — kept alive for fast return.
+final whisperPlayerProvider = FutureProvider<WhisperPlayerController>((ref) async {
+  final controller = await WhisperPlayerController.create();
+  ref.onDispose(() {
+    unawaited(controller.dispose());
+  });
+  return controller;
+});
+
+/// Live search query for the Discover screen. Empty / very short
+/// strings short-circuit to an empty result list inside the search RPC.
+final discoverSearchQueryProvider =
+    StateProvider.autoDispose<String>((ref) => '');
+
+/// Debounced search results — fires the search_global RPC 280ms after
+/// the user stops typing so we don't hammer the backend on every keystroke.
+final discoverSearchResultsProvider =
+    FutureProvider.autoDispose<List<SearchHit>>((ref) async {
+  final query = ref.watch(discoverSearchQueryProvider).trim();
+  if (query.length < 2) return const [];
+  await Future<void>.delayed(const Duration(milliseconds: 280));
+  // Bail if the query changed during the debounce window — Riverpod will
+  // throw if we return for a stale state, so check via the latest read.
+  if (ref.read(discoverSearchQueryProvider).trim() != query) return const [];
+  return ref.watch(repositoryProvider).searchGlobal(query);
+});
+
+/// Friend-scoped live 24h story posts for the story viewer.
+final liveStoriesProvider =
+    FutureProvider.autoDispose<List<Post>>((ref) async {
+  return ref.watch(friendStoryPostsProvider.future);
 });

@@ -4,30 +4,48 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../screens/compose/compose_screen.dart';
+import '../screens/compose/create_story_screen.dart';
 import '../screens/discover/discover_screen.dart';
-import '../screens/feed/feed_screen.dart';
+import '../screens/home/adaptive_shell_tabs.dart';
 import '../screens/feed/post_detail_screen.dart';
+import '../screens/feed/story_viewer_screen.dart';
 import '../screens/friends/friend_profile_screen.dart';
 import '../screens/friends/friends_screen.dart';
 import '../screens/home/home_shell.dart';
 import '../screens/inbox/chat_screen.dart';
-import '../screens/inbox/inbox_screen.dart';
+import '../screens/whispers/create_whisper_screen.dart';
+import '../widgets/keep_alive.dart';
+import '../screens/onboarding/email_signup_screen.dart';
 import '../screens/onboarding/identity_screen.dart';
 import '../screens/onboarding/recover_screen.dart';
 import '../screens/onboarding/recovery_key_screen.dart';
+import '../screens/onboarding/phone_signin_screen.dart';
+import '../screens/onboarding/verify_email_screen.dart';
 import '../screens/notifications/notifications_screen.dart';
 import '../screens/onboarding/welcome_screen.dart';
 import '../screens/plugz/plug_profile_screen.dart';
 import '../screens/profile/avatar_builder_screen.dart';
-import '../screens/profile/profile_screen.dart';
+import '../screens/profile/edit_profile_screen.dart';
+import '../screens/profile/profile_stat_detail_screen.dart';
+import '../screens/profile/security_screen.dart';
+import '../screens/profile/password_security_screen.dart';
+import '../screens/settings/settings_screen.dart';
 import '../screens/questions/questions_screen.dart';
 import '../screens/share/share_card_screen.dart';
 import '../screens/tribes/create_tribe_screen.dart';
 import '../screens/tribes/edit_tribe_screen.dart';
+import '../screens/tribes/tribe_chat_screen.dart';
+import '../screens/tribes/tribe_chat_hub_screen.dart';
 import '../screens/tribes/tribe_detail_screen.dart';
+import '../screens/tribes/space_home_screen.dart';
 import '../screens/tribes/tribe_manage_screen.dart';
+import '../screens/tribes/tribe_moderation_screen.dart';
 import '../screens/tribes/tribe_reports_screen.dart';
 import '../screens/tribes/tribes_directory_screen.dart';
+import '../screens/keeper/keeper_moderation_center_screen.dart';
+import '../screens/keeper/keeper_engagement_calendar_screen.dart';
+import '../screens/keeper/keeper_comod_screen.dart';
+import '../screens/keeper/keeper_insights_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -53,28 +71,65 @@ final routerProvider = Provider<GoRouter>((ref) {
             RecoveryKeyScreen(phrase: (st.extra as String?) ?? ''),
       ),
       GoRoute(path: '/onboarding/recover', builder: (_, __) => const RecoverScreen()),
+      GoRoute(
+        path: '/onboarding/email',
+        builder: (_, __) => const EmailSignupScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding/phone',
+        builder: (_, __) => const PhoneSignInScreen(),
+      ),
 
+      // Bottom-nav shell. 5 tabs: Home / Whispers / Post / Inbox / Profile.
+      // Friends + Discover + Tribes live behind the hamburger menu and the
+      // Home top bar; they're top-level push routes below.
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
             HomeShell(navigationShell: navigationShell),
         branches: [
           StatefulShellBranch(routes: [
-            GoRoute(path: '/feed',      builder: (_, __) => const FeedScreen()),
+            GoRoute(
+                path: '/feed',
+                builder: (_, __) =>
+                    const KeepAliveWrapper(child: AdaptiveHomeTab())),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/discover',  builder: (_, __) => const DiscoverScreen()),
+            GoRoute(
+                path: '/whispers',
+                builder: (_, __) =>
+                    const KeepAliveWrapper(child: AdaptiveWhispersTab())),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/compose',   builder: (_, __) => const ComposeScreen()),
+            GoRoute(
+                path: '/compose',
+                builder: (ctx, st) => ComposeScreen(
+                      queryParams: st.uri.queryParameters,
+                    )),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/tribes',    builder: (_, __) => const TribesDirectoryScreen()),
+            GoRoute(
+                path: '/inbox',
+                builder: (_, __) =>
+                    const KeepAliveWrapper(child: AdaptiveInboxTab())),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/profile',   builder: (_, __) => const ProfileScreen()),
+            GoRoute(
+                path: '/profile',
+                builder: (_, __) =>
+                    const KeepAliveWrapper(child: AdaptiveProfileTab())),
           ]),
         ],
       ),
+
+      // Friends + Discover + Tribes are top-level push routes — reachable
+      // from the Home hamburger drawer + Home top bar + Profile entries.
+      GoRoute(
+        path: '/verify-email',
+        builder: (_, st) => VerifyEmailScreen(email: st.uri.queryParameters['email']),
+      ),
+      GoRoute(path: '/friends',   builder: (_, __) => const FriendsScreen()),
+      GoRoute(path: '/discover',  builder: (_, __) => const DiscoverScreen()),
+      GoRoute(path: '/tribes',    builder: (_, __) => const TribesDirectoryScreen()),
 
       GoRoute(
         path: '/post/:id',
@@ -88,16 +143,60 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(
+        path: '/whisper/:id',
+        redirect: (_, state) =>
+            '/whispers?whisper=${state.pathParameters['id']}',
+      ),
+      GoRoute(
         path: '/plug/:name',
         builder: (ctx, st) => PlugProfileScreen(
           displayName: Uri.decodeComponent(st.pathParameters['name']!),
         ),
       ),
       GoRoute(
+        path: '/plug-dashboard',
+        redirect: (_, __) => '/feed',
+      ),
+      GoRoute(
+        path: '/keeper/moderation',
+        builder: (_, __) => const KeeperModerationCenterScreen(),
+      ),
+      GoRoute(
+        path: '/keeper/calendar',
+        builder: (_, __) => const KeeperEngagementCalendarScreen(),
+      ),
+      GoRoute(
+        path: '/keeper/comod',
+        builder: (_, __) => const KeeperComodScreen(),
+      ),
+      GoRoute(
+        path: '/keeper/insights',
+        builder: (_, __) => const KeeperInsightsScreen(),
+      ),
+      GoRoute(
         path: '/tribe/:slug',
         builder: (ctx, st) =>
             TribeDetailScreen(slug: st.pathParameters['slug']!),
         routes: [
+          GoRoute(
+            path: 'chat',
+            builder: (ctx, st) => TribeChatScreen(
+              slug: st.pathParameters['slug']!,
+              scrollToMessageId: st.uri.queryParameters['message'],
+            ),
+            routes: [
+              GoRoute(
+                path: 'hub',
+                builder: (ctx, st) =>
+                    TribeChatHubScreen(slug: st.pathParameters['slug']!),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'space/:spaceId',
+            builder: (ctx, st) =>
+                SpaceHomeScreen(spaceId: st.pathParameters['spaceId']!),
+          ),
           GoRoute(
             path: 'manage',
             builder: (ctx, st) =>
@@ -106,6 +205,11 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'reports',
                 builder: (ctx, st) => TribeReportsScreen(
+                    slug: st.pathParameters['slug']!),
+              ),
+              GoRoute(
+                path: 'moderation',
+                builder: (ctx, st) => TribeModerationScreen(
                     slug: st.pathParameters['slug']!),
               ),
               GoRoute(
@@ -126,20 +230,56 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (ctx, st) => ChatScreen(roomId: st.pathParameters['roomId']!),
       ),
       GoRoute(path: '/questions', builder: (_, __) => const QuestionsScreen()),
-      GoRoute(path: '/inbox', builder: (_, __) => const InboxScreen()),
       GoRoute(
         path: '/profile/avatar',
         builder: (_, __) => const AvatarBuilderScreen(),
       ),
-      GoRoute(path: '/friends', builder: (_, __) => const FriendsScreen()),
+      GoRoute(
+        path: '/profile/edit',
+        builder: (_, __) => const EditProfileScreen(),
+      ),
+      GoRoute(
+        path: '/profile/security',
+        builder: (_, __) => const SecurityScreen(),
+      ),
+      GoRoute(
+        path: '/profile/password-security',
+        builder: (_, __) => const PasswordSecurityScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (_, __) => const SettingsScreen(),
+      ),
       GoRoute(
         path: '/user/:userId',
         builder: (ctx, st) =>
             FriendProfileScreen(userId: st.pathParameters['userId']!),
+        routes: [
+          GoRoute(
+            path: 'stat/:statKind',
+            builder: (ctx, st) => ProfileStatDetailScreen(
+              userId: st.pathParameters['userId']!,
+              statKind: st.pathParameters['statKind']!,
+            ),
+          ),
+        ],
       ),
       GoRoute(
         path: '/notifications',
         builder: (_, __) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/compose/story',
+        builder: (_, __) => const CreateStoryScreen(),
+      ),
+      GoRoute(
+        path: '/whispers/new',
+        builder: (_, __) => const CreateWhisperScreen(),
+      ),
+      GoRoute(
+        path: '/story/:postId',
+        builder: (ctx, st) =>
+            StoryViewerScreen(initialPostId: st.pathParameters['postId']!),
       ),
     ],
   );

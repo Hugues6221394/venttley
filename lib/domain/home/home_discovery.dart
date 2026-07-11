@@ -83,6 +83,28 @@ class HomeDiscovery {
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}K';
     return '$n';
   }
+
+  /// 24h stories from self + accepted friends only (no demo content).
+  static List<VentStory> friendStories({
+    required List<Post> posts,
+    required String? myUserId,
+    required Set<String> friendUserIds,
+    DateTime? now,
+  }) {
+    final clock = now ?? DateTime.now();
+    return posts
+        .where((p) =>
+            p.isWhisper &&
+            p.createdAt.add(const Duration(hours: 24)).isAfter(clock))
+        .where((p) {
+          if (p.authorId == null) return false;
+          if (p.authorId == myUserId) return true;
+          return friendUserIds.contains(p.authorId);
+        })
+        .map((p) => VentStory.fromPost(p, now: clock))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
 }
 
 class HomeKpi {
@@ -126,6 +148,11 @@ class VentStory {
   final DateTime expiresAt;
   final int reactionsCount;
   final int repliesCount;
+  final int viewCount;
+  final String? imageUrl;
+  final String? audioUrl;
+  final int? audioDurationSeconds;
+  final bool authorIsVerified;
   final String? myReaction;
 
   const VentStory({
@@ -139,8 +166,13 @@ class VentStory {
     required this.expiresAt,
     required this.reactionsCount,
     required this.repliesCount,
+    this.viewCount = 0,
     this.authorId,
     this.authorProfilePhotoUrl,
+    this.imageUrl,
+    this.audioUrl,
+    this.audioDurationSeconds,
+    this.authorIsVerified = false,
     this.myReaction,
   });
 
@@ -158,6 +190,11 @@ class VentStory {
       expiresAt: post.createdAt.add(const Duration(hours: 24)),
       reactionsCount: post.likesCount,
       repliesCount: post.commentsCount,
+      viewCount: post.viewCount,
+      imageUrl: post.imageUrl,
+      audioUrl: post.audioUrl,
+      audioDurationSeconds: post.audioDurationSeconds,
+      authorIsVerified: post.authorIsVerified,
       myReaction: post.myReaction,
     );
   }

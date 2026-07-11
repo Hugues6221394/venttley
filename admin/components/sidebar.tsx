@@ -3,12 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
+import { canAccess } from "@/lib/roles";
 import {
   LayoutDashboard,
   ShieldAlert,
+  ShieldCheck,
+  AlertTriangle,
+  ImageIcon,
   Users,
   Users2,
   LineChart,
+  TrendingUp,
   Megaphone,
   ScrollText,
   Activity,
@@ -16,6 +21,7 @@ import {
   KeyRound,
   SettingsIcon,
   Heart,
+  LifeBuoy,
   Sparkles,
 } from "./ui/icons";
 
@@ -36,7 +42,11 @@ const groups: Group[] = [
     label: "Operate",
     items: [
       { href: "/overview",   label: "Control Center", icon: LayoutDashboard },
+      { href: "/safety",     label: "Safety & Crisis", icon: LifeBuoy },
+      { href: "/csam",       label: "CSAM incidents", icon: AlertTriangle },
       { href: "/moderation", label: "Moderation",     icon: ShieldAlert },
+      { href: "/automod",    label: "Automod rules",  icon: ShieldCheck },
+      { href: "/media",      label: "Media safety",   icon: ImageIcon },
       { href: "/broadcasts", label: "Broadcasts",     icon: Megaphone },
     ],
   },
@@ -46,12 +56,15 @@ const groups: Group[] = [
       { href: "/users",  label: "Users",  icon: Users },
       { href: "/tribes", label: "Tribes", icon: Users2 },
       { href: "/roles",  label: "Roles & permissions", icon: KeyRound },
+      { href: "/sessions", label: "Sessions & IPs", icon: Activity },
+      { href: "/verification", label: "Verification queue", icon: Sparkles },
     ],
   },
   {
     label: "Insight",
     items: [
       { href: "/analytics", label: "Analytics", icon: LineChart },
+      { href: "/ops",       label: "Ops & cost", icon: TrendingUp },
       { href: "/audit",     label: "Audit log", icon: ScrollText },
       { href: "/system",    label: "System health", icon: Activity },
     ],
@@ -66,13 +79,25 @@ const groups: Group[] = [
 ];
 
 export default function Sidebar({
+  role,
   pendingReports = 0,
   openIncidents = 0,
+  openSafety = 0,
 }: {
+  role?: string;
   pendingReports?: number;
   openIncidents?: number;
+  openSafety?: number;
 }) {
   const pathname = usePathname();
+  // Least-privilege: a role only sees the sections it may open. The middleware
+  // is the hard gate; this just keeps the nav honest.
+  const visibleGroups = groups
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((it) => canAccess(role, it.href)),
+    }))
+    .filter((g) => g.items.length > 0);
   const isActive = (href: string) =>
     href === "/overview"
       ? pathname === "/" || pathname.startsWith("/overview")
@@ -94,7 +119,7 @@ export default function Sidebar({
       </Link>
 
       <nav className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-5">
-        {groups.map((g) => (
+        {visibleGroups.map((g) => (
           <div key={g.label}>
             <p className="h-eyebrow px-3 mb-1.5">{g.label}</p>
             <div className="flex flex-col gap-0.5">
@@ -104,9 +129,11 @@ export default function Sidebar({
                 const badge =
                   it.href === "/moderation"
                     ? pendingReports
-                    : it.href === "/system"
-                      ? openIncidents
-                      : undefined;
+                    : it.href === "/safety"
+                      ? openSafety
+                      : it.href === "/system"
+                        ? openIncidents
+                        : undefined;
                 return (
                   <Link
                     key={it.href}

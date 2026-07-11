@@ -12,6 +12,7 @@ class ProfileAvatar extends StatelessWidget {
     this.size = 44,
     this.showVerifiedBadge = false,
     this.animate = false,
+    this.heroTag,
   });
 
   final String avatarSeed;
@@ -20,6 +21,12 @@ class ProfileAvatar extends StatelessWidget {
   final double size;
   final bool showVerifiedBadge;
   final bool animate;
+
+  /// Opt-in Hero tag. Pass when the same avatar appears on two screens
+  /// and you want a shared-element transition (e.g. feed card →
+  /// profile). Tags must be unique per route stack so this is null by
+  /// default — only the screen that owns the destination should set it.
+  final Object? heroTag;
 
   @override
   Widget build(BuildContext context) {
@@ -52,13 +59,14 @@ class ProfileAvatar extends StatelessWidget {
             ),
           );
 
-    if (!showVerifiedBadge) return core;
+    final wrapped = heroTag == null ? core : Hero(tag: heroTag!, child: core);
+    if (!showVerifiedBadge) return wrapped;
     return SizedBox(
       width: size,
       height: size,
       child: Stack(
         children: [
-          core,
+          wrapped,
           Positioned(
             right: 0,
             bottom: 0,

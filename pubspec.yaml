@@ -50,6 +50,26 @@ dependencies:
 
   # Observability (Sprint 2)
   sentry_flutter: ^8.10.1
+  # Used by Sentry to tag the release id with version+build number.
+  # The pinned 8.3.0 lives in dependency_overrides below (Flutter 3.24
+  # compatibility) — this declaration just makes it a direct dep so we
+  # can import it without "unused override" warnings.
+  package_info_plus: ^8.3.0
+
+  # Audio playback for Whispers + voice-note bubbles
+  just_audio: ^0.9.40
+  audio_session: ^0.1.21
+
+  # Foreground / in-app local notifications. OS-level push via FCM/APNs
+  # is wired through the `push_tokens` table — see docs/notifications.md.
+  flutter_local_notifications: ^17.2.3
+
+  # Audio capture for Whispers + chat voice-notes
+  record: ^5.1.2
+  permission_handler: ^11.3.1
+
+  # QR code rendering for the My-QR sheet on the Friends screen
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:

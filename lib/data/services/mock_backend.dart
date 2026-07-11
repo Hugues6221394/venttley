@@ -5,6 +5,9 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/constants.dart';
 import '../../domain/entities/entities.dart';
+import '../../domain/keeper/keeper_mode.dart';
+import '../../domain/keeper/keeper_studio_v2.dart';
+import '../../domain/tribe/tribe_chat_hub.dart';
 import 'supabase_backend.dart'
     show
         UsernameTakenException,
@@ -34,6 +37,8 @@ class MockBackend {
   final Map<String, String> _myReactions = {};
   final Map<String, List<Persona>> _personasByUser = {};
   final Set<String> _savedPosts = {};
+  final Set<String> _savedWhispers = {};
+  final Map<String, String> _whisperReactions = {};
   final Set<String> _joinedTribes = {};
   final List<ChatRoom> _rooms = [];
   final Map<String, List<ChatMessage>> _messages = {};
@@ -138,6 +143,8 @@ class MockBackend {
     String? tribeSlug,
     String? locationBucket,
     String sort = 'fresh',
+    int limit = 30,
+    int offset = 0,
   }) {
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
     final filtered = _posts.where((p) {
@@ -174,8 +181,9 @@ class MockBackend {
       filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     }
 
+    final slice = filtered.skip(offset).take(limit).toList();
     return [
-      for (final p in filtered)
+      for (final p in slice)
         p.copyWith(
           myReaction: _myReactions[p.postId],
           savedByMe: _savedPosts.contains(p.postId),
@@ -271,6 +279,36 @@ class MockBackend {
     _emitPosts();
   }
 
+  bool toggleWhisperSave(String whisperId) {
+    if (_savedWhispers.contains(whisperId)) {
+      _savedWhispers.remove(whisperId);
+      return false;
+    }
+    _savedWhispers.add(whisperId);
+    return true;
+  }
+
+  List<Whisper> mySavedWhispers() => const [];
+
+  bool toggleWhisperLike(String whisperId) {
+    if (_whisperReactions.containsKey(whisperId)) {
+      _whisperReactions.remove(whisperId);
+      return false;
+    }
+    _whisperReactions[whisperId] = 'love';
+    return true;
+  }
+
+  String? reactToWhisper(String whisperId, String reaction) {
+    final current = _whisperReactions[whisperId];
+    if (current == reaction) {
+      _whisperReactions.remove(whisperId);
+      return null;
+    }
+    _whisperReactions[whisperId] = reaction;
+    return reaction;
+  }
+
   final Set<String> _reportedPosts = {};
   final Set<String> _reportedRooms = {};
   void reportPost({
@@ -301,6 +339,22 @@ class MockBackend {
     final prompt = PlugPrompt(
       promptId: _uuid.v4(),
       plugDisplayName: '@${me?.anonymousPseudonym ?? 'keeper'}',
+      plugAvatarSeed: me?.avatarSeed ?? 'default-orb',
+      promptText: text,
+      answersCount: 0,
+    );
+    _prompts.insert(0, prompt);
+    return prompt;
+  }
+
+  PlugPrompt createUserQuestion({
+    required String text,
+    String audience = 'everyone',
+  }) {
+    final me = _me;
+    final prompt = PlugPrompt(
+      promptId: _uuid.v4(),
+      plugDisplayName: '@${me?.anonymousPseudonym ?? 'anonymous'}',
       plugAvatarSeed: me?.avatarSeed ?? 'default-orb',
       promptText: text,
       answersCount: 0,
@@ -413,6 +467,104 @@ class MockBackend {
     return updated;
   }
 
+  ({String path, String url}) uploadPostImage({
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) {
+    final me = _me;
+    if (me == null) throw StateError('Not signed in');
+    final safeExt = extension.replaceAll('.', '').toLowerCase();
+    final path = '${me.userId}/mock-${bytes.length}.${safeExt.isEmpty ? 'jpg' : safeExt}';
+    return (path: path, url: 'mock://post-media/$path');
+  }
+
+  HomeStats homeStats() {
+    final me = _me;
+    if (me == null) return HomeStats.empty;
+    final myVents = _posts.where((p) => p.authorId == me.userId).length;
+    final hugs = _posts
+        .where((p) => p.authorId == me.userId)
+        .fold<int>(0, (sum, p) => sum + p.likesCount);
+    return HomeStats(
+      ventsToday: _posts
+          .where((p) =>
+              DateTime.now().difference(p.createdAt) <
+              const Duration(hours: 24))
+          .length,
+      supporters: 0,
+      dailyHugs: hugs,
+      streakDays: myVents.clamp(0, 30),
+    );
+  }
+
+  List<TrendingCategory> trendingCategories({int limit = 6}) {
+    final counts = <String, int>{};
+    final reactions = <String, int>{};
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    for (final p in _posts) {
+      if (p.createdAt.isBefore(cutoff)) continue;
+      counts[p.categoryName] = (counts[p.categoryName] ?? 0) + 1;
+      reactions[p.categoryName] =
+          (reactions[p.categoryName] ?? 0) + p.likesCount;
+    }
+    final entries = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return entries.take(limit).map((e) {
+      return TrendingCategory(
+        categoryName: e.key,
+        postCount: e.value,
+        reactionSum: reactions[e.key] ?? 0,
+      );
+    }).toList();
+  }
+
+  List<TrendingVoice> trendingVoices({int limit = 6}) => const [];
+
+  /// Mock search — falls back to client-side substring matching over the
+  /// in-memory dataset so offline / unit-test mode still surfaces
+  /// recognisable results.
+  List<SearchHit> searchGlobal(String query, {int limit = 24}) {
+    final q = query.trim().toLowerCase();
+    if (q.length < 2) return const [];
+    final hits = <SearchHit>[];
+    for (final t in _tribes) {
+      if (t.name.toLowerCase().contains(q) ||
+          (t.description ?? '').toLowerCase().contains(q)) {
+        hits.add(SearchHit(
+          hitKind: 'tribe',
+          hitId: t.slug,
+          title: t.name,
+          subtitle: t.description ?? '',
+          memberCount: t.memberCount,
+          createdAt: t.createdAt,
+          rankScore: 3,
+        ));
+      }
+    }
+    for (final p in _posts) {
+      if (p.content.toLowerCase().contains(q)) {
+        hits.add(SearchHit(
+          hitKind: 'post',
+          hitId: p.postId,
+          title: p.content.length > 220
+              ? p.content.substring(0, 220)
+              : p.content,
+          subtitle: p.authorPseudonym,
+          avatarSeed: p.authorAvatarSeed,
+          profilePhotoUrl: p.authorProfilePhotoUrl,
+          likesCount: p.likesCount,
+          commentsCount: p.commentsCount,
+          createdAt: p.createdAt,
+          rankScore: 2,
+        ));
+      }
+    }
+    return hits.take(limit).toList();
+  }
+
+  bool markStoryViewed(String postId) => true;
+
   AppUser removeMyProfilePhoto() {
     final me = _me;
     if (me == null) throw StateError('Not signed in');
@@ -468,6 +620,7 @@ class MockBackend {
           userId: keeper.userId,
           pseudonym: keeper.anonymousPseudonym,
           avatarSeed: keeper.avatarSeed,
+          profilePhotoUrl: keeper.profilePhotoUrl,
           role: 'keeper',
           joinedAt: tribe.createdAt,
         ));
@@ -479,6 +632,7 @@ class MockBackend {
         userId: me.userId,
         pseudonym: me.anonymousPseudonym,
         avatarSeed: me.avatarSeed,
+        profilePhotoUrl: me.profilePhotoUrl,
         role: _roleFor(tribeId, me.userId),
         joinedAt: DateTime.now(),
       ));
@@ -520,9 +674,9 @@ class MockBackend {
         description: 'Your first confession.', icon: '⭐', tier: 'bronze'),
     BadgeDefinition(key: 'seven_day_venter', label: '7-Day Venter',
         description: 'Seven consecutive days posting.', icon: '🌙', tier: 'silver'),
-    BadgeDefinition(key: 'keeper', label: 'Keeper',
+    BadgeDefinition(key: 'keeper', label: 'Plug',
         description: 'Started your own Tribe.', icon: '🌿', tier: 'silver'),
-    BadgeDefinition(key: 'whisper_keeper', label: 'Whisper Keeper',
+    BadgeDefinition(key: 'whisper_keeper', label: 'Whisper Plug',
         description: 'Posted ten Whispers.', icon: '🌒', tier: 'bronze'),
   ];
   final Map<String, List<UserBadge>> _userBadges = {};
@@ -651,13 +805,26 @@ class MockBackend {
   List<Post> myVents() {
     final me = _me;
     if (me == null) return [];
-    return _posts
-        .where((p) => p.authorPseudonym == '@${me.anonymousPseudonym}')
+    return postsByAuthor(me.userId);
+  }
+
+  List<Post> postsByAuthor(
+    String authorId, {
+    int limit = 20,
+    int offset = 0,
+  }) {
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    final filtered = _posts
+        .where((p) =>
+            p.authorId == authorId &&
+            (!p.isWhisper || p.createdAt.isAfter(cutoff)))
         .map((p) => p.copyWith(
               myReaction: _myReactions[p.postId],
               savedByMe: _savedPosts.contains(p.postId),
             ))
-        .toList();
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return filtered.skip(offset).take(limit).toList();
   }
 
   // -------------------- Comments --------------------
@@ -1109,6 +1276,86 @@ class MockBackend {
         ?.removeWhere((p) => p.promptId == promptId && p.publishedAt == null);
   }
 
+  Future<void> updatePrompt({
+    required String tribeId,
+    required String promptId,
+    required String text,
+    DateTime? scheduledFor,
+  }) async {
+    final list = _promptsByTribe[tribeId];
+    if (list == null) return;
+    final i = list.indexWhere((p) => p.promptId == promptId);
+    if (i == -1) return;
+    final old = list[i];
+    list[i] = ScheduledPrompt(
+      promptId: old.promptId,
+      tribeId: old.tribeId,
+      text: text,
+      answersCount: old.answersCount,
+      isActive: old.isActive,
+      scheduledFor: scheduledFor ?? old.scheduledFor,
+      publishedAt: old.publishedAt,
+    );
+  }
+
+  Future<void> deletePrompt(String tribeId, String promptId) async {
+    _promptsByTribe[tribeId]?.removeWhere((p) => p.promptId == promptId);
+  }
+
+  Future<void> tribeChatHeartbeat(String tribeId) async {}
+
+  Future<List<TribeOnlineMember>> tribeOnlineMembers(String tribeId) async {
+    final tribe = _tribes.firstWhereOrNull((t) => t.tribeId == tribeId);
+    final me = _me;
+    if (me == null) return const [];
+    return [
+      TribeOnlineMember(
+        userId: me.userId,
+        pseudonym: me.anonymousPseudonym,
+        avatarSeed: me.avatarSeed,
+        profilePhotoUrl: me.profilePhotoUrl,
+        role: tribe?.keeperId == me.userId ? 'keeper' : 'member',
+        isOnline: true,
+      ),
+    ];
+  }
+
+  Future<void> setTribeAvatar({
+    required String tribeId,
+    required String avatarUrl,
+  }) async {
+    final i = _tribes.indexWhere((t) => t.tribeId == tribeId);
+    if (i == -1) return;
+    _tribes[i] = _tribes[i].copyWith(avatarUrl: avatarUrl);
+  }
+
+  Future<({String path, String url})> uploadTribeAvatar({
+    required String tribeId,
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) async {
+    return (path: 'mock/tribe/$tribeId.jpg', url: 'mock://tribe/$tribeId.jpg');
+  }
+
+  Future<({String path, String url})> uploadTribeChatAudio({
+    required List<int> bytes,
+    String extension = 'm4a',
+    String contentType = 'audio/mp4',
+  }) async {
+    return (path: 'mock/chat.m4a', url: 'mock://chat.m4a');
+  }
+
+  Future<void> setTribeChatSettings({
+    required String tribeId,
+    required Map<String, dynamic> patch,
+  }) async {}
+
+  void broadcastTribeTyping(String tribeId, {required String pseudonym}) {}
+
+  Stream<List<TribeTypingUser>> watchTribeTyping(String tribeId) =>
+      const Stream.empty();
+
   Future<void> setTribeBranding({
     required String tribeId,
     String? welcomeMessage,
@@ -1191,6 +1438,7 @@ class MockBackend {
       userId: u.userId,
       pseudonym: u.anonymousPseudonym,
       avatarSeed: u.avatarSeed,
+      profilePhotoUrl: u.profilePhotoUrl,
       karma: 0,
       isVerified: u.isVerified,
       // Mock users don't carry a joined-at; pin to today for plausibility.
@@ -1285,6 +1533,162 @@ class MockBackend {
       ..sort((a, b) => b.memberCount.compareTo(a.memberCount));
   }
 
+  List<Tribe> tribesByKeeper(String keeperId) {
+    return _tribes
+        .where((t) => t.keeperId == keeperId)
+        .map((t) => t.copyWith(joinedByMe: _joinedTribes.contains(t.tribeId)))
+        .toList()
+      ..sort((a, b) => b.memberCount.compareTo(a.memberCount));
+  }
+
+  List<Tribe> tribesIKeep() {
+    final me = _me;
+    if (me == null) return const [];
+    return tribesByKeeper(me.userId);
+  }
+
+  KeeperMode keeperMode() {
+    final me = _me;
+    if (me == null) return KeeperMode.guest();
+    final kept = tribesByKeeper(me.userId).length;
+    final isKeeper = me.isPlug || kept > 0;
+    String displayRole = 'member';
+    if (me.userRole == 'super_admin') {
+      displayRole = 'super_admin';
+    } else if (me.isPlug) {
+      displayRole = 'plug';
+    } else if (kept > 0) {
+      displayRole = 'keeper';
+    }
+    return KeeperMode(
+      isKeeper: isKeeper,
+      displayRole: displayRole,
+      userRole: me.userRole,
+      tribesKept: kept,
+    );
+  }
+
+  KeeperModerationQueue keeperModerationQueue(String tribeId) {
+    return const KeeperModerationQueue(
+      items: [],
+      keywordFilterCount: 2,
+      warnings30d: 0,
+    );
+  }
+
+  KeeperEngagementCalendar keeperEngagementCalendar(String tribeId) {
+    final now = DateTime.now();
+    return KeeperEngagementCalendar(
+      scheduled: [
+        KeeperCalendarPrompt(
+          promptId: 'mock-prompt-1',
+          promptText: 'What felt heavy before breakfast today?',
+          scheduledFor: now.add(const Duration(days: 1)),
+        ),
+      ],
+      recentPublished: [
+        KeeperCalendarPrompt(
+          promptId: 'mock-prompt-0',
+          promptText: 'One small win from this week?',
+          publishedAt: now.subtract(const Duration(days: 3)),
+        ),
+      ],
+      suggestions: const [
+        KeeperCalendarSuggestion(
+          title: 'Morning check-in',
+          slot: 'weekday_morning',
+          hint: 'Post a gentle prompt before 9am local.',
+        ),
+      ],
+    );
+  }
+
+  KeeperAiInsights keeperAiInsights(String tribeId) {
+    return const KeeperAiInsights(
+      healthScore: 78,
+      safetyScore: 92,
+      retentionLabel: 'stable',
+      moodTrends: [
+        KeeperMoodTrend(mood: 'healing', count: 12),
+        KeeperMoodTrend(mood: 'hopeful', count: 8),
+      ],
+      insights: [
+        KeeperAiInsight(
+          kind: 'engagement',
+          severity: 'medium',
+          title: 'Posting pace is quiet',
+          body: 'Try a scheduled prompt this week.',
+          action: 'calendar',
+        ),
+      ],
+    );
+  }
+
+  KeeperComodMatrix keeperComodMatrix(String tribeId) {
+    final me = _me;
+    final tribe = _tribes.firstWhereOrNull((t) => t.tribeId == tribeId);
+    final rows = <KeeperComodRow>[];
+    if (tribe?.keeperId != null) {
+      final keeper =
+          _users.firstWhereOrNull((u) => u.userId == tribe!.keeperId);
+      if (keeper != null) {
+        rows.add(KeeperComodRow(
+          userId: keeper.userId,
+          pseudonym: keeper.anonymousPseudonym,
+          avatarSeed: keeper.avatarSeed,
+          role: 'keeper',
+          canPromote: true,
+          canWarn: true,
+          canReviewReports: true,
+          canPin: true,
+          canSchedule: true,
+          canKickMods: true,
+          canKickMembers: true,
+          joinedAt: DateTime.now().subtract(const Duration(days: 30)),
+        ));
+      }
+    }
+    return KeeperComodMatrix(
+      mods: rows,
+      callerIsKeeper: me?.userId == tribe?.keeperId,
+    );
+  }
+
+  KeeperExportReport keeperExportReport(String tribeId) {
+    final tribe = _tribes.firstWhereOrNull((t) => t.tribeId == tribeId);
+    final name = tribe?.name ?? 'Tribe';
+    final slug = tribe?.slug ?? 'tribe';
+    final now = DateTime.now().toUtc();
+    return KeeperExportReport(
+      format: 'markdown',
+      tribeName: name,
+      tribeSlug: slug,
+      generatedAt: now,
+      markdown:
+          '# $name Studio Report\n\nGenerated: ${now.toIso8601String()}\n\n## Snapshot\n- Members: ${tribe?.memberCount ?? 0}\n',
+    );
+  }
+
+  List<Post> postsByKeeper(
+    String keeperId, {
+    int limit = 20,
+    int offset = 0,
+  }) {
+    final slugs = _tribes
+        .where((t) => t.keeperId == keeperId)
+        .map((t) => t.slug)
+        .toSet();
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    final filtered = _posts
+        .where((p) =>
+            p.tribeSlug != null &&
+            slugs.contains(p.tribeSlug) &&
+            (!p.isWhisper || p.createdAt.isAfter(cutoff)))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return filtered.skip(offset).take(limit).toList();
+  }
+
   Tribe? tribeBySlug(String slug) {
     final t = _tribes.firstWhereOrNull((t) => t.slug == slug);
     return t?.copyWith(joinedByMe: _joinedTribes.contains(t.tribeId));
@@ -1345,12 +1749,41 @@ class MockBackend {
 
   // -------------------- Chat / Inbox --------------------
   List<ChatRoom> inbox({required String tab}) {
-    return _rooms.where((r) {
-      if (tab == 'requests') return r.roomStatus == 'pending_request';
-      if (tab == 'active')   return r.roomStatus == 'active';
-      return true;
-    }).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    ChatRoom enrich(ChatRoom room) {
+      final msgs = _messages[room.roomId] ?? const <ChatMessage>[];
+      final unread = msgs
+          .where((m) => !m.sentByMe && m.readAt == null && m.deletedAt == null)
+          .length;
+      final visible =
+          msgs.where((m) => m.deletedAt == null).toList(growable: false);
+      final last = visible.isEmpty ? null : visible.last;
+      final own = visible.where((m) => m.sentByMe).toList();
+      final lastOwn = own.isEmpty ? null : own.last;
+      return ChatRoom(
+        roomId: room.roomId,
+        peerPseudonym: room.peerPseudonym,
+        peerAvatarSeed: room.peerAvatarSeed,
+        requestPreview: room.requestPreview,
+        roomStatus: room.roomStatus,
+        createdAt: room.createdAt,
+        initiatedByMe: room.initiatedByMe,
+        unreadCount: unread,
+        lastMessagePreview: last?.plaintext,
+        lastMessageAt: last?.createdAt,
+        lastOwnMessageRead: lastOwn?.readAt != null,
+      );
+    }
+
+    return _rooms
+        .where((r) {
+          if (tab == 'requests') return r.roomStatus == 'pending_request';
+          if (tab == 'active') return r.roomStatus == 'active';
+          return true;
+        })
+        .map(enrich)
+        .toList()
+      ..sort((a, b) => (b.lastMessageAt ?? b.createdAt)
+          .compareTo(a.lastMessageAt ?? a.createdAt));
   }
 
   ChatRoom acceptRequest(String roomId) {
@@ -1473,6 +1906,18 @@ class MockBackend {
           readAt: DateTime.now(),
         );
         count++;
+      }
+    }
+    return count;
+  }
+
+  Future<int> unreadChatMessageCount() async {
+    var count = 0;
+    for (final msgs in _messages.values) {
+      for (final m in msgs) {
+        if (!m.sentByMe && m.readAt == null && m.deletedAt == null) {
+          count++;
+        }
       }
     }
     return count;
@@ -1650,7 +2095,7 @@ class MockBackend {
     final patrick = PlugProfile(
       plugId: _uuid.v4(),
       displayName: '@PatrickO',
-      bio: 'Community Keeper | Kigali. Holding space for big feelings.',
+      bio: 'Community Plug | Kigali. Holding space for big feelings.',
       locationLabel: 'Kigali, Rwanda',
       tribeCount: 750000,
       avatarSeed: 'plum-orb-0001',

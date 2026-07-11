@@ -30,6 +30,8 @@ type ReportRow = {
   post_id: string | null;
   target_comment_id: string | null;
   target_room_id: string | null;
+  target_tribe_message_id: string | null;
+  target_chat_message_id: string | null;
   posts: {
     content: string;
     tribe_id: string | null;
@@ -148,6 +150,40 @@ async function shadowBanAction(formData: FormData) {
   revalidatePath("/moderation");
 }
 
+async function suspendLadderAction(formData: FormData) {
+  "use server";
+  const userId = String(formData.get("user_id") ?? "");
+  const reportId = String(formData.get("report_id") ?? "");
+  const reason = String(formData.get("reason") ?? "");
+  if (!userId) return;
+  // Escalating temp-ban: the RPC picks the tier from the user's history.
+  await rpc("admin_suspend_user_ladder", {
+    p_target: userId,
+    p_reason: reason || null,
+  });
+  if (reportId) {
+    await rpc("admin_resolve_report", {
+      p_report_id: reportId,
+      p_action: "user_suspended",
+      p_note: reason || null,
+    });
+  }
+  revalidatePath("/moderation");
+}
+
+async function bulkResolveAction(formData: FormData) {
+  "use server";
+  const ids = formData.getAll("report_ids").map(String).filter(Boolean);
+  const reason = String(formData.get("reason") ?? "");
+  if (ids.length === 0) return;
+  await rpc("admin_bulk_resolve_reports", {
+    p_report_ids: ids,
+    p_action: "dismissed",
+    p_note: reason || "Bulk dismissed",
+  });
+  revalidatePath("/moderation");
+}
+
 async function clearCrisisFlagAction(formData: FormData) {
   "use server";
   const postId = String(formData.get("post_id") ?? "");
@@ -222,7 +258,7 @@ export default async function ModerationPage({
     let q = db
       .from("reports")
       .select(
-        "report_id, reason, note, is_resolved, created_at, resolved_at, post_id, target_comment_id, target_room_id, posts(content, tribe_id, deleted_at, author_id, crisis_level)"
+        "report_id, reason, note, is_resolved, created_at, resolved_at, post_id, target_comment_id, target_room_id, target_tribe_message_id, target_chat_message_id, posts(content, tribe_id, deleted_at, author_id, crisis_level)"
       )
       .order("created_at", { ascending: false })
       .limit(200);
@@ -282,16 +318,55 @@ export default async function ModerationPage({
           onSuspend={suspendAuthorAction}
         />
       ) : (
-        <ReportQueue
-          rows={reports}
-          showResolved={tab !== "pending"}
-          onResolve={resolveAction}
-          onDelete={softDeletePostAction}
-          onSuspend={suspendAuthorAction}
-          onShadow={shadowBanAction}
-        />
+        <>
+          <BulkBar reports={reports} onBulkResolve={bulkResolveAction} />
+          <ReportQueue
+            rows={reports}
+            showResolved={tab !== "pending"}
+            onResolve={resolveAction}
+            onDelete={softDeletePostAction}
+            onSuspend={suspendAuthorAction}
+            onShadow={shadowBanAction}
+            onLadder={suspendLadderAction}
+          />
+        </>
       )}
     </div>
+  );
+}
+
+// Batch-dismiss every pending report currently shown (respects the active
+// reason filter). Not nested with the per-card forms, so no invalid HTML.
+function BulkBar({
+  reports,
+  onBulkResolve,
+}: {
+  reports: ReportRow[];
+  onBulkResolve: (fd: FormData) => Promise<void>;
+}) {
+  const pending = reports.filter((r) => !r.is_resolved);
+  if (pending.length < 2) return null;
+  return (
+    <form
+      action={onBulkResolve}
+      className="surface-flat flex flex-wrap items-center gap-3 px-4 py-3"
+    >
+      {pending.map((r) => (
+        <input key={r.report_id} type="hidden" name="report_ids" value={r.report_id} />
+      ))}
+      <p className="text-sm font-semibold text-burgundy">
+        {pending.length} pending report{pending.length === 1 ? "" : "s"} shown
+      </p>
+      <input
+        type="text"
+        name="reason"
+        placeholder="reason (optional)"
+        className="input h-8 w-44 text-xs ml-auto"
+      />
+      <button type="submit" className="btn-secondary">
+        Dismiss all shown
+      </button>
+    </form>
   );
 }
 
@@ -339,6 +414,7 @@ function ReportQueue({
   onDelete,
   onSuspend,
   onShadow,
+  onLadder,
 }: {
   rows: ReportRow[];
   showResolved: boolean;
@@ -346,6 +422,7 @@ function ReportQueue({
   onDelete: (fd: FormData) => Promise<void>;
   onSuspend: (fd: FormData) => Promise<void>;
   onShadow: (fd: FormData) => Promise<void>;
+  onLadder: (fd: FormData) => Promise<void>;
 }) {
   if (rows.length === 0) {
     return (
@@ -368,11 +445,15 @@ function ReportQueue({
   return (
     <div className="flex flex-col gap-3">
       {rows.map((r) => {
-        const target = r.target_room_id
-          ? "chat"
-          : r.target_comment_id
-            ? "comment"
-            : "post";
+        const target = r.target_tribe_message_id
+          ? "tribe message"
+          : r.target_chat_message_id
+            ? "dm message"
+            : r.target_room_id
+              ? "chat"
+              : r.target_comment_id
+                ? "comment"
+                : "post";
         const tone = REASON_TONE[r.reason] ?? "neutral";
         const crisis = r.posts?.crisis_level;
         const deleted = !!r.posts?.deleted_at;
@@ -453,6 +534,15 @@ function ReportQueue({
                 )}
                 {r.posts?.author_id && (
                   <>
+                    <ActionForm
+                      action={onLadder}
+                      reportId={r.report_id}
+                      userId={r.posts.author_id}
+                      label="Ladder suspend"
+                      variant="secondary"
+                      icon={<Clock size={14} />}
+                      promptReason
+                    />
                     <ActionForm
                       action={onSuspend}
                       reportId={r.report_id}

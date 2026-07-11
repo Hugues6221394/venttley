@@ -59,5 +59,24 @@ export async function POST(req: Request) {
     );
   }
 
+  // Session audit: record the successful admin sign-in. Same client instance,
+  // so it now carries the fresh session and auth.uid() resolves to this admin.
+  // admin_log() is staff-gated; a non-staff sign-in simply fails the log
+  // (caught) and gets bounced by middleware anyway.
+  try {
+    await supabase.rpc("admin_log", {
+      p_action: "admin.login",
+      p_target_type: "session",
+      p_target_id: null,
+      p_target_label: username,
+      p_before: null,
+      p_after: null,
+      p_reason: null,
+      p_metadata: { ip },
+    });
+  } catch {
+    // Never block login on an audit failure.
+  }
+
   return NextResponse.json({ ok: true });
 }

@@ -8,6 +8,7 @@ import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/skeleton.dart';
+import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_logo.dart';
 
 /// Hybrid Tribes browse + search + create entry point.
@@ -42,6 +43,7 @@ class _TribesDirectoryScreenState
     final tribes = async.valueOrNull ?? const <Tribe>[];
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const VentlyLogo(size: 26),
         actions: [
@@ -149,7 +151,6 @@ class _TribeCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final categoryLabel = switch (tribe.category) {
       'campus' => 'Campus',
       'city' => 'City',
@@ -169,24 +170,7 @@ class _TribeCard extends ConsumerWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 52,
-                height: 52,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  color: scheme.primary.withOpacity(isDark ? 0.18 : 0.12),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                alignment: Alignment.center,
-                child: tribe.avatarUrl != null && tribe.avatarUrl!.isNotEmpty
-                    ? Image.network(
-                        tribe.avatarUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            Icon(Icons.diversity_3, color: scheme.primary),
-                      )
-                    : Icon(Icons.diversity_3, color: scheme.primary),
-              ),
+              TribeAvatar(avatarUrl: tribe.avatarUrl, size: 52),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

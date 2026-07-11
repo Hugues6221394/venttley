@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,8 +10,14 @@ import 'package:intl/intl.dart';
 
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
+import '../../../data/services/moderation_service.dart';
+import '../../../data/services/whisper_recorder.dart';
+import '../../widgets/chat_audio_bubble.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
+import '../../widgets/report_reason_sheet.dart';
+import '../../widgets/crisis_support_sheet.dart';
+import '../../widgets/chat_options_sheet.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.roomId});
@@ -34,6 +40,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Uint8List? _pendingImageBytes;
   String _pendingImageExt = 'jpg';
   String _pendingImageMime = 'image/jpeg';
+  bool _recordingVoice = false;
+  bool _searching = false;
+  final _searchController = TextEditingController();
+
+  /// Chat V2: the message currently being quoted in the composer.
+  /// When set, the composer shows a reply preview chip + the next send
+  /// stamps parent_message_id on the new row.
+  ChatMessage? _replyingTo;
+
+  /// Chat V2: the message currently being edited in-place. When set,
+  /// the composer is pre-filled with the existing plaintext and the
+  /// send button calls edit_chat_message instead of send.
+  ChatMessage? _editingMessage;
 
   Future<void> _pickImage() async {
     try {
@@ -60,6 +79,47 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  /// Voice note: first tap starts recording, second tap stops → uploads the
+  /// m4a into chat-media → sends a message with attachedMediaType 'audio'.
+  /// Mirrors the tribe-chat flow (WhisperRecorder is a shared singleton).
+  Future<void> _toggleVoice() async {
+    if (_recordingVoice) {
+      setState(() => _recordingVoice = false);
+      final result = await WhisperRecorder.instance.stop();
+      if (result == null || !mounted) return;
+      try {
+        final up = await ref.read(repositoryProvider).uploadChatAudio(
+              roomId: widget.roomId,
+              bytes: result.bytes,
+              durationSeconds: result.duration.inSeconds,
+            );
+        await ref.read(repositoryProvider).sendMessage(
+              roomId: widget.roomId,
+              plaintext: '',
+              attachedMediaPath: up.path,
+              attachedMediaType: 'audio',
+            );
+        ref.invalidate(messagesProvider(widget.roomId));
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Voice note failed: $e')),
+        );
+      }
+      return;
+    }
+    final ok = await WhisperRecorder.instance.start();
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Microphone unavailable — check permissions.')),
+      );
+      return;
+    }
+    setState(() => _recordingVoice = true);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -69,7 +129,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ref
             .read(repositoryProvider)
             .markRoomRead(widget.roomId)
-            .catchError((_) => 0);
+            .then((_) {
+              ref.invalidate(navInboxBadgeCountProvider);
+              ref.invalidate(unreadInboxCountProvider);
+              ref.invalidate(inboxStreamProvider);
+            })
+            .catchError((_) {});
       }
     });
     _controller.addListener(_handleTyping);
@@ -91,6 +156,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _controller.removeListener(_handleTyping);
     _controller.dispose();
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -100,19 +166,45 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final r = roomAsync.valueOrNull;
     if (roomAsync.isLoading && r == null) {
       return Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
     if (r == null) {
       return Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: const Center(child: Text('Conversation not found')),
       );
     }
     final messages =
         ref.watch(messagesProvider(widget.roomId)).valueOrNull ?? const [];
-    final scheme = Theme.of(context).colorScheme;
+    final prefs = ref.watch(dmRoomPrefsProvider(widget.roomId)).valueOrNull ??
+        DmRoomPrefs.empty;
+    final peerName = (prefs.peerNickname?.trim().isNotEmpty ?? false)
+        ? prefs.peerNickname!.trim()
+        : r.peerPseudonym;
+    // Conversation-level disappearing TTL (server hard-deletes on a cron;
+    // hide immediately here so it feels instant) + in-chat search.
+    final disappearing =
+        ref.watch(roomDisappearingProvider(widget.roomId)).valueOrNull ?? 0;
+    List<ChatMessage> visible = messages;
+    if (disappearing > 0) {
+      final cutoff = DateTime.now().subtract(Duration(seconds: disappearing));
+      visible = visible.where((m) => m.createdAt.isAfter(cutoff)).toList();
+    }
+    final query = _searchController.text.trim().toLowerCase();
+    if (_searching && query.isNotEmpty) {
+      visible =
+          visible.where((m) => m.plaintext.toLowerCase().contains(query)).toList();
+    }
+    // Per-room chat theme: inject the chosen accent as colorScheme.primary for
+    // this screen's subtree, so every scheme.primary (bubbles, send button,
+    // header, chips, typing dots) picks it up consistently — one source of
+    // truth, no per-widget threading.
+    final accent = kChatThemes[prefs.theme] ?? Theme.of(context).colorScheme.primary;
+    final scheme = Theme.of(context).colorScheme.copyWith(primary: accent);
     final peerTyping = ref.watch(typingProvider(widget.roomId)).valueOrNull ?? false;
 
     // Mark unread peer messages as read whenever the messages list ticks
@@ -125,7 +217,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         final hasUnreadFromPeer =
             list.any((m) => !m.sentByMe && m.readAt == null);
         if (hasUnreadFromPeer) {
-          ref.read(repositoryProvider).markRoomRead(widget.roomId);
+          ref.read(repositoryProvider).markRoomRead(widget.roomId).then((_) {
+            ref.invalidate(navInboxBadgeCountProvider);
+            ref.invalidate(unreadInboxCountProvider);
+            ref.invalidate(inboxStreamProvider);
+          });
         }
       },
     );
@@ -141,34 +237,82 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(r.peerPseudonym,
-                style: const TextStyle(fontWeight: FontWeight.w800)),
-            Row(
-              children: [
-                Icon(Icons.shield_outlined, size: 10, color: scheme.primary),
-                const SizedBox(width: 3),
-                Text('Private',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w700,
-                    )),
+    return Theme(
+      data: Theme.of(context).copyWith(colorScheme: scheme),
+      child: Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: _searching
+          ? AppBar(
+              title: TextField(
+                controller: _searchController,
+                autofocus: true,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  hintText: 'Search in conversation',
+                  border: InputBorder.none,
+                ),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => setState(() {
+                    _searching = false;
+                    _searchController.clear();
+                  }),
+                ),
+              ],
+            )
+          : AppBar(
+              title: InkWell(
+                onTap: () => showChatOptionsSheet(
+                  context,
+                  room: r,
+                  onSearch: () => setState(() {
+                    _searching = true;
+                    _searchController.clear();
+                  }),
+                ),
+                borderRadius: BorderRadius.circular(8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(peerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.shield_outlined,
+                            size: 10, color: scheme.primary),
+                        const SizedBox(width: 3),
+                        Text('Private',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w700,
+                            )),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.more_horiz_rounded),
+                  tooltip: 'Options',
+                  onPressed: () => showChatOptionsSheet(
+                    context,
+                    room: r,
+                    onSearch: () => setState(() {
+                      _searching = true;
+                      _searchController.clear();
+                    }),
+                  ),
+                ),
               ],
             ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.flag_outlined),
-            onPressed: () => _openReportSheet(context),
-          ),
-        ],
-      ),
       body: Column(
         children: [
           Container(
@@ -178,12 +322,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               children: [
                 Icon(Icons.shield_outlined, size: 14, color: scheme.primary),
                 const SizedBox(width: 6),
-                Text(
-                  'Private chat — only you and your peer see this. Moderators can review reported chats.',
-                  style: TextStyle(
-                    color: scheme.primary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
+                Expanded(
+                  child: Text(
+                    'Private chat — only you and your peer see this. Moderators can review reported chats.',
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
               ],
@@ -193,7 +339,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.all(16),
-              itemCount: messages.length + 1,
+              itemCount: visible.length + 1,
               itemBuilder: (ctx, i) {
                 if (i == 0) {
                   return Padding(
@@ -218,10 +364,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                   );
                 }
-                final m = messages[i - 1];
+                final m = visible[i - 1];
                 return _Bubble(
                   message: m,
                   showSeen: m.messageId == lastSeenOwnId,
+                  onReply: () => setState(() {
+                    _replyingTo = m;
+                    _editingMessage = null;
+                  }),
+                  onCopy: () {
+                    Clipboard.setData(ClipboardData(text: m.plaintext));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Copied.')),
+                    );
+                  },
+                  onEdit: () {
+                    setState(() {
+                      _editingMessage = m;
+                      _replyingTo = null;
+                      _controller.text = m.plaintext;
+                      _controller.selection = TextSelection.collapsed(
+                        offset: _controller.text.length,
+                      );
+                    });
+                  },
+                  onDeleteForEveryone: () async {
+                    try {
+                      await ref
+                          .read(repositoryProvider)
+                          .deleteChatMessage(m.messageId);
+                      ref.invalidate(messagesProvider(widget.roomId));
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(_deleteError(e))),
+                      );
+                    }
+                  },
+                  onDeleteForMe: () async {
+                    try {
+                      await ref
+                          .read(repositoryProvider)
+                          .hideChatMessage(m.messageId);
+                      ref.invalidate(messagesProvider(widget.roomId));
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Could not delete: $e')),
+                      );
+                    }
+                  },
+                  onReport: () => _reportMessage(context, m),
                 );
               },
             ),
@@ -230,17 +423,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             peerPseudonym: r.peerPseudonym,
             visible: peerTyping,
           ),
+          if (_replyingTo != null)
+            _ReplyContextChip(
+              message: _replyingTo!,
+              onCancel: () => setState(() => _replyingTo = null),
+            ),
+          if (_editingMessage != null)
+            _EditContextChip(
+              message: _editingMessage!,
+              onCancel: () {
+                setState(() {
+                  _editingMessage = null;
+                  _controller.clear();
+                });
+              },
+            ),
           _Composer(
             controller: _controller,
             pendingImageBytes: _pendingImageBytes,
             onAttachImage: _pickImage,
+            onMicTap: _toggleVoice,
+            recording: _recordingVoice,
             onClearImage: () => setState(() => _pendingImageBytes = null),
             onSend: () async {
               final t = _controller.text.trim();
+              // EDIT path — bypass moderation re-check + attachments.
+              if (_editingMessage != null) {
+                if (t.isEmpty) return;
+                final original = _editingMessage!;
+                try {
+                  await ref.read(repositoryProvider).editChatMessage(
+                        messageId: original.messageId,
+                        newPlaintext: t,
+                      );
+                  if (!mounted) return;
+                  _controller.clear();
+                  setState(() => _editingMessage = null);
+                  ref.invalidate(messagesProvider(widget.roomId));
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Could not edit: $e')),
+                  );
+                }
+                return;
+              }
+
               final pending = _pendingImageBytes;
               if (t.isEmpty && pending == null) return;
+              ModerationResult? moderation;
               if (t.isNotEmpty) {
-                final moderation =
+                moderation =
                     await ref.read(moderationServiceProvider).review(t);
                 if (!context.mounted) return;
                 if (moderation.isBlocked) {
@@ -276,113 +509,103 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   return;
                 }
               }
-              await ref.read(repositoryProvider).sendMessage(
+              final sent = await ref.read(repositoryProvider).sendMessage(
                     roomId: widget.roomId,
                     plaintext: t,
                     attachedMediaPath: mediaPath,
                     attachedMediaType: mediaType,
+                    parentMessageId: _replyingTo?.messageId,
                   );
               _controller.clear();
-              if (mounted) setState(() => _pendingImageBytes = null);
+              if (mounted) {
+                setState(() {
+                  _pendingImageBytes = null;
+                  _replyingTo = null;
+                });
+              }
+              // Safety scan on the sender's own message — reuses the verdict
+              // already computed above (DM bodies are encrypted, so this is the
+              // only place with plaintext). Offers help + flags for the queue.
+              if (moderation != null &&
+                  moderation.surfaceCrisisHelpline &&
+                  context.mounted) {
+                final level = moderation.categories
+                            .contains(HazardCategory.selfHarm) &&
+                        moderation.reasons.any((r) => r.contains('care about you'))
+                    ? 'high'
+                    : 'elevated';
+                unawaited(ref
+                    .read(repositoryProvider)
+                    .setChatMessageCrisis(sent.messageId, level)
+                    .catchError((_) {}));
+                await showCrisisSupportSheet(context, ref);
+              }
             },
           ),
         ],
       ),
+      ),
     );
   }
 
-  void _openReportSheet(BuildContext context) {
-    const reasons = <(String, String)>[
-      ('harassment',     'Harassment or bullying'),
-      ('hate',           'Hate speech'),
-      ('self_harm',      'Self-harm or suicide concern'),
-      ('sexual_content', 'Sexual content'),
-      ('privacy',        'Doxxing or personal info'),
-      ('spam',           'Spam or scam'),
-      ('other',          'Something else'),
-    ];
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 44,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8),
-                child: Text('Report this chat',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-              ),
-              const SizedBox(height: 6),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
-                  'Moderators can review messages in this conversation. Other conversations stay private.',
-                  style: TextStyle(
-                    color:
-                        Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              for (final r in reasons)
-                ListTile(
-                  title: Text(r.$2),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    try {
-                      await ref.read(repositoryProvider).reportChat(
-                            roomId: widget.roomId,
-                            reason: r.$1,
-                          );
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content:
-                              Text('Thank you — a moderator will review.'),
-                        ),
-                      );
-                    } catch (e) {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Could not send: $e')),
-                      );
-                    }
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
+  Future<void> _reportMessage(BuildContext context, ChatMessage m) async {
+    final reason = await showReportReasonSheet(context);
+    if (reason == null || !context.mounted) return;
+    try {
+      await ref.read(repositoryProvider).reportChatMessage(
+            messageId: m.messageId,
+            reason: reason,
+          );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Thank you — a moderator will review.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send: $e')),
+      );
+    }
   }
 }
 
+/// Maps an edit/delete RPC error onto a friendly one-liner.
+String _deleteError(Object e) {
+  final s = e.toString().toLowerCase();
+  if (s.contains('window expired')) {
+    return "It's been over 24h — you can only delete this for yourself.";
+  }
+  if (s.contains('not your message')) return 'You can only delete your own messages.';
+  return 'Could not delete. Please try again.';
+}
+
 class _Bubble extends ConsumerWidget {
-  const _Bubble({required this.message, this.showSeen = false});
+  const _Bubble({
+    required this.message,
+    this.showSeen = false,
+    this.onReply,
+    this.onCopy,
+    this.onEdit,
+    this.onDeleteForEveryone,
+    this.onDeleteForMe,
+    this.onReport,
+  });
   final ChatMessage message;
 
   /// Render the "Seen" footer under this bubble. The chat screen only
   /// sets this on the latest own-message that the peer has read so the
   /// indicator stays single, anchored, and unobtrusive.
   final bool showSeen;
+
+  /// Chat V2 callbacks. onEdit fires only when the message is still editable
+  /// (own + within 30 min); the action sheet gates on [ChatMessage.canEdit].
+  /// Delete is two-tier: "for everyone" (own + <24h) and "for me" (always).
+  final VoidCallback? onReply;
+  final VoidCallback? onCopy;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDeleteForEveryone;
+  final VoidCallback? onDeleteForMe;
+  final VoidCallback? onReport;
 
   Future<void> _react(BuildContext context, WidgetRef ref) async {
     final picked = await showModalBottomSheet<String>(
@@ -395,6 +618,7 @@ class _Bubble extends ConsumerWidget {
       await ref
           .read(repositoryProvider)
           .setMessageReaction(message.messageId, picked);
+      ref.invalidate(messagesProvider(message.roomId));
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -404,6 +628,175 @@ class _Bubble extends ConsumerWidget {
     }
   }
 
+  Future<void> _openActionSheet(BuildContext context, WidgetRef ref) async {
+    HapticFeedback.selectionClick();
+    final mine = message.sentByMe;
+    final canEdit = onEdit != null && message.canEdit;
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (onReply != null)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.reply_rounded,
+                      color: VentlyColors.deepBurgundy),
+                  title: const Text('Reply',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    onReply!();
+                  },
+                ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.add_reaction_outlined,
+                    color: VentlyColors.deepBurgundy),
+                title: const Text('React',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _react(context, ref);
+                },
+              ),
+              if (onCopy != null && message.plaintext.isNotEmpty)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.copy_rounded,
+                      color: VentlyColors.deepBurgundy),
+                  title: const Text('Copy',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    onCopy!();
+                  },
+                ),
+              if (canEdit)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.edit_outlined,
+                      color: VentlyColors.deepBurgundy),
+                  title: const Text('Edit',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: const Text(
+                    'Within 30 minutes of sending',
+                    style: TextStyle(fontSize: 11, color: Color(0xFF8B5566)),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    onEdit!();
+                  },
+                ),
+              if (onDeleteForMe != null)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.delete_outline,
+                      color: Theme.of(context).colorScheme.error),
+                  title: Text(
+                    'Delete',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _confirmDelete(context);
+                  },
+                ),
+              if (!mine && onReport != null)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.flag_outlined,
+                      color: VentlyColors.deepBurgundy),
+                  title: const Text('Report',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    onReport!();
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// WhatsApp-style delete chooser. "Delete for everyone" only appears when
+  /// the message is still yours-and-fresh (<24h); "Delete for me" is always
+  /// available and hides the message from just this device.
+  Future<void> _confirmDelete(BuildContext context) async {
+    final canEveryone =
+        onDeleteForEveryone != null && message.canDeleteForEveryone;
+    final error = Theme.of(context).colorScheme.error;
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text('Delete message?',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+              ),
+              if (canEveryone)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.public_off_rounded, color: error),
+                  title: Text('Delete for everyone',
+                      style: TextStyle(
+                          color: error, fontWeight: FontWeight.w800)),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    HapticFeedback.mediumImpact();
+                    onDeleteForEveryone!();
+                  },
+                ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.delete_outline,
+                    color: VentlyColors.deepBurgundy),
+                title: const Text('Delete for me',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: const Text(
+                  'Removes it from your view only',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF8B5566)),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  onDeleteForMe!();
+                },
+              ),
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: () => Navigator.pop(sheetCtx),
+                child: const Text('Cancel',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
@@ -411,13 +804,94 @@ class _Bubble extends ConsumerWidget {
     final snapshot = message.attachedPostSnapshot;
     final hasText = message.plaintext.trim().isNotEmpty;
     final reactions = message.reactionCounts;
+    final deleted = message.isDeleted;
 
-    return Align(
+    // Soft-delete tombstone — minimal, italic, no actions wired.
+    if (deleted) {
+      return Align(
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.74),
+          decoration: BoxDecoration(
+            color: VentlyColors.softMauve.withOpacity(0.18),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: VentlyColors.softMauve.withOpacity(0.4)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.do_not_disturb_on_outlined,
+                  size: 12, color: scheme.onSurface.withOpacity(0.55)),
+              const SizedBox(width: 6),
+              Text(
+                'Message deleted',
+                style: TextStyle(
+                  color: scheme.onSurface.withOpacity(0.6),
+                  fontStyle: FontStyle.italic,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final bubble = Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
         crossAxisAlignment:
             mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
+          if (message.parentMessageId != null)
+            Container(
+              margin: EdgeInsets.only(
+                top: 4,
+                left: mine ? 0 : 6,
+                right: mine ? 6 : 0,
+              ),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 6),
+              constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.72),
+              decoration: BoxDecoration(
+                color: VentlyColors.softMauve.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(12),
+                border: Border(
+                  left: BorderSide(color: scheme.primary, width: 3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Replying to ${message.parentSenderPseudonym ?? "them"}',
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 10,
+                    ),
+                  ),
+                  Text(
+                    message.parentPreview ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: scheme.onSurface.withOpacity(0.72),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Shared-post card — rendered as its own bubble above any
           // accompanying text so the conversation reads "they sent me
           // this vent" then "their thought about it" in order.
@@ -450,10 +924,25 @@ class _Bubble extends ConsumerWidget {
                 storagePath: message.attachedMediaPath!,
               ),
             ),
+          if (message.attachedMediaPath != null &&
+              message.attachedMediaType == 'audio')
+            GestureDetector(
+              onLongPress: () => _openActionSheet(context, ref),
+              child: Container(
+                margin: EdgeInsets.only(top: 4, bottom: hasText ? 2 : 4),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.72,
+                ),
+                child: _ChatVoiceNote(
+                  messageId: message.messageId,
+                  storagePath: message.attachedMediaPath!,
+                ),
+              ),
+            ),
 
           if (hasText)
             GestureDetector(
-              onLongPress: () => _react(context, ref),
+              onLongPress: () => _openActionSheet(context, ref),
               child: Container(
                 margin: const EdgeInsets.symmetric(vertical: 4),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -519,6 +1008,17 @@ class _Bubble extends ConsumerWidget {
                     color: scheme.onSurface.withOpacity(0.55),
                   ),
                 ),
+                if (message.editedAt != null) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    '· edited',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontStyle: FontStyle.italic,
+                      color: scheme.onSurface.withOpacity(0.55),
+                    ),
+                  ),
+                ],
                 if (showSeen) ...[
                   const SizedBox(width: 6),
                   Icon(Icons.done_all,
@@ -535,6 +1035,208 @@ class _Bubble extends ConsumerWidget {
                 ],
               ],
             ),
+          ),
+        ],
+      ),
+    );
+
+    // Swipe gesture: on your own still-editable message it opens the editor
+    // (as requested); on anything else it starts a reply — the familiar
+    // WhatsApp/IG gesture. Long-press still opens the full action sheet.
+    final canEditNow = onEdit != null && message.canEdit;
+    if (canEditNow) {
+      return _SwipeAction(
+        icon: Icons.edit_outlined,
+        onSwipe: onEdit!,
+        child: bubble,
+      );
+    }
+    if (onReply != null) {
+      return _SwipeAction(
+        icon: Icons.reply_rounded,
+        onSwipe: onReply!,
+        child: bubble,
+      );
+    }
+    return bubble;
+  }
+}
+
+/// Lightweight horizontal-drag wrapper. We deliberately avoid
+/// Dismissible because we never want the child to actually slide off
+/// the screen — the bubble just nudges right and snaps back, then
+/// triggers the intent (reply or edit) at the end of the gesture. The
+/// [icon] hints which action will fire.
+class _SwipeAction extends StatefulWidget {
+  const _SwipeAction({
+    required this.child,
+    required this.onSwipe,
+    this.icon = Icons.reply_rounded,
+  });
+  final Widget child;
+  final VoidCallback onSwipe;
+  final IconData icon;
+  @override
+  State<_SwipeAction> createState() => _SwipeActionState();
+}
+
+class _SwipeActionState extends State<_SwipeAction> {
+  double _dx = 0;
+  bool _fired = false;
+  static const _trigger = 60.0;
+  static const _maxNudge = 80.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragUpdate: (d) {
+        setState(() {
+          _dx = (_dx + d.delta.dx).clamp(0.0, _maxNudge);
+        });
+        if (!_fired && _dx >= _trigger) {
+          _fired = true;
+          HapticFeedback.selectionClick();
+        }
+      },
+      onHorizontalDragEnd: (_) {
+        if (_dx >= _trigger) widget.onSwipe();
+        setState(() {
+          _dx = 0;
+          _fired = false;
+        });
+      },
+      onHorizontalDragCancel: () {
+        setState(() {
+          _dx = 0;
+          _fired = false;
+        });
+      },
+      child: Stack(
+        alignment: Alignment.centerLeft,
+        children: [
+          if (_dx > 8)
+            Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: Opacity(
+                opacity: (_dx / _trigger).clamp(0.0, 1.0),
+                child: Icon(widget.icon,
+                    size: 20, color: VentlyColors.deepBurgundy),
+              ),
+            ),
+          AnimatedSlide(
+            offset: Offset(_dx / 200, 0),
+            duration: const Duration(milliseconds: 80),
+            curve: Curves.easeOut,
+            child: widget.child,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Reply preview chip shown above the composer when [_replyingTo] is
+/// set. Cancels via the X button.
+class _ReplyContextChip extends StatelessWidget {
+  const _ReplyContextChip({required this.message, required this.onCancel});
+  final ChatMessage message;
+  final VoidCallback onCancel;
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final preview = message.plaintext.trim().isEmpty
+        ? '(media message)'
+        : message.plaintext;
+    return Container(
+      color: scheme.primary.withOpacity(0.08),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Icon(Icons.reply_rounded, color: scheme.primary, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Replying to ${message.sentByMe ? "yourself" : "them"}',
+                  style: TextStyle(
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 11,
+                  ),
+                ),
+                Text(
+                  preview,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: scheme.onSurface.withOpacity(0.75),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.close_rounded, size: 18),
+            onPressed: onCancel,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Edit preview chip — shows the original text the user is editing,
+/// with a cancel button that restores the composer.
+class _EditContextChip extends StatelessWidget {
+  const _EditContextChip({required this.message, required this.onCancel});
+  final ChatMessage message;
+  final VoidCallback onCancel;
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      color: scheme.primary.withOpacity(0.08),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Icon(Icons.edit_outlined, color: scheme.primary, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Editing message',
+                  style: TextStyle(
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 11,
+                  ),
+                ),
+                Text(
+                  message.plaintext,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: scheme.onSurface.withOpacity(0.7),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.close_rounded, size: 18),
+            onPressed: onCancel,
           ),
         ],
       ),
@@ -647,6 +1349,8 @@ class _Composer extends StatelessWidget {
     required this.controller,
     required this.onSend,
     required this.onAttachImage,
+    required this.onMicTap,
+    this.recording = false,
     this.pendingImageBytes,
     this.onClearImage,
   });
@@ -654,6 +1358,11 @@ class _Composer extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
   final VoidCallback onAttachImage;
+
+  /// Voice note: tap to record, tap again to send. [recording] drives the
+  /// pulsing red state.
+  final VoidCallback onMicTap;
+  final bool recording;
 
   /// When non-null, shows a small preview chip above the composer with
   /// a clear button. The send action will upload + attach this image.
@@ -713,12 +1422,23 @@ class _Composer extends StatelessWidget {
                   tooltip: 'Attach image',
                   onPressed: onAttachImage,
                 ),
+                IconButton(
+                  icon: Icon(
+                    recording ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
+                    color: recording ? Colors.redAccent : null,
+                  ),
+                  tooltip: recording ? 'Tap to send voice note' : 'Voice note',
+                  onPressed: onMicTap,
+                ),
                 Expanded(
                   child: TextField(
                     controller: controller,
                     minLines: 1,
                     maxLines: 5,
-                    decoration: const InputDecoration(hintText: 'Message'),
+                    decoration: InputDecoration(
+                      hintText:
+                          recording ? 'Recording… tap ■ to send' : 'Message',
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1029,6 +1749,67 @@ class _ChatImageState extends ConsumerState<_ChatImage> {
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+}
+
+/// Voice-note attachment in a chat bubble. Resolves the private storage path
+/// to a signed URL, parses the duration encoded in the object name
+/// (`voice-<id>-d<seconds>s.m4a`), and renders the shared audio player.
+class _ChatVoiceNote extends ConsumerStatefulWidget {
+  const _ChatVoiceNote({required this.messageId, required this.storagePath});
+  final String messageId;
+  final String storagePath;
+
+  @override
+  ConsumerState<_ChatVoiceNote> createState() => _ChatVoiceNoteState();
+}
+
+class _ChatVoiceNoteState extends ConsumerState<_ChatVoiceNote> {
+  late Future<String> _urlFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlFuture =
+        ref.read(repositoryProvider).chatImageSignedUrl(widget.storagePath);
+  }
+
+  int get _durationSeconds {
+    final m = RegExp(r'-d(\d+)s\.').firstMatch(widget.storagePath);
+    return m == null ? 0 : int.parse(m.group(1)!);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _urlFuture,
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return Container(
+            height: 52,
+            width: 220,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: snap.hasError
+                ? const Icon(Icons.error_outline, size: 18)
+                : const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+          );
+        }
+        return ChatAudioBubble(
+          messageId: widget.messageId,
+          audioUrl: snap.data!,
+          durationSeconds: _durationSeconds,
+          lightOnDark: false,
         );
       },
     );

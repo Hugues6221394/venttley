@@ -112,11 +112,11 @@ class _ChipForStatus extends ConsumerWidget {
         return _Pill(
           dense: dense,
           icon: Icons.person_add_alt_1,
-          label: 'Add friend',
+          label: 'Add connection',
           filled: true,
           onTap: () => wrap(
             () => repo.sendFriendRequest(otherUserId).then((_) {}),
-            'Friend request sent.',
+            'Connection request sent.',
           ),
         );
 
@@ -131,7 +131,7 @@ class _ChipForStatus extends ConsumerWidget {
             if (friendshipId == null) return;
             await wrap(
               () => repo.declineFriendRequest(friendshipId),
-              'Friend request cancelled.',
+              'Connection request cancelled.',
             );
           },
         );
@@ -150,7 +150,7 @@ class _ChipForStatus extends ConsumerWidget {
                 if (id == null) return;
                 await wrap(
                   () => repo.acceptFriendRequest(id),
-                  'You are now friends.',
+                  'You are now connected.',
                 );
               },
             ),
@@ -175,7 +175,7 @@ class _ChipForStatus extends ConsumerWidget {
         return _Pill(
           dense: dense,
           icon: Icons.favorite,
-          label: 'Friends',
+          label: 'Connections',
           filled: false,
           color: scheme.primary,
           onTap: () => _showFriendMenu(context, ref, otherUserId, otherPseudonym),
@@ -244,7 +244,7 @@ class _ChipForStatus extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.person_remove_alt_1),
-                title: const Text('Unfriend'),
+                title: const Text('Disconnect'),
                 onTap: () async {
                   Navigator.pop(ctx);
                   await repo.unfriend(otherUserId);
@@ -252,7 +252,7 @@ class _ChipForStatus extends ConsumerWidget {
                   ref.invalidate(myFriendsProvider);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Unfriended.')),
+                      const SnackBar(content: Text('Disconnected.')),
                     );
                   }
                 },
@@ -273,7 +273,7 @@ class _ChipForStatus extends ConsumerWidget {
                     builder: (d) => AlertDialog(
                       title: const Text('Block this user?'),
                       content: const Text(
-                        'They won\'t be able to send you requests, and your friendship will end.',
+                        'They won\'t be able to send you requests, and your connection will end.',
                       ),
                       actions: [
                         TextButton(

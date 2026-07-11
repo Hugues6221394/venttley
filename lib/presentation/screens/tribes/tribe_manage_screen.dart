@@ -8,6 +8,8 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
+import '../../widgets/user_profile_link.dart';
+import '../../widgets/keeper_action_center.dart';
 import '../../widgets/post_card.dart';
 
 /// Plugz / Keeper creator dashboard.
@@ -28,18 +30,21 @@ class TribeManageScreen extends ConsumerWidget {
 
     if (tribeAsync.isLoading && tribe == null) {
       return Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
     if (tribe == null) {
       return Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: const Center(child: Text('Tribe not found')),
       );
     }
     if (me == null || tribe.keeperId != me.userId) {
       return Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(title: Text(tribe.name)),
         body: Padding(
           padding: const EdgeInsets.all(24),
@@ -53,7 +58,7 @@ class TribeManageScreen extends ConsumerWidget {
                         Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
                 const SizedBox(height: 12),
                 const Text(
-                  'Only the Keeper of this Tribe can open the dashboard.',
+                  'Only the Plug of this Tribe can open the dashboard.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
@@ -66,8 +71,14 @@ class TribeManageScreen extends ConsumerWidget {
 
     final postsAsync = ref.watch(_tribeManagePostsProvider(slug));
     final posts = postsAsync.valueOrNull ?? const <Post>[];
+    final statsAsync = ref.watch(tribeStudioStatsProvider(tribe.tribeId));
+    final stats = statsAsync.valueOrNull;
+    final unanswered = posts
+        .where((p) => p.commentsCount < 2 && !p.isDeleted)
+        .length;
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text(tribe.name, overflow: TextOverflow.ellipsis),
         actions: [
@@ -82,15 +93,24 @@ class TribeManageScreen extends ConsumerWidget {
         onRefresh: () async {
           ref.invalidate(_tribeManagePostsProvider(slug));
           ref.invalidate(tribeBySlugProvider(slug));
+          ref.invalidate(tribeStudioStatsProvider(tribe.tribeId));
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            _HeaderCard(tribe: tribe, posts: posts),
+            _HeaderCard(tribe: tribe, posts: posts, stats: stats),
+            KeeperActionCenter(
+              tribe: tribe,
+              stats: stats,
+              unansweredCount: unanswered,
+              newMembers7d: stats?.members7d ?? 0,
+            ),
             _BrandingCard(tribe: tribe),
             _AnalyticsGrid(tribe: tribe, posts: posts),
             _SentimentCard(posts: posts),
             _ActivityCard(posts: posts),
+            _TopPostsCard(posts: posts),
+            _TopContributorsCard(posts: posts),
             _SpotlightCard(tribe: tribe),
             _PinnedPostsCard(tribe: tribe, tribePosts: posts),
             _ScheduledPromptsCard(tribe: tribe),
@@ -148,9 +168,14 @@ class TribeManageScreen extends ConsumerWidget {
 // =========================================================================
 
 class _HeaderCard extends StatelessWidget {
-  const _HeaderCard({required this.tribe, required this.posts});
+  const _HeaderCard({
+    required this.tribe,
+    required this.posts,
+    this.stats,
+  });
   final Tribe tribe;
   final List<Post> posts;
+  final TribeStudioStats? stats;
 
   @override
   Widget build(BuildContext context) {
@@ -227,11 +252,15 @@ class _HeaderCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Kept by you',
+                      stats != null && stats!.openReports > 0
+                          ? 'Plug · ${stats!.openReports} open report${stats!.openReports == 1 ? '' : 's'}'
+                          : 'Kept by you',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: scheme.primary,
+                        color: stats != null && stats!.openReports > 0
+                            ? VentlyColors.dangerRed
+                            : scheme.primary,
                       ),
                     ),
                   ],
@@ -397,13 +426,29 @@ class _AnalyticsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalLikes =
-        posts.fold<int>(0, (acc, p) => acc + p.likesCount);
-    final totalComments =
-        posts.fold<int>(0, (acc, p) => acc + p.commentsCount);
-    final engagement = posts.isEmpty
+    final now = DateTime.now();
+    final last7 = now.subtract(const Duration(days: 7));
+    final prior7 = now.subtract(const Duration(days: 14));
+    final inLast7 =
+        posts.where((p) => p.createdAt.isAfter(last7)).toList();
+    final inPrior =
+        posts.where((p) =>
+            p.createdAt.isAfter(prior7) &&
+            p.createdAt.isBefore(last7)).toList();
+
+    int sum(Iterable<Post> ps, int Function(Post) f) =>
+        ps.fold<int>(0, (a, p) => a + f(p));
+
+    final replies7    = sum(inLast7, (p) => p.commentsCount);
+    final repliesPrev = sum(inPrior, (p) => p.commentsCount);
+    final likes7      = sum(inLast7, (p) => p.likesCount);
+    final likesPrev   = sum(inPrior, (p) => p.likesCount);
+    final engage7 = inLast7.isEmpty
         ? 0
-        : (((totalLikes + totalComments) / posts.length).round());
+        : (((likes7 + replies7) / inLast7.length).round());
+    final engagePrev = inPrior.isEmpty
+        ? 0
+        : (((likesPrev + repliesPrev) / inPrior.length).round());
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -413,7 +458,7 @@ class _AnalyticsGrid extends StatelessWidget {
         physics: const NeverScrollableScrollPhysics(),
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 1.55,
+        childAspectRatio: 1.45,
         children: [
           _StatTile(
             icon: Icons.people_alt_rounded,
@@ -423,25 +468,35 @@ class _AnalyticsGrid extends StatelessWidget {
           ),
           _StatTile(
             icon: Icons.forum_rounded,
-            label: 'Posts',
-            value: PostCard.compactNumber(posts.length),
-            sub: 'Lifetime',
+            label: 'Posts · 7d',
+            value: PostCard.compactNumber(inLast7.length),
+            sub: 'vs prior 7d',
+            deltaPercent: _deltaPercent(inLast7.length, inPrior.length),
           ),
           _StatTile(
             icon: Icons.mode_comment_outlined,
-            label: 'Replies',
-            value: PostCard.compactNumber(totalComments),
-            sub: 'On your tribe’s posts',
+            label: 'Replies · 7d',
+            value: PostCard.compactNumber(replies7),
+            sub: 'vs prior 7d',
+            deltaPercent: _deltaPercent(replies7, repliesPrev),
           ),
           _StatTile(
             icon: Icons.favorite_rounded,
-            label: 'Engagement',
-            value: '$engagement',
-            sub: 'Avg likes + replies / post',
+            label: 'Engage · 7d',
+            value: '$engage7',
+            sub: 'avg likes+replies / post',
+            deltaPercent: _deltaPercent(engage7, engagePrev),
           ),
         ],
       ),
     );
+  }
+
+  /// Returns a signed percentage delta, or null when the prior value is
+  /// zero (no honest comparison possible).
+  static double? _deltaPercent(num now, num prior) {
+    if (prior == 0) return null;
+    return ((now - prior) / prior) * 100.0;
   }
 }
 
@@ -451,11 +506,15 @@ class _StatTile extends StatelessWidget {
     required this.label,
     required this.value,
     required this.sub,
+    this.deltaPercent,
   });
   final IconData icon;
   final String label;
   final String value;
   final String sub;
+  /// Signed % change vs prior period. Positive = up; negative = down;
+  /// null = no honest comparison (prior period was zero).
+  final double? deltaPercent;
 
   @override
   Widget build(BuildContext context) {
@@ -486,15 +545,20 @@ class _StatTile extends StatelessWidget {
                 child: Icon(icon, color: scheme.primary, size: 17),
               ),
               const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.3,
-                  color: scheme.onSurface.withOpacity(0.7),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3,
+                    color: scheme.onSurface.withOpacity(0.7),
+                  ),
                 ),
               ),
+              if (deltaPercent != null) _DeltaBadge(percent: deltaPercent!),
             ],
           ),
           const Spacer(),
@@ -515,6 +579,45 @@ class _StatTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Small ▲ +24% / ▼ −8% chip used on KPI tiles. Up=green, down=red,
+/// flat=neutral. Caps display at ±999% so the chip never wraps.
+class _DeltaBadge extends StatelessWidget {
+  const _DeltaBadge({required this.percent});
+  final double percent;
+
+  @override
+  Widget build(BuildContext context) {
+    final flat = percent.abs() < 0.5;
+    final up = percent > 0;
+    final fg = flat
+        ? const Color(0xFF8B5566)
+        : up
+            ? const Color(0xFF21C76A)
+            : const Color(0xFFD93D5C);
+    final bg = fg.withOpacity(0.14);
+    final shown = percent.abs().clamp(0, 999);
+    final label = flat
+        ? '·'
+        : '${up ? '▲' : '▼'} ${shown.toStringAsFixed(shown >= 10 ? 0 : 1)}%';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.1,
+        ),
       ),
     );
   }
@@ -840,6 +943,14 @@ class _QuickActions extends ConsumerWidget {
               onTap: () {
                 if (tribeSlug == null) return;
                 context.push('/tribe/$tribeSlug/manage/reports');
+              },
+            ),
+            _ActionTile(
+              icon: Icons.shield_outlined,
+              label: 'Moderation',
+              onTap: () {
+                if (tribeSlug == null) return;
+                context.push('/tribe/$tribeSlug/manage/moderation');
               },
             ),
             _ActionTile(
@@ -1316,7 +1427,7 @@ class _MemberRow extends ConsumerWidget {
   String _roleLabel(String role) {
     switch (role) {
       case 'keeper':
-        return 'Keeper';
+        return 'Plug';
       case 'mod':
         return 'Mod';
       default:
@@ -1342,29 +1453,36 @@ class _MemberRow extends ConsumerWidget {
     final isKeeper = member.role == 'keeper';
     final isMod = member.role == 'mod';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          AnonymousAvatar(
-            seed: member.avatarSeed,
-            label: member.pseudonym,
-            size: 36,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '@${member.pseudonym}${isMe ? ' · you' : ''}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                  ),
-                ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.push('/user/${member.userId}'),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            children: [
+              UserProfileLink(
+                userId: member.userId,
+                pseudonym: member.pseudonym,
+                avatarSeed: member.avatarSeed,
+                profilePhotoUrl: member.profilePhotoUrl,
+                size: 36,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '@${member.pseudonym}${isMe ? ' · you' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
                 const SizedBox(height: 2),
                 Row(
                   children: [
@@ -1441,6 +1559,8 @@ class _MemberRow extends ConsumerWidget {
             ),
         ],
       ),
+        ),
+      ),
     );
   }
 
@@ -1485,7 +1605,7 @@ class _MemberRow extends ConsumerWidget {
             context,
             title: 'Transfer keepership?',
             body:
-                'You will become a mod. @${member.pseudonym} will be the new Keeper of ${tribe.name}.',
+                'You will become a mod. @${member.pseudonym} will be the new Plug of ${tribe.name}.',
             confirm: 'Transfer',
             destructive: true,
           );
@@ -1493,7 +1613,7 @@ class _MemberRow extends ConsumerWidget {
           await repo.transferKeeper(
               tribeId: tribe.tribeId, toUserId: member.userId);
           _snack(context,
-              'Keepership transferred to @${member.pseudonym}.');
+              'Plug role transferred to @${member.pseudonym}.');
           invalidate();
           break;
       }
@@ -1949,6 +2069,64 @@ class _PromptRow extends ConsumerWidget {
   const _PromptRow({required this.prompt});
   final ScheduledPrompt prompt;
 
+  Future<void> _editPrompt(BuildContext context, WidgetRef ref) async {
+    final ctl = TextEditingController(text: prompt.text);
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit prompt'),
+        content: TextField(
+          controller: ctl,
+          maxLines: 3,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctl.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (updated == null || updated.length < 4) return;
+    await ref.read(repositoryProvider).updatePrompt(
+          tribeId: prompt.tribeId,
+          promptId: prompt.promptId,
+          text: updated,
+          scheduledFor: prompt.scheduledFor,
+        );
+    ref.invalidate(tribePromptsProvider(prompt.tribeId));
+  }
+
+  Future<void> _deletePrompt(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete prompt?'),
+        content: const Text('This removes the prompt from your tribe.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref
+        .read(repositoryProvider)
+        .deletePrompt(prompt.tribeId, prompt.promptId);
+    ref.invalidate(tribePromptsProvider(prompt.tribeId));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
@@ -1997,6 +2175,17 @@ class _PromptRow extends ConsumerWidget {
                 ref.invalidate(tribePromptsProvider(prompt.tribeId));
               },
             ),
+          IconButton(
+            tooltip: 'Edit',
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            onPressed: () => _editPrompt(context, ref),
+          ),
+          IconButton(
+            tooltip: 'Delete',
+            icon: const Icon(Icons.delete_outline,
+                size: 16, color: Colors.redAccent),
+            onPressed: () => _deletePrompt(context, ref),
+          ),
         ],
       ),
     );
@@ -2525,6 +2714,330 @@ class _SpotlightPickerSheetState
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// TOP POSTS THIS WEEK
+// =========================================================================
+
+class _TopPostsCard extends StatelessWidget {
+  const _TopPostsCard({required this.posts});
+  final List<Post> posts;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final last7 = DateTime.now().subtract(const Duration(days: 7));
+    final recent =
+        posts.where((p) => p.createdAt.isAfter(last7)).toList()
+          ..sort((a, b) {
+            final ea = a.likesCount + a.commentsCount * 2;
+            final eb = b.likesCount + b.commentsCount * 2;
+            return eb.compareTo(ea);
+          });
+    final top = recent.take(3).toList();
+    if (top.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      decoration: BoxDecoration(
+        color:
+            isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('Best this week',
+                  style:
+                      TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+              const Spacer(),
+              Text(
+                'Top ${top.length} by engagement',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: scheme.onSurface.withOpacity(0.55),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          for (var i = 0; i < top.length; i++)
+            _TopPostRow(post: top[i], rank: i + 1),
+        ],
+      ),
+    );
+  }
+}
+
+class _TopPostRow extends StatelessWidget {
+  const _TopPostRow({required this.post, required this.rank});
+  final Post post;
+  final int rank;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final engagement = post.likesCount + post.commentsCount;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.push('/post/${post.postId}'),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withOpacity(0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '$rank',
+                  style: TextStyle(
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      post.content,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.favorite_border,
+                            size: 12,
+                            color: scheme.onSurface.withOpacity(0.55)),
+                        const SizedBox(width: 4),
+                        Text(
+                          PostCard.compactNumber(post.likesCount),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface.withOpacity(0.65),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Icon(Icons.chat_bubble_outline,
+                            size: 12,
+                            color: scheme.onSurface.withOpacity(0.55)),
+                        const SizedBox(width: 4),
+                        Text(
+                          PostCard.compactNumber(post.commentsCount),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface.withOpacity(0.65),
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${PostCard.compactNumber(engagement)} pts',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: scheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// TOP CONTRIBUTORS THIS WEEK
+// =========================================================================
+
+class _TopContributorsCard extends StatelessWidget {
+  const _TopContributorsCard({required this.posts});
+  final List<Post> posts;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final last7 = DateTime.now().subtract(const Duration(days: 7));
+    final stats = <String, _ContributorStat>{};
+    for (final p in posts) {
+      if (p.createdAt.isBefore(last7)) continue;
+      final id = p.authorId ?? p.authorPseudonym;
+      final stat = stats.putIfAbsent(
+        id,
+        () => _ContributorStat(
+          authorId: p.authorId,
+          pseudonym: p.authorPseudonym,
+          avatarSeed: p.authorAvatarSeed,
+        ),
+      );
+      stat.postCount += 1;
+      stat.likes += p.likesCount;
+      stat.replies += p.commentsCount;
+    }
+    final ranked = stats.values.toList()
+      ..sort((a, b) {
+        final ea = a.likes + a.replies * 2 + a.postCount * 3;
+        final eb = b.likes + b.replies * 2 + b.postCount * 3;
+        return eb.compareTo(ea);
+      });
+    final top = ranked.take(3).toList();
+    if (top.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color:
+            isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('Top contributors',
+                  style:
+                      TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+              const Spacer(),
+              Text(
+                'Last 7 days',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: scheme.onSurface.withOpacity(0.55),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < top.length; i++)
+            _ContributorRow(stat: top[i], rank: i + 1),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContributorStat {
+  _ContributorStat({
+    required this.authorId,
+    required this.pseudonym,
+    required this.avatarSeed,
+  });
+  final String? authorId;
+  final String pseudonym;
+  final String avatarSeed;
+  int postCount = 0;
+  int likes = 0;
+  int replies = 0;
+}
+
+class _ContributorRow extends StatelessWidget {
+  const _ContributorRow({required this.stat, required this.rank});
+  final _ContributorStat stat;
+  final int rank;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final crown = rank == 1 ? '👑 ' : '';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Container(
+            width: 22,
+            height: 22,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: scheme.primary.withOpacity(0.14),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              '$rank',
+              style: TextStyle(
+                color: scheme.primary,
+                fontWeight: FontWeight.w900,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          AnonymousAvatar(
+              seed: stat.avatarSeed, label: stat.pseudonym, size: 32),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$crown${stat.pseudonym}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 13),
+                ),
+                Text(
+                  '${stat.postCount} post${stat.postCount == 1 ? '' : 's'} · '
+                  '${PostCard.compactNumber(stat.likes)} likes · '
+                  '${PostCard.compactNumber(stat.replies)} replies',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurface.withOpacity(0.6),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (stat.authorId != null)
+            IconButton(
+              icon: const Icon(Icons.open_in_new, size: 16),
+              tooltip: 'Open profile',
+              onPressed: () => context.push('/user/${stat.authorId}'),
+            ),
+        ],
       ),
     );
   }

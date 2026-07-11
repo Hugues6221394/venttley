@@ -1,11 +1,16 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/notification_routing.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
-import '../../theme/colors.dart';
+import '../../widgets/glass_card.dart';
+import '../../widgets/tribe_avatar.dart';
+import '../../widgets/vently_premium_background.dart';
 
 /// Unified notification center. Backed by the existing `notifications`
 /// table; RLS policy "notifications owner" already restricts SELECT to
@@ -22,7 +27,11 @@ class NotificationsScreen extends ConsumerWidget {
     final invites = ref.watch(myInvitesProvider).valueOrNull ?? const [];
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         title: const Text('Notifications'),
         actions: [
           if (unread > 0)
@@ -37,7 +46,8 @@ class NotificationsScreen extends ConsumerWidget {
             ),
         ],
       ),
-      body: RefreshIndicator(
+      body: VentlyPremiumBackground(
+        child: RefreshIndicator(
         onRefresh: () async => ref.invalidate(notificationsProvider),
         child: async.isLoading && items.isEmpty
             ? const Center(child: CircularProgressIndicator())
@@ -70,7 +80,14 @@ class NotificationsScreen extends ConsumerWidget {
                   )
                 : ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    // Body extends behind the transparent AppBar — offset the
+                    // list so the first item doesn't render under the title.
+                    padding: EdgeInsets.only(
+                      top: MediaQuery.of(context).padding.top +
+                          kToolbarHeight +
+                          8,
+                      bottom: 8,
+                    ),
                     children: [
                       if (invites.isNotEmpty) ...[
                         Padding(
@@ -93,6 +110,7 @@ class NotificationsScreen extends ConsumerWidget {
                         _NotificationTile(item: n),
                     ],
                   ),
+        ),
       ),
     );
   }
@@ -106,44 +124,20 @@ class _InviteCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
+    return GlassCard(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isDark
-            ? VentlyColors.cardDark
-            : Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: scheme.primary.withOpacity(isDark ? 0.30 : 0.22),
-        ),
-      ),
+      borderRadius: 18,
+      elevated: true,
+      borderColor: scheme.primary.withOpacity(isDark ? 0.35 : 0.28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  color: scheme.primary.withOpacity(0.14),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                alignment: Alignment.center,
-                child: invite.tribeAvatarUrl != null &&
-                        invite.tribeAvatarUrl!.isNotEmpty
-                    ? Image.network(
-                        invite.tribeAvatarUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(
-                            Icons.diversity_3,
-                            size: 18,
-                            color: scheme.primary),
-                      )
-                    : Icon(Icons.diversity_3,
-                        size: 18, color: scheme.primary),
+              TribeAvatar(
+                avatarUrl: invite.tribeAvatarUrl,
+                size: 38,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -183,34 +177,101 @@ class _InviteCard extends ConsumerWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              OutlinedButton(
-                onPressed: () async {
-                  await ref.read(repositoryProvider).respondToInvite(
-                        inviteId: invite.inviteId,
-                        accept: false,
-                      );
-                  ref.invalidate(myInvitesProvider);
-                  ref.invalidate(notificationsProvider);
-                },
-                child: const Text('Decline'),
+              Expanded(
+                child: _FrostedButton(
+                  label: 'Decline',
+                  onPressed: () async {
+                    await ref.read(repositoryProvider).respondToInvite(
+                          inviteId: invite.inviteId,
+                          accept: false,
+                        );
+                    ref.invalidate(myInvitesProvider);
+                    ref.invalidate(notificationsProvider);
+                  },
+                ),
               ),
-              const Spacer(),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.check, size: 16),
-                onPressed: () async {
-                  await ref.read(repositoryProvider).respondToInvite(
-                        inviteId: invite.inviteId,
-                        accept: true,
-                      );
-                  ref.invalidate(myInvitesProvider);
-                  ref.invalidate(notificationsProvider);
-                  ref.invalidate(tribesProvider);
-                },
-                label: const Text('Accept & join'),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: _FrostedButton(
+                  label: 'Accept & join',
+                  icon: Icons.check_rounded,
+                  primary: true,
+                  onPressed: () async {
+                    await ref.read(repositoryProvider).respondToInvite(
+                          inviteId: invite.inviteId,
+                          accept: true,
+                        );
+                    ref.invalidate(myInvitesProvider);
+                    ref.invalidate(notificationsProvider);
+                    ref.invalidate(tribesProvider);
+                  },
+                ),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FrostedButton extends StatelessWidget {
+  const _FrostedButton({
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.primary = false,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+  final IconData? icon;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fill = primary
+        ? scheme.primary.withOpacity(isDark ? 0.82 : 0.88)
+        : (isDark ? Colors.white.withOpacity(0.10) : Colors.white.withOpacity(0.42));
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Material(
+          color: fill,
+          child: InkWell(
+            onTap: onPressed,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon,
+                        size: 16,
+                        color: primary ? Colors.white : scheme.onSurface),
+                    const SizedBox(width: 6),
+                  ],
+                  Flexible(
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: primary ? Colors.white : scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -225,33 +286,33 @@ class _NotificationTile extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final unread = !item.isRead;
-    return InkWell(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
       onTap: () async {
         if (unread) {
           await ref.read(repositoryProvider).markNotificationRead(item.id);
           ref.invalidate(notificationsProvider);
         }
-        // Route by kind. Whatever each notification "is about" should
-        // open the right surface so taps feel resolved, not silent.
-        final dest = _destinationFor(item);
-        if (dest != null && context.mounted) context.push(dest);
+        final dest = NotificationPayload.fromNotificationItem(
+          item.kind,
+          item.payload,
+        );
+        if (dest != null && context.mounted) {
+          navigateFromNotificationPayload(GoRouter.of(context), dest);
+        }
       },
-      child: Container(
+      borderRadius: BorderRadius.circular(18),
+      child: GlassCard(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: unread
-              ? scheme.primary.withOpacity(isDark ? 0.16 : 0.10)
-              : isDark
-                  ? VentlyColors.cardDark
-                  : Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: unread
-                ? scheme.primary.withOpacity(0.30)
-                : scheme.onSurface.withOpacity(0.08),
-          ),
-        ),
+        borderRadius: 18,
+        tint: unread
+            ? scheme.primary.withOpacity(isDark ? 0.14 : 0.08)
+            : null,
+        borderColor: unread
+            ? scheme.primary.withOpacity(0.30)
+            : null,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -316,6 +377,7 @@ class _NotificationTile extends ConsumerWidget {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -324,32 +386,12 @@ class _NotificationTile extends ConsumerWidget {
       case 'message_request': return Icons.mail_outline;
       case 'comment_reply':   return Icons.chat_bubble_outline;
       case 'tribe_prompt':    return Icons.help_outline;
+      case 'tribe_chat_message':
+      case 'tribe_message':   return Icons.forum_outlined;
       case 'admin_broadcast': return Icons.campaign_outlined;
       case 'tribe_invite':    return Icons.group_add_outlined;
       case 'post_like':       return Icons.favorite_border;
       default:                return Icons.notifications_outlined;
-    }
-  }
-
-  /// Where tapping a notification should land. Returns null when there
-  /// isn't a meaningful destination (we still mark-as-read in that case).
-  String? _destinationFor(NotificationItem item) {
-    switch (item.kind) {
-      case 'tribe_prompt':
-        final slug = item.payload['tribe_slug'] as String?;
-        return slug != null ? '/tribe/$slug' : null;
-      case 'tribe_invite':
-        final slug = item.payload['tribe_slug'] as String?;
-        return slug != null ? '/tribe/$slug' : null;
-      case 'comment_reply':
-      case 'post_like':
-        final postId = item.payload['post_id'] as String?;
-        return postId != null ? '/post/$postId' : null;
-      case 'message_request':
-        final roomId = item.payload['room_id'] as String?;
-        return roomId != null ? '/chat/$roomId' : null;
-      default:
-        return null;
     }
   }
 }

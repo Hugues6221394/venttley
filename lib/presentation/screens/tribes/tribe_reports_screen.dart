@@ -20,6 +20,7 @@ class TribeReportsScreen extends ConsumerWidget {
     final me = ref.watch(sessionProvider);
     if (tribe == null) {
       return Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: tribeAsync.isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -28,12 +29,13 @@ class TribeReportsScreen extends ConsumerWidget {
     }
     if (me == null || tribe.keeperId != me.userId) {
       return Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(title: Text(tribe.name)),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
             child: Text(
-              'Reports for this Tribe are visible to its Keeper only.',
+              'Reports for this Tribe are visible to its Plug only.',
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
@@ -47,6 +49,7 @@ class TribeReportsScreen extends ConsumerWidget {
     final resolved = reports.where((r) => r.isResolved).toList();
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text('Reports · ${tribe.name}', overflow: TextOverflow.ellipsis),
       ),

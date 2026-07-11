@@ -47,6 +47,7 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
 
     if (tribe == null) {
       return Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: tribeAsync.isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -55,12 +56,13 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
     }
     if (me == null || tribe.keeperId != me.userId) {
       return Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(title: Text(tribe.name)),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
             child: Text(
-              'Only the Keeper of a Tribe can edit its settings.',
+              'Only the Plug of a Tribe can edit its settings.',
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
@@ -78,6 +80,7 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
     }
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('Tribe settings'),
       ),
@@ -85,7 +88,7 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
         padding: const EdgeInsets.all(20),
         children: [
           const Text(
-            'Keepers can soften their tribe over time. Changes apply immediately.',
+            'Plugz can soften their tribe over time. Changes apply immediately.',
             style: TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 20),

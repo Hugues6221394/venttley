@@ -43,12 +43,29 @@ class CacheService {
     }
   }
 
-  /// Invalidate one key (or all keys matching [prefix]).
+  /// Invalidate one key (or all keys matching [prefix]). Pass either.
   void invalidate({String? key, String? prefix}) {
     if (key != null) _store.remove(key);
     if (prefix != null) {
       _store.removeWhere((k, _) => k.startsWith(prefix));
     }
+  }
+
+  /// Convenience: invalidate by exact key (positional shorthand).
+  void invalidateKey(String key) => _store.remove(key);
+
+  /// Insert / overwrite an entry. Used by the two-tier cache to push
+  /// values fetched from the remote tier into the local hot-path.
+  void set<T>(String key, T value, {required Duration ttl}) {
+    _put(key, value, ttl);
+  }
+
+  /// Returns the cached value without touching LRU recency. Returns
+  /// null on miss / expired.
+  T? peek<T>(String key) {
+    final hit = _store[key];
+    if (hit == null || hit.isExpired) return null;
+    return hit.value as T;
   }
 
   void clear() => _store.clear();

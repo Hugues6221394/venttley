@@ -13,9 +13,11 @@ void main() {
     int comments = 0,
     bool story = false,
     String content = 'A tiny story about campus life and music.',
+    String? authorId,
   }) {
     return Post(
       postId: id,
+      authorId: authorId,
       authorPseudonym: '@demo',
       authorAvatarSeed: 'seed',
       categoryName: category,
@@ -108,6 +110,67 @@ void main() {
     expect(model.kpis.first.value, '3');
     expect(model.trendingTopics.first.category, 'campus');
     expect(model.trendingTopics.first.score, greaterThan(model.trendingTopics.last.score));
-    expect(model.trendingTribes.map((t) => t.tribeId), ['campus', 'music', 'quiet']);
+    // Joined tribes get pushed to the top of the rail so people see the
+    // communities they already belong to first; remaining order falls
+    // back to member count.
+    expect(
+      model.trendingTribes.map((t) => t.tribeId),
+      ['quiet', 'campus', 'music'],
+    );
+  });
+
+  test('friend stories include only self and accepted friends', () {
+    final stories = HomeDiscovery.friendStories(
+      posts: [
+        post(
+          id: 'self-story',
+          category: 'confessions',
+          createdAt: now.subtract(const Duration(hours: 2)),
+          story: true,
+          authorId: 'me',
+        ),
+        post(
+          id: 'friend-story',
+          category: 'campus',
+          createdAt: now.subtract(const Duration(hours: 1)),
+          story: true,
+          authorId: 'friend-1',
+        ),
+        post(
+          id: 'stranger-story',
+          category: 'campus',
+          createdAt: now.subtract(const Duration(hours: 1)),
+          story: true,
+          authorId: 'stranger',
+        ),
+        post(
+          id: 'normal-post',
+          category: 'campus',
+          createdAt: now.subtract(const Duration(minutes: 30)),
+          authorId: 'friend-1',
+        ),
+        post(
+          id: 'expired-friend-story',
+          category: 'campus',
+          createdAt: now.subtract(const Duration(hours: 26)),
+          story: true,
+          authorId: 'friend-1',
+        ),
+        post(
+          id: 'anonymous-author-story',
+          category: 'campus',
+          createdAt: now.subtract(const Duration(minutes: 15)),
+          story: true,
+        ),
+      ],
+      myUserId: 'me',
+      friendUserIds: {'friend-1'},
+      now: now,
+    );
+
+    expect(
+      stories.map((story) => story.postId),
+      ['friend-story', 'self-story'],
+    );
   });
 }

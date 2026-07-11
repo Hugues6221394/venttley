@@ -1,11 +1,26 @@
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
+import { rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, KeyRound, XCircle } from "@/components/ui/icons";
 
 export const dynamic = "force-dynamic";
+
+async function assignRole(formData: FormData) {
+  "use server";
+  const id = String(formData.get("user_id") ?? "").trim();
+  const role = String(formData.get("role") ?? "");
+  const reason = String(formData.get("reason") ?? "");
+  await rpc("admin_set_user_role", {
+    p_target: id,
+    p_role: role,
+    p_reason: reason || null,
+  });
+  revalidatePath("/roles");
+}
 
 type Role =
   | "super_admin"
@@ -184,6 +199,43 @@ export default async function RolesPage() {
         </p>
       </Card>
 
+      <Card
+        title="Assign or change a staff role"
+        hint="super_admin only. Promote a user to admin, change a role, or set 'normal' to remove staff access."
+      >
+        <form action={assignRole} className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-col gap-1 flex-1 min-w-[240px]">
+            <label className="h-eyebrow">User ID</label>
+            <input
+              type="text"
+              name="user_id"
+              placeholder="user_id to promote / change"
+              className="input font-mono text-xs"
+              required
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="h-eyebrow">Role</label>
+            <select name="role" className="select" defaultValue="admin">
+              {ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </div>
+          <input
+            type="text"
+            name="reason"
+            placeholder="reason"
+            className="input flex-1 min-w-[160px]"
+          />
+          <button type="submit" className="btn-secondary">
+            Apply role
+          </button>
+        </form>
+      </Card>
+
       <Card title="Current staff" hint="Users with any staff role" padded={false}>
         {((staff ?? []) as unknown[]).length === 0 ? (
           <div className="px-5 py-10 text-sm text-ink-muted italic">
@@ -217,7 +269,23 @@ export default async function RolesPage() {
                 >
                   {u.account_status}
                 </Badge>
-                <p className="ml-auto text-[11px] text-ink-muted">
+                <form action={assignRole} className="ml-auto">
+                  <input type="hidden" name="user_id" value={u.user_id} />
+                  <input type="hidden" name="role" value="normal" />
+                  <input
+                    type="hidden"
+                    name="reason"
+                    value="removed staff access"
+                  />
+                  <button
+                    type="submit"
+                    title="Remove staff access (set role to normal)"
+                    className="btn-ghost text-red-600 hover:bg-red-50 inline-flex items-center gap-1"
+                  >
+                    <XCircle size={13} /> Remove
+                  </button>
+                </form>
+                <p className="text-[11px] text-ink-muted">
                   joined {new Date(u.created_at).toLocaleDateString()}
                 </p>
               </li>

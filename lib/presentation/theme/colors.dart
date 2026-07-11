@@ -38,4 +38,40 @@ class VentlyColors {
   static const Color successGreen = Color(0xFF6BA56F);
   static const Color warningAmber = Color(0xFFE6B65C);
   static const Color dangerRed    = Color(0xFFCC4747);
+
+  /// Online-presence dot (matches the ad mockups' fresh green).
+  static const Color onlineGreen = Color(0xFF34C759);
+}
+
+/// Brand gradients pulled from the launch adverts — the glossy berry sweep,
+/// the deep whispers banner, and the orb highlight.
+class VentlyGradients {
+  VentlyGradients._();
+
+  /// Primary CTA / center-nav button. Berry → deep raspberry, top-lit.
+  static const LinearGradient brand = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFE84D88), Color(0xFFC01A5B)],
+  );
+
+  /// Deep rose banner (Whispers spotlight card).
+  static const LinearGradient banner = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFD4638E), Color(0xFF9E1F50)],
+  );
+
+  /// Story-ring sweep.
+  static const LinearGradient storyRing = LinearGradient(
+    colors: [Color(0xFFB91452), Color(0xFFFF91B7), Color(0xFF4A0E17)],
+  );
+
+  /// Glossy sphere highlight used by the decorative orb.
+  static const RadialGradient orb = RadialGradient(
+    center: Alignment(-0.35, -0.45),
+    radius: 1.15,
+    colors: [Color(0xFFFFE9F1), Color(0xFFF7A8C6), Color(0xFFE05C93)],
+    stops: [0.0, 0.55, 1.0],
+  );
 }

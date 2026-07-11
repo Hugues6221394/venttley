@@ -13,10 +13,12 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 
 import '../../core/constants.dart';
+import '../../domain/entities/entities.dart';
 
 enum SafetyVerdict { safe, warn, block }
 
@@ -49,9 +51,76 @@ class ModerationResult {
 }
 
 class ModerationService {
-  ModerationService({http.Client? httpClient}) : _http = httpClient;
+  ModerationService({http.Client? httpClient, this.remoteGuard})
+      : _http = httpClient;
 
   final http.Client? _http;
+
+  /// When set, Tier-2 classification is delegated to this callback — the
+  /// server-side `moderate` edge function — instead of calling Groq directly.
+  /// Keeps the API key off-device and enables the trusted verdict cache.
+  /// Returns the raw verdict map {verdict, categories, reason}, or null on
+  /// failure (treated as safe; Tier-1 still applies).
+  final Future<Map<String, dynamic>?> Function(String text)? remoteGuard;
+
+  // Staff-managed automod rules (migration 0085), loaded from the backend and
+  // applied on top of the built-in dictionaries. Updated at runtime as the
+  // rules provider resolves.
+  List<AutomodRule> _dynamicRules = const [];
+  void setDynamicRules(List<AutomodRule> rules) => _dynamicRules = rules;
+
+  // --- Tier-2 cost gate ---------------------------------------------------
+  final _rng = Random();
+
+  /// Fraction of clearly-benign messages still sent to the LLM, so we keep
+  /// coverage on novel harmful phrasing and can monitor classifier drift.
+  static const double _llmSampleRate = 0.05;
+
+  /// Minimum length below which a signal-free message is treated as benign
+  /// (a 3-word "i feel sad" doesn't need a Llama Guard round-trip).
+  static const int _llmMinLength = 24;
+
+  /// Coarse risk-adjacent tokens. If none of these appear AND Tier 1 found
+  /// nothing, the content is almost certainly benign venting — the LLM's job
+  /// is nuance around these themes, so its absence means low value / high cost.
+  static final RegExp _riskHints = RegExp(
+    r'\b('
+    r'die|dead|death|kill|hurt|harm|blood|cut|pills|overdose|suicide|'
+    r'hate|kys|ugly|stupid|worthless|loser|freak|'
+    r'sex|nude|naked|horny|dick|pussy|porn|'
+    r'gun|knife|shoot|stab|bomb|threat|'
+    r'address|phone|snap|insta|whatsapp|email|meet\s?up'
+    r')\b',
+    caseSensitive: false,
+  );
+
+  /// Decides whether to spend a Tier-2 LLM call. Escalates on any Tier-1
+  /// signal or risk hint; otherwise samples a small fraction.
+  bool _shouldRunLlmGuard(String lower, Set<HazardCategory> categories) {
+    if (categories.isNotEmpty) return true;      // confirm/expand a Tier-1 hit
+    if (lower.length < _llmMinLength) return false;
+    if (_riskHints.hasMatch(lower)) return true; // nuance worth the call
+    return _rng.nextDouble() < _llmSampleRate;    // sampled coverage
+  }
+
+  bool _ruleMatches(AutomodRule rule, String original, String lower) {
+    final p = rule.pattern.trim();
+    if (p.isEmpty) return false;
+    switch (rule.matchType) {
+      case 'regex':
+        try {
+          return RegExp(p, caseSensitive: false).hasMatch(original);
+        } catch (_) {
+          return false; // A malformed rule never breaks moderation.
+        }
+      case 'word':
+        return RegExp('\\b${RegExp.escape(p.toLowerCase())}\\b')
+            .hasMatch(lower);
+      case 'contains':
+      default:
+        return lower.contains(p.toLowerCase());
+    }
+  }
 
   // ---------------------------------------------------------------------
   // TIER 1 — keyword dictionaries
@@ -145,9 +214,38 @@ class ModerationService {
       }
     }
 
-    // Tier 2 — Groq-hosted Llama Guard 3. Skipped when no key is configured;
-    // skipped when Tier 1 already blocked (no need to spend a call).
-    if (verdict != SafetyVerdict.block && VentlyConfig.groqApiKey.isNotEmpty) {
+    // Tier 1.5 — staff-managed automod rules (migration 0085). Applied on top
+    // of the built-in dictionaries so ops can react to new abuse without a
+    // release. 'crisis' never blocks (help stays reachable); 'block' stops the
+    // message; 'flag' warns but lets it through.
+    for (final rule in _dynamicRules) {
+      if (!_ruleMatches(rule, text, t)) continue;
+      categories.add(_categoryFromString(rule.category));
+      switch (rule.action) {
+        case 'crisis':
+          crisis = true;
+          if (verdict == SafetyVerdict.safe) verdict = SafetyVerdict.warn;
+          reasons.add('We care about you. Would you like crisis resources?');
+          break;
+        case 'flag':
+          if (verdict == SafetyVerdict.safe) verdict = SafetyVerdict.warn;
+          reasons.add('Flagged by a Venttly safety rule.');
+          break;
+        case 'block':
+        default:
+          verdict = SafetyVerdict.block;
+          reasons.add('This goes against our community rules.');
+          break;
+      }
+    }
+
+    // Tier 2 — Groq-hosted Llama Guard 3. Skipped when no key is configured,
+    // when Tier 1 already blocked, and — at scale — when the content shows no
+    // risk signal at all (cost gate, see _shouldRunLlmGuard). This keeps LLM
+    // spend/latency proportional to actual risk instead of paying per message.
+    if (verdict != SafetyVerdict.block &&
+        (remoteGuard != null || VentlyConfig.groqApiKey.isNotEmpty) &&
+        _shouldRunLlmGuard(t, categories)) {
       try {
         final guard = await _llamaGuardReview(text)
             .timeout(const Duration(seconds: 3));
@@ -200,47 +298,64 @@ class ModerationService {
       'or descriptions of past trauma told in the first person.';
 
   Future<ModerationResult> _llamaGuardReview(String text) async {
-    final client = _http ?? http.Client();
-    final res = await client.post(
-      Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
-      headers: {
-        'Authorization': 'Bearer ${VentlyConfig.groqApiKey}',
-        'Content-Type':  'application/json',
-      },
-      body: jsonEncode({
-        'model':           VentlyConfig.groqGuardModel,
-        'temperature':     0,
-        'max_tokens':      200,
-        'response_format': {'type': 'json_object'},
-        'messages': [
-          {'role': 'system', 'content': _guardSystemPrompt},
-          {'role': 'user',   'content': text},
-        ],
-      }),
-    );
-    if (res.statusCode >= 400) {
-      throw StateError('Groq guard HTTP ${res.statusCode}: ${res.body}');
-    }
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
-    final choices = body['choices'] as List?;
-    final firstChoice = (choices == null || choices.isEmpty)
-        ? null
-        : choices.first as Map<String, dynamic>?;
-    final message = firstChoice?['message'] as Map<String, dynamic>?;
-    final content = (message?['content'] as String?) ?? '{}';
     Map<String, dynamic> parsed;
-    try {
-      parsed = jsonDecode(content) as Map<String, dynamic>;
-    } catch (_) {
-      // Model produced non-JSON despite the format hint — fail safe.
-      return const ModerationResult(
-        verdict: SafetyVerdict.safe,
-        reasons: [],
-        categories: {},
-        surfaceCrisisHelpline: false,
+    final remote = remoteGuard;
+    if (remote != null) {
+      // Server-side path: the `moderate` edge function returns the raw verdict
+      // shape {verdict, categories, reason} and caches it. The Groq key stays
+      // off-device.
+      final r = await remote(text);
+      if (r == null) return _safeGuardResult;
+      parsed = r;
+    } else {
+      // Direct Groq path (fallback / tests) — needs groqApiKey on-device.
+      final client = _http ?? http.Client();
+      final res = await client.post(
+        Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+        headers: {
+          'Authorization': 'Bearer ${VentlyConfig.groqApiKey}',
+          'Content-Type':  'application/json',
+        },
+        body: jsonEncode({
+          'model':           VentlyConfig.groqGuardModel,
+          'temperature':     0,
+          'max_tokens':      200,
+          'response_format': {'type': 'json_object'},
+          'messages': [
+            {'role': 'system', 'content': _guardSystemPrompt},
+            {'role': 'user',   'content': text},
+          ],
+        }),
       );
+      if (res.statusCode >= 400) {
+        throw StateError('Groq guard HTTP ${res.statusCode}: ${res.body}');
+      }
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      final choices = body['choices'] as List?;
+      final firstChoice = (choices == null || choices.isEmpty)
+          ? null
+          : choices.first as Map<String, dynamic>?;
+      final message = firstChoice?['message'] as Map<String, dynamic>?;
+      final content = (message?['content'] as String?) ?? '{}';
+      try {
+        parsed = jsonDecode(content) as Map<String, dynamic>;
+      } catch (_) {
+        return _safeGuardResult; // non-JSON despite the hint — fail safe.
+      }
     }
+    return _mapGuardParsed(parsed);
+  }
 
+  static const ModerationResult _safeGuardResult = ModerationResult(
+    verdict: SafetyVerdict.safe,
+    reasons: [],
+    categories: {},
+    surfaceCrisisHelpline: false,
+  );
+
+  /// Maps the raw model verdict shape {verdict, categories, reason} onto a
+  /// [ModerationResult] — shared by the remote and direct-Groq paths.
+  ModerationResult _mapGuardParsed(Map<String, dynamic> parsed) {
     final verdictStr = (parsed['verdict'] as String?)?.toLowerCase();
     final rawCats = parsed['categories'];
     final reason = parsed['reason'] as String?;

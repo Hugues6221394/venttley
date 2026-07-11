@@ -32,18 +32,32 @@ class VentlyConfig {
   static bool get useMockBackend =>
       _forceMock || supabaseUrl.isEmpty || supabaseAnonKey.isEmpty;
 
+  /// Tenor (Google) API key for the GIF picker in replies. Get a free key at
+  /// https://developers.google.com/tenor/guides/quickstart and pass it at
+  /// build time: --dart-define=TENOR_API_KEY=AIza...  When empty, the GIF
+  /// picker shows a friendly "not configured" message instead of results.
+  static const String tenorApiKey = String.fromEnvironment(
+    'TENOR_API_KEY',
+    defaultValue: '',
+  );
+
+  static bool get gifSearchEnabled => tenorApiKey.isNotEmpty;
+
   /// COPPA / FTC compliance — registration is hard-blocked under 13,
   /// users 13–17 are placed in a restricted safety tier.
   static const int minAge = 13;
   static const int restrictedMaxAge = 17;
 
-  /// Sentry DSN — empty by default. Pass at build time so dev runs do
-  /// not ship breadcrumbs to a real project:
-  ///   flutter run --dart-define=SENTRY_DSN=https://…@sentry.io/…
-  /// When empty, Sentry initialisation is a no-op.
+  /// Sentry DSN — live for the Venttly project (EU region).
+  /// Override at build time for staging or to disable in CI:
+  ///   flutter run --dart-define=SENTRY_DSN=''            # no-op
+  ///   flutter run --dart-define=SENTRY_DSN=https://other@…
+  /// When the default is replaced by an empty string, Sentry init
+  /// short-circuits in main.dart.
   static const String sentryDsn = String.fromEnvironment(
     'SENTRY_DSN',
-    defaultValue: '',
+    defaultValue:
+        'https://2aceec425a13bf7b6e29350e4b700cb9@o4511605237284864.ingest.de.sentry.io/4511605242069072',
   );
 
   /// Build environment label surfaced to Sentry + app_events.
@@ -80,6 +94,114 @@ class VentlyConfig {
     'GROQ_GUARD_MODEL',
     defaultValue: 'llama-3.3-70b-versatile',
   );
+
+  // =========================================================================
+  // Phase A — service env keys
+  //
+  // Every integration in the architecture spec is keyed off a single
+  // --dart-define. When a key is empty the corresponding service falls
+  // back to a no-op or the local Supabase implementation, so the app
+  // runs identically in dev with zero external accounts.
+  //
+  // Build example:
+  //   flutter run \
+  //     --dart-define=POSTHOG_KEY=phc_... \
+  //     --dart-define=POSTHOG_HOST=https://eu.posthog.com \
+  //     --dart-define=UPSTASH_REDIS_REST_URL=https://… \
+  //     --dart-define=UPSTASH_REDIS_REST_TOKEN=… \
+  //     --dart-define=MEILISEARCH_HOST=https://… \
+  //     --dart-define=MEILISEARCH_KEY=…
+  // =========================================================================
+
+  /// Clerk — identity provider. When unset, falls back to the existing
+  /// Supabase Auth flows (anonymous username + email + recovery phrase).
+  /// See docs/architecture.md → Auth migration.
+  static const String clerkPublishableKey =
+      String.fromEnvironment('CLERK_PUBLISHABLE_KEY', defaultValue: '');
+  static const String clerkFrontendApi =
+      String.fromEnvironment('CLERK_FRONTEND_API', defaultValue: '');
+
+  /// PostHog — product analytics + feature flags.
+  /// Project: Venttly (US Cloud, project id 480284).
+  /// Override the key with --dart-define=POSTHOG_KEY='' to silence
+  /// analytics in CI / mock runs.
+  static const String posthogKey = String.fromEnvironment(
+    'POSTHOG_KEY',
+    defaultValue: 'phc_tDyuFaUpZvN2pp2xWssF5JvGtQUagY5FKhfJ2fEdSojZ',
+  );
+  static const String posthogHost = String.fromEnvironment(
+    'POSTHOG_HOST',
+    defaultValue: 'https://us.i.posthog.com',
+  );
+
+  /// Upstash Redis (REST). Used by CacheService for cross-process cache.
+  /// When empty, CacheService stays in-memory-only.
+  static const String upstashRedisRestUrl =
+      String.fromEnvironment('UPSTASH_REDIS_REST_URL', defaultValue: '');
+  static const String upstashRedisRestToken =
+      String.fromEnvironment('UPSTASH_REDIS_REST_TOKEN', defaultValue: '');
+
+  /// Meilisearch host + admin / search key. When empty, SearchService
+  /// falls through to the Postgres `search_global` RPC.
+  static const String meilisearchHost =
+      String.fromEnvironment('MEILISEARCH_HOST', defaultValue: '');
+  static const String meilisearchKey =
+      String.fromEnvironment('MEILISEARCH_KEY', defaultValue: '');
+
+  /// Resend — transactional email. Wired through the email-dispatcher
+  /// edge function, never called from the client (so the API key stays
+  /// server-side). The flag below tells the client whether to surface
+  /// "we'll email you" copy.
+  static const String resendFromAddress = String.fromEnvironment(
+    'RESEND_FROM_ADDRESS',
+    defaultValue: 'hello@venttly.app',
+  );
+  static const bool resendEnabled =
+      bool.fromEnvironment('RESEND_ENABLED', defaultValue: false);
+
+  /// Deep-link the OAuth (Google) flow returns to. Must be allow-listed in
+  /// Supabase → Authentication → URL Configuration and registered as a native
+  /// deep link (Android intent-filter / iOS URL scheme). Empty ⇒ let the SDK
+  /// use its platform default. Example: 'rw.vently.vently_app://login-callback'.
+  static const String oauthRedirectUrl =
+      String.fromEnvironment('OAUTH_REDIRECT_URL', defaultValue: '');
+
+  /// Whether to surface the optional Google / phone sign-in buttons. Off by
+  /// default so the buttons only appear once their providers are configured.
+  static const bool socialAuthEnabled =
+      bool.fromEnvironment('SOCIAL_AUTH_ENABLED', defaultValue: true);
+
+  /// Stripe — publishable key for the Flutter SDK. The secret key lives
+  /// only in the payment-webhook edge function.
+  static const String stripePublishableKey =
+      String.fromEnvironment('STRIPE_PUBLISHABLE_KEY', defaultValue: '');
+
+  /// Firebase Cloud Messaging. The client uses Firebase iOS/Android
+  /// config files at build time (GoogleService-Info.plist /
+  /// google-services.json) — this env var is just a feature flag to
+  /// skip FCM init when no Firebase project is wired.
+  static const bool fcmEnabled =
+      bool.fromEnvironment('FCM_ENABLED', defaultValue: false);
+
+  /// OpenTelemetry collector endpoint (Honeycomb / Tempo / Grafana).
+  /// When empty, the OTEL exporter no-ops.
+  static const String otelEndpoint =
+      String.fromEnvironment('OTEL_ENDPOINT', defaultValue: '');
+  static const String otelHeaders =
+      String.fromEnvironment('OTEL_HEADERS', defaultValue: '');
+
+  // Convenience getters — true only when the corresponding integration
+  // has been provisioned in the ops dashboard.
+  static bool get isClerkEnabled         => clerkPublishableKey.isNotEmpty;
+  static bool get isPosthogEnabled       => posthogKey.isNotEmpty;
+  static bool get isUpstashEnabled       => upstashRedisRestUrl.isNotEmpty &&
+                                            upstashRedisRestToken.isNotEmpty;
+  static bool get isMeilisearchEnabled   => meilisearchHost.isNotEmpty;
+  static bool get isResendEnabled        => resendEnabled;
+  static bool get isStripeEnabled        => stripePublishableKey.isNotEmpty;
+  static bool get isFcmEnabled           => fcmEnabled;
+  static bool get isOtelEnabled          => otelEndpoint.isNotEmpty;
+  static bool get isSentryEnabled        => sentryDsn.isNotEmpty;
 }
 
 /// The eighteen + two emotional story channels.
@@ -115,7 +237,7 @@ class FeedCategories {
       case 'relationships':     return 'Dating & Love';
       case 'trauma':            return 'Comebacks';
       case 'questions':         return 'Ask';
-      case 'friendship':        return 'Friends';
+      case 'friendship':        return 'Connections';
       case 'adulting':          return 'Adulting';
       case 'regrets':           return 'Regrets';
       case 'secrets':           return 'Secrets';

@@ -14,7 +14,9 @@ class CreateTribeScreen extends ConsumerStatefulWidget {
 class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   final _name = TextEditingController();
   final _desc = TextEditingController();
+  final _customCategory = TextEditingController();
   String _category = 'interest_group';
+  bool _customMode = false;
   bool _private = false;
   bool _submitting = false;
 
@@ -25,12 +27,23 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
     ('hobby',           'Hobby',      Icons.palette_outlined),
     ('support',         'Support',    Icons.favorite_outline),
     ('venting',         'Venting',    Icons.bedtime_outlined),
+    ('wellness',        'Wellness',   Icons.spa_outlined),
+    ('creativity',      'Creativity', Icons.brush_outlined),
+    ('faith',           'Faith',      Icons.auto_awesome_outlined),
+    ('lgbtq',           'LGBTQ+',     Icons.diversity_1_outlined),
+    ('grief',           'Grief',      Icons.filter_vintage_outlined),
+    ('growth',          'Growth',     Icons.trending_up_rounded),
+    ('study',           'Study',      Icons.menu_book_outlined),
+    ('gaming',          'Gaming',     Icons.sports_esports_outlined),
+    ('music',           'Music',      Icons.music_note_outlined),
+    ('fitness',         'Fitness',    Icons.fitness_center_outlined),
   ];
 
   @override
   void dispose() {
     _name.dispose();
     _desc.dispose();
+    _customCategory.dispose();
     super.dispose();
   }
 
@@ -40,11 +53,20 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
       _toast('Pick a name with at least 3 characters.');
       return;
     }
+    // Custom category: lowercase, slug-ish, 2–40 chars (matches the DB check).
+    var category = _category;
+    if (_customMode) {
+      category = _customCategory.text.trim().toLowerCase();
+      if (category.length < 2) {
+        _toast('Give your category a name (2+ characters).');
+        return;
+      }
+    }
     setState(() => _submitting = true);
     try {
       final tribe = await ref.read(repositoryProvider).createTribe(
             name: name,
-            category: _category,
+            category: category,
             description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
             isPrivate: _private,
           );
@@ -67,6 +89,7 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(title: const Text('Create a Tribe')),
       body: ListView(
         padding: const EdgeInsets.all(20),
@@ -104,20 +127,44 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
             children: [
               for (final (key, label, icon) in _options)
                 ChoiceChip(
-                  selected: _category == key,
-                  onSelected: (_) => setState(() => _category = key),
+                  selected: !_customMode && _category == key,
+                  onSelected: (_) => setState(() {
+                    _customMode = false;
+                    _category = key;
+                  }),
                   avatar: Icon(icon, size: 14, color: scheme.primary),
                   label: Text(label),
                 ),
+              // Create-your-own category.
+              ChoiceChip(
+                selected: _customMode,
+                onSelected: (_) => setState(() => _customMode = true),
+                avatar: Icon(Icons.add_rounded, size: 16, color: scheme.primary),
+                label: const Text('Custom'),
+              ),
             ],
           ),
+          if (_customMode) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _customCategory,
+              maxLength: 40,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Your category',
+                hintText: 'e.g. Night owls, Recovery, K-pop',
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
           SwitchListTile.adaptive(
             value: _private,
             onChanged: (v) => setState(() => _private = v),
             title: const Text('Private Tribe'),
-            subtitle: const Text(
-              'Only members can see posts. Joining stays free for v1.',
+            subtitle: Text(
+              _private
+                  ? 'Only members can see and post. It stays out of public feeds.'
+                  : 'Anyone can see posts. Turn on to make it members-only.',
             ),
           ),
           const SizedBox(height: 24),

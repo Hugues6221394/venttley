@@ -24,6 +24,8 @@ export {
   // Navigation
   LayoutDashboard,
   ShieldAlert,
+  LifeBuoy,
+  Image as ImageIcon,
   Users,
   Users2,
   LineChart,

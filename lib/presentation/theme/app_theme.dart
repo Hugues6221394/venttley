@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../../animation/transitions/page_transitions.dart';
 import 'colors.dart';
 
 /// Venttly global theme — warmth, safety, emotional comfort.
@@ -15,6 +17,10 @@ class VentlyTheme {
     return base.copyWith(
       scaffoldBackgroundColor: VentlyColors.blushPink,
       canvasColor: VentlyColors.blushPink,
+      // System transitions (top of the motion hierarchy): shared-axis on
+      // Android/desktop, Cupertino on iOS to keep the native edge-swipe
+      // back gesture. Plays nicely with Hero transitions on ProfileAvatar.
+      pageTransitionsTheme: VentlyPageTransitions.theme,
       colorScheme: const ColorScheme.light(
         primary: VentlyColors.berryMagenta,
         onPrimary: Colors.white,
@@ -27,7 +33,9 @@ class VentlyTheme {
       ),
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
-        backgroundColor: VentlyColors.blushPink,
+        // Transparent so the app-wide premium gradient shows through —
+        // screens with opaque scaffolds still read as their own color.
+        backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
@@ -144,6 +152,7 @@ class VentlyTheme {
     return base.copyWith(
       scaffoldBackgroundColor: VentlyColors.charcoal,
       canvasColor: VentlyColors.charcoal,
+      pageTransitionsTheme: VentlyPageTransitions.theme,
       colorScheme: const ColorScheme.dark(
         primary: VentlyColors.berryDesat,
         onPrimary: VentlyColors.charcoal,
@@ -156,7 +165,7 @@ class VentlyTheme {
       ),
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
-        backgroundColor: VentlyColors.charcoal,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,

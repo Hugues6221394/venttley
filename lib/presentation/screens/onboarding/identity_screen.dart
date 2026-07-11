@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/user_friendly_errors.dart';
 import '../../../data/repositories/vently_repository.dart';
 import '../../../data/services/identity_service.dart';
 import '../../../data/services/supabase_backend.dart'
@@ -112,15 +113,18 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       context.go('/onboarding/key', extra: result.recoveryPhrase);
     } on AgeGateBlocked catch (e) {
       setState(() => _error = e.toString());
-    } on UsernameTakenException catch (e) {
-      setState(() => _error = e.toString());
+    } on UsernameTakenException {
+      setState(() => _error = UserFriendlyErrors.message(
+            'already exists',
+            fallback: 'That username is taken. Try another one.',
+          ));
       _shuffleName();
     } on EmailConfirmationStillOnException catch (e) {
       setState(() => _error = e.toString());
     } on FormatException catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = UserFriendlyErrors.message(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -130,6 +134,7 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.close),

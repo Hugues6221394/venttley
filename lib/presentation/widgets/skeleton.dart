@@ -134,6 +134,66 @@ class TribeSkeletonList extends StatelessWidget {
   }
 }
 
+/// Horizontal whisper cards on Home.
+class WhisperRailSkeleton extends StatelessWidget {
+  const WhisperRailSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 176,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: 4,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (_, __) => _Surface(
+          child: Container(
+            width: 132,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Full-screen whisper feed first paint.
+class WhisperFeedSkeleton extends StatelessWidget {
+  const WhisperFeedSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Colors.black,
+      child: _Surface(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 100, 20, 120),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Spacer(),
+              Container(
+                height: 72,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _bar(14, 180),
+              const SizedBox(height: 8),
+              _bar(10, 240),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class QuestionsSkeletonList extends StatelessWidget {
   const QuestionsSkeletonList({super.key, this.count = 3});
   final int count;

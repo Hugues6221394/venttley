@@ -25,6 +25,7 @@ class _RecoveryKeyScreenState extends ConsumerState<RecoveryKeyScreen> {
     final scheme = Theme.of(context).colorScheme;
     final words = widget.phrase.split(RegExp(r'\s+'));
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(title: const Text('Your Recovery Phrase')),
       body: SafeArea(
         child: Padding(

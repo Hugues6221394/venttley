@@ -14,13 +14,7 @@ class VentlyLogo extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: size,
-          height: size,
-          child: CustomPaint(
-            painter: _HeartBubblePainter(VentlyColors.berryMagenta),
-          ),
-        ),
+        VentlyGlyph(size: size),
         const SizedBox(width: 6),
         Text(
           'Venttly',
@@ -32,6 +26,28 @@ class VentlyLogo extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Just the heart-bubble mark, tintable — used on gradient buttons where the
+/// full wordmark doesn't fit.
+class VentlyGlyph extends StatelessWidget {
+  const VentlyGlyph({
+    super.key,
+    this.size = 28,
+    this.color = VentlyColors.berryMagenta,
+  });
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _HeartBubblePainter(color)),
     );
   }
 }
@@ -57,7 +73,12 @@ class _HeartBubblePainter extends CustomPainter {
       ..close();
     canvas.drawPath(path, paint);
 
-    final dot = Paint()..color = Colors.white;
+    // Keep the three "speech" dots visible when the glyph itself is white
+    // (e.g. on gradient buttons).
+    final dot = Paint()
+      ..color = color.computeLuminance() > 0.7
+          ? VentlyColors.berryMagenta
+          : Colors.white;
     final r = w * 0.045;
     canvas.drawCircle(Offset(w * 0.36, h * 0.50), r, dot);
     canvas.drawCircle(Offset(w * 0.50, h * 0.50), r, dot);

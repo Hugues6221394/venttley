@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../animation/widgets/animated_button.dart';
 import '../../../core/providers.dart';
+import '../../../core/user_friendly_errors.dart';
 import '../../../data/services/identity_service.dart';
 import '../../../data/services/supabase_backend.dart'
-    show InvalidCredentialsException;
-import '../../widgets/vently_logo.dart';
+    show InvalidCredentialsException, MfaChallengeRequiredException;
+import '../../theme/colors.dart';
 
 /// Returning-user entry: sign in with username + password, or recover with
 /// the 12-word phrase.
@@ -18,6 +20,36 @@ class RecoverScreen extends ConsumerStatefulWidget {
 }
 
 enum _Mode { signIn, phrase }
+
+class _SignInLogo extends StatelessWidget {
+  const _SignInLogo();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 188,
+        height: 148,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: VentlyColors.berryMagenta.withOpacity(0.10),
+              blurRadius: 26,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Image.asset(
+          'assets/images/venttly_logo.png',
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+        ),
+      ),
+    );
+  }
+}
 
 class _RecoverScreenState extends ConsumerState<RecoverScreen> {
   _Mode _mode = _Mode.signIn;
@@ -57,13 +89,85 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
           );
       if (!mounted) return;
       context.go('/feed');
-    } on InvalidCredentialsException catch (e) {
-      setState(() => _error = e.toString());
+    } on MfaChallengeRequiredException catch (e) {
+      final verified = await _promptTotp(e.factorId);
+      if (!mounted) return;
+      if (verified) {
+        // Re-fetch the profile now that we're at AAL2.
+        try {
+          await ref.read(sessionProvider.notifier).restore();
+        } catch (_) {}
+        if (!mounted) return;
+        context.go('/feed');
+      } else {
+        setState(() => _error = 'Two-factor verification cancelled.');
+      }
+    } on InvalidCredentialsException {
+      setState(() => _error = UserFriendlyErrors.message(
+            'invalid credentials',
+            fallback: 'That username or password didn\'t work. Double-check and try again.',
+          ));
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = UserFriendlyErrors.message(e, fallback: _friendlyError(e)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<bool> _promptTotp(String factorId) async {
+    final ctl = TextEditingController();
+    String? error;
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setLocal) {
+        return AlertDialog(
+          title: const Text('Two-factor verification'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                  'Enter the 6-digit code from your authenticator app.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctl,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText: '6-digit code',
+                  errorText: error,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                final code = ctl.text.trim();
+                if (code.length != 6) {
+                  setLocal(() => error = 'Enter all 6 digits.');
+                  return;
+                }
+                try {
+                  await ref
+                      .read(repositoryProvider)
+                      .verifyMfa(factorId: factorId, code: code);
+                  if (ctx.mounted) Navigator.pop(ctx, true);
+                } catch (_) {
+                  setLocal(() => error = 'Code didn\'t match.');
+                }
+              },
+              child: const Text('Verify'),
+            ),
+          ],
+        );
+      }),
+    );
+    return ok == true;
   }
 
   Future<void> _recover() async {
@@ -101,23 +205,27 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
       }
       context.go('/feed');
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = _friendlyError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  String _friendlyError(Object error) =>
+      UserFriendlyErrors.message(error, fallback: 'Could not sign in right now. Please try again.');
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: ListView(
             children: [
-              const Center(child: VentlyLogo(size: 36)),
+              const _SignInLogo(),
               const SizedBox(height: 24),
               _ModeSwitch(
                 mode: _mode,
@@ -152,20 +260,14 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
                   ),
                 ),
               const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _loading
-                    ? null
-                    : (_mode == _Mode.signIn ? _signIn : _recover),
-                child: _loading
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2),
-                      )
-                    : Text(_mode == _Mode.signIn
-                        ? 'Enter the Circle'
-                        : 'Restore my sanctuary'),
+              AnimatedButton(
+                label: _mode == _Mode.signIn
+                    ? 'Enter the Circle'
+                    : 'Restore my sanctuary',
+                state: _loading
+                    ? VentlyButtonState.loading
+                    : VentlyButtonState.idle,
+                onPressed: _mode == _Mode.signIn ? _signIn : _recover,
               ),
               const SizedBox(height: 24),
               Center(

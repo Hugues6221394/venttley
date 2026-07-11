@@ -2,8 +2,13 @@ import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/analytics_events.dart';
 import '../../core/constants.dart';
 import '../../domain/entities/entities.dart';
+import '../../domain/keeper/keeper_mode.dart';
+import '../../domain/keeper/keeper_studio_v2.dart';
+import '../../domain/tribe/tribe_chat_hub.dart';
+import '../services/analytics_service.dart';
 import '../services/cache_service.dart';
 import '../services/identity_service.dart';
 import '../services/mock_backend.dart';
@@ -102,6 +107,193 @@ class VentlyRepository {
     );
     return (user: user, recoveryPhrase: phrase);
   }
+
+  /// Email-based account creation. `user` is null when email
+  /// confirmation is enabled on the Supabase project — the caller
+  /// then routes to a "check your inbox" screen and the user finishes
+  /// signing in after clicking the confirm link.
+  Future<({AppUser? user, String recoveryPhrase})> registerAccountWithEmail({
+    required DateTime birthDate,
+    required String email,
+    required String username,
+    required String password,
+    required String avatarSeed,
+  }) async {
+    if (!IdentityService.usernamePattern.hasMatch(username)) {
+      throw const FormatException(
+        'Usernames are 3–20 letters/numbers/underscores.',
+      );
+    }
+    if (!_emailPattern.hasMatch(email)) {
+      throw const FormatException('That doesn\'t look like a valid email.');
+    }
+    if (password.length < 8) {
+      throw const FormatException('Password must be at least 8 characters.');
+    }
+    final age = _ageFrom(birthDate);
+    if (age < VentlyConfig.minAge) {
+      throw AgeGateBlocked();
+    }
+    final tier =
+        age <= VentlyConfig.restrictedMaxAge ? 'restricted_minor' : 'standard';
+
+    final phrase = _identity.generateRecoveryPhrase();
+    final sealed = await _identity.sealPassword(
+      password: password,
+      phrase: phrase,
+    );
+
+    final live = _live;
+    if (live == null) {
+      throw StateError('Email signup needs the live backend.');
+    }
+    final user = await live.signUpWithEmail(
+      email: email,
+      password: password,
+      username: username,
+      avatarSeed: avatarSeed,
+      birthYear: birthDate.year,
+      safetyTier: tier,
+      recoveryBlob: sealed.blob,
+      recoverySalt: sealed.salt,
+    );
+
+    await _identity.persistSession(
+      username: username,
+      avatarSeed: avatarSeed,
+      birthYear: birthDate.year,
+      safetyTier: tier,
+      recoveryPhrase: phrase,
+    );
+    return (user: user, recoveryPhrase: phrase);
+  }
+
+  /// Email-based sign-in. Mirrors [signIn] but with a real email.
+  Future<AppUser> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    final live = _live;
+    if (live == null) {
+      throw StateError('Email sign-in needs the live backend.');
+    }
+    final user = await live.signInWithEmail(email: email, password: password);
+    await _identity.persistSession(
+      username: user.anonymousPseudonym,
+      avatarSeed: user.avatarSeed,
+      birthYear: user.birthYear ?? DateTime.now().year - 18,
+      safetyTier: user.safetyTier,
+    );
+    return user;
+  }
+
+  // ===================== Optional real-email verification =================
+
+  /// True when the signed-in account uses a real email (vs an anonymous
+  /// synthetic handle). Only these accounts are gated on verification.
+  bool get hasRealEmail => _live?.hasRealEmail ?? false;
+
+  String? get currentEmail => _live?.currentEmail;
+
+  bool get isEmailVerified => currentUser?.emailVerified ?? false;
+
+  /// Email + queue a fresh 6-digit verification code.
+  Future<void> sendEmailVerification() async {
+    final live = _live;
+    if (live == null) return; // mock/dev: nothing to verify
+    await live.sendEmailVerification();
+  }
+
+  /// Confirm a 6-digit code. Returns true when the email is now verified.
+  Future<bool> confirmEmailVerification(String code) async {
+    final live = _live;
+    if (live == null) return true;
+    return live.confirmEmailVerification(code.trim());
+  }
+
+  /// Re-read the verified flag from the backend (best-effort).
+  Future<bool> refreshEmailVerified() async {
+    final live = _live;
+    if (live == null) return true;
+    return live.refreshEmailVerified();
+  }
+
+  // ===================== Password & security ==============================
+
+  /// Rotate the signed-in user's password (re-auths with the current one).
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    if (newPassword.length < 8) {
+      throw const FormatException('Password must be at least 8 characters.');
+    }
+    if (newPassword == currentPassword) {
+      throw const FormatException('Choose a password you haven\'t used here.');
+    }
+    final live = _live;
+    if (live == null) return;
+    await live.changePassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
+  }
+
+  /// Attach / change a real recovery email (Supabase emails a confirm link).
+  Future<void> setRecoveryEmail(String email) async {
+    final live = _live;
+    if (live == null) return;
+    await live.setRecoveryEmail(email);
+  }
+
+  /// Sign out of every device (revokes all refresh tokens).
+  Future<void> signOutEverywhere() async {
+    final live = _live;
+    if (live == null) return logout();
+    await live.signOutEverywhere();
+  }
+
+  // ===================== Optional social sign-in ==========================
+
+  /// Launch Google OAuth. Returns false if the flow could not start.
+  Future<bool> signInWithGoogle() async {
+    final live = _live;
+    if (live == null) {
+      throw StateError('Google sign-in needs the live backend.');
+    }
+    return live.signInWithGoogle();
+  }
+
+  /// Send an SMS OTP to [phone] (E.164).
+  Future<void> startPhoneOtp(String phone) async {
+    final live = _live;
+    if (live == null) {
+      throw StateError('Phone sign-in needs the live backend.');
+    }
+    await live.startPhoneOtp(phone);
+  }
+
+  /// Verify the SMS OTP and finish sign-in.
+  Future<AppUser> verifyPhoneOtp({
+    required String phone,
+    required String token,
+  }) async {
+    final live = _live;
+    if (live == null) {
+      throw StateError('Phone sign-in needs the live backend.');
+    }
+    final user = await live.verifyPhoneOtp(phone: phone, token: token);
+    await _identity.persistSession(
+      username: user.anonymousPseudonym,
+      avatarSeed: user.avatarSeed,
+      birthYear: user.birthYear ?? DateTime.now().year - 18,
+      safetyTier: user.safetyTier,
+    );
+    return user;
+  }
+
+  static final RegExp _emailPattern =
+      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   /// Sign in an existing account.
   Future<AppUser> signIn({
@@ -205,13 +397,30 @@ class VentlyRepository {
       controller.onCancel = () => sub.cancel();
       return controller.stream;
     }
-    return _mock.postsStream.map((_) => _mock.feed(
-          category: category,
-          mood: mood,
-          tribeSlug: tribeSlug,
-          locationBucket: locationBucket,
-          sort: sort,
-        ));
+    return _mockSnapshotStream(
+      _mock.postsStream,
+      () => _mock.feed(
+        category: category,
+        mood: mood,
+        tribeSlug: tribeSlug,
+        locationBucket: locationBucket,
+        sort: sort,
+      ),
+    );
+  }
+
+  /// Mock streams are bare broadcast controllers: they only emit on writes,
+  /// so a listener that subscribes after the last write waits forever. Wrap
+  /// them so every subscription gets the current snapshot immediately.
+  Stream<T> _mockSnapshotStream<T>(
+      Stream<dynamic> ticks, T Function() snapshot) {
+    final controller = StreamController<T>();
+    late StreamSubscription<dynamic> sub;
+    void emit() => controller.add(snapshot());
+    sub = ticks.listen((_) => emit());
+    controller.onListen = emit;
+    controller.onCancel = () => sub.cancel();
+    return controller.stream;
   }
 
   Future<List<Post>> feed({
@@ -220,6 +429,8 @@ class VentlyRepository {
     String? tribeSlug,
     String? locationBucket,
     String sort = 'fresh',
+    int limit = 30,
+    int offset = 0,
   }) {
     final live = _live;
     if (live != null) {
@@ -229,6 +440,8 @@ class VentlyRepository {
         tribeSlug: tribeSlug,
         locationBucket: locationBucket,
         sort: sort,
+        limit: limit,
+        offset: offset,
       );
     }
     return Future.value(_mock.feed(
@@ -237,7 +450,29 @@ class VentlyRepository {
       tribeSlug: tribeSlug,
       locationBucket: locationBucket,
       sort: sort,
+      limit: limit,
+      offset: offset,
     ));
+  }
+
+  Future<List<Post>> friendStories({int limit = 24}) async {
+    final live = _live;
+    if (live != null) return live.friendStories(limit: limit);
+    final me = _mock.me;
+    if (me == null) return const <Post>[];
+    final friends = await _mock.myFriends();
+    final friendIds = friends.map((f) => f.userId).toSet();
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    final stories = _mock
+        .feed(sort: 'hot', limit: limit * 4)
+        .where((p) =>
+            p.isWhisper &&
+            p.authorId != null &&
+            p.createdAt.isAfter(cutoff) &&
+            (p.authorId == me.userId || friendIds.contains(p.authorId)))
+        .take(limit)
+        .toList();
+    return stories;
   }
 
   // ===================== Profile location =====================
@@ -335,6 +570,35 @@ class VentlyRepository {
     _mock.kickMember(tribeId: tribeId, userId: userId, reason: reason);
   }
 
+  /// Remove AND block from rejoining (rule enforcement, migration 0071).
+  Future<void> banMember({
+    required String tribeId,
+    required String userId,
+    String? reason,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.banMember(tribeId: tribeId, userId: userId, reason: reason);
+    }
+    _mock.kickMember(tribeId: tribeId, userId: userId, reason: reason);
+  }
+
+  Future<void> unbanMember({
+    required String tribeId,
+    required String userId,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.unbanMember(tribeId: tribeId, userId: userId);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> tribeBans(String tribeId) async {
+    final live = _live;
+    if (live != null) return live.tribeBans(tribeId);
+    return const [];
+  }
+
   Future<void> transferKeeper({
     required String tribeId,
     required String toUserId,
@@ -377,12 +641,34 @@ class VentlyRepository {
     required String category,
     required String mood,
     String? tribeId,
+    String? spaceId,
     String? personaId,
     bool isWhisper = false,
-  }) {
+    String? imagePath,
+    String? imageUrl,
+    String? audioPath,
+    String? audioUrl,
+    int? audioDurationSeconds,
+  }) async {
     final live = _live;
+    final Post post;
     if (live != null) {
-      return live.createPost(
+      post = await live.createPost(
+        content: content,
+        category: category,
+        mood: mood,
+        tribeId: tribeId,
+        spaceId: spaceId,
+        personaId: personaId,
+        isWhisper: isWhisper,
+        imagePath: imagePath,
+        imageUrl: imageUrl,
+        audioPath: audioPath,
+        audioUrl: audioUrl,
+        audioDurationSeconds: audioDurationSeconds,
+      );
+    } else {
+      post = await _mock.createPost(
         content: content,
         category: category,
         mood: mood,
@@ -391,13 +677,71 @@ class VentlyRepository {
         isWhisper: isWhisper,
       );
     }
-    return _mock.createPost(
-      content: content,
-      category: category,
-      mood: mood,
-      tribeId: tribeId,
-      personaId: personaId,
-      isWhisper: isWhisper,
+    // PII rule: never ship `content` — only its dimensions.
+    AnalyticsService.instance.track(
+      isWhisper ? Events.storyPublished : Events.postCreated,
+      props: {
+        'category':     category,
+        'mood':         mood,
+        'has_image':    imageUrl != null,
+        'has_audio':    audioUrl != null,
+        'has_tribe':    tribeId != null,
+        'has_persona':  personaId != null,
+        'content_chars': content.length,
+      },
+    );
+    return post;
+  }
+
+  // ===================== Premium home (migration 0038) =====================
+
+  Future<HomeStats> homeStats() {
+    final live = _live;
+    if (live != null) return live.homeStats();
+    return Future.value(_mock.homeStats());
+  }
+
+  Future<List<TrendingCategory>> trendingCategories({int limit = 6}) {
+    final live = _live;
+    if (live != null) return live.trendingCategories(limit: limit);
+    return Future.value(_mock.trendingCategories(limit: limit));
+  }
+
+  Future<List<TrendingVoice>> trendingVoices({int limit = 6}) {
+    final live = _live;
+    if (live != null) return live.trendingVoices(limit: limit);
+    return Future.value(_mock.trendingVoices(limit: limit));
+  }
+
+  Future<bool> markStoryViewed(String postId) {
+    final live = _live;
+    if (live != null) return live.markStoryViewed(postId);
+    return Future.value(_mock.markStoryViewed(postId));
+  }
+
+  Future<List<SearchHit>> searchGlobal(String query, {int limit = 24}) {
+    final live = _live;
+    if (live != null) return live.searchGlobal(query, limit: limit);
+    return Future.value(_mock.searchGlobal(query, limit: limit));
+  }
+
+  Future<({String path, String url})> uploadPostImage({
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.uploadPostImage(
+        bytes: bytes,
+        extension: extension,
+        contentType: contentType,
+      );
+    }
+    return _mock.uploadPostImage(
+      bytes: bytes,
+      extension: extension,
+      contentType: contentType,
     );
   }
 
@@ -457,10 +801,40 @@ class VentlyRepository {
     return _mock.setPostCrisis(postId, level);
   }
 
+  Future<void> setTribeMessageCrisis(String messageId, String level) {
+    final live = _live;
+    if (live != null) return live.setTribeMessageCrisis(messageId, level);
+    return Future.value();
+  }
+
+  Future<void> setChatMessageCrisis(String messageId, String level) {
+    final live = _live;
+    if (live != null) return live.setChatMessageCrisis(messageId, level);
+    return Future.value();
+  }
+
   Future<List<CrisisHelpline>> crisisResources({String? region}) {
     final live = _live;
     if (live != null) return live.crisisResources(region: region);
     return _mock.crisisResources(region: region);
+  }
+
+  Future<List<AutomodRule>> automodRules() {
+    final live = _live;
+    if (live != null) return live.automodRules();
+    return Future.value(const <AutomodRule>[]);
+  }
+
+  Future<Map<String, dynamic>?> moderateRemote(String text) {
+    final live = _live;
+    if (live != null) return live.moderateRemote(text);
+    return Future.value(null);
+  }
+
+  Future<Map<String, dynamic>> exportMyData() {
+    final live = _live;
+    if (live != null) return live.exportMyData();
+    return Future.value(<String, dynamic>{});
   }
 
   // ===================== Friends graph =====================
@@ -471,10 +845,16 @@ class VentlyRepository {
     return _mock.friendStatus(otherUserId);
   }
 
-  Future<String> sendFriendRequest(String otherUserId, {String? note}) {
+  Future<String> sendFriendRequest(String otherUserId, {String? note}) async {
     final live = _live;
-    if (live != null) return live.sendFriendRequest(otherUserId, note: note);
-    return _mock.sendFriendRequest(otherUserId, note: note);
+    final id = live != null
+        ? await live.sendFriendRequest(otherUserId, note: note)
+        : await _mock.sendFriendRequest(otherUserId, note: note);
+    AnalyticsService.instance.track(
+      Events.friendRequestSent,
+      props: {'has_note': note != null && note.trim().isNotEmpty},
+    );
+    return id;
   }
 
   Future<void> acceptFriendRequest(String friendshipId) {
@@ -507,10 +887,547 @@ class VentlyRepository {
     return _mock.unblockUser(otherUserId);
   }
 
+  Future<DmRoomPrefs> dmRoomPrefs(String roomId) {
+    final live = _live;
+    if (live != null) return live.dmRoomPrefs(roomId);
+    return Future.value(DmRoomPrefs.empty);
+  }
+
+  Future<void> setDmRoomPref({
+    required String roomId,
+    bool? muted,
+    String? peerNickname,
+    bool clearNickname = false,
+    int? disappearingSeconds,
+    String? theme,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.setDmRoomPref(
+        roomId: roomId,
+        muted: muted,
+        peerNickname: peerNickname,
+        clearNickname: clearNickname,
+        disappearingSeconds: disappearingSeconds,
+        theme: theme,
+      );
+    }
+    return Future.value();
+  }
+
+  Future<int> roomDisappearingSeconds(String roomId) {
+    final live = _live;
+    if (live != null) return live.roomDisappearingSeconds(roomId);
+    return Future.value(0);
+  }
+
+  Future<void> setRoomDisappearing(String roomId, int seconds) {
+    final live = _live;
+    if (live != null) return live.setRoomDisappearing(roomId, seconds);
+    return Future.value();
+  }
+
   Future<List<FriendSummary>> myFriends() {
     final live = _live;
     if (live != null) return live.myFriends();
     return _mock.myFriends();
+  }
+
+  Future<bool> toggleFriendFavorite(String friendshipId) {
+    final live = _live;
+    if (live != null) return live.toggleFriendFavorite(friendshipId);
+    return Future.value(false);
+  }
+
+  Future<List<FriendSuggestion>> friendSuggestions({int limit = 6}) {
+    final live = _live;
+    if (live != null) return live.friendSuggestions(limit: limit);
+    return Future.value(const <FriendSuggestion>[]);
+  }
+
+  // ===================== Tribe group chat (migration 0041) =====================
+
+  Future<List<TribeMessage>> tribeMessages(String tribeId, {int limit = 80}) {
+    final live = _live;
+    if (live != null) return live.tribeMessages(tribeId, limit: limit);
+    return Future.value(const <TribeMessage>[]);
+  }
+
+  Stream<List<TribeMessage>> watchTribeMessages(String tribeId) {
+    final live = _live;
+    if (live != null) return live.watchTribeMessages(tribeId);
+    return const Stream<List<TribeMessage>>.empty();
+  }
+
+  Future<String> sendTribeMessage({
+    required String tribeId,
+    String? content,
+    String? personaId,
+    String? imagePath,
+    String? imageUrl,
+    String? audioPath,
+    String? audioUrl,
+    int? audioDurationSeconds,
+    String? replyToMessageId,
+    Map<String, dynamic>? metadata,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.sendTribeMessage(
+        tribeId: tribeId,
+        content: content,
+        personaId: personaId,
+        imagePath: imagePath,
+        imageUrl: imageUrl,
+        audioPath: audioPath,
+        audioUrl: audioUrl,
+        audioDurationSeconds: audioDurationSeconds,
+        replyToMessageId: replyToMessageId,
+        metadata: metadata,
+      );
+    }
+    return Future.value('mock-message-id');
+  }
+
+  Future<void> voteTribeChatPoll({
+    required String messageId,
+    required String optionId,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.voteTribeChatPoll(
+        messageId: messageId,
+        optionId: optionId,
+      );
+    }
+    return Future.value();
+  }
+
+  Future<void> closeTribeChatPoll(String messageId) {
+    final live = _live;
+    if (live != null) return live.closeTribeChatPoll(messageId);
+    return Future.value();
+  }
+
+  Future<void> setTribeMessageReaction({
+    required String messageId,
+    required String emoji,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.setTribeMessageReaction(
+        messageId: messageId,
+        emoji: emoji,
+      );
+    }
+    return Future.value();
+  }
+
+  Future<({String path, String url})> uploadTribeChatImage({
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.uploadTribeChatImage(
+        bytes: bytes,
+        extension: extension,
+        contentType: contentType,
+      );
+    }
+    return Future.value((path: 'mock/path.jpg', url: 'mock://chat/path.jpg'));
+  }
+
+  Future<int> tribeChatPresence(String tribeId) {
+    final live = _live;
+    if (live != null) return live.tribeChatPresence(tribeId);
+    return Future.value(0);
+  }
+
+  Future<void> tribeChatHeartbeat(String tribeId) {
+    final live = _live;
+    if (live != null) return live.tribeChatHeartbeat(tribeId);
+    return Future.value();
+  }
+
+  Future<List<TribeOnlineMember>> tribeOnlineMembers(String tribeId) {
+    final live = _live;
+    if (live != null) return live.tribeOnlineMembers(tribeId);
+    return Future.value(const []);
+  }
+
+  Future<void> setTribeAvatar({
+    required String tribeId,
+    required String avatarUrl,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.setTribeAvatar(tribeId: tribeId, avatarUrl: avatarUrl);
+    }
+    return Future.value();
+  }
+
+  Future<({String path, String url})> uploadTribeAvatar({
+    required String tribeId,
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.uploadTribeAvatar(
+        tribeId: tribeId,
+        bytes: bytes,
+        extension: extension,
+        contentType: contentType,
+      );
+    }
+    return Future.value((path: 'mock/tribe.jpg', url: 'mock://tribe.jpg'));
+  }
+
+  Future<({String path, String url})> uploadTribeChatAudio({
+    required List<int> bytes,
+    String extension = 'm4a',
+    String contentType = 'audio/mp4',
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.uploadTribeChatAudio(
+        bytes: bytes,
+        extension: extension,
+        contentType: contentType,
+      );
+    }
+    return Future.value((path: 'mock/audio.m4a', url: 'mock://audio.m4a'));
+  }
+
+  Future<void> setTribeChatSettings({
+    required String tribeId,
+    required Map<String, dynamic> patch,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.setTribeChatSettings(tribeId: tribeId, patch: patch);
+    }
+    return Future.value();
+  }
+
+  Future<void> markTribeChatRead(String tribeId) {
+    final live = _live;
+    if (live != null) return live.markTribeChatRead(tribeId);
+    return Future.value();
+  }
+
+  Future<List<TribeChatInboxSummary>> tribeChatInbox() {
+    final live = _live;
+    if (live != null) return live.tribeChatInbox();
+    return Future.value(const []);
+  }
+
+  Future<List<TribeChatMediaItem>> tribeChatMedia(String tribeId,
+      {int limit = 60}) {
+    final live = _live;
+    if (live != null) return live.tribeChatMedia(tribeId, limit: limit);
+    return Future.value(const []);
+  }
+
+  Future<void> pinTribeMessage({
+    required String tribeId,
+    required String messageId,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.pinTribeMessage(tribeId: tribeId, messageId: messageId);
+    }
+    return Future.value();
+  }
+
+  Future<void> unpinTribeMessage(String tribeId) {
+    final live = _live;
+    if (live != null) return live.unpinTribeMessage(tribeId);
+    return Future.value();
+  }
+
+  Future<({bool hugged, int hugsCount})> toggleTribeMessageHug(
+      String messageId) {
+    final live = _live;
+    if (live != null) return live.toggleTribeMessageHug(messageId);
+    return Future.value((hugged: false, hugsCount: 0));
+  }
+
+  void broadcastTribeTyping(String tribeId, {required String pseudonym}) {
+    _live?.broadcastTribeTyping(tribeId, pseudonym: pseudonym);
+  }
+
+  Stream<List<TribeTypingUser>> watchTribeTyping(String tribeId) {
+    final live = _live;
+    if (live != null) return live.watchTribeTyping(tribeId);
+    return const Stream.empty();
+  }
+
+  // ===================== Plugz V2 moderation (0045) =====================
+
+  Future<List<TribeKeywordFilter>> tribeKeywordFilters(String tribeId) {
+    final live = _live;
+    if (live != null) return live.tribeKeywordFilters(tribeId);
+    return Future.value(const <TribeKeywordFilter>[]);
+  }
+
+  Future<String?> addKeywordFilter({
+    required String tribeId,
+    required String keyword,
+    String severity = 'soft',
+  }) async {
+    final live = _live;
+    if (live == null) return null;
+    return live.addKeywordFilter(
+      tribeId: tribeId,
+      keyword: keyword,
+      severity: severity,
+    );
+  }
+
+  Future<void> removeKeywordFilter(String filterId) async {
+    final live = _live;
+    if (live == null) return;
+    return live.removeKeywordFilter(filterId);
+  }
+
+  Future<List<TribeMemberWarning>> tribeMemberWarnings(String tribeId) {
+    final live = _live;
+    if (live != null) return live.tribeMemberWarnings(tribeId);
+    return Future.value(const <TribeMemberWarning>[]);
+  }
+
+  Future<String?> warnMember({
+    required String tribeId,
+    required String memberId,
+    required String reason,
+    String severity = 'warning',
+  }) async {
+    final live = _live;
+    if (live == null) return null;
+    return live.warnMember(
+      tribeId: tribeId,
+      memberId: memberId,
+      reason: reason,
+      severity: severity,
+    );
+  }
+
+  Future<void> setTribeRules({
+    required String tribeId,
+    required Map<String, dynamic> rules,
+  }) async {
+    final live = _live;
+    if (live == null) return;
+    return live.setTribeRules(tribeId: tribeId, rules: rules);
+  }
+
+  // ===================== Whispers (migration 0042) =====================
+
+  Future<List<Whisper>> listWhispers({
+    int limit = 30,
+    int offset = 0,
+    String? category,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.listWhispers(
+        limit: limit,
+        offset: offset,
+        category: category,
+      );
+    }
+    return Future.value(const <Whisper>[]);
+  }
+
+  Future<List<Whisper>> whispersForAuthor(String userId, {int limit = 12}) {
+    final live = _live;
+    if (live != null) return live.whispersForAuthor(userId, limit: limit);
+    return Future.value(const <Whisper>[]);
+  }
+
+  Future<bool> toggleWhisperLike(String whisperId) {
+    final live = _live;
+    if (live != null) return live.toggleWhisperLike(whisperId);
+    return Future.value(false);
+  }
+
+  Future<String?> reactToWhisper(String whisperId, String reaction) {
+    final live = _live;
+    if (live != null) return live.reactToWhisper(whisperId, reaction);
+    return Future.value(_mock.reactToWhisper(whisperId, reaction));
+  }
+
+  Future<void> bumpWhisperPlays(String whisperId) {
+    final live = _live;
+    if (live != null) return live.bumpWhisperPlays(whisperId);
+    return Future.value();
+  }
+
+  /// Capture a real listen (dedup per user; first listen bumps plays_count).
+  Future<void> recordWhisperListen(String whisperId) {
+    final live = _live;
+    if (live != null) return live.recordWhisperListen(whisperId);
+    return Future.value();
+  }
+
+  /// Public tribes a user belongs to (private ones only visible to fellow
+  /// members). Powers the Tribes section on a public profile.
+  Future<List<Tribe>> userPublicTribes(String userId) {
+    final live = _live;
+    if (live != null) return live.userPublicTribes(userId);
+    return Future.value(const <Tribe>[]);
+  }
+
+  /// Reversible: hides the account app-wide until next login.
+  Future<void> deactivateMyAccount() {
+    final live = _live;
+    if (live != null) return live.deactivateMyAccount();
+    return Future.value();
+  }
+
+  /// Starts the 30-day deletion grace period (deactivates immediately).
+  Future<void> requestAccountDeletion() {
+    final live = _live;
+    if (live != null) return live.requestAccountDeletion();
+    return Future.value();
+  }
+
+  /// Restores a deactivated account / cancels a pending deletion on login.
+  Future<void> reactivateMyAccount() {
+    final live = _live;
+    if (live != null) return live.reactivateMyAccount();
+    return Future.value();
+  }
+
+  /// Update the signed-in user's public profile. Mock backend is a no-op that
+  /// echoes the current user.
+  Future<AppUser?> updateMyProfile({
+    String? pseudonym,
+    String? bio,
+    String? pronouns,
+    String? profilePhotoUrl,
+    String? homeCity,
+    bool clearPhoto = false,
+    bool clearBio = false,
+    bool clearPronouns = false,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.updateMyProfile(
+        pseudonym: pseudonym,
+        bio: bio,
+        pronouns: pronouns,
+        profilePhotoUrl: profilePhotoUrl,
+        homeCity: homeCity,
+        clearPhoto: clearPhoto,
+        clearBio: clearBio,
+        clearPronouns: clearPronouns,
+      );
+    }
+    return _mock.me;
+  }
+
+  Future<List<WhisperComment>> listWhisperComments(
+    String whisperId, {
+    int limit = 50,
+    int offset = 0,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.listWhisperComments(
+        whisperId,
+        limit: limit,
+        offset: offset,
+      );
+    }
+    return Future.value(const <WhisperComment>[]);
+  }
+
+  Future<String> addWhisperComment(
+    String whisperId,
+    String content, {
+    String? personaId,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.addWhisperComment(
+        whisperId,
+        content,
+        personaId: personaId,
+      );
+    }
+    return Future.value('mock-comment-id');
+  }
+
+  Future<bool> toggleWhisperSave(String whisperId) {
+    final live = _live;
+    if (live != null) return live.toggleWhisperSave(whisperId);
+    return Future.value(_mock.toggleWhisperSave(whisperId));
+  }
+
+  Future<List<Whisper>> mySavedWhispers() {
+    final live = _live;
+    if (live != null) return live.mySavedWhispers();
+    return Future.value(_mock.mySavedWhispers());
+  }
+
+  Future<({String path, String url})> uploadWhisperAudio({
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'audio/mp4',
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.uploadWhisperAudio(
+        bytes: bytes,
+        extension: extension,
+        contentType: contentType,
+      );
+    }
+    return Future.value((path: 'mock/whisper.m4a', url: 'mock://whisper'));
+  }
+
+  Future<String> createWhisper({
+    required String audioPath,
+    required String audioUrl,
+    required int audioDurationSeconds,
+    required String category,
+    String? backgroundImageUrl,
+    String voiceFilter = 'none',
+    String? title,
+    String? description,
+    String? personaId,
+  }) async {
+    final live = _live;
+    final id = live != null
+        ? await live.createWhisper(
+            audioPath: audioPath,
+            audioUrl: audioUrl,
+            audioDurationSeconds: audioDurationSeconds,
+            category: category,
+            backgroundImageUrl: backgroundImageUrl,
+            voiceFilter: voiceFilter,
+            title: title,
+            description: description,
+            personaId: personaId,
+          )
+        : 'mock-whisper-id';
+    AnalyticsService.instance.track(
+      Events.whisperPublished,
+      props: {
+        'category':         category,
+        'voice_filter':     voiceFilter,
+        'duration_seconds': audioDurationSeconds,
+        'has_background':   backgroundImageUrl != null,
+        'has_title':        title != null && title.isNotEmpty,
+        'has_persona':      personaId != null,
+      },
+    );
+    return id;
   }
 
   Future<List<FriendRequest>> incomingFriendRequests() {
@@ -535,6 +1452,24 @@ class VentlyRepository {
     final live = _live;
     if (live != null) return live.userProfile(otherUserId);
     return _mock.userProfile(otherUserId);
+  }
+
+  Future<int> hugsReceivedFor(String userId) {
+    final live = _live;
+    if (live != null) return live.hugsReceivedFor(userId);
+    return Future.value(0);
+  }
+
+  Future<String> requestVerification({String? note}) {
+    final live = _live;
+    if (live != null) return live.requestVerification(note: note);
+    return Future.value('pending');
+  }
+
+  Future<String> myVerificationStatus() {
+    final live = _live;
+    if (live != null) return live.myVerificationStatus();
+    return Future.value('none');
   }
 
   // ===================== Plugz Creator Studio =====================
@@ -593,6 +1528,35 @@ class VentlyRepository {
     final live = _live;
     if (live != null) return live.cancelPrompt(tribeId, promptId);
     return _mock.cancelPrompt(tribeId, promptId);
+  }
+
+  Future<void> updatePrompt({
+    required String tribeId,
+    required String promptId,
+    required String text,
+    DateTime? scheduledFor,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.updatePrompt(
+        tribeId: tribeId,
+        promptId: promptId,
+        text: text,
+        scheduledFor: scheduledFor,
+      );
+    }
+    return _mock.updatePrompt(
+      tribeId: tribeId,
+      promptId: promptId,
+      text: text,
+      scheduledFor: scheduledFor,
+    );
+  }
+
+  Future<void> deletePrompt(String tribeId, String promptId) {
+    final live = _live;
+    if (live != null) return live.deletePrompt(tribeId, promptId);
+    return _mock.deletePrompt(tribeId, promptId);
   }
 
   Future<void> setTribeBranding({
@@ -772,6 +1736,31 @@ class VentlyRepository {
     _mock.reportChat(roomId: roomId, reason: reason, note: note);
   }
 
+  Future<void> reportTribeMessage({
+    required String messageId,
+    required String reason,
+    String? note,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.reportTribeMessage(
+          messageId: messageId, reason: reason, note: note);
+    }
+    // Mock backend has no moderation store — treat as a no-op.
+  }
+
+  Future<void> reportChatMessage({
+    required String messageId,
+    required String reason,
+    String? note,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.reportChatMessage(
+          messageId: messageId, reason: reason, note: note);
+    }
+  }
+
   // ===================== Keeper tools =====================
 
   Future<PlugPrompt> createPromptForTribe({
@@ -784,6 +1773,19 @@ class VentlyRepository {
     }
     return Future.value(
         _mock.createPromptForTribe(tribeId: tribeId, text: text));
+  }
+
+  /// Member-authored question to everyone or friends only (migration 0069).
+  Future<PlugPrompt> createUserQuestion({
+    required String text,
+    String audience = 'everyone',
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.createUserQuestion(text: text, audience: audience);
+    }
+    return Future.value(
+        _mock.createUserQuestion(text: text, audience: audience));
   }
 
   Future<List<TribeReport>> tribeReports(String tribeId) {
@@ -880,6 +1882,25 @@ class VentlyRepository {
     return Future.value(_mock.myVents());
   }
 
+  Future<List<Post>> postsByAuthor(
+    String authorId, {
+    int limit = 20,
+    int offset = 0,
+  }) {
+    final key = 'posts:author:$authorId:$limit:$offset';
+    return _cache.getOrLoad(
+      key,
+      () async {
+        final live = _live;
+        if (live != null) {
+          return live.postsByAuthor(authorId, limit: limit, offset: offset);
+        }
+        return _mock.postsByAuthor(authorId, limit: limit, offset: offset);
+      },
+      ttl: const Duration(seconds: 45),
+    );
+  }
+
   // ===================== Comments =====================
   Future<List<ThreadedComment>> comments(String postId) {
     final live = _live;
@@ -892,6 +1913,8 @@ class VentlyRepository {
     String? parentId,
     required String content,
     String? personaId,
+    String? imageUrl,
+    String? imagePath,
   }) {
     final live = _live;
     if (live != null) {
@@ -900,6 +1923,8 @@ class VentlyRepository {
         parentId: parentId,
         content: content,
         personaId: personaId,
+        imageUrl: imageUrl,
+        imagePath: imagePath,
       );
     }
     return _mock.addComment(
@@ -943,6 +1968,166 @@ class VentlyRepository {
       },
       ttl: const Duration(minutes: 1),
     );
+  }
+
+  Future<List<Tribe>> tribesIKeep() {
+    final live = _live;
+    if (live != null) return live.tribesIKeep();
+    return Future.value(_mock.tribesIKeep());
+  }
+
+  Future<KeeperMode> keeperMode() {
+    final live = _live;
+    if (live != null) return live.keeperMode();
+    return Future.value(_mock.keeperMode());
+  }
+
+  Future<KeeperModerationQueue> keeperModerationQueue(
+    String tribeId, {
+    int limit = 30,
+    int offset = 0,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.keeperModerationQueue(tribeId, limit: limit, offset: offset);
+    }
+    return Future.value(_mock.keeperModerationQueue(tribeId));
+  }
+
+  Future<KeeperEngagementCalendar> keeperEngagementCalendar(String tribeId) {
+    final live = _live;
+    if (live != null) return live.keeperEngagementCalendar(tribeId);
+    return Future.value(_mock.keeperEngagementCalendar(tribeId));
+  }
+
+  Future<KeeperAiInsights> keeperAiInsights(String tribeId) {
+    final live = _live;
+    if (live != null) return live.keeperAiInsights(tribeId);
+    return Future.value(_mock.keeperAiInsights(tribeId));
+  }
+
+  Future<KeeperComodMatrix> keeperComodMatrix(String tribeId) {
+    final live = _live;
+    if (live != null) return live.keeperComodMatrix(tribeId);
+    return Future.value(_mock.keeperComodMatrix(tribeId));
+  }
+
+  Future<KeeperExportReport> keeperExportReport(
+    String tribeId, {
+    String format = 'markdown',
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.keeperExportReport(tribeId, format: format);
+    }
+    return Future.value(_mock.keeperExportReport(tribeId));
+  }
+
+  Future<List<Tribe>> tribesByKeeper(String keeperId) {
+    final key = 'tribes:keeper:$keeperId';
+    return _cache.getOrLoad(
+      key,
+      () async {
+        final live = _live;
+        if (live != null) return live.tribesByKeeper(keeperId);
+        return _mock.tribesByKeeper(keeperId);
+      },
+      ttl: const Duration(minutes: 1),
+    );
+  }
+
+  Future<List<Post>> postsByKeeper(
+    String keeperId, {
+    int limit = 20,
+    int offset = 0,
+  }) {
+    final key = 'posts:keeper:$keeperId:$limit:$offset';
+    return _cache.getOrLoad(
+      key,
+      () async {
+        final live = _live;
+        if (live != null) {
+          return live.postsByKeeper(keeperId, limit: limit, offset: offset);
+        }
+        return _mock.postsByKeeper(keeperId, limit: limit, offset: offset);
+      },
+      ttl: const Duration(seconds: 45),
+    );
+  }
+
+  // ─── Spaces (migration 0050) ────────────────────────────────────────
+
+  Future<List<Space>> spacesByTribe(String tribeId) {
+    final live = _live;
+    if (live != null) return live.spacesByTribe(tribeId);
+    return Future.value(const <Space>[]);
+  }
+
+  Future<Space?> spaceById(String spaceId) {
+    final live = _live;
+    if (live != null) return live.spaceById(spaceId);
+    return Future.value(null);
+  }
+
+  Future<List<Post>> postsInSpace({
+    required String spaceId,
+    String sort = 'fresh',
+    int limit = 60,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.postsInSpace(spaceId: spaceId, sort: sort, limit: limit);
+    }
+    return Future.value(const <Post>[]);
+  }
+
+  Future<String> createSpace({
+    required String tribeId,
+    required String name,
+    String? description,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.createSpace(
+          tribeId: tribeId, name: name, description: description);
+    }
+    return Future.error(StateError('not_signed_in'));
+  }
+
+  Future<bool> renameSpace({required String spaceId, required String name}) {
+    final live = _live;
+    if (live != null) return live.renameSpace(spaceId: spaceId, name: name);
+    return Future.value(false);
+  }
+
+  Future<bool> archiveSpace(String spaceId) {
+    final live = _live;
+    if (live != null) return live.archiveSpace(spaceId);
+    return Future.value(false);
+  }
+
+  Future<SpaceSummary?> latestSpaceSummary(String spaceId) {
+    final live = _live;
+    if (live != null) return live.latestSpaceSummary(spaceId);
+    return Future.value(null);
+  }
+
+  Future<bool> updateSpaceTheme({
+    required String spaceId,
+    String? weeklyTheme,
+    String? themeColor,
+    String? description,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.updateSpaceTheme(
+        spaceId: spaceId,
+        weeklyTheme: weeklyTheme,
+        themeColor: themeColor,
+        description: description,
+      );
+    }
+    return Future.value(false);
   }
 
   Future<Tribe?> tribeBySlug(String slug) {
@@ -1008,7 +2193,7 @@ class VentlyRepository {
       controller.onCancel = () => sub.cancel();
       return controller.stream;
     }
-    return _mock.roomsStream.map((_) => _mock.inbox(tab: tab));
+    return _mockSnapshotStream(_mock.roomsStream, () => _mock.inbox(tab: tab));
   }
 
   Future<List<ChatRoom>> inbox(String tab) {
@@ -1041,7 +2226,8 @@ class VentlyRepository {
   Stream<List<ChatMessage>> watchMessages(String roomId) {
     final live = _live;
     if (live != null) return live.watchMessages(roomId);
-    return _mock.roomsStream.map((_) => _mock.roomMessages(roomId));
+    return _mockSnapshotStream(
+        _mock.roomsStream, () => _mock.roomMessages(roomId));
   }
 
   /// Returns true when the current user is allowed to DM [peerUserId].
@@ -1095,6 +2281,13 @@ class VentlyRepository {
     return _mock.markRoomRead(roomId);
   }
 
+  /// Unread peer messages in active DM rooms (Inbox tab badge).
+  Future<int> unreadChatMessageCount() {
+    final live = _live;
+    if (live != null) return live.unreadChatMessageCount();
+    return _mock.unreadChatMessageCount();
+  }
+
   /// Toggle/swap/clear an emoji reaction on a chat message. Mirrors
   /// the post-reaction semantic: same emoji again clears, different
   /// emoji swaps, null clears. Returns the resulting reaction.
@@ -1128,24 +2321,235 @@ class VentlyRepository {
     String? attachedPostId,
     String? attachedMediaPath,
     String? attachedMediaType,
-  }) {
+    String? parentMessageId,
+  }) async {
     final live = _live;
+    final ChatMessage msg;
     if (live != null) {
-      return live.sendMessage(
+      msg = await live.sendMessage(
         roomId: roomId,
         payload: plaintext,
         attachedPostId: attachedPostId,
         attachedMediaPath: attachedMediaPath,
         attachedMediaType: attachedMediaType,
+        parentMessageId: parentMessageId,
+      );
+    } else {
+      msg = _mock.sendMessage(
+        roomId: roomId,
+        plaintext: plaintext,
+        attachedPostId: attachedPostId,
+        attachedMediaPath: attachedMediaPath,
+        attachedMediaType: attachedMediaType,
       );
     }
-    return Future.value(_mock.sendMessage(
-      roomId: roomId,
-      plaintext: plaintext,
-      attachedPostId: attachedPostId,
-      attachedMediaPath: attachedMediaPath,
-      attachedMediaType: attachedMediaType,
-    ));
+    AnalyticsService.instance.track(
+      parentMessageId != null
+          ? Events.chatMessageReplied
+          : Events.chatMessageSent,
+      props: {
+        'has_image':         attachedMediaPath != null,
+        'has_attached_post': attachedPostId != null,
+        'is_reply':          parentMessageId != null,
+        'content_chars':     plaintext.length,
+      },
+    );
+    return msg;
+  }
+
+  Future<bool> editChatMessage({
+    required String messageId,
+    required String newPlaintext,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.editChatMessage(
+        messageId: messageId,
+        newPlaintext: newPlaintext,
+      );
+    }
+    return Future.value(false);
+  }
+
+  Future<bool> deleteChatMessage(String messageId) {
+    final live = _live;
+    if (live != null) return live.deleteChatMessage(messageId);
+    return Future.value(false);
+  }
+
+  Future<bool> hideChatMessage(String messageId) {
+    final live = _live;
+    if (live != null) return live.hideChatMessage(messageId);
+    return Future.value(false);
+  }
+
+  // ===================== Author CRUD (migration 0047) =====================
+
+  Future<bool> editPost({required String postId, required String newContent}) {
+    final live = _live;
+    if (live != null) {
+      return live.editPost(postId: postId, newContent: newContent);
+    }
+    return Future.value(false);
+  }
+
+  Future<bool> deletePost(String postId) {
+    final live = _live;
+    if (live != null) return live.deletePost(postId);
+    return Future.value(false);
+  }
+
+  Future<bool> editComment({
+    required String commentId,
+    required String newContent,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.editComment(commentId: commentId, newContent: newContent);
+    }
+    return Future.value(false);
+  }
+
+  Future<bool> deleteComment(String commentId) {
+    final live = _live;
+    if (live != null) return live.deleteComment(commentId);
+    return Future.value(false);
+  }
+
+  Future<bool> editWhisper({
+    required String whisperId,
+    String? title,
+    String? description,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.editWhisper(
+        whisperId: whisperId,
+        title: title,
+        description: description,
+      );
+    }
+    return Future.value(false);
+  }
+
+  Future<bool> deleteWhisper(String whisperId) {
+    final live = _live;
+    if (live != null) return live.deleteWhisper(whisperId);
+    return Future.value(false);
+  }
+
+  Future<bool> editTribeMessage({
+    required String messageId,
+    required String newContent,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.editTribeMessage(
+        messageId: messageId,
+        newContent: newContent,
+      );
+    }
+    return Future.value(false);
+  }
+
+  Future<bool> deleteTribeMessage(String messageId) {
+    final live = _live;
+    if (live != null) return live.deleteTribeMessage(messageId);
+    return Future.value(false);
+  }
+
+  Future<bool> hideTribeMessage(String messageId) {
+    final live = _live;
+    if (live != null) return live.hideTribeMessage(messageId);
+    return Future.value(false);
+  }
+
+  /// Used by the sign-in screens after catching
+  /// [MfaChallengeRequiredException] to complete AAL2.
+  Future<void> verifyMfa({
+    required String factorId,
+    required String code,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.verifyMfa(factorId: factorId, code: code);
+    }
+    return Future.value();
+  }
+
+  // ─── Phase 2 (migration 0051) ──────────────────────────────────────
+
+  Future<bool> pinComment(String commentId) {
+    final live = _live;
+    if (live != null) return live.pinComment(commentId);
+    return Future.value(false);
+  }
+
+  Future<bool> unpinComment(String commentId) {
+    final live = _live;
+    if (live != null) return live.unpinComment(commentId);
+    return Future.value(false);
+  }
+
+  Future<bool> setPostCommentsLock({
+    required String postId,
+    required bool locked,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.setPostCommentsLock(postId: postId, locked: locked);
+    }
+    return Future.value(false);
+  }
+
+  Future<bool> toggleKeeperPick(String postId) {
+    final live = _live;
+    if (live != null) return live.toggleKeeperPick(postId);
+    return Future.value(false);
+  }
+
+  Future<bool> updateTribeManagement({
+    required String tribeId,
+    String? name,
+    String? rules,
+    bool? isPremium,
+    String? avatarUrl,
+    Map<String, dynamic>? settings,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.updateTribeManagement(
+        tribeId: tribeId,
+        name: name,
+        rules: rules,
+        isPremium: isPremium,
+        avatarUrl: avatarUrl,
+        settings: settings,
+      );
+    }
+    return Future.value(false);
+  }
+
+  Future<void> registerPushToken({
+    required String token,
+    required String platform,
+    String? locale,
+    String? appVersion,
+  }) async {
+    final live = _live;
+    if (live == null) return;
+    return live.registerPushToken(
+      token: token,
+      platform: platform,
+      locale: locale,
+      appVersion: appVersion,
+    );
+  }
+
+  Future<void> unregisterPushToken(String token) async {
+    final live = _live;
+    if (live == null) return;
+    return live.unregisterPushToken(token);
   }
 
   /// Upload an image to the room's chat-media folder. Returns the
@@ -1172,6 +2576,24 @@ class VentlyRepository {
       extension: extension,
       contentType: contentType,
     );
+  }
+
+  /// Upload a DM voice note (m4a). Duration rides in the object name so no
+  /// schema change is needed — see SupabaseBackend.uploadChatAudio.
+  Future<({String path, String messageId})> uploadChatAudio({
+    required String roomId,
+    required List<int> bytes,
+    required int durationSeconds,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.uploadChatAudio(
+        roomId: roomId,
+        bytes: bytes,
+        durationSeconds: durationSeconds,
+      );
+    }
+    return Future.value((path: 'mock/voice.m4a', messageId: 'mock'));
   }
 
   /// Resolve a chat-media storage path into a signed URL the UI can
