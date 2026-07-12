@@ -287,9 +287,9 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
   Widget build(BuildContext context) {
     final tribeAsync = ref.watch(tribeBySlugProvider(widget.slug));
     return tribeAsync.when(
-      loading: () => const Scaffold(
-        backgroundColor: VentlyColors.cardBlush,
-        body: Center(child: CircularProgressIndicator()),
+      loading: () => Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        body: const Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => Scaffold(
         appBar: AppBar(),
@@ -1762,7 +1762,9 @@ class _Composer extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 6),
                       decoration: BoxDecoration(
-                        color: VentlyColors.cardBlush.withOpacity(0.65),
+                        color: context.isDark
+                            ? Colors.white.withOpacity(0.08)
+                            : VentlyColors.cardBlush.withOpacity(0.65),
                         borderRadius: BorderRadius.circular(22),
                       ),
                       child: Row(

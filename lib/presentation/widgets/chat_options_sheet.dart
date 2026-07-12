@@ -66,9 +66,10 @@ class _ChatOptionsSheet extends ConsumerWidget {
       maxChildSize: 0.92,
       expand: false,
       builder: (context, scroll) => Container(
-        decoration: const BoxDecoration(
-          color: VentlyColors.cardBlush,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: ListView(
           controller: scroll,
@@ -340,7 +341,7 @@ class _Quick extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: active
                     ? VentlyColors.berryMagenta.withOpacity(0.15)
-                    : Colors.white.withOpacity(0.7),
+                    : context.glass(0.7),
               ),
               child: Icon(icon,
                   color: VentlyColors.berryMagenta, size: 22),

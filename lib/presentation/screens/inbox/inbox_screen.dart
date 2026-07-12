@@ -1110,10 +1110,14 @@ class _ConversationRow extends ConsumerWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: VentlyColors.cardBlush,
+                  color: sheetCtx.isDark
+                      ? sheetCtx.glass()
+                      : VentlyColors.cardBlush,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                      color: VentlyColors.softMauve.withOpacity(0.4)),
+                      color: sheetCtx.isDark
+                          ? sheetCtx.glassBorder
+                          : VentlyColors.softMauve.withOpacity(0.4)),
                 ),
                 child: Text(
                   '"${room.requestPreview}"',

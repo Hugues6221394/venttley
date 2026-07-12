@@ -76,11 +76,12 @@ class BlockedAccountsSheet extends ConsumerWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 8),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: ctx.glass(1),
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
-                                color:
-                                    VentlyColors.softMauve.withOpacity(0.3),
+                                color: ctx.isDark
+                                    ? ctx.glassBorder
+                                    : VentlyColors.softMauve.withOpacity(0.3),
                               ),
                             ),
                             child: Row(

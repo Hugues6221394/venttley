@@ -34,9 +34,10 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
       expand: false,
       builder: (_, scroll) {
         return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: ListView(
             controller: scroll,

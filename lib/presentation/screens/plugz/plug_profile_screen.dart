@@ -151,7 +151,9 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      VentlyColors.cardBlush,
+                      context.isDark
+                          ? scheme.surface
+                          : VentlyColors.cardBlush,
                       scheme.surface,
                     ],
                   ),

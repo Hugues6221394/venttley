@@ -1119,10 +1119,14 @@ class _FeaturedVoiceCard extends ConsumerWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: VentlyColors.cardBlush,
+              color: context.isDark
+                  ? context.glass()
+                  : VentlyColors.cardBlush,
               borderRadius: BorderRadius.circular(18),
-              border:
-                  Border.all(color: VentlyColors.softMauve.withOpacity(0.5)),
+              border: Border.all(
+                  color: context.isDark
+                      ? context.glassBorder
+                      : VentlyColors.softMauve.withOpacity(0.5)),
             ),
             child: Text(
               '"${voice.topQuote.trim()}"',

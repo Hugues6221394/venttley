@@ -441,7 +441,9 @@ class _InstantConnectCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: VentlyColors.cardBlush,
+                  color: context.isDark
+                      ? context.glass()
+                      : VentlyColors.cardBlush,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(

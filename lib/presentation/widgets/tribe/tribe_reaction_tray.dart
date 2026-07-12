@@ -80,7 +80,7 @@ class _AddReactionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withOpacity(0.72),
+      color: context.glass(0.72),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
@@ -163,9 +163,10 @@ class _EmojiPickerSheetState extends State<_EmojiPickerSheet> {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -249,7 +250,9 @@ class TribeReactionSummary extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFE3EC),
+          color: context.isDark
+              ? VentlyColors.berryMagenta.withOpacity(0.16)
+              : const Color(0xFFFFE3EC),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(

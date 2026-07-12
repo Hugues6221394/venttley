@@ -272,7 +272,9 @@ class MessageHugRow extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFE3EC),
+                color: context.isDark
+                    ? VentlyColors.berryMagenta.withOpacity(0.16)
+                    : const Color(0xFFFFE3EC),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -390,7 +392,7 @@ class PinnedMessageBanner extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
       child: Material(
-        color: Colors.white.withOpacity(0.72),
+        color: context.glass(0.72),
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),

@@ -427,10 +427,12 @@ class SettingsScreen extends ConsumerWidget {
                   child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: VentlyColors.cardBlush,
+                      color: ctx.isDark ? ctx.glass() : VentlyColors.cardBlush,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: VentlyColors.softMauve.withOpacity(0.4),
+                        color: ctx.isDark
+                            ? ctx.glassBorder
+                            : VentlyColors.softMauve.withOpacity(0.4),
                       ),
                     ),
                     child: Column(
