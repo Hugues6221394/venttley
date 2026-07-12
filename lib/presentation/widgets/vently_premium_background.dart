@@ -24,6 +24,7 @@ class VentlyPremiumBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isPureBlack = context.isPureBlack;
     final hasPhoto =
         wallpaperUrl != null &&
         wallpaperUrl!.trim().isNotEmpty &&
@@ -36,10 +37,13 @@ class VentlyPremiumBackground extends StatelessWidget {
           Image.network(
             wallpaperUrl!,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _AmbientCanvas(isDark: isDark),
+            errorBuilder: (_, __, ___) =>
+                _AmbientCanvas(isDark: isDark, pureBlack: isPureBlack),
           )
         else
-          RepaintBoundary(child: _AmbientCanvas(isDark: isDark)),
+          RepaintBoundary(
+            child: _AmbientCanvas(isDark: isDark, pureBlack: isPureBlack),
+          ),
         if (hasPhoto)
           DecoratedBox(
             decoration: BoxDecoration(
@@ -61,9 +65,10 @@ class VentlyPremiumBackground extends StatelessWidget {
 
 /// Gradient base + drifting glow blobs + halo ring.
 class _AmbientCanvas extends StatefulWidget {
-  const _AmbientCanvas({required this.isDark});
+  const _AmbientCanvas({required this.isDark, required this.pureBlack});
 
   final bool isDark;
+  final bool pureBlack;
 
   @override
   State<_AmbientCanvas> createState() => _AmbientCanvasState();
@@ -100,7 +105,11 @@ class _AmbientCanvasState extends State<_AmbientCanvas>
               ? Curves.easeInOut.transform(_controller.value) * 2 - 1
               : 0.0;
           return CustomPaint(
-            painter: _AmbientPainter(isDark: widget.isDark, drift: t),
+            painter: _AmbientPainter(
+              isDark: widget.isDark,
+              pureBlack: widget.pureBlack,
+              drift: t,
+            ),
             isComplex: true,
           );
         },
@@ -110,9 +119,14 @@ class _AmbientCanvasState extends State<_AmbientCanvas>
 }
 
 class _AmbientPainter extends CustomPainter {
-  const _AmbientPainter({required this.isDark, required this.drift});
+  const _AmbientPainter({
+    required this.isDark,
+    required this.pureBlack,
+    required this.drift,
+  });
 
   final bool isDark;
+  final bool pureBlack;
 
   /// -1..1 — how far the blobs have drifted from center.
   final double drift;
@@ -121,16 +135,21 @@ class _AmbientPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
 
-    // Base diagonal gradient (unchanged brand canvas).
-    final base = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: isDark
-            ? const [Color(0xFF1A1014), Color(0xFF2A1520), VentlyColors.cardDark]
-            : const [Color(0xFFFFF5F8), VentlyColors.cardBlush, Color(0xFFFFE8F0)],
-      ).createShader(rect);
-    canvas.drawRect(rect, base);
+    // Base canvas: true black for the AMOLED theme, otherwise the diagonal
+    // brand gradient.
+    if (pureBlack) {
+      canvas.drawRect(rect, Paint()..color = VentlyColors.pureBlack);
+    } else {
+      final base = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? const [Color(0xFF1A1014), Color(0xFF2A1520), VentlyColors.cardDark]
+              : const [Color(0xFFFFF5F8), VentlyColors.cardBlush, Color(0xFFFFE8F0)],
+        ).createShader(rect);
+      canvas.drawRect(rect, base);
+    }
 
     void blob(Offset center, double radius, Color color) {
       final paint = Paint()
@@ -142,7 +161,9 @@ class _AmbientPainter extends CustomPainter {
 
     final w = size.width;
     final h = size.height;
-    final glow = isDark ? 0.16 : 0.30;
+    // Pure black keeps only a whisper of the brand glow so the canvas
+    // still reads as true black on OLED panels.
+    final glow = pureBlack ? 0.07 : (isDark ? 0.16 : 0.30);
 
     // Berry glow — upper right, drifts diagonally.
     blob(
@@ -167,7 +188,7 @@ class _AmbientPainter extends CustomPainter {
     final ring = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4
-      ..color = Colors.white.withOpacity(isDark ? 0.05 : 0.45);
+      ..color = Colors.white.withOpacity(pureBlack ? 0.03 : (isDark ? 0.05 : 0.45));
     canvas.drawCircle(
       Offset(w * 0.50, h * 0.30 + 6 * drift),
       w * 0.42,
@@ -177,5 +198,5 @@ class _AmbientPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _AmbientPainter old) =>
-      old.drift != drift || old.isDark != isDark;
+      old.drift != drift || old.isDark != isDark || old.pureBlack != pureBlack;
 }

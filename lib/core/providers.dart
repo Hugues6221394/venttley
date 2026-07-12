@@ -291,13 +291,17 @@ class SessionController extends StateNotifier<AppUser?> {
   }
 }
 
-/// Brightness mode controller — defaults to system.
+/// Venttly appearance — light, warm charcoal dark, or pure black (AMOLED).
+/// Flutter's [ThemeMode] only knows light/dark, so black is our own third
+/// option that maps to [ThemeMode.dark] with a true-black theme variant.
+enum VentlyThemeMode { light, dark, black }
+
 final themeModeProvider =
-    StateNotifierProvider<ThemeModeController, ThemeMode>(
+    StateNotifierProvider<ThemeModeController, VentlyThemeMode>(
         (ref) => ThemeModeController());
 
-class ThemeModeController extends StateNotifier<ThemeMode> {
-  ThemeModeController() : super(ThemeMode.light) {
+class ThemeModeController extends StateNotifier<VentlyThemeMode> {
+  ThemeModeController() : super(VentlyThemeMode.light) {
     _restore();
   }
 
@@ -305,23 +309,22 @@ class ThemeModeController extends StateNotifier<ThemeMode> {
 
   Future<void> _restore() async {
     final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(_prefsKey);
-    if (saved == 'dark') state = ThemeMode.dark;
-    if (saved == 'light') state = ThemeMode.light;
+    switch (prefs.getString(_prefsKey)) {
+      case 'dark':
+        state = VentlyThemeMode.dark;
+      case 'black':
+        state = VentlyThemeMode.black;
+      case 'light':
+        state = VentlyThemeMode.light;
+    }
   }
 
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _prefsKey, state == ThemeMode.dark ? 'dark' : 'light');
+    await prefs.setString(_prefsKey, state.name);
   }
 
-  void toggle() {
-    state = state == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
-    _persist();
-  }
-
-  void setMode(ThemeMode mode) {
+  void setMode(VentlyThemeMode mode) {
     state = mode;
     _persist();
   }

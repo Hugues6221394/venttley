@@ -16,10 +16,10 @@ class _Surface extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Shimmer.fromColors(
       baseColor: isDark
-          ? VentlyColors.cardDark.withOpacity(0.7)
+          ? Theme.of(context).colorScheme.surface.withOpacity(0.7)
           : VentlyColors.softMauve.withOpacity(0.3),
       highlightColor: isDark
-          ? VentlyColors.charcoal.withOpacity(0.4)
+          ? Theme.of(context).scaffoldBackgroundColor.withOpacity(0.4)
           : Colors.white.withOpacity(0.9),
       child: child,
     );

@@ -21,7 +21,7 @@ class WelcomeScreen extends StatelessWidget {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: isDark
-                ? [VentlyColors.charcoal, VentlyColors.cardDark]
+                ? [Theme.of(context).scaffoldBackgroundColor, Theme.of(context).colorScheme.surface]
                 : [
                     const Color(0xFFFFEEF3),
                     const Color(0xFFFFF8F8),

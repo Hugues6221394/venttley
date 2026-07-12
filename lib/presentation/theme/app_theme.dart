@@ -143,22 +143,28 @@ class VentlyTheme {
     );
   }
 
-  static ThemeData dark() {
+  /// Warm charcoal dark theme; pass [pureBlack] for the AMOLED variant
+  /// (true-black canvas, near-black cards — everything else identical).
+  static ThemeData dark({bool pureBlack = false}) {
+    final canvas = pureBlack ? VentlyColors.pureBlack : VentlyColors.charcoal;
+    final card = pureBlack ? VentlyColors.cardBlack : VentlyColors.cardDark;
+    final divider =
+        pureBlack ? VentlyColors.dividerBlack : VentlyColors.dividerDark;
     final base = ThemeData.dark(useMaterial3: true);
     final textTheme = GoogleFonts.plusJakartaSansTextTheme(base.textTheme).apply(
       bodyColor: VentlyColors.softOffWhite,
       displayColor: VentlyColors.softOffWhite,
     );
     return base.copyWith(
-      scaffoldBackgroundColor: VentlyColors.charcoal,
-      canvasColor: VentlyColors.charcoal,
+      scaffoldBackgroundColor: canvas,
+      canvasColor: canvas,
       pageTransitionsTheme: VentlyPageTransitions.theme,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: ColorScheme.dark(
         primary: VentlyColors.berryDesat,
-        onPrimary: VentlyColors.charcoal,
-        secondary: VentlyColors.dividerDark,
+        onPrimary: canvas,
+        secondary: divider,
         onSecondary: VentlyColors.softOffWhite,
-        surface: VentlyColors.cardDark,
+        surface: card,
         onSurface: VentlyColors.softOffWhite,
         error: VentlyColors.dangerRed,
         onError: Colors.white,
@@ -176,23 +182,23 @@ class VentlyTheme {
           color: VentlyColors.berryDesat,
         ),
       ),
-      dividerColor: VentlyColors.dividerDark,
-      dividerTheme: const DividerThemeData(
-        color: VentlyColors.dividerDark,
+      dividerColor: divider,
+      dividerTheme: DividerThemeData(
+        color: divider,
         thickness: 0.6,
       ),
       cardTheme: CardTheme(
-        color: VentlyColors.cardDark,
+        color: card,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radius),
-          side: const BorderSide(color: VentlyColors.dividerDark),
+          side: BorderSide(color: divider),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: VentlyColors.berryDesat,
-          foregroundColor: VentlyColors.charcoal,
+          foregroundColor: canvas,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radius),
@@ -207,7 +213,7 @@ class VentlyTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: VentlyColors.softOffWhite,
-          side: const BorderSide(color: VentlyColors.dividerDark, width: 1.2),
+          side: BorderSide(color: divider, width: 1.2),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radius),
@@ -223,18 +229,18 @@ class VentlyTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: VentlyColors.cardDark,
+        fillColor: card,
         contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         hintStyle: GoogleFonts.plusJakartaSans(
           color: VentlyColors.softOffWhite.withOpacity(0.5),
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
-          borderSide: const BorderSide(color: VentlyColors.dividerDark),
+          borderSide: BorderSide(color: divider),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
-          borderSide: const BorderSide(color: VentlyColors.dividerDark),
+          borderSide: BorderSide(color: divider),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
@@ -242,7 +248,7 @@ class VentlyTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: VentlyColors.cardDark,
+        backgroundColor: card,
         selectedColor: VentlyColors.berryDesat,
         secondarySelectedColor: VentlyColors.berryDesat,
         labelStyle: GoogleFonts.plusJakartaSans(
@@ -250,17 +256,17 @@ class VentlyTheme {
           fontWeight: FontWeight.w600,
         ),
         secondaryLabelStyle: GoogleFonts.plusJakartaSans(
-          color: VentlyColors.charcoal,
+          color: canvas,
           fontWeight: FontWeight.w700,
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radius),
-          side: const BorderSide(color: VentlyColors.dividerDark),
+          side: BorderSide(color: divider),
         ),
-        side: const BorderSide(color: VentlyColors.dividerDark),
+        side: BorderSide(color: divider),
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: VentlyColors.cardDark,
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: card,
         selectedItemColor: VentlyColors.berryDesat,
         unselectedItemColor: VentlyColors.softOffWhite,
         type: BottomNavigationBarType.fixed,

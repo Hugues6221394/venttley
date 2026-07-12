@@ -180,8 +180,11 @@ class _VentlyAppState extends ConsumerState<VentlyApp> {
       title: 'Venttly',
       debugShowCheckedModeBanner: false,
       theme: VentlyTheme.light(),
-      darkTheme: VentlyTheme.dark(),
-      themeMode: mode,
+      // "Black" is our own third appearance: same dark theme, true-black
+      // canvas — so it rides ThemeMode.dark with a pureBlack theme variant.
+      darkTheme: VentlyTheme.dark(pureBlack: mode == VentlyThemeMode.black),
+      themeMode:
+          mode == VentlyThemeMode.light ? ThemeMode.light : ThemeMode.dark,
       routerConfig: router,
       // Premium blush gradient painted once behind the whole navigator —
       // screens opt in by making their Scaffold transparent.

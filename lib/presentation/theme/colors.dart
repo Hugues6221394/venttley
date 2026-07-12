@@ -34,6 +34,17 @@ class VentlyColors {
   /// Slightly lifted surface for dark-mode cards.
   static const Color cardDark = Color(0xFF1E1316);
 
+  // ---------------- Pure black (AMOLED) theme ----------------
+  /// True black canvas for the "Black" appearance option.
+  static const Color pureBlack = Color(0xFF000000);
+
+  /// Near-black card lift with a whisper of brand warmth — just enough
+  /// separation from the true-black canvas without losing the AMOLED feel.
+  static const Color cardBlack = Color(0xFF120D0F);
+
+  /// Hairline dividers on the pure-black canvas.
+  static const Color dividerBlack = Color(0xFF241B1F);
+
   // ---------------- Semantic helpers ----------------
   static const Color successGreen = Color(0xFF6BA56F);
   static const Color warningAmber = Color(0xFFE6B65C);
@@ -62,6 +73,12 @@ extension VentlyInk on BuildContext {
 
   /// True when the active theme is dark. Handy for one-off surface tweaks.
   bool get isDark => Theme.of(this).brightness == Brightness.dark;
+
+  /// True when the pure-black (AMOLED) appearance is active. The black theme
+  /// is a variant of the dark theme distinguished only by its canvas color.
+  bool get isPureBlack =>
+      isDark &&
+      Theme.of(this).scaffoldBackgroundColor == VentlyColors.pureBlack;
 
   /// Adaptive frosted-glass surface fill. Light mode keeps the airy white
   /// frost (pass the original white opacity); dark mode swaps to a subtle

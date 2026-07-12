@@ -165,8 +165,8 @@ class _GlassNavBar extends ConsumerWidget {
                 end: Alignment.bottomCenter,
                 colors: isDark
                     ? [
-                        VentlyColors.cardDark.withOpacity(0.80),
-                        VentlyColors.cardDark.withOpacity(0.66),
+                        Theme.of(context).colorScheme.surface.withOpacity(0.80),
+                        Theme.of(context).colorScheme.surface.withOpacity(0.66),
                       ]
                     : [
                         Colors.white.withOpacity(0.78),
@@ -312,7 +312,7 @@ class _NavItem extends StatelessWidget {
                       gradient: VentlyGradients.brand,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isDark ? VentlyColors.cardDark : Colors.white,
+                        color: isDark ? Theme.of(context).colorScheme.surface : Colors.white,
                         width: 1.6,
                       ),
                     ),

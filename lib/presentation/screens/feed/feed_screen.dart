@@ -739,7 +739,7 @@ class _FeedFiltersHeader extends SliverPersistentHeaderDelegate {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
-          color: (isDark ? VentlyColors.charcoal : Colors.white)
+          color: (isDark ? Theme.of(context).scaffoldBackgroundColor : Colors.white)
               .withOpacity(overlapsContent ? 0.72 : 0.35),
           alignment: Alignment.topCenter,
           child: Column(
@@ -1156,7 +1156,7 @@ class _TribeChipCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: isDark
-                ? VentlyColors.cardDark
+                ? Theme.of(context).colorScheme.surface
                 : Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(

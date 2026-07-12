@@ -1098,7 +1098,7 @@ class _V2Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: context.isDark ? VentlyColors.cardDark : Colors.white,
+      color: context.isDark ? Theme.of(context).colorScheme.surface : Colors.white,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
@@ -1106,7 +1106,7 @@ class _V2Tile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: context.isDark ? VentlyColors.cardDark : Colors.white,
+            color: context.isDark ? Theme.of(context).colorScheme.surface : Colors.white,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
@@ -1210,7 +1210,7 @@ class _QuickAction extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: 10),
       child: Material(
-        color: context.isDark ? VentlyColors.cardDark : Colors.white,
+        color: context.isDark ? Theme.of(context).colorScheme.surface : Colors.white,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: onTap,
@@ -1221,7 +1221,7 @@ class _QuickAction extends StatelessWidget {
               width: 96,
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
-                color: context.isDark ? VentlyColors.cardDark : Colors.white,
+                color: context.isDark ? Theme.of(context).colorScheme.surface : Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
@@ -1773,7 +1773,7 @@ class _KeeperDrawer extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Drawer(
       backgroundColor: context.isDark
-          ? VentlyColors.cardDark
+          ? Theme.of(context).colorScheme.surface
           : VentlyColors.cardBlush,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.horizontal(right: Radius.circular(28)),

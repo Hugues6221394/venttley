@@ -67,21 +67,25 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ],
           const _SectionHeader('Appearance'),
-          SwitchListTile(
-            secondary: Icon(
-              themeMode == ThemeMode.dark
-                  ? Icons.dark_mode_rounded
-                  : Icons.light_mode_rounded,
-              color: VentlyColors.berryMagenta,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+            child: Row(
+              children: [
+                for (final option in VentlyThemeMode.values) ...[
+                  Expanded(
+                    child: _AppearanceOption(
+                      mode: option,
+                      selected: themeMode == option,
+                      onTap: () => ref
+                          .read(themeModeProvider.notifier)
+                          .setMode(option),
+                    ),
+                  ),
+                  if (option != VentlyThemeMode.values.last)
+                    const SizedBox(width: 10),
+                ],
+              ],
             ),
-            title: const Text('Dark mode',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text(
-              themeMode == ThemeMode.dark ? 'On' : 'Off',
-              style: TextStyle(color: scheme.onSurface.withOpacity(0.6)),
-            ),
-            value: themeMode == ThemeMode.dark,
-            onChanged: (_) => ref.read(themeModeProvider.notifier).toggle(),
           ),
           const _SectionHeader('Account'),
           ListTile(
@@ -452,6 +456,72 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One tile of the Light / Dark / Black appearance selector.
+class _AppearanceOption extends StatelessWidget {
+  const _AppearanceOption({
+    required this.mode,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final VentlyThemeMode mode;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (icon, label) = switch (mode) {
+      VentlyThemeMode.light => (Icons.light_mode_rounded, 'Light'),
+      VentlyThemeMode.dark => (Icons.dark_mode_rounded, 'Dark'),
+      VentlyThemeMode.black => (Icons.contrast_rounded, 'Black'),
+    };
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        color: selected
+            ? scheme.primary.withOpacity(0.14)
+            : context.glass(0.55),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: selected ? scheme.primary : context.glassBorder,
+          width: selected ? 1.4 : 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 22,
+                  color: selected ? scheme.primary : context.inkMuted,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: selected ? scheme.primary : context.inkMuted,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
