@@ -14,6 +14,7 @@ import '../../theme/colors.dart';
 import '../../../core/vently_haptics.dart';
 import '../../widgets/glass_surfaces.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/verified_badge.dart';
 import '../../widgets/tribe/keeper_control_strip.dart';
 import '../../widgets/tribe/tribe_member_sheet.dart';
 import '../../widgets/tribe/tribe_rules_sheet.dart';
@@ -793,13 +794,26 @@ class _MessageSearchResults extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '@${msg.senderPseudonym}',
-                          style: const TextStyle(
-                            color: VentlyColors.berryMagenta,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 12,
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                '@${msg.senderPseudonym}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: VentlyColors.berryMagenta,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            if (msg.senderIsVerified) ...[
+                              const SizedBox(width: 3),
+                              const VerifiedBadge(size: 12),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 2),
                         _HighlightedText(text: preview, query: query),
@@ -1136,13 +1150,26 @@ class _MessageBubble extends ConsumerWidget {
                         ? null
                         : () => context.push('/user/${message.senderId}'),
                     borderRadius: BorderRadius.circular(6),
-                    child: Text(
-                      '@${message.senderPseudonym}',
-                      style: const TextStyle(
-                        color: VentlyColors.berryMagenta,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '@${message.senderPseudonym}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: VentlyColors.berryMagenta,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        if (message.senderIsVerified) ...[
+                          const SizedBox(width: 3),
+                          const VerifiedBadge(size: 12),
+                        ],
+                      ],
                     ),
                   ),
                 ),
@@ -2130,14 +2157,25 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: Text(
-                                        '@${m.senderPseudonym}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w800,
-                                        ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              '@${m.senderPseudonym}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                          ),
+                                          if (m.senderIsVerified) ...[
+                                            const SizedBox(width: 3),
+                                            const VerifiedBadge(size: 12),
+                                          ],
+                                        ],
                                       ),
                                     ),
                                     Text(

@@ -18,6 +18,7 @@ import '../../widgets/profile_avatar.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/sensitive_media_veil.dart';
 import '../../widgets/user_profile_link.dart';
+import '../../widgets/verified_badge.dart';
 import '../../widgets/whisper_comments_sheet.dart';
 import '../../widgets/whisper_share_sheet.dart';
 
@@ -1070,6 +1071,10 @@ class _CaptionBlock extends StatelessWidget {
                   fontSize: 13,
                 ),
               ),
+            if (whisper.authorIsVerified) ...[
+              const SizedBox(width: 4),
+              const VerifiedBadge(size: 14, color: Colors.white),
+            ],
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

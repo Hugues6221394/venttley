@@ -788,7 +788,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                                       ),
                                     ),
                                     Text(
-                                      'Connections only',
+                                      'Friends only',
                                       style: TextStyle(
                                         color: VentlyColors.deepBurgundy,
                                         fontWeight: FontWeight.w600,

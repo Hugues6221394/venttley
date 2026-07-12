@@ -57,28 +57,16 @@ class FriendProfileScreen extends ConsumerWidget {
       ),
       body: VentlyPremiumBackground(
         child: async.when(
-          loading: () {
-            // ignore: avoid_print
-            print('[PROBE] friend_profile loading userId=$userId');
-            return const Center(child: CircularProgressIndicator());
-          },
-          error: (e, _) {
-            // ignore: avoid_print
-            print('[PROBE] friend_profile ERROR userId=$userId err=$e');
-            return _NotAvailable(message: 'Could not load profile.\n$e');
-          },
+          loading: () =>
+              const Center(child: CircularProgressIndicator()),
+          error: (e, _) =>
+              _NotAvailable(message: 'Could not load profile.\n$e'),
           data: (profile) {
             if (profile == null) {
-              // ignore: avoid_print
-              print('[PROBE] friend_profile data=NULL userId=$userId');
               return const _NotAvailable(
                 message: "This profile isn't available.",
               );
             }
-            // ignore: avoid_print
-            print('[PROBE] friend_profile data OK userId=$userId '
-                'isFriend=${profile.isFriend} relation=${profile.relation} '
-                'pseudonym=${profile.pseudonym}');
             return RefreshIndicator(
               onRefresh: () async {
                 ref.invalidate(userProfileProvider(userId));
@@ -460,10 +448,10 @@ class _Hero extends ConsumerWidget {
     final daysSince =
         DateTime.now().difference(profile.joinedAt).inDays.clamp(0, 999999);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
       child: GlassCard(
         elevated: true,
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
         borderRadius: 24,
         child: Column(
           children: [
@@ -488,7 +476,7 @@ class _Hero extends ConsumerWidget {
                 showVerifiedBadge: profile.isVerified,
               ),
             ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -601,7 +589,7 @@ class _Hero extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                'Connections can DM. Send a request to unlock messaging.',
+                'Friends can DM. Send a request to unlock messaging.',
                 style: TextStyle(
                   fontSize: 11.5,
                   color: scheme.onSurface.withOpacity(0.55),
@@ -1043,8 +1031,8 @@ class _MutualsSection extends StatelessWidget {
                 if (profile.mutualFriendsCount > 0) ...[
                   Text(
                     profile.mutualFriendsCount == 1
-                        ? '1 mutual connection'
-                        : '${profile.mutualFriendsCount} mutual connections',
+                        ? '1 mutual friend'
+                        : '${profile.mutualFriendsCount} mutual friends',
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -1136,7 +1124,7 @@ class _StrangerCallout extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Send a connection request to see streaks, badges, mood distribution, and recent vents.',
+              'Send a friend request to see streaks, badges, mood distribution, and recent vents.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,

@@ -150,7 +150,8 @@ class _KeeperWelcome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = me?.anonymousPseudonym ?? 'Plug';
+    // Privacy: the studio home is a public-facing surface — never print the
+    // keeper's pseudonym here. Identity lives on the profile tab only.
     final reports = overview.totalOpenReports;
     final quiet = overview.totalPosts24h == 0;
     final slug = overview.tribes.isNotEmpty ? overview.tribes.first.slug : null;
@@ -225,25 +226,42 @@ class _KeeperWelcome extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Welcome back,',
-                    style: TextStyle(
-                      color: VentlyColors.deepBurgundy.withOpacity(0.7),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: VentlyColors.berryMagenta,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        'CONTROL CENTER',
+                        style: TextStyle(
+                          color: VentlyColors.berryMagenta.withOpacity(0.9),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                          letterSpacing: 1.4,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    '@$name 👋',
-                    style: const TextStyle(
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Your tribe, at a glance',
+                    style: TextStyle(
                       color: VentlyColors.deepBurgundy,
                       fontWeight: FontWeight.w900,
-                      fontSize: 22,
+                      fontSize: 23,
+                      height: 1.05,
+                      letterSpacing: -0.5,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'This is your control center.\nKeep your tribe safe and thriving.',
+                    'Everything you need to keep it safe and thriving.',
                     style: TextStyle(
                       color: VentlyColors.deepBurgundy.withOpacity(0.6),
                       fontWeight: FontWeight.w600,
@@ -1845,7 +1863,7 @@ class _KeeperDrawer extends ConsumerWidget {
                   const _DrawerSection('Community'),
                   _DrawerTile(
                     icon: Icons.diversity_3_rounded,
-                    label: 'Connections',
+                    label: 'Friends',
                     onTap: () {
                       Navigator.pop(context);
                       context.push('/friends');

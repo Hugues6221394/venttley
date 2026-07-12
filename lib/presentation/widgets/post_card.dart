@@ -14,6 +14,7 @@ import 'profile_avatar.dart';
 import 'user_profile_link.dart';
 import 'share_post_to_friend_sheet.dart';
 import 'tribe_avatar.dart';
+import 'verified_badge.dart';
 
 class PostCard extends ConsumerWidget {
   const PostCard({
@@ -132,6 +133,10 @@ class PostCard extends ConsumerWidget {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                             ),
+                            if (post.authorIsVerified) ...[
+                              const SizedBox(width: 4),
+                              const VerifiedBadge(size: 14),
+                            ],
                             if (post.authorKarma >= 10) ...[
                               const SizedBox(width: 4),
                               Icon(Icons.auto_awesome,

@@ -165,7 +165,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.diversity_3,
                     color: VentlyColors.deepBurgundy),
-                title: const Text('Connections',
+                title: const Text('Friends',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
                   Navigator.pop(ctx);

@@ -11,6 +11,7 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/verified_badge.dart';
 
 /// Discover — Image #12.
 ///
@@ -1080,15 +1081,25 @@ class _FeaturedVoiceCard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '@${voice.pseudonym}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: VentlyColors.deepBurgundy,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '@${voice.pseudonym}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: VentlyColors.deepBurgundy,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                        if (voice.isVerified) ...[
+                          const SizedBox(width: 4),
+                          const VerifiedBadge(size: 14),
+                        ],
+                      ],
                     ),
                     const Text(
                       'Trending creator',
@@ -1156,14 +1167,27 @@ class _MiniVoiceCard extends ConsumerWidget {
       crossAxisAlignment:
           horizontal ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
-        Text(
-          '@${voice.pseudonym}',
-          textAlign: horizontal ? TextAlign.start : TextAlign.center,
-          style: const TextStyle(
-            color: VentlyColors.deepBurgundy,
-            fontWeight: FontWeight.w900,
-            fontSize: 12.5,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment:
+              horizontal ? MainAxisAlignment.start : MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                '@${voice.pseudonym}',
+                textAlign: horizontal ? TextAlign.start : TextAlign.center,
+                style: const TextStyle(
+                  color: VentlyColors.deepBurgundy,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12.5,
+                ),
+              ),
+            ),
+            if (voice.isVerified) ...[
+              const SizedBox(width: 3),
+              const VerifiedBadge(size: 12.5),
+            ],
+          ],
         ),
         const SizedBox(height: 3),
         Text(
@@ -1249,7 +1273,7 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content:
-              Text('Connection request sent to @${widget.voice.pseudonym}.'),
+              Text('Friend request sent to @${widget.voice.pseudonym}.'),
         ),
       );
     } catch (e) {

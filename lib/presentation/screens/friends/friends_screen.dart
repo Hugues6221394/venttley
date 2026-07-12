@@ -13,6 +13,7 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../widgets/verified_badge.dart';
 
 /// Friends — Image #15.
 ///
@@ -96,7 +97,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                   child: _EmptyState(
                     icon: Icons.diversity_3_rounded,
                     title: friendsAsync.valueOrNull?.isEmpty ?? true
-                        ? 'No connections yet.'
+                        ? 'No friends yet.'
                         : 'No matches.',
                     body: friendsAsync.valueOrNull?.isEmpty ?? true
                         ? 'Share your link, scan a QR, or pick a Quick Suggestion above.'
@@ -323,7 +324,7 @@ class _InstantConnectCard extends StatelessWidget {
                       ),
                       SizedBox(height: 3),
                       Text(
-                        'Share your profile or scan a connection.',
+                        'Share your profile or add a friend.',
                         style: TextStyle(
                           color: Color(0xFF8B5566),
                           fontWeight: FontWeight.w700,
@@ -527,7 +528,7 @@ class _RequestsSection extends ConsumerWidget {
             child: Row(
               children: [
                 const Text(
-                  'Connection Requests',
+                  'Friend Requests',
                   style: TextStyle(
                     color: VentlyColors.deepBurgundy,
                     fontWeight: FontWeight.w900,
@@ -825,15 +826,27 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
             showVerifiedBadge: widget.s.isVerified,
           ),
           const SizedBox(height: 8),
-          Text(
-            widget.s.pseudonym,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: VentlyColors.deepBurgundy,
-              fontWeight: FontWeight.w900,
-              fontSize: 13,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  widget.s.pseudonym,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: VentlyColors.deepBurgundy,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              if (widget.s.isVerified) ...[
+                const SizedBox(width: 3),
+                const VerifiedBadge(size: 13),
+              ],
+            ],
           ),
           const SizedBox(height: 2),
           Text(
@@ -916,7 +929,7 @@ class _MyFriendsHeader extends StatelessWidget {
                 fontSize: 18,
               ),
               children: [
-                const TextSpan(text: 'My Connections '),
+                const TextSpan(text: 'My Friends '),
                 TextSpan(
                   text: '($total)',
                   style: const TextStyle(
@@ -950,7 +963,7 @@ class _MyFriendsHeader extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
                     decoration: InputDecoration(
-                      hintText: 'Find a connection…',
+                      hintText: 'Find a friend…',
                       hintStyle: TextStyle(
                         color: VentlyColors.deepBurgundy.withOpacity(0.42),
                         fontWeight: FontWeight.w700,
@@ -996,19 +1009,29 @@ class _FriendRow extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      friend.pseudonym,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: VentlyColors.deepBurgundy,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            friend.pseudonym,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: VentlyColors.deepBurgundy,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        if (friend.isVerified) ...[
+                          const SizedBox(width: 4),
+                          const VerifiedBadge(size: 14),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Connected ${_relative(friend.acceptedAt)}',
+                      'Friends since ${_relative(friend.acceptedAt)}',
                       style: TextStyle(
                         color: VentlyColors.deepBurgundy.withOpacity(0.55),
                         fontWeight: FontWeight.w700,
@@ -1047,13 +1070,23 @@ class _FriendRow extends ConsumerWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                  friend.pseudonym,
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                  ),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        friend.pseudonym,
+                        style: const TextStyle(
+                          color: VentlyColors.deepBurgundy,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    if (friend.isVerified) ...[
+                      const SizedBox(width: 4),
+                      const VerifiedBadge(size: 15),
+                    ],
+                  ],
                 ),
               ),
               ListTile(
@@ -1114,7 +1147,7 @@ class _FriendRow extends ConsumerWidget {
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.person_remove_alt_1,
                     color: VentlyColors.deepBurgundy),
-                title: const Text('Remove connection',
+                title: const Text('Remove friend',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () async {
                   Navigator.pop(sheetCtx);

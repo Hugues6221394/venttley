@@ -24,7 +24,7 @@ class HomeShell extends ConsumerWidget {
     _Tab(Icons.graphic_eq_outlined, Icons.graphic_eq_rounded, 'Whispers',
         branchIndex: 1),
     _Tab(Icons.add_rounded, Icons.add_rounded, 'Post', isPost: true),
-    _Tab(Icons.people_alt_outlined, Icons.people_alt_rounded, 'Connections',
+    _Tab(Icons.people_alt_outlined, Icons.people_alt_rounded, 'Friends',
         pushRoute: '/friends'),
     _Tab(Icons.mail_outline_rounded, Icons.mail_rounded, 'Inbox',
         branchIndex: 3),
@@ -152,25 +152,44 @@ class _GlassNavBar extends ConsumerWidget {
       top: false,
       minimum: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(32),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             decoration: BoxDecoration(
-              color: (isDark ? VentlyColors.cardDark : Colors.white)
-                  .withOpacity(isDark ? 0.72 : 0.62),
-              borderRadius: BorderRadius.circular(30),
+              // Layered translucent gradient reads as frosted glass with a
+              // brighter top edge catching the light.
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: isDark
+                    ? [
+                        VentlyColors.cardDark.withOpacity(0.80),
+                        VentlyColors.cardDark.withOpacity(0.66),
+                      ]
+                    : [
+                        Colors.white.withOpacity(0.78),
+                        Colors.white.withOpacity(0.52),
+                      ],
+              ),
+              borderRadius: BorderRadius.circular(32),
               border: Border.all(
-                color: (isDark ? Colors.white : Colors.white)
-                    .withOpacity(isDark ? 0.10 : 0.70),
+                color: Colors.white.withOpacity(isDark ? 0.12 : 0.75),
+                width: 1.2,
               ),
               boxShadow: [
                 BoxShadow(
                   color: VentlyColors.berryMagenta
-                      .withOpacity(isDark ? 0.18 : 0.10),
-                  blurRadius: 24,
-                  offset: const Offset(0, 10),
+                      .withOpacity(isDark ? 0.22 : 0.14),
+                  blurRadius: 30,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 12),
+                ),
+                BoxShadow(
+                  color: Colors.black.withOpacity(isDark ? 0.30 : 0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
@@ -219,39 +238,71 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Icons-only footer (IG / X style). The selected tab reads through a
+    // tinted glass pill + soft berry glow instead of a text label.
     final color = selected
         ? scheme.primary
-        : scheme.onSurface.withOpacity(isDark ? 0.55 : 0.50);
+        : scheme.onSurface.withOpacity(isDark ? 0.62 : 0.55);
     return Pressable(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(
+      child: Semantics(
+        label: tab.label,
+        button: true,
+        selected: selected,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Stack(
             clipBehavior: Clip.none,
+            alignment: Alignment.center,
             children: [
               AnimatedContainer(
                 duration: VentlyMotion.base,
                 curve: VentlyMotion.enter,
-                width: 38,
-                height: 34,
+                width: 52,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: selected
-                      ? scheme.primary.withOpacity(0.14)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
+                  gradient: selected
+                      ? LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            scheme.primary.withOpacity(0.22),
+                            scheme.primary.withOpacity(0.10),
+                          ],
+                        )
+                      : null,
+                  borderRadius: BorderRadius.circular(16),
+                  border: selected
+                      ? Border.all(
+                          color: scheme.primary.withOpacity(0.28), width: 1)
+                      : null,
+                  boxShadow: selected
+                      ? [
+                          BoxShadow(
+                            color: scheme.primary.withOpacity(0.22),
+                            blurRadius: 14,
+                            spreadRadius: -2,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : null,
                 ),
                 alignment: Alignment.center,
-                child: Icon(
-                  selected ? tab.activeIcon : tab.icon,
-                  color: color,
-                  size: 21,
+                child: AnimatedScale(
+                  duration: VentlyMotion.base,
+                  curve: VentlyMotion.enter,
+                  scale: selected ? 1.08 : 1.0,
+                  child: Icon(
+                    selected ? tab.activeIcon : tab.icon,
+                    color: color,
+                    size: 24,
+                  ),
                 ),
               ),
               if (badge != null)
                 Positioned(
-                  right: -3,
-                  top: -3,
+                  right: 8,
+                  top: 2,
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -278,29 +329,7 @@ class _NavItem extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 1),
-          Text(
-            tab.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
-              color: color,
-            ),
-          ),
-          AnimatedContainer(
-            duration: VentlyMotion.base,
-            curve: VentlyMotion.enter,
-            margin: const EdgeInsets.only(top: 2),
-            width: selected ? 10 : 0,
-            height: 3,
-            decoration: BoxDecoration(
-              color: scheme.primary,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -315,7 +344,10 @@ class _PostNavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Pressable(
+    return Semantics(
+      label: label,
+      button: true,
+      child: Pressable(
       onTap: onTap,
       pressedScale: 0.90,
       child: Column(
@@ -343,18 +375,8 @@ class _PostNavButton extends StatelessWidget {
                   const Icon(Icons.add_rounded, color: Colors.white, size: 28),
             ),
           ),
-          Transform.translate(
-            offset: const Offset(0, -12),
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w800,
-                color: VentlyColors.berryMagenta,
-              ),
-            ),
-          ),
         ],
+      ),
       ),
     );
   }

@@ -237,7 +237,7 @@ class FeedCategories {
       case 'relationships':     return 'Dating & Love';
       case 'trauma':            return 'Comebacks';
       case 'questions':         return 'Ask';
-      case 'friendship':        return 'Connections';
+      case 'friendship':        return 'Friends';
       case 'adulting':          return 'Adulting';
       case 'regrets':           return 'Regrets';
       case 'secrets':           return 'Secrets';

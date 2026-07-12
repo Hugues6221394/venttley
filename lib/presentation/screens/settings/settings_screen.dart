@@ -123,7 +123,11 @@ class SettingsScreen extends ConsumerWidget {
               // Use go(), not push(): the keeper studio lives in the bottom-nav
               // shell branch. push() would stack a second copy of the branch
               // and duplicate its GlobalKeys (keyReservation assertion crash).
-              onTap: () => context.go('/feed'),
+              // Also exit "member view" or /feed just shows the member feed.
+              onTap: () {
+                ref.read(keeperMemberViewProvider.notifier).state = false;
+                context.go('/feed');
+              },
             ),
           const _SectionHeader('Privacy'),
           ListTile(

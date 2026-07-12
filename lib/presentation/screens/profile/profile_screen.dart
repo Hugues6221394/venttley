@@ -158,26 +158,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
     return Scaffold(
         extendBodyBehindAppBar: true,
+        // No app-bar title band — the hero card is the header (settings lives
+        // inside it now), so the profile content hugs the top of the screen.
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           scrolledUnderElevation: 0,
-          title: const Text('Profile'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.settings_outlined),
-              tooltip: 'Settings',
-              onPressed: () => context.push('/settings'),
-            ),
-          ],
+          toolbarHeight: 0,
         ),
         body: VentlyPremiumBackground(
           child: NestedScrollView(
           headerSliverBuilder: (ctx, _) => [
-            // Body extends behind the transparent app bar — clear it.
+            // Only clear the status bar — the transparent app bar is 0-height.
             SliverToBoxAdapter(
               child: SizedBox(
-                height: MediaQuery.of(ctx).padding.top + kToolbarHeight,
+                height: MediaQuery.of(ctx).padding.top + 8,
               ),
             ),
             SliverToBoxAdapter(

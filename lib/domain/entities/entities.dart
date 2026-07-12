@@ -680,6 +680,9 @@ class ThreadedComment {
   final String authorPseudonym;
   final String authorAvatarSeed;
   final String? authorProfilePhotoUrl;
+  /// True when the comment's author is a verified member — drives the tick
+  /// next to their name in the thread.
+  final bool authorIsVerified;
   final String content;
   /// Migration 0102 — optional photo / GIF attached to the reply.
   final String? imageUrl;
@@ -708,6 +711,7 @@ class ThreadedComment {
     required this.createdAt,
     this.authorId,
     this.authorProfilePhotoUrl,
+    this.authorIsVerified = false,
     this.parentId,
     this.imageUrl,
     this.likedByMe = false,
@@ -737,6 +741,7 @@ class ThreadedComment {
       authorPseudonym: authorPseudonym,
       authorAvatarSeed: authorAvatarSeed,
       authorProfilePhotoUrl: authorProfilePhotoUrl,
+      authorIsVerified: authorIsVerified,
       content: content ?? this.content,
       imageUrl: imageUrl,
       path: path,
@@ -1412,6 +1417,9 @@ class TribeMessage {
   final String senderPseudonym;
   final String senderAvatarSeed;
   final String? senderProfilePhotoUrl;
+  /// True when the sender is a verified member posting under their real
+  /// identity (never for persona-sent messages — migration 0110).
+  final bool senderIsVerified;
   final String? senderPersonaId;
   final String? content;
   final String? imageUrl;
@@ -1445,6 +1453,7 @@ class TribeMessage {
     required this.sentByMe,
     this.senderId,
     this.senderProfilePhotoUrl,
+    this.senderIsVerified = false,
     this.senderPersonaId,
     this.content,
     this.imageUrl,

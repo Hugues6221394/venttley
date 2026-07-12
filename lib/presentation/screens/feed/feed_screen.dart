@@ -16,6 +16,7 @@ import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
 import '../../widgets/chat_audio_bubble.dart';
 import '../../widgets/friend_action_button.dart';
+import '../../widgets/verified_badge.dart';
 import '../../widgets/sensitive_media_veil.dart';
 import '../../widgets/email_verification_banner.dart';
 import '../../widgets/popular_whispers_rail.dart';
@@ -90,7 +91,7 @@ class FeedScreen extends ConsumerWidget {
                     // The greeting is one slim line; composing lives in the
                     // nav's Post button and the menu.
                     SliverToBoxAdapter(child: _VentlyFeedTopBar(me: me)),
-                    SliverToBoxAdapter(child: _CompactGreeting(me: me)),
+                    const SliverToBoxAdapter(child: _CompactGreeting()),
                     const SliverToBoxAdapter(child: EmailVerificationBanner()),
                     SliverToBoxAdapter(
                       child: storiesAsync.when(
@@ -303,7 +304,7 @@ class _VentlyFeedTopBar extends ConsumerWidget {
       (Icons.diversity_3_outlined, 'Tribes', '/tribes', false),
       (Icons.graphic_eq_rounded, 'Whispers', '/whispers', true),
       (Icons.help_outline_rounded, 'Questions', '/questions', false),
-      (Icons.people_alt_outlined, 'Connections', '/friends', false),
+      (Icons.people_alt_outlined, 'Friends', '/friends', false),
       (Icons.mail_outline_rounded, 'Inbox', '/inbox', true),
       (Icons.notifications_none_rounded, 'Notifications', '/notifications',
           false),
@@ -342,6 +343,11 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                   color: VentlyColors.softMauve),
               onTap: () {
                 Navigator.of(sheetCtx).pop();
+                // Returning to the Studio must exit "member view" first, or the
+                // /feed branch just re-renders the member feed.
+                if (label == 'Plug Studio') {
+                  ref.read(keeperMemberViewProvider.notifier).state = false;
+                }
                 if (isBranch) {
                   context.go(route);
                 } else {
@@ -440,56 +446,40 @@ class _GlassCircleButton extends StatelessWidget {
   }
 }
 
-/// One-line greeting — keeps the brand's warmth without pushing content
-/// below the fold.
+/// Editorial header for the feed. Deliberately **never** prints the user's
+/// pseudonym — the feed is a public-facing surface (someone could be scrolling
+/// in a crowd), so identity stays on the profile tab only. Instead we lead with
+/// a time-aware greeting + a warm, brand-appropriate line.
 class _CompactGreeting extends StatelessWidget {
-  const _CompactGreeting({required this.me});
-
-  final AppUser? me;
-
-  static String _greetingFor(DateTime t) {
-    final h = t.hour;
-    if (h < 5) return 'Late night';
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    if (h < 22) return 'Good evening';
-    return 'Hey, night owl';
-  }
+  const _CompactGreeting();
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final name = me?.anonymousPseudonym ?? 'Ghost';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 2, 16, 4),
+      padding: const EdgeInsets.fromLTRB(20, 4, 16, 6),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Text.rich(
-              TextSpan(
-                text: '${_greetingFor(DateTime.now())}, ',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: isDark
-                      ? VentlyColors.softOffWhite
-                      : VentlyColors.deepBurgundy,
-                ),
-                children: [
-                  TextSpan(
-                    text: '$name.',
-                    style: const TextStyle(
-                      color: VentlyColors.berryMagenta,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ),
+            child: Text(
+              'Take a breath. You’re safe here.',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.2,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.1,
+                color: (isDark
+                        ? VentlyColors.softOffWhite
+                        : VentlyColors.deepBurgundy)
+                    .withOpacity(0.72),
+              ),
             ),
           ),
-          const GlowOrb(size: 30),
+          const SizedBox(width: 10),
+          const GlowOrb(size: 22),
         ],
       ),
     );
@@ -1751,15 +1741,27 @@ class _SuggestedPersonCard extends StatelessWidget {
           const SizedBox(height: 8),
           GestureDetector(
             onTap: () => context.push('/user/${s.userId}'),
-            child: Text(
-              '@${s.pseudonym}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 12.5,
-                color: VentlyColors.deepBurgundy,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    '@${s.pseudonym}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12.5,
+                      color: VentlyColors.deepBurgundy,
+                    ),
+                  ),
+                ),
+                if (s.isVerified) ...[
+                  const SizedBox(width: 3),
+                  const VerifiedBadge(size: 12.5),
+                ],
+              ],
             ),
           ),
           const SizedBox(height: 2),

@@ -11,6 +11,7 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/user_profile_link.dart';
+import '../../widgets/verified_badge.dart';
 import '../../widgets/friend_action_button.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/sensitive_media_veil.dart';
@@ -472,21 +473,37 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                     ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: comment.authorId != null
-                        ? InkWell(
-                            onTap: () =>
-                                context.push('/user/${comment.authorId}'),
-                            child: Text(
-                              comment.authorPseudonym,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w800, fontSize: 13),
-                            ),
-                          )
-                        : Text(
-                            comment.authorPseudonym,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w800, fontSize: 13),
-                          ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: comment.authorId != null
+                              ? InkWell(
+                                  onTap: () =>
+                                      context.push('/user/${comment.authorId}'),
+                                  child: Text(
+                                    comment.authorPseudonym,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13),
+                                  ),
+                                )
+                              : Text(
+                                  comment.authorPseudonym,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w800, fontSize: 13),
+                                ),
+                        ),
+                        if (comment.authorIsVerified) ...[
+                          const SizedBox(width: 4),
+                          const VerifiedBadge(size: 13),
+                        ],
+                      ],
+                    ),
                   ),
                   if (hasChildren)
                     Padding(

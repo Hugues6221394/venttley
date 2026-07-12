@@ -646,7 +646,7 @@ class _PrivacyDurationCard extends StatelessWidget {
                   fontSize: 13.5),
             ),
             subtitle: Text(
-              friendsOnly ? 'Connections only' : 'Everyone on Venttly',
+              friendsOnly ? 'Friends only' : 'Everyone on Venttly',
               style: TextStyle(
                 color: VentlyColors.deepBurgundy.withOpacity(0.62),
                 fontSize: 12,

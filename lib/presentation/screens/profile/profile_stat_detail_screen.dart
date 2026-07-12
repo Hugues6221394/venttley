@@ -86,14 +86,14 @@ class ProfileStatDetailScreen extends ConsumerWidget {
       case ProfileStatKind.connections:
         return [
           _InsightCard(
-            title: 'Connection graph',
+            title: 'Friends graph',
             body:
                 '@${profile.pseudonym} has ${profile.connectionsCount} accepted '
-                'friendships. Connections unlock DMs and deeper profile views.',
+                'friendships. Friends unlock DMs and deeper profile views.',
           ),
           if (profile.mutualFriendsCount > 0)
             _InsightCard(
-              title: 'You share ${profile.mutualFriendsCount} connections',
+              title: 'You share ${profile.mutualFriendsCount} friends',
               body: profile.mutualFriendSample
                   .map((f) => '@${f.pseudonym}')
                   .join(', '),

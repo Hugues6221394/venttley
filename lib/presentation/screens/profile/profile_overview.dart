@@ -123,7 +123,9 @@ class _HeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GlassCard(
       padding: const EdgeInsets.all(16),
-      child: Column(
+      child: Stack(
+        children: [
+          Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -216,6 +218,11 @@ class _HeroCard extends StatelessWidget {
             trust: trust,
           ),
         ],
+          ),
+          // Settings gear floats in the card's top-right corner so it never
+          // squeezes the username row.
+          Positioned(top: 0, right: 0, child: _HeroSettingsButton()),
+        ],
       ),
     );
   }
@@ -269,17 +276,29 @@ class _GlowAvatar extends ConsumerWidget {
               ),
             ),
           ),
-          // Online dot.
+          // Add-photo affordance (Instagram-style +). Tapping it — or the
+          // avatar — opens the gallery / camera / avatar-builder sheet.
           Positioned(
-            right: 4,
-            bottom: 6,
-            child: Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: VentlyColors.onlineGreen,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
+            right: 0,
+            bottom: 2,
+            child: GestureDetector(
+              onTap: () => _showPhotoSheet(context, ref),
+              child: Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: VentlyColors.berryMagenta,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: VentlyColors.berryMagenta.withOpacity(0.35),
+                      blurRadius: 6,
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.add_rounded,
+                    color: Colors.white, size: 17),
               ),
             ),
           ),
@@ -579,6 +598,28 @@ class _EditButton extends StatelessWidget {
   }
 }
 
+/// Settings gear that lives in the hero card (top-right of the username row).
+/// Moved here from the app bar so the profile header can hug the top of the
+/// screen — no more empty "Profile" title band above the card.
+class _HeroSettingsButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withOpacity(0.6),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () => context.push('/settings'),
+        child: const Padding(
+          padding: EdgeInsets.all(7),
+          child: Icon(Icons.settings_outlined,
+              size: 18, color: VentlyColors.deepBurgundy),
+        ),
+      ),
+    );
+  }
+}
+
 class _StatsPanel extends StatelessWidget {
   const _StatsPanel({
     required this.posts,
@@ -820,16 +861,16 @@ class _FriendsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _CardTitle(icon: Icons.people_alt_rounded, title: 'Connections'),
+          const _CardTitle(icon: Icons.people_alt_rounded, title: 'Friends'),
           const SizedBox(height: 6),
-          Text('Meaningful connections start here.',
+          Text('Meaningful friendships start here.',
               style: TextStyle(
                   fontSize: 12,
                   height: 1.35,
                   color: VentlyColors.deepBurgundy.withOpacity(0.6))),
           const SizedBox(height: 14),
           if (friends.isEmpty)
-            Text('No connections yet.',
+            Text('No friends yet.',
                 style: TextStyle(
                     fontSize: 12,
                     color: VentlyColors.deepBurgundy.withOpacity(0.5)))
@@ -885,16 +926,20 @@ class _FriendsCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
               onTap: () => context.push('/friends'),
               child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                padding: EdgeInsets.symmetric(horizontal: 11, vertical: 9),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('Find Connections',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12.5,
-                            color: VentlyColors.berryMagenta)),
-                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text('Find Friends',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12.5,
+                              color: VentlyColors.berryMagenta)),
+                    ),
+                    SizedBox(width: 5),
                     Icon(Icons.arrow_forward_rounded,
                         size: 15, color: VentlyColors.berryMagenta),
                   ],

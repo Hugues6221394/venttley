@@ -18,6 +18,7 @@ import '../../theme/colors.dart';
 import '../../widgets/report_reason_sheet.dart';
 import '../../widgets/crisis_support_sheet.dart';
 import '../../widgets/chat_options_sheet.dart';
+import '../../widgets/verified_badge.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.roomId});
@@ -185,6 +186,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final peerName = (prefs.peerNickname?.trim().isNotEmpty ?? false)
         ? prefs.peerNickname!.trim()
         : r.peerPseudonym;
+    // DM peers are always accepted friends, so reuse the cached friends list
+    // to know whether the peer is verified (no extra fetch).
+    final peerVerified = () {
+      final pid = r.peerUserId;
+      if (pid == null) return false;
+      final friends =
+          ref.watch(myFriendsProvider).valueOrNull ?? const <FriendSummary>[];
+      for (final f in friends) {
+        if (f.userId == pid) return f.isVerified;
+      }
+      return false;
+    }();
     // Conversation-level disappearing TTL (server hard-deletes on a cron;
     // hide immediately here so it feels instant) + in-chat search.
     final disappearing =
@@ -277,10 +290,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(peerName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(peerName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                        if (peerVerified) ...[
+                          const SizedBox(width: 4),
+                          const VerifiedBadge(size: 14),
+                        ],
+                      ],
+                    ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

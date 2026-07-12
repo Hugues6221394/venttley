@@ -1248,6 +1248,7 @@ class SupabaseBackend {
       senderPseudonym:    (r['sender_pseudonym'] as String?) ?? 'anonymous',
       senderAvatarSeed:   (r['sender_avatar_seed'] as String?) ?? 'default-orb',
       senderProfilePhotoUrl: r['sender_profile_photo_url'] as String?,
+      senderIsVerified:   (r['sender_is_verified'] as bool?) ?? false,
       senderPersonaId:    r['sender_persona_id'] as String?,
       content:            r['content']        as String?,
       imageUrl:           r['image_url']      as String?,
@@ -3177,7 +3178,8 @@ class SupabaseBackend {
     if (authorIds.isNotEmpty) {
       final list = await _client
           .from('users')
-          .select('user_id, anonymous_pseudonym, avatar_seed, profile_photo_url')
+          .select(
+              'user_id, anonymous_pseudonym, avatar_seed, profile_photo_url, is_verified')
           .inFilter('user_id', authorIds);
       for (final r in list) {
         authors[r['user_id'] as String] = r;
@@ -3200,6 +3202,7 @@ class SupabaseBackend {
         authorAvatarSeed:
             author == null ? 'default-orb' : author['avatar_seed'] as String,
         authorProfilePhotoUrl: author?['profile_photo_url'] as String?,
+        authorIsVerified: (author?['is_verified'] as bool?) ?? false,
         content: r['content'] as String,
         imageUrl: r['image_url'] as String?,
         path: r['path'] as String,
@@ -3253,6 +3256,7 @@ class SupabaseBackend {
           parentId: parentId,
           authorPseudonym: '@${me?.anonymousPseudonym ?? 'anonymous'}',
           authorAvatarSeed: me?.avatarSeed ?? 'default-orb',
+          authorIsVerified: me?.isVerified ?? false,
           content: content,
           imageUrl: imageUrl,
           path: id.replaceAll('-', ''),
