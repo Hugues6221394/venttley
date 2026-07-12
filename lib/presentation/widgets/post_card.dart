@@ -10,6 +10,7 @@ import '../theme/colors.dart';
 import 'anonymous_avatar.dart';
 import 'mood_chip.dart';
 import 'poll_card.dart';
+import 'premium_motion.dart';
 import 'profile_avatar.dart';
 import 'user_profile_link.dart';
 import 'share_post_to_friend_sheet.dart';
@@ -78,9 +79,9 @@ class PostCard extends ConsumerWidget {
       );
     }
 
-    return InkWell(
+    return Pressable(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
+      pressedScale: 0.98,
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Padding(

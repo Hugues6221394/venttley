@@ -10,6 +10,7 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/blocked_accounts_sheet.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/premium_motion.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/vently_premium_background.dart';
@@ -988,11 +989,11 @@ class _FriendRow extends ConsumerWidget {
   final FriendSummary friend;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => context.push('/user/${friend.userId}'),
-        borderRadius: BorderRadius.circular(20),
+    return Pressable(
+      pressedScale: 0.98,
+      onTap: () => context.push('/user/${friend.userId}'),
+      child: Material(
+        color: Colors.transparent,
         child: Container(
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),

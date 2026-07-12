@@ -9,6 +9,7 @@ import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_chat_hub.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/premium_motion.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_premium_background.dart';
@@ -116,6 +117,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                     }
                     return ListView.separated(
                       physics: const AlwaysScrollableScrollPhysics(),
+                      cacheExtent: 800,
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                       itemCount: filtered.length,
                       separatorBuilder: (_, __) =>
@@ -888,14 +890,14 @@ class _ConversationRow extends ConsumerWidget {
     // Treat pending requests as "unread" so they get the accent bar.
     final unread = room.unreadCount > 0 || isRequest;
     final activityAt = room.lastMessageAt ?? room.createdAt;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => isRequest
-            ? _showRequestSheet(context, ref)
-            : context.push('/chat/${room.roomId}'),
-        onLongPress: () => _showActionsSheet(context, ref),
-        borderRadius: BorderRadius.circular(24),
+    return Pressable(
+      pressedScale: 0.98,
+      onTap: () => isRequest
+          ? _showRequestSheet(context, ref)
+          : context.push('/chat/${room.roomId}'),
+      onLongPress: () => _showActionsSheet(context, ref),
+      child: Material(
+        color: Colors.transparent,
         child: GlassCard(
           padding: EdgeInsets.zero,
           child: Row(

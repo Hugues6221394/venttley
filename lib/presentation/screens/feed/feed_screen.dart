@@ -86,6 +86,9 @@ class FeedScreen extends ConsumerWidget {
                 final stories = storiesAsync.valueOrNull ?? const <VentStory>[];
                 return CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
+                  // Pre-build offscreen items so fast flings never show a
+                  // blank gap on mid-tier devices.
+                  cacheExtent: 800,
                   slivers: [
                     // Content-first: stories → whispers → tribes → posts.
                     // The greeting is one slim line; composing lives in the
