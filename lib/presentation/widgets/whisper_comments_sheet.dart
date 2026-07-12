@@ -120,8 +120,8 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
                                 : 'Whisper comments',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: VentlyColors.deepBurgundy,
+                            style: TextStyle(
+                              color: context.ink,
                               fontWeight: FontWeight.w900,
                               fontSize: 17,
                             ),
@@ -130,7 +130,7 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
                         Text(
                           '${widget.whisper.commentsCount}',
                           style: TextStyle(
-                            color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                            color: context.ink.withOpacity(0.55),
                             fontWeight: FontWeight.w900,
                           ),
                         ),
@@ -148,7 +148,7 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
                     child: Text(
                       'Could not load comments',
                       style: TextStyle(
-                        color: VentlyColors.deepBurgundy.withOpacity(0.7),
+                        color: context.ink.withOpacity(0.7),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -159,7 +159,7 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
                         child: Text(
                           'Be the first to leave support.',
                           style: TextStyle(
-                            color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                            color: context.ink.withOpacity(0.55),
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -298,8 +298,8 @@ class _CommentTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   comment.content,
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
                     height: 1.35,

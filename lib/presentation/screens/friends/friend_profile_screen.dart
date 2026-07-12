@@ -138,16 +138,16 @@ class _FriendProfileBody extends StatelessWidget {
             backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             surfaceTintColor: Colors.transparent,
             elevation: 0,
-            bottom: const TabBar(
+            bottom: TabBar(
               labelColor: VentlyColors.berryMagenta,
-              unselectedLabelColor: VentlyColors.deepBurgundy,
+              unselectedLabelColor: context.ink,
               indicatorColor: VentlyColors.berryMagenta,
               indicatorWeight: 3,
-              labelStyle: TextStyle(
+              labelStyle: const TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 13,
               ),
-              tabs: [
+              tabs: const [
                 Tab(text: 'Vents'),
                 Tab(text: 'Achievements'),
                 Tab(text: 'Activity'),
@@ -653,7 +653,7 @@ class _StatsBanner extends StatelessWidget {
           divider(),
           stat(PostCard.compactNumber(profile.postsTotal), 'Posts'),
           divider(),
-          stat('🫂 ${PostCard.compactNumber(profile.hugsReceived)}', 'Hugs'),
+          stat(PostCard.compactNumber(profile.hugsReceived), 'Hugs'),
         ],
       ),
     );
@@ -1546,8 +1546,8 @@ class _WhisperMiniCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   '$mm:$ss',
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 12,
                   ),
@@ -1555,12 +1555,12 @@ class _WhisperMiniCard extends StatelessWidget {
                 const Spacer(),
                 Icon(Icons.favorite_border,
                     size: 12,
-                    color: VentlyColors.deepBurgundy.withOpacity(0.6)),
+                    color: context.ink.withOpacity(0.6)),
                 const SizedBox(width: 3),
                 Text(
                   '${whisper.likesCount}',
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                    color: context.ink.withOpacity(0.6),
                     fontWeight: FontWeight.w800,
                     fontSize: 11,
                   ),
@@ -1574,8 +1574,8 @@ class _WhisperMiniCard extends StatelessWidget {
                   : FeedCategories.label(whisper.category),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: VentlyColors.deepBurgundy,
+              style: TextStyle(
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 13,
                 height: 1.25,
@@ -1675,8 +1675,8 @@ class _TribesSection extends ConsumerWidget {
                                   t.name,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: VentlyColors.deepBurgundy,
+                                  style: TextStyle(
+                                    color: context.ink,
                                     fontWeight: FontWeight.w900,
                                     fontSize: 13.5,
                                   ),
@@ -1687,7 +1687,7 @@ class _TribesSection extends ConsumerWidget {
                                   '${t.isPrivate ? " • Private" : ""}',
                                   style: TextStyle(
                                     color:
-                                        VentlyColors.deepBurgundy.withOpacity(0.6),
+                                        context.ink.withOpacity(0.6),
                                     fontWeight: FontWeight.w700,
                                     fontSize: 11.5,
                                   ),

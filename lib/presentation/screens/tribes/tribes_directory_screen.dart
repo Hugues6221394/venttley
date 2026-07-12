@@ -270,7 +270,7 @@ class _JoinPill extends ConsumerWidget {
       return OutlinedButton(
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          foregroundColor: VentlyColors.deepBurgundy,
+          foregroundColor: context.ink,
         ),
         onPressed: () async {
           await repo.leaveTribe(tribe.tribeId);

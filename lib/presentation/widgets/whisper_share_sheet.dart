@@ -54,10 +54,10 @@ class _WhisperShareSheet extends StatelessWidget {
                 ),
               ),
             ),
-            const Text(
+            Text(
               'Share Whisper',
               style: TextStyle(
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 18,
               ),
@@ -70,7 +70,7 @@ class _WhisperShareSheet extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.65),
+                color: context.ink.withOpacity(0.65),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -134,8 +134,8 @@ class _ShareAction extends StatelessWidget {
                 const SizedBox(width: 12),
                 Text(
                   label,
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 15,
                   ),

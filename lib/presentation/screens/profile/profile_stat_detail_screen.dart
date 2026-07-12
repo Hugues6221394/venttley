@@ -181,7 +181,7 @@ class ProfileStatDetailScreen extends ConsumerWidget {
               child: Text(
                 'Badges unlock as @${profile.pseudonym} keeps showing up.',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.65),
+                  color: context.ink.withOpacity(0.65),
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -198,7 +198,7 @@ class ProfileStatDetailScreen extends ConsumerWidget {
           GlassCard(
             child: Row(
               children: [
-                Icon(Icons.local_fire_department,
+                const Icon(Icons.local_fire_department,
                     size: 36, color: VentlyColors.berryMagenta),
                 const SizedBox(width: 14),
                 Expanded(
@@ -215,7 +215,7 @@ class ProfileStatDetailScreen extends ConsumerWidget {
                       Text(
                         'Personal best ${profile.bestStreak ?? 0} days',
                         style: TextStyle(
-                          color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                          color: context.ink.withOpacity(0.6),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -275,7 +275,7 @@ class _Header extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: VentlyColors.deepBurgundy.withOpacity(0.58),
+                    color: context.ink.withOpacity(0.58),
                   ),
                 ),
               ],
@@ -369,7 +369,7 @@ class _InsightCard extends StatelessWidget {
             style: TextStyle(
               height: 1.4,
               fontWeight: FontWeight.w600,
-              color: VentlyColors.deepBurgundy.withOpacity(0.72),
+              color: context.ink.withOpacity(0.72),
             ),
           ),
         ],

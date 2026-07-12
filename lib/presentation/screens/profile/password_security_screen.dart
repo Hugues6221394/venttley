@@ -142,7 +142,7 @@ class _PasswordSecurityScreenState
                 'always works; a recovery email is a backup way in if you ever '
                 'forget your password.',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                  color: context.ink.withOpacity(0.55),
                   fontSize: 12.5,
                   height: 1.4,
                   fontWeight: FontWeight.w600,
@@ -193,16 +193,16 @@ class _PasswordSecurityScreenState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Change password',
+              Text('Change password',
                   style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w900,
-                      color: VentlyColors.deepBurgundy)),
+                      color: context.ink)),
               const SizedBox(height: 4),
               Text(
                 'Enter your current password, then choose a new one.',
                 style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                    color: context.ink.withOpacity(0.6),
                     fontSize: 13),
               ),
               const SizedBox(height: 16),
@@ -343,16 +343,16 @@ class _PasswordSecurityScreenState
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(hasRealEmail ? 'Change recovery email' : 'Add recovery email',
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w900,
-                      color: VentlyColors.deepBurgundy)),
+                      color: context.ink)),
               const SizedBox(height: 4),
               Text(
                 'We\'ll email a confirmation link to this address. Tap it to '
                 'finish — your username login keeps working either way.',
                 style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                    color: context.ink.withOpacity(0.6),
                     fontSize: 13,
                     height: 1.35),
               ),
@@ -479,18 +479,18 @@ class _PasswordSecurityScreenState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Confirm recovery email',
+              Text('Confirm recovery email',
                   style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w900,
-                      color: VentlyColors.deepBurgundy)),
+                      color: context.ink)),
               const SizedBox(height: 4),
               Text(
                 sent
                     ? 'Enter the 6-digit code we emailed to ${session.currentEmail ?? 'your inbox'}.'
                     : 'We\'ll email a 6-digit code to ${session.currentEmail ?? 'your inbox'}.',
                 style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                    color: context.ink.withOpacity(0.6),
                     fontSize: 13,
                     height: 1.35),
               ),
@@ -700,7 +700,7 @@ class _CheckupCard extends StatelessWidget {
                     Text(
                       'Security checkup',
                       style: TextStyle(
-                        color: VentlyColors.deepBurgundy.withOpacity(0.7),
+                        color: context.ink.withOpacity(0.7),
                         fontWeight: FontWeight.w700,
                         fontSize: 12.5,
                       ),
@@ -711,8 +711,8 @@ class _CheckupCard extends StatelessWidget {
                           : allGood
                               ? 'You\'re fully protected'
                               : '$covered of $total steps done',
-                      style: const TextStyle(
-                        color: VentlyColors.deepBurgundy,
+                      style: TextStyle(
+                        color: context.ink,
                         fontWeight: FontWeight.w900,
                         fontSize: 17,
                       ),
@@ -754,7 +754,7 @@ class _CheckItem extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(ok ? 0.7 : 0.9),
+              color: context.ink.withOpacity(ok ? 0.7 : 0.9),
               fontWeight: FontWeight.w700,
               fontSize: 13,
             ),
@@ -840,14 +840,14 @@ class _Tile extends StatelessWidget {
                           fontSize: 14.5,
                           color: danger
                               ? color
-                              : VentlyColors.deepBurgundy,
+                              : context.ink,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         subtitle,
                         style: TextStyle(
-                          color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                          color: context.ink.withOpacity(0.55),
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
                         ),
@@ -878,7 +878,7 @@ class _Tile extends StatelessWidget {
                   trailing!,
                 ] else if (onTap != null)
                   Icon(Icons.chevron_right_rounded,
-                      color: VentlyColors.deepBurgundy.withOpacity(0.3)),
+                      color: context.ink.withOpacity(0.3)),
               ],
             ),
           ),

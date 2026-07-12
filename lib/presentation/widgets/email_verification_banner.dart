@@ -45,12 +45,12 @@ class EmailVerificationBanner extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Verify your email',
                         style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 13.5,
-                          color: VentlyColors.deepBurgundy,
+                          color: context.ink,
                         ),
                       ),
                       Text(
@@ -58,7 +58,7 @@ class EmailVerificationBanner extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
-                          color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                          color: context.ink.withOpacity(0.6),
                         ),
                       ),
                     ],

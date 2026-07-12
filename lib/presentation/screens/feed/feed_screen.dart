@@ -231,10 +231,10 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                     height: 42,
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.55),
+                      color: context.glass(0.55),
                       borderRadius: BorderRadius.circular(22),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.65),
+                        color: context.glassBorder,
                       ),
                     ),
                     child: Row(
@@ -242,7 +242,7 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                         Icon(
                           Icons.search_rounded,
                           size: 19,
-                          color: VentlyColors.deepBurgundy.withOpacity(0.48),
+                          color: context.ink.withOpacity(0.48),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -252,7 +252,7 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color:
-                                  VentlyColors.deepBurgundy.withOpacity(0.48),
+                                  context.ink.withOpacity(0.48),
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
                             ),
@@ -333,10 +333,10 @@ class _VentlyFeedTopBar extends ConsumerWidget {
               ),
               title: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 14,
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                 ),
               ),
               trailing: const Icon(Icons.chevron_right_rounded,
@@ -432,9 +432,9 @@ class _GlassCircleButton extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.55),
+              color: context.glass(0.55),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withOpacity(0.65)),
+              border: Border.all(color: context.glassBorder),
             ),
             child: Icon(icon, size: 20, color: VentlyColors.berryMagenta),
           ),
@@ -473,7 +473,7 @@ class _CompactGreeting extends StatelessWidget {
                 letterSpacing: -0.1,
                 color: (isDark
                         ? VentlyColors.softOffWhite
-                        : VentlyColors.deepBurgundy)
+                        : context.ink)
                     .withOpacity(0.72),
               ),
             ),
@@ -516,31 +516,31 @@ class _VentlyStoriesRail extends ConsumerWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.72),
+                    color: context.glass(0.72),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: VentlyColors.softMauve.withOpacity(0.22),
                     ),
                   ),
-                  child: const Column(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         'No friend stories yet',
                         style: TextStyle(
-                          color: VentlyColors.deepBurgundy,
+                          color: context.ink,
                           fontWeight: FontWeight.w900,
                           fontSize: 13,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         'When friends post, they stay here for 24 hours.',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: VentlyColors.softMauve,
+                          color: context.inkMuted,
                           fontWeight: FontWeight.w700,
                           fontSize: 11,
                           height: 1.25,
@@ -614,12 +614,12 @@ class _AddStoryBubble extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 7),
-          const Text(
+          Text(
             'Add vent',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
               fontSize: 10,
               fontWeight: FontWeight.w700,
             ),
@@ -705,8 +705,8 @@ class _VentlyStoryCircle extends StatelessWidget {
             story.authorPseudonym,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: VentlyColors.deepBurgundy,
+            style: TextStyle(
+              color: context.ink,
               fontSize: 10,
               fontWeight: FontWeight.w700,
             ),
@@ -794,9 +794,9 @@ class _VentlyFeedPostCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.72),
+            color: context.glass(0.72),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.65)),
+            border: Border.all(color: context.glassBorder),
             boxShadow: [
               BoxShadow(
                 color: VentlyColors.berryMagenta.withOpacity(0.05),
@@ -837,8 +837,8 @@ class _VentlyFeedPostCard extends StatelessWidget {
                               post.authorPseudonym,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: VentlyColors.deepBurgundy,
+                              style: TextStyle(
+                                color: context.ink,
                                 fontWeight: FontWeight.w900,
                                 fontSize: 12,
                               ),
@@ -849,8 +849,8 @@ class _VentlyFeedPostCard extends StatelessWidget {
                             post.authorPseudonym,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: VentlyColors.deepBurgundy,
+                            style: TextStyle(
+                              color: context.ink,
                               fontWeight: FontWeight.w900,
                               fontSize: 12,
                             ),
@@ -861,7 +861,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: VentlyColors.deepBurgundy.withOpacity(0.58),
+                            color: context.ink.withOpacity(0.58),
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
                           ),
@@ -906,8 +906,8 @@ class _VentlyFeedPostCard extends StatelessWidget {
               ],
               Text(
                 post.content,
-                style: const TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                style: TextStyle(
+                  color: context.ink,
                   height: 1.48,
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
@@ -922,10 +922,10 @@ class _VentlyFeedPostCard extends StatelessWidget {
                     onTap: onTap,
                     size: 18,
                     activeColor: VentlyColors.berryMagenta,
-                    inactiveColor: VentlyColors.deepBurgundy,
+                    inactiveColor: context.ink,
                     label: Text(
                       '${PostCard.compactNumber(post.likesCount)} Hugs',
-                      style: _metricStyle,
+                      style: _metricStyle(context),
                     ),
                   ),
                   const SizedBox(width: 20),
@@ -934,12 +934,12 @@ class _VentlyFeedPostCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                     child: Row(
                       children: [
-                        const Icon(Icons.chat_bubble_outline,
-                            size: 17, color: VentlyColors.deepBurgundy),
+                        Icon(Icons.chat_bubble_outline,
+                            size: 17, color: context.ink),
                         const SizedBox(width: 6),
                         Text(
                           '${PostCard.compactNumber(post.commentsCount)} Replies',
-                          style: _metricStyle,
+                          style: _metricStyle(context),
                         ),
                       ],
                     ),
@@ -947,7 +947,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.share_rounded, size: 18),
-                    color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                    color: context.ink.withOpacity(0.62),
                     onPressed: onShare,
                   ),
                 ],
@@ -959,11 +959,11 @@ class _VentlyFeedPostCard extends StatelessWidget {
     );
   }
 
-  static const _metricStyle = TextStyle(
-    color: VentlyColors.deepBurgundy,
-    fontSize: 12,
-    fontWeight: FontWeight.w800,
-  );
+  static TextStyle _metricStyle(BuildContext context) => TextStyle(
+        color: context.ink,
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+      );
 
   static String _ago(DateTime date) {
     final diff = DateTime.now().difference(date);
@@ -1397,7 +1397,7 @@ class _VibeChip extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? scheme.primary : Colors.white.withOpacity(0.55),
+          color: selected ? scheme.primary : context.glass(0.55),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: selected
@@ -1685,14 +1685,14 @@ class _SuggestedPeopleRail extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(18, 4, 18, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
             child: Text(
               'People to connect with',
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 15,
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
               ),
             ),
           ),
@@ -1722,9 +1722,9 @@ class _SuggestedPersonCard extends StatelessWidget {
       width: 156,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.72),
+        color: context.glass(0.72),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.65)),
+        border: Border.all(color: context.glassBorder),
       ),
       child: Column(
         children: [
@@ -1750,10 +1750,10 @@ class _SuggestedPersonCard extends StatelessWidget {
                     '@${s.pseudonym}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 12.5,
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                     ),
                   ),
                 ),
@@ -1772,7 +1772,7 @@ class _SuggestedPersonCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
-              color: VentlyColors.deepBurgundy.withOpacity(0.55),
+              color: context.ink.withOpacity(0.55),
             ),
           ),
           const Spacer(),

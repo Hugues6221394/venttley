@@ -42,10 +42,10 @@ class KeeperAnalyticsScreen extends ConsumerWidget {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                   children: [
-                    const Text(
+                    Text(
                       'Analytics',
                       style: TextStyle(
-                        color: VentlyColors.deepBurgundy,
+                        color: context.ink,
                         fontWeight: FontWeight.w900,
                         fontSize: 24,
                       ),
@@ -295,10 +295,10 @@ class _MetricCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w900,
               fontSize: 22,
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
             ),
           ),
           Text(
@@ -306,7 +306,7 @@ class _MetricCard extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 11,
-              color: VentlyColors.deepBurgundy.withOpacity(0.55),
+              color: context.ink.withOpacity(0.55),
             ),
           ),
         ],
@@ -332,7 +332,7 @@ class _InsightRow extends StatelessWidget {
             size: 16,
             color: urgent
                 ? VentlyColors.berryMagenta
-                : VentlyColors.deepBurgundy.withOpacity(0.55),
+                : context.ink.withOpacity(0.55),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -341,7 +341,7 @@ class _InsightRow extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
-                color: VentlyColors.deepBurgundy.withOpacity(0.85),
+                color: context.ink.withOpacity(0.85),
               ),
             ),
           ),

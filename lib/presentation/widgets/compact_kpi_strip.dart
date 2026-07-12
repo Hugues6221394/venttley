@@ -64,7 +64,7 @@ class _KpiTile extends StatelessWidget {
           Text(
             item.value,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
               fontWeight: FontWeight.w900,
               fontSize: 18,
               height: 1,
@@ -76,7 +76,7 @@ class _KpiTile extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.55),
+              color: context.ink.withOpacity(0.55),
               fontWeight: FontWeight.w800,
               fontSize: 9.5,
               letterSpacing: 0.3,

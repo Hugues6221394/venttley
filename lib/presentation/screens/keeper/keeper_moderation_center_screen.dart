@@ -84,10 +84,10 @@ class KeeperModerationCenterScreen extends ConsumerWidget {
               ),
             ],
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Priority queue',
               style: TextStyle(
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 15,
               ),
@@ -98,7 +98,7 @@ class KeeperModerationCenterScreen extends ConsumerWidget {
                 child: Text(
                   'No open reports — your tribe looks calm right now.',
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.7),
+                    color: context.ink.withOpacity(0.7),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -136,10 +136,10 @@ class _StatChip extends StatelessWidget {
               children: [
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: 18,
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                   ),
                 ),
                 Text(
@@ -147,7 +147,7 @@ class _StatChip extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
-                    color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                    color: context.ink.withOpacity(0.55),
                   ),
                 ),
               ],
@@ -196,7 +196,7 @@ class _ReportTile extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: VentlyColors.deepBurgundy.withOpacity(0.5),
+                    color: context.ink.withOpacity(0.5),
                   ),
                 ),
               ],
@@ -207,9 +207,9 @@ class _ReportTile extends StatelessWidget {
                 item.postSnippet!,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w700,
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                 ),
               ),
             ],
@@ -220,7 +220,7 @@ class _ReportTile extends StatelessWidget {
                   'Flagged by @${item.reporterPseudonym}',
                   style: TextStyle(
                     fontSize: 11,
-                    color: VentlyColors.deepBurgundy.withOpacity(0.5),
+                    color: context.ink.withOpacity(0.5),
                   ),
                 ),
               ),

@@ -29,17 +29,17 @@ class VentlyErrorState extends StatelessWidget {
             const SizedBox(height: VentlyTokens.s12),
             Text(title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 16,
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                 )),
             const SizedBox(height: 8),
             Text(
               UserFriendlyErrors.message(error),
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.65),
+                color: context.ink.withOpacity(0.65),
                 fontWeight: FontWeight.w600,
                 height: 1.35,
               ),

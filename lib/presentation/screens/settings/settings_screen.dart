@@ -33,7 +33,7 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         children: [
           if (me != null) ...[
-            _SectionHeader('Signed in as'),
+            const _SectionHeader('Signed in as'),
             ListTile(
               leading: CircleAvatar(
                 backgroundColor: scheme.primary.withOpacity(0.14),
@@ -400,12 +400,12 @@ class SettingsScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
+              Text(
                 'You are not alone',
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 18,
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                 ),
               ),
               const SizedBox(height: 8),

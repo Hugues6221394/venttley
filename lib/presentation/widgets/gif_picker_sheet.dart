@@ -197,7 +197,7 @@ class _Centered extends StatelessWidget {
               text,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                color: context.ink.withOpacity(0.6),
                 fontWeight: FontWeight.w600,
               ),
             ),

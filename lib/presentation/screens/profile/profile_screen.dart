@@ -245,40 +245,40 @@ class _AboutTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const Text('About',
+        Text('About',
             style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 18,
-                color: VentlyColors.deepBurgundy)),
+                color: context.ink)),
         const SizedBox(height: 12),
         Text(bio,
             style: TextStyle(
                 fontSize: 14,
                 height: 1.5,
-                color: VentlyColors.deepBurgundy.withOpacity(0.8))),
+                color: context.ink.withOpacity(0.8))),
         const SizedBox(height: 20),
-        _row('Pseudonym', '@${me.anonymousPseudonym}'),
-        _row('Verified', me.isVerified ? 'Yes' : 'Not yet'),
-        _row('Karma', '${me.karmaPoints}'),
+        _row(context, 'Pseudonym', '@${me.anonymousPseudonym}'),
+        _row(context, 'Verified', me.isVerified ? 'Yes' : 'Not yet'),
+        _row(context, 'Karma', '${me.karmaPoints}'),
         if ((me.homeCountry ?? '').isNotEmpty)
-          _row('From', me.homeCountry!),
+          _row(context, 'From', me.homeCountry!),
       ],
     );
   }
 
-  Widget _row(String k, String v) => Padding(
+  Widget _row(BuildContext context, String k, String v) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 7),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(k,
                 style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                    color: context.ink.withOpacity(0.6),
                     fontWeight: FontWeight.w600)),
             Text(v,
-                style: const TextStyle(
+                style: TextStyle(
                     fontWeight: FontWeight.w800,
-                    color: VentlyColors.deepBurgundy)),
+                    color: context.ink)),
           ],
         ),
       );
@@ -351,7 +351,7 @@ class _MyWhispersTab extends ConsumerWidget {
               Text(
                 'Record a voice story from the Whispers tab.',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.65),
+                  color: context.ink.withOpacity(0.65),
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -422,7 +422,7 @@ class _MyWhisperTile extends ConsumerWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: VentlyColors.deepBurgundy.withOpacity(0.62),
+            color: context.ink.withOpacity(0.62),
             fontWeight: FontWeight.w700,
             fontSize: 12,
           ),
@@ -582,7 +582,7 @@ class _SavedWhisperTile extends StatelessWidget {
       subtitle: Text(
         '${whisper.category} · ${_fmtDuration(whisper.audioDurationSeconds)}',
         style: TextStyle(
-          color: VentlyColors.deepBurgundy.withOpacity(0.6),
+          color: context.ink.withOpacity(0.6),
           fontWeight: FontWeight.w700,
           fontSize: 12,
         ),

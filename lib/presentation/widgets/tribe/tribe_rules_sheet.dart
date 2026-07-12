@@ -93,7 +93,7 @@ class _RulesSheetBodyState extends ConsumerState<_RulesSheetBody> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                color: context.ink.withOpacity(0.6),
               ),
             ),
           )
@@ -236,7 +236,7 @@ class _BanListState extends ConsumerState<_BanList> {
                 fontSize: 10.5,
                 letterSpacing: 0.8,
                 fontWeight: FontWeight.w900,
-                color: VentlyColors.deepBurgundy.withOpacity(0.5),
+                color: context.ink.withOpacity(0.5),
               ),
             ),
             const SizedBox(height: 6),
@@ -260,7 +260,7 @@ class _BanListState extends ConsumerState<_BanList> {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 11,
-                                color: VentlyColors.deepBurgundy
+                                color: context.ink
                                     .withOpacity(0.55),
                               ),
                             ),

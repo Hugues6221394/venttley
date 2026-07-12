@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/repositories/vently_repository.dart';
 import '../data/services/analytics_service.dart';
@@ -296,11 +297,34 @@ final themeModeProvider =
         (ref) => ThemeModeController());
 
 class ThemeModeController extends StateNotifier<ThemeMode> {
-  ThemeModeController() : super(ThemeMode.light);
+  ThemeModeController() : super(ThemeMode.light) {
+    _restore();
+  }
+
+  static const _prefsKey = 'vently.themeMode';
+
+  Future<void> _restore() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_prefsKey);
+    if (saved == 'dark') state = ThemeMode.dark;
+    if (saved == 'light') state = ThemeMode.light;
+  }
+
+  Future<void> _persist() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _prefsKey, state == ThemeMode.dark ? 'dark' : 'light');
+  }
+
   void toggle() {
     state = state == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+    _persist();
   }
-  void setMode(ThemeMode mode) => state = mode;
+
+  void setMode(ThemeMode mode) {
+    state = mode;
+    _persist();
+  }
 }
 
 /// Feed filter state.

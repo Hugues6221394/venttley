@@ -84,11 +84,11 @@ class ShareCardScreen extends ConsumerWidget {
                           const SizedBox(height: 18),
                           Text(
                             '"${post.content}"',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontStyle: FontStyle.italic,
                               fontWeight: FontWeight.w600,
-                              color: VentlyColors.deepBurgundy,
+                              color: context.ink,
                               height: 1.4,
                             ),
                           ),
@@ -97,8 +97,8 @@ class ShareCardScreen extends ConsumerWidget {
                             children: [
                               Text(
                                 'Shared by ${post.authorPseudonym}',
-                                style: const TextStyle(
-                                  color: VentlyColors.deepBurgundy,
+                                style: TextStyle(
+                                  color: context.ink,
                                   fontWeight: FontWeight.w800,
                                   fontSize: 11,
                                 ),

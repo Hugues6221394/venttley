@@ -86,14 +86,14 @@ Future<void> showTribeMessageActions(
               ref.invalidate(tribeMessagesProvider(tribeId));
             },
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(0, 4, 0, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
             child: Text(
               'React',
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 12,
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
               ),
             ),
           ),
@@ -179,13 +179,13 @@ Future<void> _confirmTribeDelete(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(bottom: 6, left: 4),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6, left: 4),
             child: Text('Delete message?',
                 style: TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: 16,
-                    color: VentlyColors.deepBurgundy)),
+                    color: context.ink)),
           ),
           if (canEveryone && onEveryone != null)
             _ActionTile(
@@ -231,7 +231,7 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = accent ?? VentlyColors.deepBurgundy;
+    final color = accent ?? context.ink;
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: Icon(icon, color: color),
@@ -320,7 +320,7 @@ class ReplyQuote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final preview = content?.trim().isNotEmpty == true ? content! : 'Attachment';
-    final fg = lightOnDark ? Colors.white : VentlyColors.deepBurgundy;
+    final fg = lightOnDark ? Colors.white : context.ink;
     return GestureDetector(
       onTap: onTap,
       child: Container(

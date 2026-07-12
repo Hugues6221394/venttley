@@ -69,9 +69,9 @@ class KeeperInsightsScreen extends ConsumerWidget {
                   Expanded(
                     child: Text(
                       'Retention: ${_retentionLabel(data.retentionLabel)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w900,
-                        color: VentlyColors.deepBurgundy,
+                        color: context.ink,
                       ),
                     ),
                   ),
@@ -80,10 +80,10 @@ class KeeperInsightsScreen extends ConsumerWidget {
             ),
             if (data.moodTrends.isNotEmpty) ...[
               const SizedBox(height: 18),
-              const Text(
+              Text(
                 'Mood trends (14d)',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 15,
                 ),
@@ -92,10 +92,10 @@ class KeeperInsightsScreen extends ConsumerWidget {
               ...data.moodTrends.map(_MoodRow.new),
             ],
             const SizedBox(height: 18),
-            const Text(
+            Text(
               'Recommendations',
               style: TextStyle(
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 15,
               ),
@@ -106,7 +106,7 @@ class KeeperInsightsScreen extends ConsumerWidget {
                 child: Text(
                   'No alerts — keep nurturing your community.',
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.65),
+                    color: context.ink.withOpacity(0.65),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -170,7 +170,7 @@ class _ScoreCard extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 12,
-              color: VentlyColors.deepBurgundy.withOpacity(0.6),
+              color: context.ink.withOpacity(0.6),
             ),
           ),
         ],
@@ -194,9 +194,9 @@ class _MoodRow extends StatelessWidget {
             Expanded(
               child: Text(
                 trend.mood.replaceAll('_', ' '),
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                 ),
               ),
             ),
@@ -243,7 +243,7 @@ class _InsightTile extends ConsumerWidget {
               insight.body,
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                color: VentlyColors.deepBurgundy.withOpacity(0.75),
+                color: context.ink.withOpacity(0.75),
               ),
             ),
             if (insight.action != null) ...[

@@ -85,20 +85,20 @@ class _AddReactionChip extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.add_reaction_outlined,
-                  size: 16, color: VentlyColors.deepBurgundy),
-              SizedBox(width: 4),
+                  size: 16, color: context.ink),
+              const SizedBox(width: 4),
               Text(
                 'More',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                 ),
               ),
             ],
@@ -182,12 +182,12 @@ class _EmojiPickerSheetState extends State<_EmojiPickerSheet> {
               ),
             ),
           ),
-          const Text(
+          Text(
             'React with any emoji',
             style: TextStyle(
               fontWeight: FontWeight.w900,
               fontSize: 15,
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
             ),
           ),
           const SizedBox(height: 2),
@@ -196,7 +196,7 @@ class _EmojiPickerSheetState extends State<_EmojiPickerSheet> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: VentlyColors.deepBurgundy.withOpacity(0.7),
+              color: context.ink.withOpacity(0.7),
             ),
           ),
           const SizedBox(height: 12),
@@ -211,7 +211,7 @@ class _EmojiPickerSheetState extends State<_EmojiPickerSheet> {
               hintText: '😊',
               hintStyle: TextStyle(
                 fontSize: 26,
-                color: VentlyColors.deepBurgundy.withOpacity(0.25),
+                color: context.ink.withOpacity(0.25),
               ),
               filled: true,
               fillColor: VentlyColors.softMauve.withOpacity(0.12),
@@ -325,7 +325,7 @@ class _ReactionChip extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                   color: selected
                       ? VentlyColors.berryMagenta
-                      : VentlyColors.deepBurgundy,
+                      : context.ink,
                 ),
               ),
             ],

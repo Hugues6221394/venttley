@@ -655,7 +655,7 @@ class PromptCard extends StatelessWidget {
                         height: 1.4,
                         color: isDark
                             ? VentlyColors.softOffWhite
-                            : VentlyColors.deepBurgundy,
+                            : context.ink,
                         fontWeight: FontWeight.w600,
                       ),
                     ),

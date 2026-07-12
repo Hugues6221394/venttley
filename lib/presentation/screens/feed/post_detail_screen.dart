@@ -884,13 +884,13 @@ class _LockedFooter extends StatelessWidget {
       child: Row(
         children: [
           Icon(Icons.lock_outline,
-              size: 16, color: VentlyColors.deepBurgundy.withOpacity(0.7)),
+              size: 16, color: context.ink.withOpacity(0.7)),
           const SizedBox(width: 8),
           Text(
             'Replies are locked by the author.',
             style: TextStyle(
               fontWeight: FontWeight.w800,
-              color: VentlyColors.deepBurgundy.withOpacity(0.75),
+              color: context.ink.withOpacity(0.75),
             ),
           ),
         ],

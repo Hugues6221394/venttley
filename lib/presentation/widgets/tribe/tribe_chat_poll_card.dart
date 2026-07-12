@@ -305,7 +305,7 @@ class TribeChatQuestionCard extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                   fontSize: 14,
                   height: 1.35,
-                  color: lightOnDark ? Colors.white : VentlyColors.deepBurgundy,
+                  color: lightOnDark ? Colors.white : context.ink,
                 ),
               ),
               if (showTapHint) ...[

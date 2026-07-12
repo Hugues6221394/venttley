@@ -44,13 +44,13 @@ class PlugDashboardScreen extends ConsumerWidget {
               const SizedBox(height: 14),
               _SummaryStrip(tribes: tribes),
               const SizedBox(height: 18),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
                   'Tribes you manage',
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                     fontSize: 16,
                   ),
                 ),
@@ -166,8 +166,8 @@ class _SummaryTile extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               value,
-              style: const TextStyle(
-                color: VentlyColors.deepBurgundy,
+              style: TextStyle(
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 20,
               ),
@@ -175,7 +175,7 @@ class _SummaryTile extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                color: context.ink.withOpacity(0.55),
                 fontWeight: FontWeight.w800,
                 fontSize: 11,
                 letterSpacing: 0.4,
@@ -231,8 +231,8 @@ class _TribeManageCard extends ConsumerWidget {
                             tribe.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: VentlyColors.deepBurgundy,
+                            style: TextStyle(
+                              color: context.ink,
                               fontWeight: FontWeight.w900,
                               fontSize: 15,
                             ),
@@ -249,7 +249,7 @@ class _TribeManageCard extends ConsumerWidget {
                     Text(
                       '${PostCard.compactNumber(tribe.memberCount)} members · ${tribe.category}',
                       style: TextStyle(
-                        color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                        color: context.ink.withOpacity(0.55),
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                       ),
@@ -491,8 +491,8 @@ class _ManageChip extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               label,
-              style: const TextStyle(
-                color: VentlyColors.deepBurgundy,
+              style: TextStyle(
+                color: context.ink,
                 fontWeight: FontWeight.w800,
                 fontSize: 12,
               ),
@@ -517,12 +517,12 @@ class _EmptyState extends StatelessWidget {
             const Icon(Icons.diversity_3,
                 size: 48, color: VentlyColors.berryMagenta),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'No tribes to manage yet',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w900,
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
               ),
             ),
             const SizedBox(height: 6),
@@ -530,7 +530,7 @@ class _EmptyState extends StatelessWidget {
               'Once you create or are assigned a tribe, it\'ll appear here with the management tools.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                color: context.ink.withOpacity(0.6),
                 fontWeight: FontWeight.w600,
               ),
             ),

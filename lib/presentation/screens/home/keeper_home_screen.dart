@@ -91,11 +91,11 @@ class KeeperHomeScreen extends ConsumerWidget {
                         padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
                         child: Row(
                           children: [
-                            const Expanded(
+                            Expanded(
                               child: Text(
                                 'Your tribes',
                                 style: TextStyle(
-                                  color: VentlyColors.deepBurgundy,
+                                  color: context.ink,
                                   fontWeight: FontWeight.w900,
                                   fontSize: 17,
                                 ),
@@ -172,22 +172,28 @@ class _KeeperWelcome extends StatelessWidget {
               )
             : (
                 Icons.favorite_rounded,
-                'Your community is active and safe.\nKeep nurturing it 🌸',
+                'Your community is active and safe.\nKeep nurturing it.',
                 null,
               );
 
+    final isDark = context.isDark;
     return Container(
       margin: const EdgeInsets.fromLTRB(18, 6, 18, 2),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFDD9E7), Color(0xFFFBEAF1)],
+        gradient: LinearGradient(
+          colors: isDark
+              ? const [Color(0xFF351D26), Color(0xFF241419)]
+              : const [Color(0xFFFDD9E7), Color(0xFFFBEAF1)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
+        border: isDark
+            ? Border.all(color: Colors.white.withOpacity(0.06))
+            : null,
         boxShadow: [
           BoxShadow(
-            color: VentlyColors.berryMagenta.withOpacity(0.12),
+            color: VentlyColors.berryMagenta.withOpacity(isDark ? 0.18 : 0.12),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -207,11 +213,17 @@ class _KeeperWelcome extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
-                    colors: [
-                      Colors.white.withOpacity(0.9),
-                      const Color(0xFFF7A8C6).withOpacity(0.55),
-                      const Color(0xFFE05C93).withOpacity(0.25),
-                    ],
+                    colors: isDark
+                        ? [
+                            const Color(0xFFF7A8C6).withOpacity(0.30),
+                            const Color(0xFFE05C93).withOpacity(0.18),
+                            const Color(0xFFE05C93).withOpacity(0.06),
+                          ]
+                        : [
+                            Colors.white.withOpacity(0.9),
+                            const Color(0xFFF7A8C6).withOpacity(0.55),
+                            const Color(0xFFE05C93).withOpacity(0.25),
+                          ],
                   ),
                 ),
                 alignment: Alignment.center,
@@ -249,10 +261,10 @@ class _KeeperWelcome extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Your tribe, at a glance',
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                       fontWeight: FontWeight.w900,
                       fontSize: 23,
                       height: 1.05,
@@ -263,7 +275,7 @@ class _KeeperWelcome extends StatelessWidget {
                   Text(
                     'Everything you need to keep it safe and thriving.',
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                      color: context.ink.withOpacity(0.6),
                       fontWeight: FontWeight.w600,
                       fontSize: 12.5,
                       height: 1.4,
@@ -300,7 +312,9 @@ class _HeroCallout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withOpacity(0.72),
+      color: context.isDark
+          ? Colors.white.withOpacity(0.07)
+          : Colors.white.withOpacity(0.72),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
@@ -322,8 +336,8 @@ class _HeroCallout extends StatelessWidget {
               Expanded(
                 child: Text(
                   hint,
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontWeight: FontWeight.w800,
                     fontSize: 12.5,
                     height: 1.3,
@@ -375,7 +389,7 @@ class _TopBar extends StatelessWidget {
                 height: 40,
                 margin: const EdgeInsets.only(right: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.7),
+                  color: context.glass(0.7),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.menu_rounded,
@@ -383,12 +397,12 @@ class _TopBar extends StatelessWidget {
               ),
             ),
           ),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
+                const Row(
                   children: [
                     Text(
                       'Plug Studio',
@@ -399,15 +413,13 @@ class _TopBar extends StatelessWidget {
                         letterSpacing: -0.4,
                       ),
                     ),
-                    SizedBox(width: 4),
-                    Text('✨', style: TextStyle(fontSize: 16)),
                   ],
                 ),
-                SizedBox(height: 1),
+                const SizedBox(height: 1),
                 Text(
                   'Manage your tribe. Protect your safe space.',
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
@@ -449,8 +461,8 @@ class _BellButton extends ConsumerWidget {
       clipBehavior: Clip.none,
       children: [
         IconButton(
-          icon: const Icon(Icons.notifications_none_rounded,
-              color: VentlyColors.deepBurgundy),
+          icon: Icon(Icons.notifications_none_rounded,
+              color: context.ink),
           onPressed: () => context.push('/notifications'),
         ),
         if (unread > 0)
@@ -502,10 +514,10 @@ class _CommandStrip extends ConsumerWidget {
               const Icon(Icons.insights_rounded,
                   size: 17, color: VentlyColors.berryMagenta),
               const SizedBox(width: 6),
-              const Text(
+              Text(
                 'Tribe overview',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 15,
                 ),
@@ -564,7 +576,7 @@ class _CommandStrip extends ConsumerWidget {
                   value: '$vents',
                   label: '24h vents',
                   status: vents > 0 ? 'Active' : 'No activity',
-                  statusColor: VentlyColors.deepBurgundy.withOpacity(0.5),
+                  statusColor: context.ink.withOpacity(0.5),
                 ),
               ),
               const SizedBox(width: 10),
@@ -622,12 +634,17 @@ class _OverviewCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.72),
+        color: context.isDark
+            ? Colors.white.withOpacity(0.05)
+            : Colors.white.withOpacity(0.72),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.7)),
+        border: Border.all(
+            color: Colors.white.withOpacity(context.isDark ? 0.08 : 0.7)),
         boxShadow: [
           BoxShadow(
-            color: VentlyColors.berryMagenta.withOpacity(0.06),
+            color: context.isDark
+                ? Colors.black.withOpacity(0.30)
+                : VentlyColors.berryMagenta.withOpacity(0.06),
             blurRadius: 14,
             offset: const Offset(0, 6),
           ),
@@ -648,8 +665,8 @@ class _OverviewCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             value,
-            style: const TextStyle(
-              color: VentlyColors.deepBurgundy,
+            style: TextStyle(
+              color: context.ink,
               fontWeight: FontWeight.w900,
               fontSize: 26,
               height: 1,
@@ -659,7 +676,7 @@ class _OverviewCard extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.7),
+              color: context.ink.withOpacity(0.7),
               fontWeight: FontWeight.w700,
               fontSize: 12.5,
             ),
@@ -718,12 +735,12 @@ class _PriorityQueue extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               "Today's priorities",
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 13,
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
               ),
             ),
             const SizedBox(height: 10),
@@ -746,10 +763,10 @@ class _PriorityQueue extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             items[i].value,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w900,
                               fontSize: 16,
-                              color: VentlyColors.deepBurgundy,
+                              color: context.ink,
                             ),
                           ),
                           Text(
@@ -760,7 +777,7 @@ class _PriorityQueue extends StatelessWidget {
                               fontSize: 9,
                               fontWeight: FontWeight.w800,
                               color:
-                                  VentlyColors.deepBurgundy.withOpacity(0.55),
+                                  context.ink.withOpacity(0.55),
                             ),
                           ),
                         ],
@@ -788,7 +805,6 @@ class _HeroPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final name = me?.anonymousPseudonym ?? 'Plug';
     final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
     final stats = primary != null
         ? overview.statsFor(primary.tribeId)
@@ -896,7 +912,7 @@ class _HeroPanel extends ConsumerWidget {
               const SizedBox(height: 8),
             ],
             Text(
-              'Hey @$name',
+              primary != null ? 'Today' : 'Your tribes',
               style: TextStyle(
                 color: Colors.white.withOpacity(primary != null ? 0.85 : 1),
                 fontSize: primary != null ? 14 : 22,
@@ -995,10 +1011,10 @@ class _StudioV2Grid extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Creator Studio',
             style: TextStyle(
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
               fontWeight: FontWeight.w900,
               fontSize: 15,
             ),
@@ -1007,7 +1023,7 @@ class _StudioV2Grid extends StatelessWidget {
           Text(
             'Everything you need to grow and protect your tribe.',
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.55),
+              color: context.ink.withOpacity(0.55),
               fontWeight: FontWeight.w600,
               fontSize: 12,
             ),
@@ -1082,7 +1098,7 @@ class _V2Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: context.isDark ? VentlyColors.cardDark : Colors.white,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
@@ -1090,7 +1106,7 @@ class _V2Tile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.isDark ? VentlyColors.cardDark : Colors.white,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
@@ -1117,10 +1133,10 @@ class _V2Tile extends StatelessWidget {
                   const Spacer(),
                   Text(
                     label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 13.5,
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                     ),
                   ),
                   if (subtitle != null) ...[
@@ -1133,7 +1149,7 @@ class _V2Tile extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                         fontSize: 10.5,
                         height: 1.2,
-                        color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                        color: context.ink.withOpacity(0.55),
                       ),
                     ),
                   ],
@@ -1194,7 +1210,7 @@ class _QuickAction extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: 10),
       child: Material(
-        color: Colors.white,
+        color: context.isDark ? VentlyColors.cardDark : Colors.white,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: onTap,
@@ -1205,7 +1221,7 @@ class _QuickAction extends StatelessWidget {
               width: 96,
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.isDark ? VentlyColors.cardDark : Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
@@ -1230,10 +1246,10 @@ class _QuickAction extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 11,
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                     ),
                   ),
                 ],
@@ -1258,10 +1274,10 @@ class _TodaySnapshot extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               "Today's activity",
               style: TextStyle(
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 15,
               ),
@@ -1329,8 +1345,8 @@ class _SnapTile extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               value,
-              style: const TextStyle(
-                color: VentlyColors.deepBurgundy,
+              style: TextStyle(
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 22,
               ),
@@ -1340,7 +1356,7 @@ class _SnapTile extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                color: context.ink.withOpacity(0.6),
                 fontWeight: FontWeight.w800,
                 fontSize: 10.5,
               ),
@@ -1411,8 +1427,8 @@ class _KpiTile extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               value,
-              style: const TextStyle(
-                color: VentlyColors.deepBurgundy,
+              style: TextStyle(
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 20,
               ),
@@ -1420,7 +1436,7 @@ class _KpiTile extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                color: context.ink.withOpacity(0.55),
                 fontWeight: FontWeight.w800,
                 fontSize: 11,
               ),
@@ -1448,10 +1464,10 @@ class _ContentHub extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Needs attention',
               style: TextStyle(
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 15,
               ),
@@ -1595,8 +1611,8 @@ class _TribeControlCard extends StatelessWidget {
                         tribe.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: VentlyColors.deepBurgundy,
+                        style: TextStyle(
+                          color: context.ink,
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
                         ),
@@ -1605,7 +1621,7 @@ class _TribeControlCard extends StatelessWidget {
                         '${PostCard.compactNumber(tribe.memberCount)} members · '
                         'Engagement $engagement',
                         style: TextStyle(
-                          color: VentlyColors.deepBurgundy.withOpacity(0.58),
+                          color: context.ink.withOpacity(0.58),
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                         ),
@@ -1683,8 +1699,8 @@ class _MiniStat extends StatelessWidget {
           children: [
             Text(
               value,
-              style: const TextStyle(
-                color: VentlyColors.deepBurgundy,
+              style: TextStyle(
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 15,
               ),
@@ -1692,7 +1708,7 @@ class _MiniStat extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                color: context.ink.withOpacity(0.55),
                 fontWeight: FontWeight.w700,
                 fontSize: 10,
               ),
@@ -1732,8 +1748,8 @@ class _ActionChip extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               label,
-              style: const TextStyle(
-                color: VentlyColors.deepBurgundy,
+              style: TextStyle(
+                color: context.ink,
                 fontWeight: FontWeight.w800,
                 fontSize: 12,
               ),
@@ -1756,7 +1772,9 @@ class _KeeperDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Drawer(
-      backgroundColor: VentlyColors.cardBlush,
+      backgroundColor: context.isDark
+          ? VentlyColors.cardDark
+          : VentlyColors.cardBlush,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.horizontal(right: Radius.circular(28)),
       ),
@@ -1776,19 +1794,19 @@ class _KeeperDrawer extends ConsumerWidget {
                       size: 44,
                     ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Plug Studio',
                           style: TextStyle(
-                            color: VentlyColors.deepBurgundy,
+                            color: context.ink,
                             fontWeight: FontWeight.w900,
                             fontSize: 16,
                           ),
                         ),
-                        Text(
+                        const Text(
                           'Tribe Control Center',
                           style: TextStyle(
                             color: VentlyColors.berryMagenta,
@@ -1923,7 +1941,7 @@ class _DrawerSection extends StatelessWidget {
       child: Text(
         label.toUpperCase(),
         style: TextStyle(
-          color: VentlyColors.deepBurgundy.withOpacity(0.45),
+          color: context.ink.withOpacity(0.45),
           fontWeight: FontWeight.w800,
           fontSize: 10,
           letterSpacing: 0.8,
@@ -1972,8 +1990,10 @@ class _DrawerIcon extends StatelessWidget {
     return Container(
       width: 36,
       height: 36,
-      decoration: const BoxDecoration(
-        color: Color(0xFFFFE3EC),
+      decoration: BoxDecoration(
+        color: context.isDark
+            ? VentlyColors.berryMagenta.withOpacity(0.16)
+            : const Color(0xFFFFE3EC),
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
@@ -2003,13 +2023,13 @@ class _EmptyKeeperState extends StatelessWidget {
           const Icon(Icons.diversity_3,
               size: 56, color: VentlyColors.berryMagenta),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'No tribes to manage yet',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w900,
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
             ),
           ),
           const SizedBox(height: 8),
@@ -2019,7 +2039,7 @@ class _EmptyKeeperState extends StatelessWidget {
                 : 'When you create or inherit a tribe, your studio dashboard appears here.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.65),
+              color: context.ink.withOpacity(0.65),
               fontWeight: FontWeight.w600,
             ),
           ),

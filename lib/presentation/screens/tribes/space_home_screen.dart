@@ -144,10 +144,10 @@ class _SpaceHeader extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             space.name,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w900,
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
             ),
           ),
           if (space.description != null && space.description!.isNotEmpty)
@@ -156,7 +156,7 @@ class _SpaceHeader extends StatelessWidget {
               child: Text(
                 space.description!,
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.72),
+                  color: context.ink.withOpacity(0.72),
                   height: 1.35,
                 ),
               ),
@@ -182,7 +182,7 @@ class _SpaceHeader extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 11.5,
-                        color: VentlyColors.deepBurgundy.withOpacity(0.85),
+                        color: context.ink.withOpacity(0.85),
                       ),
                     ),
                   ),
@@ -230,15 +230,15 @@ class _HeaderStat extends StatelessWidget {
     return Row(
       children: [
         Text(value,
-            style: const TextStyle(
-              color: VentlyColors.deepBurgundy,
+            style: TextStyle(
+              color: context.ink,
               fontWeight: FontWeight.w900,
               fontSize: 14,
             )),
         const SizedBox(width: 4),
         Text(label,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.55),
+              color: context.ink.withOpacity(0.55),
               fontWeight: FontWeight.w700,
               fontSize: 11,
             )),
@@ -288,12 +288,12 @@ class _AISummaryTile extends ConsumerWidget {
                     size: 16, color: VentlyColors.berryMagenta),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Today in this Space',
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                     fontSize: 13,
                   ),
                 ),
@@ -324,7 +324,7 @@ class _AISummaryTile extends ConsumerWidget {
                 ? summary!.summary
                 : placeholderText,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.78),
+              color: context.ink.withOpacity(0.78),
               fontWeight: FontWeight.w600,
               fontSize: 12.5,
               height: 1.4,
@@ -346,8 +346,8 @@ class _AISummaryTile extends ConsumerWidget {
                     ),
                     child: Text(
                       '#$t',
-                      style: const TextStyle(
-                        color: VentlyColors.deepBurgundy,
+                      style: TextStyle(
+                        color: context.ink,
                         fontWeight: FontWeight.w800,
                         fontSize: 10.5,
                       ),
@@ -382,8 +382,8 @@ class _AISummaryTile extends ConsumerWidget {
                     Expanded(
                       child: Text(
                         summary.suggestedPrompt,
-                        style: const TextStyle(
-                          color: VentlyColors.deepBurgundy,
+                        style: TextStyle(
+                          color: context.ink,
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                           height: 1.35,
@@ -484,7 +484,7 @@ class _SortStrip extends StatelessWidget {
                 style: TextStyle(
                   color: active
                       ? Colors.white
-                      : VentlyColors.deepBurgundy,
+                      : context.ink,
                   fontWeight: FontWeight.w800,
                   fontSize: 12,
                 ),
@@ -509,11 +509,11 @@ class _EmptyVents extends StatelessWidget {
             const Icon(Icons.forum_outlined,
                 size: 44, color: VentlyColors.softMauve),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'No vents here yet.',
               style: TextStyle(
                 fontWeight: FontWeight.w900,
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
               ),
             ),
             const SizedBox(height: 4),
@@ -521,7 +521,7 @@ class _EmptyVents extends StatelessWidget {
               'Start the first conversation in this Space.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                color: context.ink.withOpacity(0.6),
                 fontWeight: FontWeight.w600,
               ),
             ),

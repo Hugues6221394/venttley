@@ -613,7 +613,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.settings_outlined),
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                     onPressed: () {},
                   ),
                 ],
@@ -775,14 +775,14 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                               const Icon(Icons.visibility_outlined,
                                   color: VentlyColors.berryMagenta),
                               const SizedBox(width: 12),
-                              const Expanded(
+                              Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       'Privacy Settings',
                                       style: TextStyle(
-                                        color: VentlyColors.deepBurgundy,
+                                        color: context.ink,
                                         fontWeight: FontWeight.w900,
                                         fontSize: 15,
                                       ),
@@ -790,7 +790,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                                     Text(
                                       'Friends only',
                                       style: TextStyle(
-                                        color: VentlyColors.deepBurgundy,
+                                        color: context.ink,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -808,22 +808,22 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                           Divider(
                             color: VentlyColors.softMauve.withOpacity(0.22),
                           ),
-                          const Row(
+                          Row(
                             children: [
-                              Icon(Icons.timer_outlined,
+                              const Icon(Icons.timer_outlined,
                                   color: VentlyColors.berryMagenta),
-                              SizedBox(width: 12),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   'Story Duration',
                                   style: TextStyle(
-                                    color: VentlyColors.deepBurgundy,
+                                    color: context.ink,
                                     fontWeight: FontWeight.w900,
                                     fontSize: 15,
                                   ),
                                 ),
                               ),
-                              Text(
+                              const Text(
                                 '24 Hours',
                                 style: TextStyle(
                                   color: VentlyColors.softMauve,
@@ -1073,8 +1073,8 @@ class _StoryCreateOption extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: VentlyColors.deepBurgundy,
+              style: TextStyle(
+                color: context.ink,
                 fontSize: 15,
                 fontWeight: FontWeight.w900,
               ),

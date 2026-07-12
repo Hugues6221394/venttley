@@ -150,12 +150,12 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   'More',
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                     fontSize: 16,
                     fontWeight: FontWeight.w900,
                   ),
@@ -163,8 +163,8 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.diversity_3,
-                    color: VentlyColors.deepBurgundy),
+                leading: Icon(Icons.diversity_3,
+                    color: context.ink),
                 title: const Text('Friends',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -174,8 +174,8 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.explore_outlined,
-                    color: VentlyColors.deepBurgundy),
+                leading: Icon(Icons.explore_outlined,
+                    color: context.ink),
                 title: const Text('Discover',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -185,8 +185,8 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.groups_outlined,
-                    color: VentlyColors.deepBurgundy),
+                leading: Icon(Icons.groups_outlined,
+                    color: context.ink),
                 title: const Text('Tribes',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -240,8 +240,8 @@ class _ChatHeader extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.menu_rounded,
-                color: VentlyColors.deepBurgundy),
+            icon: Icon(Icons.menu_rounded,
+                color: context.ink),
             onPressed: onMenu,
             tooltip: 'More',
           ),
@@ -297,20 +297,20 @@ class _SearchField extends StatelessWidget {
           children: [
             Icon(Icons.search_rounded,
                 size: 18,
-                color: VentlyColors.deepBurgundy.withOpacity(0.55)),
+                color: context.ink.withOpacity(0.55)),
             const SizedBox(width: 10),
             Expanded(
               child: TextField(
                 controller: controller,
                 onChanged: onChanged,
-                style: const TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                style: TextStyle(
+                  color: context.ink,
                   fontWeight: FontWeight.w700,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Search your circle…',
                   hintStyle: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.42),
+                    color: context.ink.withOpacity(0.42),
                     fontWeight: FontWeight.w700,
                   ),
                   border: InputBorder.none,
@@ -344,10 +344,10 @@ class _VibesRail extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
             child: Row(
               children: [
-                const Text(
+                Text(
                   'Vibes',
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 18,
                   ),
@@ -405,12 +405,12 @@ class _TribeChatsRail extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                 child: Text(
                   'Tribe chats',
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 18,
                   ),
@@ -446,7 +446,7 @@ class _TribeChatChip extends StatelessWidget {
     return SizedBox(
       width: 148,
       child: Material(
-        color: Colors.white.withOpacity(0.55),
+        color: context.glass(0.55),
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
@@ -508,7 +508,7 @@ class _TribeChatChip extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                      color: context.ink.withOpacity(0.6),
                     ),
                   ),
               ],
@@ -539,12 +539,12 @@ class _YourVentBubble extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Your Vent',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
               fontWeight: FontWeight.w800,
               fontSize: 11,
             ),
@@ -643,8 +643,8 @@ class _VibeBubble extends ConsumerWidget {
             _prettyName(friend.pseudonym),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: VentlyColors.deepBurgundy,
+            style: TextStyle(
+              color: context.ink,
               fontWeight: FontWeight.w800,
               fontSize: 11,
             ),
@@ -679,7 +679,7 @@ class _VibeBubble extends ConsumerWidget {
             peerUserId: friend.userId,
             peerPseudonym: friend.pseudonym,
             peerAvatarSeed: friend.avatarSeed,
-            preview: 'Hey 👋',
+            preview: 'Hey',
           );
       router.push('/chat/${room.roomId}');
     } on DmGatingException catch (e) {
@@ -732,10 +732,10 @@ class _PendingRequestsCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text(
+                        Text(
                           'Pending Requests',
                           style: TextStyle(
-                            color: VentlyColors.deepBurgundy,
+                            color: context.ink,
                             fontWeight: FontWeight.w900,
                             fontSize: 14,
                           ),
@@ -745,7 +745,7 @@ class _PendingRequestsCard extends StatelessWidget {
                           '$count new soul${count == 1 ? '' : 's'} '
                           'want${count == 1 ? 's' : ''} to connect',
                           style: TextStyle(
-                            color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                            color: context.ink.withOpacity(0.62),
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
                           ),
@@ -795,10 +795,10 @@ class _ConversationsHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
       child: Row(
         children: [
-          const Text(
+          Text(
             'Conversations',
             style: TextStyle(
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
               fontWeight: FontWeight.w900,
               fontSize: 18,
             ),
@@ -829,12 +829,12 @@ class _ConversationsHeader extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(bottom: 6),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
                 child: Text(
                   'Filter conversations',
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 16,
                   ),
@@ -855,8 +855,8 @@ class _ConversationsHeader extends StatelessWidget {
                   ),
                   title: Text(
                     label,
-                    style: const TextStyle(
-                      color: VentlyColors.deepBurgundy,
+                    style: TextStyle(
+                      color: context.ink,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -936,8 +936,8 @@ class _ConversationRow extends ConsumerWidget {
                               _displayName(room.peerPseudonym),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: VentlyColors.deepBurgundy,
+                              style: TextStyle(
+                                color: context.ink,
                                 fontWeight: FontWeight.w900,
                                 fontSize: 15,
                               ),
@@ -946,7 +946,7 @@ class _ConversationRow extends ConsumerWidget {
                           Text(
                             _smartTimestamp(activityAt).toUpperCase(),
                             style: TextStyle(
-                              color: VentlyColors.deepBurgundy
+                              color: context.ink
                                   .withOpacity(0.55),
                               fontSize: 10.5,
                               fontWeight: FontWeight.w900,
@@ -1022,8 +1022,8 @@ class _ConversationRow extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Text(
                   room.peerPseudonym,
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 16,
                   ),
@@ -1031,11 +1031,11 @@ class _ConversationRow extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.delete_outline,
-                    color: VentlyColors.deepBurgundy),
-                title: const Text('Delete conversation',
+                leading: Icon(Icons.delete_outline,
+                    color: context.ink),
+                title: Text('Delete conversation',
                     style: TextStyle(
-                        color: VentlyColors.deepBurgundy,
+                        color: context.ink,
                         fontWeight: FontWeight.w800)),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
@@ -1086,8 +1086,8 @@ class _ConversationRow extends ConsumerWidget {
                       children: [
                         Text(
                           room.peerPseudonym,
-                          style: const TextStyle(
-                            color: VentlyColors.deepBurgundy,
+                          style: TextStyle(
+                            color: context.ink,
                             fontWeight: FontWeight.w900,
                             fontSize: 15,
                           ),
@@ -1117,8 +1117,8 @@ class _ConversationRow extends ConsumerWidget {
                 ),
                 child: Text(
                   '"${room.requestPreview}"',
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontStyle: FontStyle.italic,
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
@@ -1140,7 +1140,7 @@ class _ConversationRow extends ConsumerWidget {
                         if (sheetCtx.mounted) Navigator.pop(sheetCtx);
                       },
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: VentlyColors.deepBurgundy,
+                        foregroundColor: context.ink,
                         side: BorderSide(
                           color: VentlyColors.softMauve.withOpacity(0.7),
                         ),
@@ -1248,7 +1248,7 @@ class _LastMessageLine extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.66),
+                color: context.ink.withOpacity(0.66),
                 fontWeight: FontWeight.w700,
                 fontSize: 12.5,
               ),
@@ -1266,8 +1266,8 @@ class _LastMessageLine extends StatelessWidget {
     final preview = (room.lastMessagePreview ?? room.requestPreview).trim();
     final previewStyle = TextStyle(
       color: unread
-          ? VentlyColors.deepBurgundy
-          : VentlyColors.deepBurgundy.withOpacity(0.66),
+          ? context.ink
+          : context.ink.withOpacity(0.66),
       fontWeight: unread ? FontWeight.w900 : FontWeight.w700,
       fontSize: 12.5,
       height: 1.3,
@@ -1340,7 +1340,7 @@ class _ReadStateGlyph extends StatelessWidget {
       Icons.done_all_rounded,
       color: lastOwnMessageRead
           ? VentlyColors.berryMagenta
-          : VentlyColors.deepBurgundy.withOpacity(0.35),
+          : context.ink.withOpacity(0.35),
       size: 16,
     );
   }
@@ -1401,8 +1401,8 @@ class _EmptyConversations extends StatelessWidget {
         Text(
           title,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: VentlyColors.deepBurgundy,
+          style: TextStyle(
+            color: context.ink,
             fontWeight: FontWeight.w900,
             fontSize: 18,
           ),
@@ -1412,7 +1412,7 @@ class _EmptyConversations extends StatelessWidget {
           body,
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: VentlyColors.deepBurgundy.withOpacity(0.66),
+            color: context.ink.withOpacity(0.66),
             fontWeight: FontWeight.w700,
             fontSize: 13,
           ),
@@ -1456,7 +1456,7 @@ class _LoadingSkeleton extends StatelessWidget {
       itemBuilder: (_, __) => Container(
         height: 84,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.glass(0.9),
           borderRadius: BorderRadius.circular(22),
           border:
               Border.all(color: VentlyColors.softMauve.withOpacity(0.30)),

@@ -117,7 +117,7 @@ class BadgeShelf extends ConsumerWidget {
 }
 
 class BadgeChip extends StatelessWidget {
-  const BadgeChip({required this.def, required this.earned});
+  const BadgeChip({super.key, required this.def, required this.earned});
   final BadgeDefinition def;
   final bool earned;
 

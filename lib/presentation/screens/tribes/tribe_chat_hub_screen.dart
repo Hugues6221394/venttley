@@ -73,12 +73,12 @@ class _HubBody extends ConsumerWidget {
           style: TextStyle(fontWeight: FontWeight.w900),
         ),
         backgroundColor: Colors.transparent,
-        foregroundColor: VentlyColors.deepBurgundy,
+        foregroundColor: context.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
         bottom: TabBar(
           labelColor: VentlyColors.berryMagenta,
-          unselectedLabelColor: VentlyColors.deepBurgundy.withOpacity(0.55),
+          unselectedLabelColor: context.ink.withOpacity(0.55),
           indicatorColor: VentlyColors.berryMagenta,
           labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
           unselectedLabelStyle:
@@ -223,8 +223,8 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
-        color: VentlyColors.deepBurgundy,
+      style: TextStyle(
+        color: context.ink,
         fontWeight: FontWeight.w900,
         fontSize: 15,
       ),
@@ -301,10 +301,10 @@ class _HeroSection extends ConsumerWidget {
         const SizedBox(height: 12),
         Text(
           tribe.name,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w900,
             fontSize: 22,
-            color: VentlyColors.deepBurgundy,
+            color: context.ink,
           ),
         ),
         if ((tribe.description ?? '').isNotEmpty)
@@ -314,7 +314,7 @@ class _HeroSection extends ConsumerWidget {
               tribe.description!,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.65),
+                color: context.ink.withOpacity(0.65),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -420,10 +420,10 @@ class _ActionChip extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 11,
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                 ),
               ),
             ],
@@ -446,7 +446,7 @@ class _OnlineRow extends StatelessWidget {
         child: Text(
           'No one active in the last 5 minutes.',
           style: TextStyle(
-            color: VentlyColors.deepBurgundy.withOpacity(0.6),
+            color: context.ink.withOpacity(0.6),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -635,12 +635,12 @@ class _RulesSectionState extends ConsumerState<_RulesSection> {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Tribe rules',
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                   ),
                 ),
               ),
@@ -673,7 +673,7 @@ class _RulesSectionState extends ConsumerState<_RulesSection> {
                   ? 'No rules set yet.'
                   : widget.tribe.rules!,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.75),
+                color: context.ink.withOpacity(0.75),
                 fontWeight: FontWeight.w700,
                 height: 1.4,
               ),
@@ -701,7 +701,7 @@ class _PromptsSection extends ConsumerWidget {
         child: Text(
           'No prompts yet.',
           style: TextStyle(
-            color: VentlyColors.deepBurgundy.withOpacity(0.6),
+            color: context.ink.withOpacity(0.6),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -824,12 +824,12 @@ class _ChatSettingsCard extends ConsumerWidget {
               child: VentlyPremiumBackground(
                 wallpaperUrl: s.wallpaperUrl,
                 wallpaperStyle: s.wallpaperStyle,
-                child: const Center(
+                child: Center(
                   child: Text(
                     'Chat preview',
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                     ),
                   ),
                 ),

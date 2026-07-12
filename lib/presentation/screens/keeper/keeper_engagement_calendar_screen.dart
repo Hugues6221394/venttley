@@ -52,14 +52,14 @@ class KeeperEngagementCalendarScreen extends ConsumerWidget {
             _SectionTitle('Upcoming', count: cal.scheduled.length),
             const SizedBox(height: 8),
             if (cal.scheduled.isEmpty)
-              _EmptyHint('Nothing scheduled yet — plan your next check-in.')
+              const _EmptyHint('Nothing scheduled yet — plan your next check-in.')
             else
               ...cal.scheduled.map((p) => _PromptTile(prompt: p, upcoming: true)),
             const SizedBox(height: 18),
             _SectionTitle('Recently published', count: cal.recentPublished.length),
             const SizedBox(height: 8),
             if (cal.recentPublished.isEmpty)
-              _EmptyHint('Published prompts will appear here.')
+              const _EmptyHint('Published prompts will appear here.')
             else
               ...cal.recentPublished
                   .map((p) => _PromptTile(prompt: p, upcoming: false)),
@@ -85,8 +85,8 @@ class _SectionTitle extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: VentlyColors.deepBurgundy,
+          style: TextStyle(
+            color: context.ink,
             fontWeight: FontWeight.w900,
             fontSize: 15,
           ),
@@ -115,7 +115,7 @@ class _EmptyHint extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          color: VentlyColors.deepBurgundy.withOpacity(0.65),
+          color: context.ink.withOpacity(0.65),
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -150,9 +150,9 @@ class _PromptTile extends StatelessWidget {
                 children: [
                   Text(
                     prompt.promptText,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                     ),
                   ),
                   if (when != null)
@@ -165,7 +165,7 @@ class _PromptTile extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                          color: context.ink.withOpacity(0.55),
                         ),
                       ),
                     ),
@@ -193,16 +193,16 @@ class _SuggestionTile extends StatelessWidget {
           children: [
             Text(
               suggestion.title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w900,
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               suggestion.hint,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.65),
+                color: context.ink.withOpacity(0.65),
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
               ),

@@ -197,7 +197,7 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                     'Spaces',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w900,
-                          color: VentlyColors.deepBurgundy,
+                          color: context.ink,
                         ),
                   ),
                   const Spacer(),
@@ -368,8 +368,8 @@ class _SpaceTile extends StatelessWidget {
                               space.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: VentlyColors.deepBurgundy,
+                              style: TextStyle(
+                                color: context.ink,
                                 fontWeight: FontWeight.w900,
                                 fontSize: 15,
                               ),
@@ -407,7 +407,7 @@ class _SpaceTile extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: VentlyColors.deepBurgundy
+                              color: context.ink
                                   .withOpacity(0.6),
                               fontWeight: FontWeight.w700,
                               fontSize: 12,
@@ -418,7 +418,7 @@ class _SpaceTile extends StatelessWidget {
                       Text(
                         '${PostCard.compactNumber(space.ventCount)} vents · ${PostCard.compactNumber(space.ventsToday)} today',
                         style: TextStyle(
-                          color: VentlyColors.deepBurgundy
+                          color: context.ink
                               .withOpacity(0.55),
                           fontWeight: FontWeight.w700,
                           fontSize: 11,
@@ -429,7 +429,7 @@ class _SpaceTile extends StatelessWidget {
                 ),
                 Icon(Icons.chevron_right,
                     size: 18,
-                    color: VentlyColors.deepBurgundy
+                    color: context.ink
                         .withOpacity(0.45)),
               ],
             ),

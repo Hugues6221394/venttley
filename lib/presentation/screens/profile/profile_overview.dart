@@ -144,10 +144,10 @@ class _HeroCard extends StatelessWidget {
                             '@${me.anonymousPseudonym}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w900,
                               fontSize: 21,
-                              color: VentlyColors.deepBurgundy,
+                              color: context.ink,
                             ),
                           ),
                         ),
@@ -195,7 +195,7 @@ class _HeroCard extends StatelessWidget {
                           fontSize: 13.5,
                           height: 1.4,
                           fontWeight: FontWeight.w600,
-                          color: VentlyColors.deepBurgundy.withOpacity(0.78),
+                          color: context.ink.withOpacity(0.78),
                         ),
                       ),
                     ),
@@ -388,7 +388,7 @@ class _Pill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.6),
+        color: context.glass(0.6),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
       ),
@@ -399,10 +399,10 @@ class _Pill extends StatelessWidget {
           const SizedBox(width: 5),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w800,
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
             ),
           ),
         ],
@@ -467,7 +467,7 @@ class _VerificationPill extends ConsumerWidget {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -483,17 +483,17 @@ class _VerificationPill extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Apply for verification',
+              Text('Apply for verification',
                   style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w900,
-                      color: VentlyColors.deepBurgundy)),
+                      color: context.ink)),
               const SizedBox(height: 4),
               Text(
                 'The verified check is earned. Tell us why your presence lifts '
                 'this community — our team reviews every application.',
                 style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                    color: context.ink.withOpacity(0.6),
                     fontSize: 13,
                     height: 1.35),
               ),
@@ -572,24 +572,24 @@ class _EditButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withOpacity(0.7),
+      color: context.glass(0.7),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: () => context.push('/profile/edit'),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.edit_outlined,
+              const Icon(Icons.edit_outlined,
                   size: 15, color: VentlyColors.berryMagenta),
-              SizedBox(width: 6),
+              const SizedBox(width: 6),
               Text('Edit Profile',
                   style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 12.5,
-                      color: VentlyColors.deepBurgundy)),
+                      color: context.ink)),
             ],
           ),
         ),
@@ -605,15 +605,15 @@ class _HeroSettingsButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withOpacity(0.6),
+      color: context.glass(0.6),
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: () => context.push('/settings'),
-        child: const Padding(
-          padding: EdgeInsets.all(7),
+        child: Padding(
+          padding: const EdgeInsets.all(7),
           child: Icon(Icons.settings_outlined,
-              size: 18, color: VentlyColors.deepBurgundy),
+              size: 18, color: context.ink),
         ),
       ),
     );
@@ -638,9 +638,9 @@ class _StatsPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.45),
+        color: context.glass(0.45),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.5)),
+        border: Border.all(color: context.glassBorder),
       ),
       child: Row(
         children: [
@@ -702,7 +702,7 @@ class _Stat extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: filled ? VentlyGradients.brand : null,
-              color: filled ? null : Colors.white.withOpacity(0.7),
+              color: filled ? null : context.glass(0.7),
             ),
             child: Icon(icon,
                 size: 20,
@@ -710,22 +710,22 @@ class _Stat extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(value,
-              style: const TextStyle(
+              style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 18,
-                  color: VentlyColors.deepBurgundy)),
+                  color: context.ink)),
           Text(label,
               style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w700,
-                  color: VentlyColors.deepBurgundy.withOpacity(0.75))),
+                  color: context.ink.withOpacity(0.75))),
           const SizedBox(height: 2),
           Text(sub,
               textAlign: TextAlign.center,
               style: TextStyle(
                   fontSize: 9.5,
                   fontWeight: FontWeight.w600,
-                  color: VentlyColors.deepBurgundy.withOpacity(0.5))),
+                  color: context.ink.withOpacity(0.5))),
         ],
       ),
     );
@@ -776,17 +776,17 @@ class _Action extends StatelessWidget {
                 height: 46,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.65),
+                  color: context.glass(0.65),
                   border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
                 ),
                 child: Icon(icon, color: VentlyColors.berryMagenta, size: 22),
               ),
               const SizedBox(height: 6),
               Text(label,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
-                      color: VentlyColors.deepBurgundy)),
+                      color: context.ink)),
             ],
           ),
         ),
@@ -867,13 +867,13 @@ class _FriendsCard extends StatelessWidget {
               style: TextStyle(
                   fontSize: 12,
                   height: 1.35,
-                  color: VentlyColors.deepBurgundy.withOpacity(0.6))),
+                  color: context.ink.withOpacity(0.6))),
           const SizedBox(height: 14),
           if (friends.isEmpty)
             Text('No friends yet.',
                 style: TextStyle(
                     fontSize: 12,
-                    color: VentlyColors.deepBurgundy.withOpacity(0.5)))
+                    color: context.ink.withOpacity(0.5)))
           else
             SizedBox(
               height: 34,
@@ -908,10 +908,10 @@ class _FriendsCard extends StatelessWidget {
                           border: Border.all(color: Colors.white, width: 2),
                         ),
                         child: Text('+${friends.length - 3}',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w800,
-                                color: VentlyColors.deepBurgundy)),
+                                color: context.ink)),
                       ),
                     ),
                 ],
@@ -981,7 +981,7 @@ class _PersonasCard extends ConsumerWidget {
               style: TextStyle(
                   fontSize: 12,
                   height: 1.35,
-                  color: VentlyColors.deepBurgundy.withOpacity(0.6))),
+                  color: context.ink.withOpacity(0.6))),
           const SizedBox(height: 14),
           Row(
             children: [
@@ -1049,10 +1049,10 @@ class _PersonaChip extends ConsumerWidget {
             persona.pseudonym,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w700,
-                color: VentlyColors.deepBurgundy),
+                color: context.ink),
           ),
         ],
       ),
@@ -1085,13 +1085,13 @@ class _PersonaCreate extends StatelessWidget {
                 color: VentlyColors.berryMagenta),
           ),
           const SizedBox(height: 5),
-          const Text('Create New',
+          Text('Create New',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                   fontSize: 10.5,
                   fontWeight: FontWeight.w700,
-                  color: VentlyColors.deepBurgundy)),
+                  color: context.ink)),
         ],
       ),
     );
@@ -1146,11 +1146,11 @@ class _HighlightsCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text("You're making a difference 🌸",
+          Text("You're making a difference.",
               style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: VentlyColors.deepBurgundy.withOpacity(0.55))),
+                  color: context.ink.withOpacity(0.55))),
         ],
       ),
     );
@@ -1177,10 +1177,10 @@ class _MiniStat extends StatelessWidget {
           Icon(icon, color: VentlyColors.berryMagenta, size: 18),
           const SizedBox(height: 6),
           Text('$value',
-              style: const TextStyle(
+              style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 17,
-                  color: VentlyColors.deepBurgundy)),
+                  color: context.ink)),
           const SizedBox(height: 2),
           Text(label,
               textAlign: TextAlign.center,
@@ -1188,7 +1188,7 @@ class _MiniStat extends StatelessWidget {
                   fontSize: 9.5,
                   height: 1.2,
                   fontWeight: FontWeight.w700,
-                  color: VentlyColors.deepBurgundy.withOpacity(0.6))),
+                  color: context.ink.withOpacity(0.6))),
         ],
       ),
     );
@@ -1232,10 +1232,10 @@ class _BadgesCard extends ConsumerWidget {
           ),
           const SizedBox(height: 14),
           if (earnedDefs.isEmpty)
-            Text('No badges yet — keep showing up 💗',
+            Text('No badges yet — keep showing up.',
                 style: TextStyle(
                     fontSize: 12,
-                    color: VentlyColors.deepBurgundy.withOpacity(0.55)))
+                    color: context.ink.withOpacity(0.55)))
           else
             Row(
               children: [
@@ -1289,7 +1289,7 @@ class _BadgeMedallion extends StatelessWidget {
               fontSize: 9,
               height: 1.15,
               fontWeight: FontWeight.w700,
-              color: VentlyColors.deepBurgundy.withOpacity(0.7)),
+              color: context.ink.withOpacity(0.7)),
         ),
       ],
     );
@@ -1322,10 +1322,10 @@ class _CardTitle extends StatelessWidget {
             title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 15,
-                color: VentlyColors.deepBurgundy),
+                color: context.ink),
           ),
         ),
       ],

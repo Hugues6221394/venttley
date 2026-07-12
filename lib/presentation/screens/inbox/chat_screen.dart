@@ -672,8 +672,8 @@ class _Bubble extends ConsumerWidget {
               if (onReply != null)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.reply_rounded,
-                      color: VentlyColors.deepBurgundy),
+                  leading: Icon(Icons.reply_rounded,
+                      color: context.ink),
                   title: const Text('Reply',
                       style: TextStyle(fontWeight: FontWeight.w800)),
                   onTap: () {
@@ -683,8 +683,8 @@ class _Bubble extends ConsumerWidget {
                 ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.add_reaction_outlined,
-                    color: VentlyColors.deepBurgundy),
+                leading: Icon(Icons.add_reaction_outlined,
+                    color: context.ink),
                 title: const Text('React',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -695,8 +695,8 @@ class _Bubble extends ConsumerWidget {
               if (onCopy != null && message.plaintext.isNotEmpty)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.copy_rounded,
-                      color: VentlyColors.deepBurgundy),
+                  leading: Icon(Icons.copy_rounded,
+                      color: context.ink),
                   title: const Text('Copy',
                       style: TextStyle(fontWeight: FontWeight.w800)),
                   onTap: () {
@@ -707,8 +707,8 @@ class _Bubble extends ConsumerWidget {
               if (canEdit)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.edit_outlined,
-                      color: VentlyColors.deepBurgundy),
+                  leading: Icon(Icons.edit_outlined,
+                      color: context.ink),
                   title: const Text('Edit',
                       style: TextStyle(fontWeight: FontWeight.w800)),
                   subtitle: const Text(
@@ -740,8 +740,8 @@ class _Bubble extends ConsumerWidget {
               if (!mine && onReport != null)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.flag_outlined,
-                      color: VentlyColors.deepBurgundy),
+                  leading: Icon(Icons.flag_outlined,
+                      color: context.ink),
                   title: const Text('Report',
                       style: TextStyle(fontWeight: FontWeight.w800)),
                   onTap: () {
@@ -796,8 +796,8 @@ class _Bubble extends ConsumerWidget {
                 ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.delete_outline,
-                    color: VentlyColors.deepBurgundy),
+                leading: Icon(Icons.delete_outline,
+                    color: context.ink),
                 title: const Text('Delete for me',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 subtitle: const Text(
@@ -1145,7 +1145,7 @@ class _SwipeActionState extends State<_SwipeAction> {
               child: Opacity(
                 opacity: (_dx / _trigger).clamp(0.0, 1.0),
                 child: Icon(widget.icon,
-                    size: 20, color: VentlyColors.deepBurgundy),
+                    size: 20, color: context.ink),
               ),
             ),
           AnimatedSlide(

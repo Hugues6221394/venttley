@@ -95,10 +95,10 @@ class _ChatOptionsSheet extends ConsumerWidget {
             const SizedBox(height: 10),
             Center(
               child: Text(displayName,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 19,
-                      color: VentlyColors.deepBurgundy)),
+                      color: context.ink)),
             ),
             const SizedBox(height: 16),
             // Quick actions
@@ -347,10 +347,10 @@ class _Quick extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(label,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: VentlyColors.deepBurgundy)),
+                    color: context.ink)),
           ],
         ),
       ),
@@ -376,7 +376,7 @@ class _Tile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? VentlyColors.dangerRed : VentlyColors.deepBurgundy;
+    final color = danger ? VentlyColors.dangerRed : context.ink;
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 4),
       leading: accent != null
@@ -393,7 +393,7 @@ class _Tile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                       fontSize: 12,
-                      color: VentlyColors.deepBurgundy.withOpacity(0.5))),
+                      color: context.ink.withOpacity(0.5))),
             ),
           const SizedBox(width: 4),
           const Icon(Icons.chevron_right_rounded, color: VentlyColors.softMauve),

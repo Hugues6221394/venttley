@@ -71,8 +71,8 @@ class _TribeMemberSheetBody extends ConsumerWidget {
         ),
         Text(
           tribeName,
-          style: const TextStyle(
-            color: VentlyColors.deepBurgundy,
+          style: TextStyle(
+            color: context.ink,
             fontWeight: FontWeight.w900,
             fontSize: 17,
           ),
@@ -81,7 +81,7 @@ class _TribeMemberSheetBody extends ConsumerWidget {
         Text(
           'Tap a member to view their profile',
           style: TextStyle(
-            color: VentlyColors.deepBurgundy.withOpacity(0.55),
+            color: context.ink.withOpacity(0.55),
             fontWeight: FontWeight.w700,
             fontSize: 12,
           ),
@@ -177,7 +177,7 @@ class _MemberTile extends ConsumerWidget {
                         fontWeight: FontWeight.w700,
                         color: member.isOnline
                             ? const Color(0xFF21C76A)
-                            : VentlyColors.deepBurgundy.withOpacity(0.5),
+                            : context.ink.withOpacity(0.5),
                       ),
                     ),
                   ],

@@ -181,12 +181,12 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   'More',
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 16,
                   ),
@@ -194,8 +194,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.shield_outlined,
-                    color: VentlyColors.deepBurgundy),
+                leading: Icon(Icons.shield_outlined,
+                    color: context.ink),
                 title: const Text('Blocked accounts',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -205,8 +205,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.outbox_outlined,
-                    color: VentlyColors.deepBurgundy),
+                leading: Icon(Icons.outbox_outlined,
+                    color: context.ink),
                 title: const Text('Sent requests',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -257,8 +257,8 @@ class _FriendsHeader extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.menu_rounded,
-                color: VentlyColors.deepBurgundy),
+            icon: Icon(Icons.menu_rounded,
+                color: context.ink),
             onPressed: onMenu,
           ),
           const Text(
@@ -310,20 +310,20 @@ class _InstantConnectCard extends StatelessWidget {
                       color: VentlyColors.berryMagenta, size: 30),
                 ),
                 const SizedBox(width: 14),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Instant Connect',
                         style: TextStyle(
-                          color: VentlyColors.deepBurgundy,
+                          color: context.ink,
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
                         ),
                       ),
-                      SizedBox(height: 3),
-                      Text(
+                      const SizedBox(height: 3),
+                      const Text(
                         'Share your profile or add a friend.',
                         style: TextStyle(
                           color: Color(0xFF8B5566),
@@ -416,10 +416,10 @@ class _InstantConnectCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'My QR',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 18,
                 ),
@@ -446,8 +446,8 @@ class _InstantConnectCard extends StatelessWidget {
                 ),
                 child: Text(
                   '@${me.anonymousPseudonym}',
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 16,
                   ),
@@ -458,7 +458,7 @@ class _InstantConnectCard extends StatelessWidget {
                 'Scan to add. Or copy and share the link below anywhere.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                  color: context.ink.withOpacity(0.6),
                   fontSize: 11.5,
                   fontWeight: FontWeight.w700,
                 ),
@@ -527,10 +527,10 @@ class _RequestsSection extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
             child: Row(
               children: [
-                const Text(
+                Text(
                   'Friend Requests',
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 18,
                   ),
@@ -633,8 +633,8 @@ class _RequestCard extends ConsumerWidget {
                         request.otherPseudonym,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: VentlyColors.deepBurgundy,
+                        style: TextStyle(
+                          color: context.ink,
                           fontWeight: FontWeight.w900,
                           fontSize: 15,
                         ),
@@ -643,7 +643,7 @@ class _RequestCard extends ConsumerWidget {
                       Text(
                         _relative(request.createdAt),
                         style: TextStyle(
-                          color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                          color: context.ink.withOpacity(0.55),
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                         ),
@@ -733,7 +733,7 @@ class _QuickSuggestionsSection extends StatelessWidget {
             itemBuilder: (_, __) => Container(
               width: 140,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.glass(0.9),
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
                     color: VentlyColors.softMauve.withOpacity(0.3)),
@@ -749,12 +749,12 @@ class _QuickSuggestionsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 4, 20, 10),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
             child: Text(
               'Quick Suggestions',
               style: TextStyle(
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 18,
               ),
@@ -835,8 +835,8 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
                   widget.s.pseudonym,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 13,
                   ),
@@ -854,7 +854,7 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.6),
+              color: context.ink.withOpacity(0.6),
               fontSize: 10.5,
               fontWeight: FontWeight.w800,
             ),
@@ -923,8 +923,8 @@ class _MyFriendsHeader extends StatelessWidget {
         children: [
           RichText(
             text: TextSpan(
-              style: const TextStyle(
-                color: VentlyColors.deepBurgundy,
+              style: TextStyle(
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 18,
               ),
@@ -944,7 +944,7 @@ class _MyFriendsHeader extends StatelessWidget {
             height: 44,
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.glass(0.9),
               borderRadius: BorderRadius.circular(22),
               border:
                   Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
@@ -958,14 +958,14 @@ class _MyFriendsHeader extends StatelessWidget {
                   child: TextField(
                     controller: query,
                     onChanged: onChanged,
-                    style: const TextStyle(
-                      color: VentlyColors.deepBurgundy,
+                    style: TextStyle(
+                      color: context.ink,
                       fontWeight: FontWeight.w700,
                     ),
                     decoration: InputDecoration(
                       hintText: 'Find a friend…',
                       hintStyle: TextStyle(
-                        color: VentlyColors.deepBurgundy.withOpacity(0.42),
+                        color: context.ink.withOpacity(0.42),
                         fontWeight: FontWeight.w700,
                       ),
                       border: InputBorder.none,
@@ -1016,8 +1016,8 @@ class _FriendRow extends ConsumerWidget {
                             friend.pseudonym,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: VentlyColors.deepBurgundy,
+                            style: TextStyle(
+                              color: context.ink,
                               fontWeight: FontWeight.w900,
                               fontSize: 14,
                             ),
@@ -1033,7 +1033,7 @@ class _FriendRow extends ConsumerWidget {
                     Text(
                       'Friends since ${_relative(friend.acceptedAt)}',
                       style: TextStyle(
-                        color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                        color: context.ink.withOpacity(0.55),
                         fontWeight: FontWeight.w700,
                         fontSize: 11.5,
                       ),
@@ -1044,8 +1044,8 @@ class _FriendRow extends ConsumerWidget {
               _FavoriteHeart(friend: friend),
               IconButton(
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.more_vert_rounded,
-                    color: VentlyColors.deepBurgundy, size: 20),
+                icon: Icon(Icons.more_vert_rounded,
+                    color: context.ink, size: 20),
                 onPressed: () => _showActions(context, ref),
               ),
             ],
@@ -1075,8 +1075,8 @@ class _FriendRow extends ConsumerWidget {
                     Flexible(
                       child: Text(
                         friend.pseudonym,
-                        style: const TextStyle(
-                          color: VentlyColors.deepBurgundy,
+                        style: TextStyle(
+                          color: context.ink,
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
                         ),
@@ -1091,8 +1091,8 @@ class _FriendRow extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.person_outline,
-                    color: VentlyColors.deepBurgundy),
+                leading: Icon(Icons.person_outline,
+                    color: context.ink),
                 title: const Text('View profile',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -1102,8 +1102,8 @@ class _FriendRow extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.chat_bubble_outline,
-                    color: VentlyColors.deepBurgundy),
+                leading: Icon(Icons.chat_bubble_outline,
+                    color: context.ink),
                 title: const Text('Message',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () async {
@@ -1114,7 +1114,7 @@ class _FriendRow extends ConsumerWidget {
                               peerUserId: friend.userId,
                               peerPseudonym: friend.pseudonym,
                               peerAvatarSeed: friend.avatarSeed,
-                              preview: 'Hey 👋',
+                              preview: 'Hey',
                             );
                     if (context.mounted) {
                       GoRouter.of(context).push('/chat/${room.roomId}');
@@ -1130,8 +1130,8 @@ class _FriendRow extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.notifications_off_outlined,
-                    color: VentlyColors.deepBurgundy),
+                leading: Icon(Icons.notifications_off_outlined,
+                    color: context.ink),
                 title: const Text('Mute notifications',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -1145,8 +1145,8 @@ class _FriendRow extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.person_remove_alt_1,
-                    color: VentlyColors.deepBurgundy),
+                leading: Icon(Icons.person_remove_alt_1,
+                    color: context.ink),
                 title: const Text('Remove friend',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () async {
@@ -1219,7 +1219,7 @@ class _FavoriteHeartState extends ConsumerState<_FavoriteHeart> {
         _on ? Icons.favorite : Icons.favorite_border,
         color: _on
             ? const Color(0xFF21C76A)
-            : VentlyColors.deepBurgundy.withOpacity(0.5),
+            : context.ink.withOpacity(0.5),
         size: 18,
       ),
       onPressed: _toggle,
@@ -1248,10 +1248,10 @@ class _OutgoingSheet extends ConsumerWidget {
           child: Column(
             children: [
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 'Sent requests',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 16,
                 ),
@@ -1259,11 +1259,11 @@ class _OutgoingSheet extends ConsumerWidget {
               const SizedBox(height: 12),
               Expanded(
                 child: outgoing.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           "No outgoing requests right now.",
                           style: TextStyle(
-                            color: VentlyColors.deepBurgundy,
+                            color: context.ink,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -1279,7 +1279,7 @@ class _OutgoingSheet extends ConsumerWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 8),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: context.glass(0.9),
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
                                   color: VentlyColors.softMauve
@@ -1300,15 +1300,15 @@ class _OutgoingSheet extends ConsumerWidget {
                                     children: [
                                       Text(
                                         r.otherPseudonym,
-                                        style: const TextStyle(
-                                          color: VentlyColors.deepBurgundy,
+                                        style: TextStyle(
+                                          color: context.ink,
                                           fontWeight: FontWeight.w900,
                                         ),
                                       ),
                                       Text(
                                         'Sent ${_relative(r.createdAt)}',
                                         style: TextStyle(
-                                          color: VentlyColors.deepBurgundy
+                                          color: context.ink
                                               .withOpacity(0.55),
                                           fontSize: 11,
                                           fontWeight: FontWeight.w700,
@@ -1379,8 +1379,8 @@ class _EmptyState extends StatelessWidget {
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: VentlyColors.deepBurgundy,
+            style: TextStyle(
+              color: context.ink,
               fontWeight: FontWeight.w900,
               fontSize: 18,
             ),
@@ -1390,7 +1390,7 @@ class _EmptyState extends StatelessWidget {
             body,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.66),
+              color: context.ink.withOpacity(0.66),
               fontWeight: FontWeight.w700,
               fontSize: 13,
             ),
@@ -1414,7 +1414,7 @@ class _ListSkeleton extends StatelessWidget {
             height: 56,
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.glass(0.9),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
                   color: VentlyColors.softMauve.withOpacity(0.3)),

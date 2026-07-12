@@ -175,7 +175,7 @@ class _DiscoverTopBar extends ConsumerWidget {
             children: [
               IconButton(
                 icon: const Icon(Icons.notifications_none_rounded, size: 22),
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
                 onPressed: () => context.push('/notifications'),
               ),
               if (unread > 0)
@@ -260,14 +260,14 @@ class _SearchField extends StatelessWidget {
                 onChanged: onChanged,
                 onSubmitted: onSubmit,
                 textInputAction: TextInputAction.search,
-                style: const TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                style: TextStyle(
+                  color: context.ink,
                   fontWeight: FontWeight.w700,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Search Vents, Tribes, or Topics',
                   hintStyle: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.42),
+                    color: context.ink.withOpacity(0.42),
                     fontWeight: FontWeight.w700,
                   ),
                   border: InputBorder.none,
@@ -277,7 +277,7 @@ class _SearchField extends StatelessWidget {
             if (controller.text.isNotEmpty)
               IconButton(
                 icon: const Icon(Icons.close_rounded, size: 18),
-                color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                color: context.ink.withOpacity(0.55),
                 onPressed: onClear,
               ),
           ],
@@ -310,7 +310,7 @@ class _SearchResultsSlivers extends ConsumerWidget {
           padding: const EdgeInsets.all(24),
           child: Text(
             'Search failed: $e',
-            style: const TextStyle(color: VentlyColors.deepBurgundy),
+            style: TextStyle(color: context.ink),
           ),
         ),
       ),
@@ -332,10 +332,10 @@ class _SearchResultsSlivers extends ConsumerWidget {
                         color: VentlyColors.berryMagenta, size: 36),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
+                  Text(
                     'Nothing matched.',
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                       fontWeight: FontWeight.w900,
                       fontSize: 16,
                     ),
@@ -345,7 +345,7 @@ class _SearchResultsSlivers extends ConsumerWidget {
                     'Try a shorter word or a different angle on "$query".',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy.withOpacity(0.65),
+                      color: context.ink.withOpacity(0.65),
                       fontWeight: FontWeight.w700,
                       fontSize: 12.5,
                     ),
@@ -400,7 +400,7 @@ class _ResultsLabel extends StatelessWidget {
       child: Text(
         label.toUpperCase(),
         style: TextStyle(
-          color: VentlyColors.deepBurgundy.withOpacity(0.62),
+          color: context.ink.withOpacity(0.62),
           fontSize: 11,
           fontWeight: FontWeight.w900,
           letterSpacing: 1.1,
@@ -502,8 +502,8 @@ class _TribeResultTile extends StatelessWidget {
                         hit.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: VentlyColors.deepBurgundy,
+                        style: TextStyle(
+                          color: context.ink,
                           fontWeight: FontWeight.w900,
                           fontSize: 14,
                         ),
@@ -517,7 +517,7 @@ class _TribeResultTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color:
-                              VentlyColors.deepBurgundy.withOpacity(0.62),
+                              context.ink.withOpacity(0.62),
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                         ),
@@ -525,8 +525,8 @@ class _TribeResultTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded,
-                    color: VentlyColors.deepBurgundy),
+                Icon(Icons.chevron_right_rounded,
+                    color: context.ink),
               ],
             ),
           ),
@@ -577,8 +577,8 @@ class _PostResultTile extends StatelessWidget {
                         '@${hit.subtitle}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: VentlyColors.deepBurgundy,
+                        style: TextStyle(
+                          color: context.ink,
                           fontWeight: FontWeight.w900,
                           fontSize: 13,
                         ),
@@ -589,7 +589,7 @@ class _PostResultTile extends StatelessWidget {
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: VentlyColors.deepBurgundy.withOpacity(0.85),
+                          color: context.ink.withOpacity(0.85),
                           fontWeight: FontWeight.w700,
                           fontSize: 12.5,
                           height: 1.35,
@@ -600,7 +600,7 @@ class _PostResultTile extends StatelessWidget {
                         children: [
                           Icon(Icons.favorite_border,
                               size: 12,
-                              color: VentlyColors.deepBurgundy
+                              color: context.ink
                                   .withOpacity(0.6)),
                           const SizedBox(width: 4),
                           Text(
@@ -608,14 +608,14 @@ class _PostResultTile extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
-                              color: VentlyColors.deepBurgundy
+                              color: context.ink
                                   .withOpacity(0.65),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Icon(Icons.chat_bubble_outline,
                               size: 12,
-                              color: VentlyColors.deepBurgundy
+                              color: context.ink
                                   .withOpacity(0.6)),
                           const SizedBox(width: 4),
                           Text(
@@ -623,7 +623,7 @@ class _PostResultTile extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
-                              color: VentlyColors.deepBurgundy
+                              color: context.ink
                                   .withOpacity(0.65),
                             ),
                           ),
@@ -731,7 +731,7 @@ class _RecentRow extends StatelessWidget {
               Text(
                 'RECENT SEARCHES',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                  color: context.ink.withOpacity(0.55),
                   fontSize: 11,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 1.0,
@@ -780,12 +780,12 @@ class _RecentRow extends StatelessWidget {
                       Icon(Icons.history_rounded,
                           size: 13,
                           color:
-                              VentlyColors.deepBurgundy.withOpacity(0.6)),
+                              context.ink.withOpacity(0.6)),
                       const SizedBox(width: 6),
                       Text(
                         q,
-                        style: const TextStyle(
-                          color: VentlyColors.deepBurgundy,
+                        style: TextStyle(
+                          color: context.ink,
                           fontWeight: FontWeight.w800,
                           fontSize: 12,
                         ),
@@ -829,8 +829,8 @@ class _SectionHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
@@ -839,7 +839,7 @@ class _SectionHeader extends StatelessWidget {
                 Text(
                   subtitle,
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                    color: context.ink.withOpacity(0.6),
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -861,7 +861,7 @@ class _SectionHeader extends StatelessWidget {
             IconButton(
               onPressed: onAction,
               icon: Icon(trailingIcon,
-                  size: 18, color: VentlyColors.deepBurgundy),
+                  size: 18, color: context.ink),
             ),
         ],
       ),
@@ -965,8 +965,8 @@ class _NoteworthyTribeCard extends StatelessWidget {
             tribe.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: VentlyColors.deepBurgundy,
+            style: TextStyle(
+              color: context.ink,
               fontWeight: FontWeight.w900,
               fontSize: 14,
             ),
@@ -980,7 +980,7 @@ class _NoteworthyTribeCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                color: context.ink.withOpacity(0.62),
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
               ),
@@ -1088,8 +1088,8 @@ class _FeaturedVoiceCard extends ConsumerWidget {
                             '@${voice.pseudonym}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: VentlyColors.deepBurgundy,
+                            style: TextStyle(
+                              color: context.ink,
                               fontWeight: FontWeight.w900,
                               fontSize: 15,
                             ),
@@ -1128,10 +1128,10 @@ class _FeaturedVoiceCard extends ConsumerWidget {
               '"${voice.topQuote.trim()}"',
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontStyle: FontStyle.italic,
                 height: 1.45,
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1176,8 +1176,8 @@ class _MiniVoiceCard extends ConsumerWidget {
               child: Text(
                 '@${voice.pseudonym}',
                 textAlign: horizontal ? TextAlign.start : TextAlign.center,
-                style: const TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                style: TextStyle(
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 12.5,
                 ),
@@ -1198,7 +1198,7 @@ class _MiniVoiceCard extends ConsumerWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: VentlyColors.deepBurgundy.withOpacity(0.62),
+            color: context.ink.withOpacity(0.62),
             fontSize: 11,
             fontWeight: FontWeight.w700,
           ),
@@ -1423,7 +1423,7 @@ class _RecommendedTile extends StatelessWidget {
                   Text(
                     _ago(post.createdAt),
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                      color: context.ink.withOpacity(0.55),
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
                     ),
@@ -1435,8 +1435,8 @@ class _RecommendedTile extends StatelessWidget {
                 '"${post.content}"',
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                style: TextStyle(
+                  color: context.ink,
                   height: 1.35,
                   fontWeight: FontWeight.w800,
                 ),
@@ -1444,20 +1444,20 @@ class _RecommendedTile extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  const Icon(Icons.favorite_border,
-                      size: 14, color: VentlyColors.deepBurgundy),
+                  Icon(Icons.favorite_border,
+                      size: 14, color: context.ink),
                   const SizedBox(width: 5),
                   Text(PostCard.compactNumber(post.likesCount),
-                      style: _metricStyle),
+                      style: _metricStyle(context)),
                   const SizedBox(width: 14),
-                  const Icon(Icons.chat_bubble_outline,
-                      size: 13, color: VentlyColors.deepBurgundy),
+                  Icon(Icons.chat_bubble_outline,
+                      size: 13, color: context.ink),
                   const SizedBox(width: 5),
                   Text(PostCard.compactNumber(post.commentsCount),
-                      style: _metricStyle),
+                      style: _metricStyle(context)),
                   const Spacer(),
-                  const Icon(Icons.bookmark_border,
-                      size: 17, color: VentlyColors.deepBurgundy),
+                  Icon(Icons.bookmark_border,
+                      size: 17, color: context.ink),
                 ],
               ),
             ],
@@ -1467,11 +1467,11 @@ class _RecommendedTile extends StatelessWidget {
     );
   }
 
-  static const _metricStyle = TextStyle(
-    color: VentlyColors.deepBurgundy,
-    fontSize: 12,
-    fontWeight: FontWeight.w800,
-  );
+  static TextStyle _metricStyle(BuildContext context) => TextStyle(
+        color: context.ink,
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+      );
 
   static String _ago(DateTime date) {
     final diff = DateTime.now().difference(date);
@@ -1527,7 +1527,7 @@ class _EmptyHint extends StatelessWidget {
             child: Text(
               message,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.72),
+                color: context.ink.withOpacity(0.72),
                 fontWeight: FontWeight.w700,
                 fontSize: 12.5,
               ),

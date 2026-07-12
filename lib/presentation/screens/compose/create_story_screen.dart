@@ -287,7 +287,7 @@ class _Header extends StatelessWidget {
           const Spacer(),
           IconButton(
             icon: Icon(Icons.settings_outlined,
-                color: VentlyColors.deepBurgundy.withOpacity(0.78)),
+                color: context.ink.withOpacity(0.78)),
             onPressed: () {},
           ),
         ],
@@ -367,10 +367,10 @@ class _LivePreview extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    const Text(
+                    Text(
                       'LIVE PREVIEW',
                       style: TextStyle(
-                        color: VentlyColors.deepBurgundy,
+                        color: context.ink,
                         fontSize: 10,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 1.2,
@@ -476,12 +476,12 @@ class _CaptionField extends StatelessWidget {
               ? 'Add an optional caption…'
               : 'Type the moment you want to share…',
           hintStyle: TextStyle(
-            color: VentlyColors.deepBurgundy.withOpacity(0.42),
+            color: context.ink.withOpacity(0.42),
             fontWeight: FontWeight.w700,
           ),
         ),
-        style: const TextStyle(
-          color: VentlyColors.deepBurgundy,
+        style: TextStyle(
+          color: context.ink,
           fontWeight: FontWeight.w700,
           fontSize: 14,
         ),
@@ -599,8 +599,8 @@ class _SourceTile extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 label,
-                style: const TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                style: TextStyle(
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 13,
                 ),
@@ -638,17 +638,17 @@ class _PrivacyDurationCard extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.remove_red_eye_outlined,
                 color: VentlyColors.berryMagenta),
-            title: const Text(
+            title: Text(
               'Privacy Settings',
               style: TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 13.5),
             ),
             subtitle: Text(
               friendsOnly ? 'Friends only' : 'Everyone on Venttly',
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                color: context.ink.withOpacity(0.62),
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -663,17 +663,17 @@ class _PrivacyDurationCard extends StatelessWidget {
             color: VentlyColors.softMauve.withOpacity(0.30),
             height: 1,
           ),
-          const ListTile(
-            leading: Icon(Icons.timer_outlined,
+          ListTile(
+            leading: const Icon(Icons.timer_outlined,
                 color: VentlyColors.berryMagenta),
             title: Text(
               'Story Duration',
               style: TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 13.5),
             ),
-            trailing: Text(
+            trailing: const Text(
               '24 Hours',
               style: TextStyle(
                 color: VentlyColors.berryMagenta,

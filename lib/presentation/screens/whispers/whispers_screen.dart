@@ -458,10 +458,10 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
                   fit: BoxFit.cover,
                   fadeInDuration: const Duration(milliseconds: 180),
                   placeholder: (_, __) => Container(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.4),
+                    color: context.ink.withOpacity(0.4),
                   ),
                   errorWidget: (_, __, ___) => Container(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.4),
+                    color: context.ink.withOpacity(0.4),
                   ),
                 ),
               )
@@ -473,7 +473,7 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
                     end: Alignment.bottomRight,
                     colors: [
                       VentlyColors.berryMagenta.withOpacity(0.9),
-                      VentlyColors.deepBurgundy,
+                      context.ink,
                     ],
                   ),
                 ),
@@ -950,7 +950,7 @@ class _StaticPausedRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 14),
-        Expanded(
+        const Expanded(
           child: _WaveformProgress(progress: 0),
         ),
         const SizedBox(width: 8),
@@ -1563,11 +1563,11 @@ class _CategorySheet extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 14),
-              const Center(
+              Center(
                 child: Text(
                   'Whisper categories',
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 16,
                   ),
@@ -1619,8 +1619,8 @@ class _CategoryRow extends StatelessWidget {
       ),
       title: Text(
         label,
-        style: const TextStyle(
-            color: VentlyColors.deepBurgundy, fontWeight: FontWeight.w800),
+        style: TextStyle(
+            color: context.ink, fontWeight: FontWeight.w800),
       ),
       onTap: onTap,
     );

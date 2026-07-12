@@ -47,7 +47,7 @@ class _SensitiveMediaVeilState extends State<SensitiveMediaVeil> {
               child: GestureDetector(
                 onTap: () => setState(() => _revealed = true),
                 child: Container(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.28),
+                  color: context.ink.withOpacity(0.28),
                   alignment: Alignment.center,
                   padding: const EdgeInsets.all(16),
                   child: Column(

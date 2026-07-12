@@ -245,7 +245,7 @@ class _HeaderCard extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                         color: isDark
                             ? VentlyColors.softOffWhite
-                            : VentlyColors.deepBurgundy,
+                            : context.ink,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

@@ -51,7 +51,7 @@ class ProfileStatsPanel extends StatelessWidget {
               fontWeight: FontWeight.w900,
               fontSize: 13,
               letterSpacing: 0.6,
-              color: VentlyColors.deepBurgundy.withOpacity(0.7),
+              color: context.ink.withOpacity(0.7),
             ),
           ),
           const SizedBox(height: 10),
@@ -136,18 +136,18 @@ class _PrimaryStatCard extends StatelessWidget {
                   Icon(
                     Icons.chevron_right_rounded,
                     size: 18,
-                    color: VentlyColors.deepBurgundy.withOpacity(0.35),
+                    color: context.ink.withOpacity(0.35),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
               Text(
                 PostCard.compactNumber(value),
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 26,
                   height: 1,
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                 ),
               ),
               const SizedBox(height: 4),
@@ -156,7 +156,7 @@ class _PrimaryStatCard extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 11,
-                  color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                  color: context.ink.withOpacity(0.62),
                 ),
               ),
               if (suffix != null)
@@ -204,10 +204,10 @@ class _SecondaryStatChip extends StatelessWidget {
             children: [
               Text(
                 PostCard.compactNumber(value),
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 16,
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                 ),
               ),
               const SizedBox(height: 2),
@@ -219,7 +219,7 @@ class _SecondaryStatChip extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 9,
-                  color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                  color: context.ink.withOpacity(0.55),
                 ),
               ),
             ],

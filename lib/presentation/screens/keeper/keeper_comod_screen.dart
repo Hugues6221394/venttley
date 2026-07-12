@@ -49,10 +49,10 @@ class KeeperComodScreen extends ConsumerWidget {
                     style: TextStyle(fontWeight: FontWeight.w900)),
               ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Permission grid',
               style: TextStyle(
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 15,
               ),
@@ -64,18 +64,18 @@ class KeeperComodScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Legend',
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  _LegendRow(
+                  const _LegendRow(
                       label: 'Plug',
                       detail: 'Full control — promote, kick mods, transfer'),
-                  _LegendRow(
+                  const _LegendRow(
                       label: 'Mod',
                       detail:
                           'Warn, review reports, pin, schedule, kick members'),
@@ -115,9 +115,9 @@ class _ModCard extends StatelessWidget {
                     children: [
                       Text(
                         '@${row.pseudonym}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w900,
-                          color: VentlyColors.deepBurgundy,
+                          color: context.ink,
                         ),
                       ),
                       Text(
@@ -176,7 +176,7 @@ class _PermChip extends StatelessWidget {
           fontWeight: FontWeight.w900,
           color: enabled
               ? VentlyColors.berryMagenta
-              : VentlyColors.deepBurgundy.withOpacity(0.35),
+              : context.ink.withOpacity(0.35),
         ),
       ),
     );
@@ -195,7 +195,7 @@ class _LegendRow extends StatelessWidget {
       child: RichText(
         text: TextSpan(
           style: TextStyle(
-            color: VentlyColors.deepBurgundy.withOpacity(0.7),
+            color: context.ink.withOpacity(0.7),
             fontWeight: FontWeight.w700,
             fontSize: 12,
           ),

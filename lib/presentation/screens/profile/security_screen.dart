@@ -236,10 +236,10 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                             verified
                                 ? 'Two-factor authentication is ON'
                                 : 'Two-factor authentication is OFF',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w900,
                               fontSize: 15,
-                              color: VentlyColors.deepBurgundy,
+                              color: context.ink,
                             ),
                           ),
                         ],
@@ -251,7 +251,7 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                             : 'Add a 6-digit code from any authenticator app (Google Authenticator, 1Password, Authy) on top of your password.',
                         style: TextStyle(
                           color:
-                              VentlyColors.deepBurgundy.withOpacity(0.7),
+                              context.ink.withOpacity(0.7),
                           fontWeight: FontWeight.w600,
                           height: 1.35,
                         ),
@@ -333,12 +333,12 @@ class _SecretBlock extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Secret (paste into authenticator)',
             style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
-                color: VentlyColors.deepBurgundy),
+                color: context.ink),
           ),
           const SizedBox(height: 4),
           Row(
@@ -370,7 +370,7 @@ class _SecretBlock extends StatelessWidget {
             style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: VentlyColors.deepBurgundy.withOpacity(0.7)),
+                color: context.ink.withOpacity(0.7)),
           ),
           Row(
             children: [

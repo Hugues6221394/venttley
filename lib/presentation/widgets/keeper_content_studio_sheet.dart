@@ -53,10 +53,10 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                   ),
                 ),
               ),
-              const Text(
+              Text(
                 'Content Studio',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 20,
                 ),
@@ -66,7 +66,7 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                     ? 'Create a tribe first to publish community content.'
                     : 'Publishing to ${tribe.name}',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                  color: context.ink.withOpacity(0.62),
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
@@ -194,8 +194,8 @@ class _StudioChip extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 13,
                   ),

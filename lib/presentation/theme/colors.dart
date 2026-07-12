@@ -43,6 +43,37 @@ class VentlyColors {
   static const Color onlineGreen = Color(0xFF34C759);
 }
 
+/// Theme-aware typography/icon "ink" that flips with brightness.
+///
+/// The brand was designed light-first, so most widgets hardcoded
+/// [VentlyColors.deepBurgundy] for text and icons on glass surfaces. That is
+/// invisible on the dark canvas, so any on-surface text/icon should use
+/// `context.ink` (full strength) or `context.inkMuted` / `context.inkFaint`
+/// for secondary + tertiary emphasis instead of a fixed burgundy.
+extension VentlyInk on BuildContext {
+  /// Primary on-surface ink — deep burgundy in light, soft off-white in dark.
+  Color get ink => Theme.of(this).colorScheme.onSurface;
+
+  /// Secondary emphasis (labels, captions). ~62% strength.
+  Color get inkMuted => ink.withOpacity(0.62);
+
+  /// Tertiary emphasis (hints, disabled). ~42% strength.
+  Color get inkFaint => ink.withOpacity(0.42);
+
+  /// True when the active theme is dark. Handy for one-off surface tweaks.
+  bool get isDark => Theme.of(this).brightness == Brightness.dark;
+
+  /// Adaptive frosted-glass surface fill. Light mode keeps the airy white
+  /// frost (pass the original white opacity); dark mode swaps to a subtle
+  /// lifted overlay so ink stays legible.
+  Color glass([double lightOpacity = 0.62]) => isDark
+      ? Colors.white.withOpacity(0.06)
+      : Colors.white.withOpacity(lightOpacity);
+
+  /// Adaptive hairline border for glass surfaces.
+  Color get glassBorder => Colors.white.withOpacity(isDark ? 0.08 : 0.65);
+}
+
 /// Brand gradients pulled from the launch adverts — the glossy berry sweep,
 /// the deep whispers banner, and the orb highlight.
 class VentlyGradients {

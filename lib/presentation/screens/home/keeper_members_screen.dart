@@ -65,10 +65,10 @@ class _MembersBodyState extends ConsumerState<_MembersBody> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Members',
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                       fontWeight: FontWeight.w900,
                       fontSize: 24,
                     ),
@@ -218,7 +218,7 @@ class _MemberTile extends StatelessWidget {
                       Text(
                         '${member.role.toUpperCase()} · joined ${_ago(member.joinedAt)}',
                         style: TextStyle(
-                          color: VentlyColors.deepBurgundy.withOpacity(0.58),
+                          color: context.ink.withOpacity(0.58),
                           fontWeight: FontWeight.w700,
                           fontSize: 11,
                         ),
@@ -275,10 +275,10 @@ class _KpiChip extends StatelessWidget {
           children: [
             Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 18,
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
               ),
             ),
             Text(
@@ -286,7 +286,7 @@ class _KpiChip extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 10,
-                color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                color: context.ink.withOpacity(0.55),
               ),
             ),
           ],

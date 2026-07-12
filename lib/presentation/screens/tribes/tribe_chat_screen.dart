@@ -598,8 +598,8 @@ class _ChatHeader extends StatelessWidget {
                       tribe.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: VentlyColors.deepBurgundy,
+                      style: TextStyle(
+                        color: context.ink,
                         fontWeight: FontWeight.w900,
                         fontSize: 15,
                         height: 1.1,
@@ -621,7 +621,7 @@ class _ChatHeader extends StatelessWidget {
                           child: Text(
                             '${_compact(soulsOnline)} souls online · tap for info',
                             style: TextStyle(
-                              color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                              color: context.ink.withOpacity(0.6),
                               fontWeight: FontWeight.w800,
                               fontSize: 11.5,
                             ),
@@ -636,20 +636,20 @@ class _ChatHeader extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Tribe rules',
-            icon: const Icon(Icons.menu_book_outlined,
-                color: VentlyColors.deepBurgundy),
+            icon: Icon(Icons.menu_book_outlined,
+                color: context.ink),
             onPressed: () => showTribeRulesSheet(context, tribe),
           ),
           IconButton(
             icon: Icon(
               searchActive ? Icons.close_rounded : Icons.search_rounded,
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
             ),
             onPressed: onToggleSearch,
           ),
           IconButton(
-            icon: const Icon(Icons.info_outline,
-                color: VentlyColors.deepBurgundy),
+            icon: Icon(Icons.info_outline,
+                color: context.ink),
             onPressed: onOpenHub,
           ),
         ],
@@ -696,13 +696,13 @@ class _ChatSearchBar extends StatelessWidget {
                   hintText: 'Search messages…',
                   border: InputBorder.none,
                   hintStyle: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.45),
+                    color: context.ink.withOpacity(0.45),
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
                   ),
                 ),
-                style: const TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                style: TextStyle(
+                  color: context.ink,
                   fontWeight: FontWeight.w800,
                   fontSize: 14,
                 ),
@@ -710,7 +710,7 @@ class _ChatSearchBar extends StatelessWidget {
             ),
             IconButton(
               icon: const Icon(Icons.close_rounded, size: 20),
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
               onPressed: onClose,
               visualDensity: VisualDensity.compact,
             ),
@@ -741,7 +741,7 @@ class _MessageSearchResults extends StatelessWidget {
             'No messages match "$query"',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.65),
+              color: context.ink.withOpacity(0.65),
               fontWeight: FontWeight.w800,
               fontSize: 14,
             ),
@@ -758,7 +758,7 @@ class _MessageSearchResults extends StatelessWidget {
           return Text(
             '${hits.length} result${hits.length == 1 ? '' : 's'}',
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.55),
+              color: context.ink.withOpacity(0.55),
               fontWeight: FontWeight.w900,
               fontSize: 12,
             ),
@@ -821,7 +821,7 @@ class _MessageSearchResults extends StatelessWidget {
                         Text(
                           DateFormat('MMM d · h:mm a').format(msg.createdAt),
                           style: TextStyle(
-                            color: VentlyColors.deepBurgundy.withOpacity(0.5),
+                            color: context.ink.withOpacity(0.5),
                             fontWeight: FontWeight.w700,
                             fontSize: 11,
                           ),
@@ -852,8 +852,8 @@ class _HighlightedText extends StatelessWidget {
         text,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: VentlyColors.deepBurgundy,
+        style: TextStyle(
+          color: context.ink,
           fontWeight: FontWeight.w700,
           fontSize: 13,
           height: 1.35,
@@ -867,8 +867,8 @@ class _HighlightedText extends StatelessWidget {
         text,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: VentlyColors.deepBurgundy,
+        style: TextStyle(
+          color: context.ink,
           fontWeight: FontWeight.w700,
           fontSize: 13,
           height: 1.35,
@@ -879,8 +879,8 @@ class _HighlightedText extends StatelessWidget {
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
       text: TextSpan(
-        style: const TextStyle(
-          color: VentlyColors.deepBurgundy,
+        style: TextStyle(
+          color: context.ink,
           fontWeight: FontWeight.w700,
           fontSize: 13,
           height: 1.35,
@@ -1067,8 +1067,8 @@ class _DateDivider extends StatelessWidget {
           ),
           child: Text(
             label,
-            style: const TextStyle(
-              color: VentlyColors.deepBurgundy,
+            style: TextStyle(
+              color: context.ink,
               fontWeight: FontWeight.w900,
               fontSize: 11.5,
             ),
@@ -1122,7 +1122,7 @@ class _MessageBubble extends ConsumerWidget {
               'Message removed',
               style: TextStyle(
                 fontStyle: FontStyle.italic,
-                color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                color: context.ink.withOpacity(0.55),
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -1231,7 +1231,7 @@ class _MessageBubble extends ConsumerWidget {
                                     : timeStr,
                                 style: TextStyle(
                                   color:
-                                      VentlyColors.deepBurgundy.withOpacity(0.5),
+                                      context.ink.withOpacity(0.5),
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -1546,8 +1546,8 @@ class _BubbleBody extends StatelessWidget {
                 padding: const EdgeInsets.all(10),
                 child: Text(
                   message.content!,
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontWeight: FontWeight.w700,
                     fontSize: 13.5,
                     height: 1.35,
@@ -1583,7 +1583,7 @@ class _BubbleBody extends StatelessWidget {
         Text(
           message.content ?? '',
           style: TextStyle(
-            color: mine ? Colors.white : VentlyColors.deepBurgundy,
+            color: mine ? Colors.white : context.ink,
             fontWeight: FontWeight.w700,
             fontSize: 14,
             height: 1.4,
@@ -1773,15 +1773,15 @@ class _Composer extends StatelessWidget {
                               minLines: 1,
                               maxLines: 5,
                               textCapitalization: TextCapitalization.sentences,
-                              style: const TextStyle(
-                                color: VentlyColors.deepBurgundy,
+                              style: TextStyle(
+                                color: context.ink,
                                 fontWeight: FontWeight.w700,
                                 fontSize: 14,
                               ),
                               decoration: InputDecoration(
                                 hintText: 'Share your thoughts…',
                                 hintStyle: TextStyle(
-                                  color: VentlyColors.deepBurgundy
+                                  color: context.ink
                                       .withOpacity(0.42),
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -1796,15 +1796,15 @@ class _Composer extends StatelessWidget {
                                   : Icons.mic_none_rounded,
                               color: recording
                                   ? VentlyColors.dangerRed
-                                  : VentlyColors.deepBurgundy,
+                                  : context.ink,
                               size: 20,
                             ),
                             onPressed: onMicTap,
                             visualDensity: VisualDensity.compact,
                           ),
                           IconButton(
-                            icon: const Icon(Icons.image_outlined,
-                                color: VentlyColors.deepBurgundy, size: 20),
+                            icon: Icon(Icons.image_outlined,
+                                color: context.ink, size: 20),
                             onPressed: onPickImage,
                             visualDensity: VisualDensity.compact,
                           ),
@@ -1926,10 +1926,10 @@ class _ChatEmpty extends StatelessWidget {
         children: [
           TribeAvatar(avatarUrl: tribe.avatarUrl, size: 88),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'Be the first to share.',
             style: TextStyle(
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
               fontWeight: FontWeight.w900,
               fontSize: 16,
             ),
@@ -1939,7 +1939,7 @@ class _ChatEmpty extends StatelessWidget {
             'This tribe is waiting for the conversation to begin. Drop a vent, a voice note, or a photo.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.66),
+              color: context.ink.withOpacity(0.66),
               fontWeight: FontWeight.w700,
               fontSize: 13,
             ),
