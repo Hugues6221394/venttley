@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'colors.dart';
 
@@ -31,22 +30,6 @@ class VentlyTokens {
         fontSize: 15,
         fontWeight: FontWeight.w900,
         letterSpacing: 0,
-      );
-
-  /// The emotional display voice — serif, reserved for content the user
-  /// *reads with feeling*: the feed greeting, whisper titles, profile mottos,
-  /// screen titles. Everything the user *operates* stays sans. Instrument
-  /// Serif ships one weight, so emphasis comes from size, not boldness.
-  static TextStyle display(
-    BuildContext context, {
-    double fontSize = 26,
-    Color? color,
-    double height = 1.15,
-  }) =>
-      GoogleFonts.instrumentSerif(
-        fontSize: fontSize,
-        height: height,
-        color: color ?? context.ink,
       );
 
   static const TextStyle meta = TextStyle(

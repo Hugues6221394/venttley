@@ -265,7 +265,7 @@ class SettingsScreen extends ConsumerWidget {
               final version = snap.data?.version ?? '—';
               final build = snap.data?.buildNumber ?? '';
               return Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 116),
                 child: Text(
                   'Venttly v$version${build.isEmpty ? '' : ' ($build)'}',
                   textAlign: TextAlign.center,

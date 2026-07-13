@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/tagged_text.dart';
 import '../../widgets/profile_avatar.dart';
 
 /// Edit Profile — the single place a member curates their public identity:
@@ -141,7 +142,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 116),
         children: [
           // --- Profile picture ---------------------------------------------
           Center(
@@ -217,13 +218,17 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           // --- Bio ----------------------------------------------------------
           _Section(
             title: 'Bio',
-            subtitle: 'A short public intro. Up to 160 characters.',
-            child: TextField(
+            subtitle:
+                'A short public intro. Up to 160 characters. Tag with @.',
+            child: TagAutocomplete(
               controller: _bio,
-              maxLength: 160,
-              maxLines: 3,
-              decoration: _dec(scheme,
-                  hint: 'What do you want people to know?'),
+              child: TextField(
+                controller: _bio,
+                maxLength: 160,
+                maxLines: 3,
+                decoration: _dec(scheme,
+                    hint: 'What do you want people to know?'),
+              ),
             ),
           ),
 

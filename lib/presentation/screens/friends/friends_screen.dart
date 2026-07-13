@@ -107,7 +107,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 116),
                   sliver: SliverList.builder(
                     itemCount: grouped.length,
                     itemBuilder: (ctx, i) {

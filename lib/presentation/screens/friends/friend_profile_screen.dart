@@ -13,6 +13,7 @@ import '../../widgets/friend_action_button.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/profile_stats_panel.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/tagged_text.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../widgets/post_card.dart' show PostCard;
@@ -243,7 +244,7 @@ class _VentsTabState extends ConsumerState<_VentsTab> {
 
     return ListView(
       controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 116),
       children: [
         if (widget.profile.mostLiked != null ||
             widget.profile.mostCommented != null)
@@ -539,7 +540,7 @@ class _Hero extends ConsumerWidget {
           if ((profile.bio ?? '').trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 10, 8, 0),
-              child: Text(
+              child: TaggedText(
                 profile.bio!.trim(),
                 textAlign: TextAlign.center,
                 style: TextStyle(

@@ -469,15 +469,15 @@ class _CompactGreeting extends StatelessWidget {
               'Take a breath. You’re safe here.',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              // The emotional serif voice — same compact line, more soul.
-              style: VentlyTokens.display(
-                context,
-                fontSize: 17,
+              style: TextStyle(
+                fontSize: 14,
                 height: 1.2,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.1,
                 color: (isDark
                         ? VentlyColors.softOffWhite
                         : context.ink)
-                    .withOpacity(0.78),
+                    .withOpacity(0.72),
               ),
             ),
           ),

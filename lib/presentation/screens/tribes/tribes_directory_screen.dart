@@ -136,6 +136,7 @@ class _TribesDirectoryScreenState
                         child: ListView.builder(
                           itemCount: tribes.length,
                           cacheExtent: 800,
+                          padding: const EdgeInsets.only(bottom: 116),
                           itemBuilder: (_, i) => FadeSlideIn(
                             index: i.clamp(0, 5),
                             child: _TribeCard(tribe: tribes[i]),

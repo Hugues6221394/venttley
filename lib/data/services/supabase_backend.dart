@@ -1647,6 +1647,10 @@ class SupabaseBackend {
                 (r['author_avatar_seed'] as String?) ?? 'default-orb',
             content: r['content'] as String,
             createdAt: DateTime.parse(r['created_at'] as String),
+            parentId: r['parent_id'] as String?,
+            likesCount: (r['likes_count'] as int?) ?? 0,
+            likedByMe: (r['liked_by_me'] as bool?) ?? false,
+            canDelete: (r['can_delete'] as bool?) ?? false,
           ),
         )
         .toList();
@@ -1687,6 +1691,7 @@ class SupabaseBackend {
     String whisperId,
     String content, {
     String? personaId,
+    String? parentId,
   }) async {
     final res = await _client.rpc(
       'add_whisper_comment',
@@ -1694,9 +1699,61 @@ class SupabaseBackend {
         'p_whisper_id': whisperId,
         'p_content': content,
         'p_persona_id': personaId,
+        'p_parent_id': parentId,
       },
     );
     return res as String;
+  }
+
+  /// Resolve an @handle to a user or tribe (users win — migration 0116).
+  Future<ResolvedTag?> resolveTag(String handle) async {
+    final rows = await _client.rpc(
+      'resolve_tag',
+      params: {'p_handle': handle},
+    ) as List<dynamic>;
+    if (rows.isEmpty) return null;
+    final r = rows.first as Map<String, dynamic>;
+    return ResolvedTag(
+      kind: r['kind'] as String,
+      id: r['id'] as String,
+      slug: r['slug'] as String?,
+      display: (r['display'] as String?) ?? '',
+    );
+  }
+
+  /// @-autocomplete candidates: friends first, then users, then tribes.
+  Future<List<TagCandidate>> searchTagCandidates(String prefix) async {
+    final rows = await _client.rpc(
+      'search_tag_candidates',
+      params: {'p_prefix': prefix, 'p_limit': 8},
+    ) as List<dynamic>;
+    return rows.cast<Map<String, dynamic>>().map((r) => TagCandidate(
+          kind: r['kind'] as String,
+          id: r['id'] as String,
+          handle: r['handle'] as String,
+          display: (r['display'] as String?) ?? (r['handle'] as String),
+          avatarSeed: r['avatar_seed'] as String?,
+          isFriend: (r['is_friend'] as bool?) ?? false,
+        )).toList();
+  }
+
+  /// Soft-delete a whisper comment — permitted for the comment author or
+  /// the whisper owner (migration 0115). Returns true when deleted.
+  Future<bool> deleteWhisperComment(String commentId) async {
+    final res = await _client.rpc(
+      'delete_whisper_comment',
+      params: {'p_comment_id': commentId},
+    );
+    return (res as bool?) ?? false;
+  }
+
+  /// Toggle a like on a whisper comment; returns the resulting state.
+  Future<bool> toggleWhisperCommentLike(String commentId) async {
+    final res = await _client.rpc(
+      'toggle_whisper_comment_like',
+      params: {'p_comment_id': commentId},
+    );
+    return (res as bool?) ?? false;
   }
 
   Future<({String path, String url})> uploadWhisperAudio({

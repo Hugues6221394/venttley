@@ -86,7 +86,7 @@ class NotificationsScreen extends ConsumerWidget {
                       top: MediaQuery.of(context).padding.top +
                           kToolbarHeight +
                           8,
-                      bottom: 8,
+                      bottom: 116,
                     ),
                     children: [
                       if (invites.isNotEmpty) ...[

@@ -14,6 +14,7 @@ import 'premium_motion.dart';
 import 'profile_avatar.dart';
 import 'user_profile_link.dart';
 import 'share_post_to_friend_sheet.dart';
+import 'tagged_text.dart';
 import 'tribe_avatar.dart';
 import 'verified_badge.dart';
 
@@ -262,7 +263,7 @@ class PostCard extends ConsumerWidget {
                 ),
                 const SizedBox(height: 6),
               ],
-              Text(
+              TaggedText(
                 post.content,
                 style: const TextStyle(fontSize: 15, height: 1.4),
               ),

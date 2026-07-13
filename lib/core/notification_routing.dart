@@ -47,7 +47,10 @@ class NotificationPayload {
       case 'comment_like':
       case 'mention':
         final postId = payload['post_id'] as String?;
-        return postId == null ? null : post(postId);
+        if (postId != null) return post(postId);
+        // Whisper-comment likes/replies carry whisper_id instead.
+        final commentWhisperId = payload['whisper_id'] as String?;
+        return commentWhisperId == null ? null : 'whisper:$commentWhisperId';
       case 'whisper_reply':
       case 'whisper_reaction':
         final whisperId = payload['whisper_id'] as String?;

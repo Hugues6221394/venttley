@@ -1084,6 +1084,15 @@ final userPublicTribesProvider =
   (ref, userId) => ref.watch(repositoryProvider).userPublicTribes(userId),
 );
 
+/// Debounced @-autocomplete candidates while typing a tag (0116).
+final tagCandidatesProvider = FutureProvider.autoDispose
+    .family<List<TagCandidate>, String>((ref, prefix) async {
+  if (prefix.trim().isEmpty) return const <TagCandidate>[];
+  // Debounce keystrokes — cancelled instances never hit the network.
+  await Future<void>.delayed(const Duration(milliseconds: 220));
+  return ref.watch(repositoryProvider).searchTagCandidates(prefix);
+});
+
 /// Live comments on a Whisper (migration 0059, realtime via 0111) —
 /// re-emits on every insert/soft-delete so open sheets stay current.
 final whisperCommentsProvider =

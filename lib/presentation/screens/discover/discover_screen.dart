@@ -360,7 +360,7 @@ class _SearchResultsSlivers extends ConsumerWidget {
         final topics = hits.where((h) => h.isTopic).toList();
 
         return SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, 6, 20, 116),
           sliver: SliverList(
             delegate: SliverChildListDelegate.fixed([
               if (topics.isNotEmpty) ...[

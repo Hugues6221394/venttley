@@ -15,6 +15,7 @@ import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/mood_chip.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/tagged_text.dart';
 import '../../widgets/vently_premium_background.dart';
 
 class ComposeScreen extends ConsumerStatefulWidget {
@@ -467,17 +468,22 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 child: GlassCard(
                   padding: const EdgeInsets.all(12),
                   borderRadius: 20,
-                  child: TextField(
+                  child: TagAutocomplete(
                     controller: _controller,
-                    maxLength: 1000,
-                    maxLines: null,
-                    expands: true,
-                    textAlignVertical: TextAlignVertical.top,
-                    decoration: const InputDecoration(
-                      hintText: 'Drop the thought. Keep names out, keep it real.',
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
+                    fill: true,
+                    child: TextField(
+                      controller: _controller,
+                      maxLength: 1000,
+                      maxLines: null,
+                      expands: true,
+                      textAlignVertical: TextAlignVertical.top,
+                      decoration: const InputDecoration(
+                        hintText:
+                            'Drop the thought. Keep names out, keep it real.',
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                      ),
                     ),
                   ),
                 ),

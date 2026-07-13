@@ -6,10 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
-import '../../theme/vently_tokens.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/tagged_text.dart';
 
 /// Redesigned public-profile overview (hero + quick actions + friends/personas
 /// + highlights/badges), matching the premium pink glassmorphism spec. All
@@ -188,16 +188,15 @@ class _HeroCard extends StatelessWidget {
                 child: Row(
                   children: [
                     Flexible(
-                      child: Text(
+                      child: TaggedText(
                         (me.bio?.trim().isNotEmpty ?? false)
                             ? me.bio!.trim()
                             : 'Here to listen, never to judge.',
-                        // Motto = emotional voice, so it gets the serif.
-                        style: VentlyTokens.display(
-                          context,
-                          fontSize: 16,
-                          height: 1.35,
-                          color: context.ink.withOpacity(0.82),
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600,
+                          color: context.ink.withOpacity(0.78),
                         ),
                       ),
                     ),

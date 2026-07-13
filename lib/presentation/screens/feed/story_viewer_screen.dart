@@ -10,6 +10,7 @@ import '../../../domain/home/home_discovery.dart';
 import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/tagged_text.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_empty_state.dart';
 import '../../widgets/vently_error_state.dart';
@@ -533,7 +534,7 @@ class _StoryCanvas extends StatelessWidget {
       color: const Color(0xFF1A1014),
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Text(
+      child: TaggedText(
         '"${story.content}"',
         textAlign: TextAlign.center,
         style: const TextStyle(

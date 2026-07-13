@@ -10,6 +10,7 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/tagged_text.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/friend_action_button.dart';
@@ -571,7 +572,7 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
               )
             else ...[
               if (comment.content.trim().isNotEmpty)
-                Text(comment.content,
+                TaggedText(comment.content,
                     style: const TextStyle(fontSize: 14, height: 1.35)),
               if (comment.imageUrl != null) ...[
                 if (comment.content.trim().isNotEmpty)
@@ -930,7 +931,9 @@ class _ReplyComposer extends StatelessWidget {
     final primary = Theme.of(context).colorScheme.primary;
     return SafeArea(
       child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        // Clears the floating shell nav pill — this screen now renders
+        // inside the bottom-nav shell (IG-style persistent footer).
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
           border: Border(
@@ -1006,7 +1009,9 @@ class _ReplyComposer extends StatelessWidget {
                   ),
                 ),
               ),
-            Row(
+            TagAutocomplete(
+              controller: controller,
+              child: Row(
               children: [
                 IconButton(
                   tooltip: 'Add photo',
@@ -1049,6 +1054,7 @@ class _ReplyComposer extends StatelessWidget {
                         onPressed: onSend,
                       ),
               ],
+              ),
             ),
           ],
         ),

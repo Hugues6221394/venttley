@@ -1357,6 +1357,7 @@ class VentlyRepository {
     String whisperId,
     String content, {
     String? personaId,
+    String? parentId,
   }) {
     final live = _live;
     if (live != null) {
@@ -1364,9 +1365,38 @@ class VentlyRepository {
         whisperId,
         content,
         personaId: personaId,
+        parentId: parentId,
       );
     }
     return Future.value('mock-comment-id');
+  }
+
+  /// Resolve an @handle to a user or tribe.
+  Future<ResolvedTag?> resolveTag(String handle) {
+    final live = _live;
+    if (live != null) return live.resolveTag(handle);
+    return Future.value(null);
+  }
+
+  /// @-autocomplete candidates for tagging.
+  Future<List<TagCandidate>> searchTagCandidates(String prefix) {
+    final live = _live;
+    if (live != null) return live.searchTagCandidates(prefix);
+    return Future.value(const <TagCandidate>[]);
+  }
+
+  /// Delete a whisper comment (author or whisper owner).
+  Future<bool> deleteWhisperComment(String commentId) {
+    final live = _live;
+    if (live != null) return live.deleteWhisperComment(commentId);
+    return Future.value(true);
+  }
+
+  /// Toggle a like on a whisper comment; returns resulting liked state.
+  Future<bool> toggleWhisperCommentLike(String commentId) {
+    final live = _live;
+    if (live != null) return live.toggleWhisperCommentLike(commentId);
+    return Future.value(true);
   }
 
   Future<bool> toggleWhisperSave(String whisperId) {

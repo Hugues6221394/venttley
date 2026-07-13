@@ -1338,6 +1338,15 @@ class WhisperComment {
   final String content;
   final DateTime createdAt;
 
+  /// Single-level reply threading (migration 0115). Null = top-level.
+  final String? parentId;
+  final int likesCount;
+  final bool likedByMe;
+
+  /// True when the caller may delete: own comment, or caller owns the
+  /// whisper (owner moderation).
+  final bool canDelete;
+
   const WhisperComment({
     required this.commentId,
     required this.whisperId,
@@ -1346,6 +1355,44 @@ class WhisperComment {
     required this.content,
     required this.createdAt,
     this.authorId,
+    this.parentId,
+    this.likesCount = 0,
+    this.likedByMe = false,
+    this.canDelete = false,
+  });
+}
+
+/// A resolved @tag target (migration 0116) — either a user or a tribe.
+class ResolvedTag {
+  final String kind; // 'user' | 'tribe'
+  final String id;
+  final String? slug; // tribes only
+  final String display;
+
+  const ResolvedTag({
+    required this.kind,
+    required this.id,
+    required this.display,
+    this.slug,
+  });
+}
+
+/// An @-autocomplete candidate while typing (users first, then tribes).
+class TagCandidate {
+  final String kind; // 'user' | 'tribe'
+  final String id;
+  final String handle;
+  final String display;
+  final String? avatarSeed;
+  final bool isFriend;
+
+  const TagCandidate({
+    required this.kind,
+    required this.id,
+    required this.handle,
+    required this.display,
+    this.avatarSeed,
+    this.isFriend = false,
   });
 }
 
