@@ -168,6 +168,24 @@ class FeedScreen extends ConsumerWidget {
                                 post: post,
                                 onTap: () =>
                                     context.push('/post/${post.postId}'),
+                                onLike: () async {
+                                  try {
+                                    await ref.read(repositoryProvider).react(
+                                        post.postId,
+                                        post.myReaction ?? 'hug');
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(SnackBar(
+                                              content: Text(
+                                                  'Could not react: $e')));
+                                    }
+                                    return;
+                                  }
+                                  ref.invalidate(feedPostsProvider);
+                                  ref.invalidate(
+                                      postByIdProvider(post.postId));
+                                },
                                 onComment: () =>
                                     context.push('/post/${post.postId}'),
                                 onShare: () => context
@@ -771,6 +789,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
   const _VentlyFeedPostCard({
     required this.post,
     required this.onTap,
+    required this.onLike,
     required this.onComment,
     required this.onShare,
     required this.onMessage,
@@ -778,6 +797,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
 
   final Post post;
   final VoidCallback onTap;
+  final VoidCallback onLike;
   final VoidCallback onComment;
   final VoidCallback onShare;
   final VoidCallback onMessage;
@@ -922,7 +942,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
                 children: [
                   AnimatedLikeButton(
                     active: post.myReaction != null,
-                    onTap: onTap,
+                    onTap: onLike,
                     size: 18,
                     activeColor: VentlyColors.berryMagenta,
                     inactiveColor: context.ink,

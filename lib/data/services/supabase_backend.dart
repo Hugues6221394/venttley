@@ -2430,7 +2430,7 @@ class SupabaseBackend {
         .toList();
   }
 
-  Future<void> toggleLike(String postId) async => react(postId, 'like');
+  Future<void> toggleLike(String postId) async => react(postId, 'hug');
 
   /// Returns the resulting reaction (`null` when the user toggled it off).
   Future<String?> react(String postId, String reaction) async {

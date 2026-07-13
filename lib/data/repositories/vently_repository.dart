@@ -1691,7 +1691,7 @@ class VentlyRepository {
     _mock.respondToInvite(inviteId: inviteId, accept: accept);
   }
 
-  Future<void> toggleLike(String postId) => react(postId, 'like');
+  Future<void> toggleLike(String postId) => react(postId, 'hug');
 
   Future<String?> reactToStory(String postId, String reaction) =>
       react(postId, reaction);

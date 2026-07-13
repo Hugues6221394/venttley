@@ -747,9 +747,10 @@ class _HeartBubbleBgPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Emotion reaction button. Single tap toggles a default 'like' (clears
-/// the current reaction when one is set); long-press opens a picker
-/// with the full palette from [PostReactions.all].
+/// Emotion reaction button. Single tap toggles the default 'hug' — the
+/// counts read "N Hugs", and 'hug' is a valid reaction_type enum value
+/// ('like' is NOT: it made every tap throw 22P02 server-side and the
+/// heart silently did nothing). Long-press opens the full picker.
 class _ReactionButton extends ConsumerWidget {
   const _ReactionButton({required this.post});
   final Post post;
@@ -764,7 +765,8 @@ class _ReactionButton extends ConsumerWidget {
     Widget glyph;
     if (r == null) {
       glyph = Icon(Icons.favorite_border, size: 18, color: color);
-    } else if (r == 'like') {
+    } else if (r == 'hug' || r == 'like') {
+      // The default reaction renders as the filled brand heart.
       glyph = Icon(Icons.favorite, size: 18, color: color);
     } else {
       glyph = Text(PostReactions.emoji(r), style: const TextStyle(fontSize: 16));
@@ -774,7 +776,16 @@ class _ReactionButton extends ConsumerWidget {
       onLongPress: () => _openPicker(context, ref),
       child: InkWell(
         onTap: () async {
-          await ref.read(repositoryProvider).react(post.postId, r ?? 'like');
+          try {
+            await ref.read(repositoryProvider).react(post.postId, r ?? 'hug');
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Could not react: $e')),
+              );
+            }
+            return;
+          }
           ref.invalidate(feedPostsProvider);
           ref.invalidate(postByIdProvider(post.postId));
         },

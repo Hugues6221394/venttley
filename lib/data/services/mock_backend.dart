@@ -243,7 +243,7 @@ class MockBackend {
     return post;
   }
 
-  void toggleLike(String postId) => react(postId, 'like');
+  void toggleLike(String postId) => react(postId, 'hug');
 
   /// Mock parity for set_reaction: toggle off when same, switch when
   /// different, insert when none. Returns the new reaction (or null

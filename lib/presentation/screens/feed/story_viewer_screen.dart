@@ -123,9 +123,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
 
   String _reactionLabel(String reaction) => switch (reaction) {
         'hug' => 'Hug sent',
-        'relate' => 'Relate sent',
-        'been_there' => 'Been there sent',
-        'crazy' => 'Spark sent',
+        'felt' => 'Relate sent',
+        'strong' => 'Been there sent',
+        'proud' => 'Spark sent',
         _ => '${PostReactions.label(reaction)} sent',
       };
 
@@ -552,11 +552,13 @@ class _ReactionTray extends StatelessWidget {
   const _ReactionTray({required this.onReact});
   final ValueChanged<String> onReact;
 
+  // Values must be valid reaction_type enum members ('relate' /
+  // 'been_there' / 'crazy' threw 22P02 server-side and never landed).
   static const _items = [
     (Icons.favorite_border, 'Hug', 'hug'),
-    (Icons.mood_outlined, 'Relate', 'relate'),
-    (Icons.group_outlined, 'Been there', 'been_there'),
-    (Icons.auto_awesome_rounded, 'Spark', 'crazy'),
+    (Icons.mood_outlined, 'Relate', 'felt'),
+    (Icons.group_outlined, 'Been there', 'strong'),
+    (Icons.auto_awesome_rounded, 'Spark', 'proud'),
   ];
 
   @override
