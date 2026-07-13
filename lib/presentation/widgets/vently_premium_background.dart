@@ -146,7 +146,9 @@ class _AmbientPainter extends CustomPainter {
           end: Alignment.bottomRight,
           colors: isDark
               ? const [Color(0xFF1A1014), Color(0xFF2A1520), VentlyColors.cardDark]
-              : const [Color(0xFFFFF5F8), VentlyColors.cardBlush, Color(0xFFFFE8F0)],
+              // Neutral warm-white canvas — calm, barely-there warmth so the
+              // white cards + rose actions carry the design.
+              : const [Color(0xFFFEFCFD), VentlyColors.blushPink, Color(0xFFFBF4F7)],
         ).createShader(rect);
       canvas.drawRect(rect, base);
     }
@@ -162,8 +164,9 @@ class _AmbientPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     // Pure black keeps only a whisper of the brand glow so the canvas
-    // still reads as true black on OLED panels.
-    final glow = pureBlack ? 0.07 : (isDark ? 0.16 : 0.30);
+    // still reads as true black on OLED panels. Light stays calm too —
+    // the blobs are warmth, not decoration.
+    final glow = pureBlack ? 0.07 : (isDark ? 0.16 : 0.05);
 
     // Berry glow — upper right, drifts diagonally.
     blob(
@@ -188,7 +191,7 @@ class _AmbientPainter extends CustomPainter {
     final ring = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4
-      ..color = Colors.white.withOpacity(pureBlack ? 0.03 : (isDark ? 0.05 : 0.45));
+      ..color = Colors.white.withOpacity(pureBlack ? 0.03 : (isDark ? 0.05 : 0.18));
     canvas.drawCircle(
       Offset(w * 0.50, h * 0.30 + 6 * drift),
       w * 0.42,

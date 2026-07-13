@@ -292,8 +292,9 @@ class _SearchField extends StatelessWidget {
         height: 46,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFE3EC).withOpacity(0.55),
+          color: context.isDark ? context.glass() : Colors.white,
           borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: context.glassBorder),
         ),
         child: Row(
           children: [
@@ -316,6 +317,8 @@ class _SearchField extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                   border: InputBorder.none,
+                  filled: false,
+                  isDense: true,
                 ),
               ),
             ),
@@ -448,8 +451,13 @@ class _TribeChatChip extends StatelessWidget {
     return SizedBox(
       width: 148,
       child: Material(
-        color: context.glass(0.55),
-        borderRadius: BorderRadius.circular(16),
+        color: context.isDark
+            ? Theme.of(context).colorScheme.surface
+            : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: context.glassBorder),
+        ),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () => context.push('/tribe/${item.slug}/chat'),
@@ -720,8 +728,10 @@ class _PendingRequestsCard extends StatelessWidget {
                   Container(
                     width: 48,
                     height: 48,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFFD8E5),
+                    decoration: BoxDecoration(
+                      color: context.isDark
+                          ? VentlyColors.berryDesat.withOpacity(0.16)
+                          : VentlyColors.roseTint,
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
@@ -1396,8 +1406,10 @@ class _EmptyConversations extends StatelessWidget {
         Container(
           width: 88,
           height: 88,
-          decoration: const BoxDecoration(
-            color: Color(0xFFFFE3EC),
+          decoration: BoxDecoration(
+            color: context.isDark
+                ? VentlyColors.berryDesat.withOpacity(0.16)
+                : VentlyColors.roseTint,
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.chat_bubble_outline,

@@ -3,20 +3,30 @@ import 'package:flutter/material.dart';
 /// Venttly brand palette. Source of truth for both light + dark themes.
 class VentlyColors {
   // ---------------- Light theme ----------------
-  /// Pastel Blush Pink — primary canvas / background.
-  static const Color blushPink = Color(0xFFFDECEF);
+  // 2026 "soft premium" reskin: neutral warm-white canvas, pure white cards
+  // with hairline borders, and rose reserved for action. The constant NAMES
+  // are kept so 100+ call sites restyle themselves via these values.
 
-  /// Berry Magenta — primary brand accent / interactive elements.
-  static const Color berryMagenta = Color(0xFFD12E65);
+  /// Warm off-white — primary canvas / background (was pastel blush).
+  static const Color blushPink = Color(0xFFFDF8FA);
 
-  /// Deep Burgundy — typography for headers + body in light mode.
-  static const Color deepBurgundy = Color(0xFF4A0E17);
+  /// Brand rose — actions only: buttons, active nav, badges, FAB.
+  static const Color berryMagenta = Color(0xFFE0245E);
 
-  /// Soft Mauve — dividers + card outlines in light mode.
-  static const Color softMauve = Color(0xFFE5A1B4);
+  /// Pressed rose / text on rose tint.
+  static const Color roseDeep = Color(0xFFA81145);
 
-  /// A barely-there blush used for card surfaces on light canvas.
-  static const Color cardBlush = Color(0xFFFFF5F7);
+  /// Soft rose tint — gentle fills, selected soft chips, secondary pills.
+  static const Color roseTint = Color(0xFFFBE9F0);
+
+  /// Neutral warm ink — typography for headers + body in light mode.
+  static const Color deepBurgundy = Color(0xFF241118);
+
+  /// Hairline borders + dividers in light mode (was soft mauve).
+  static const Color softMauve = Color(0xFFF3E4EA);
+
+  /// Card surface on the light canvas — pure white.
+  static const Color cardBlush = Color(0xFFFFFFFF);
 
   // ---------------- Dark theme ----------------
   /// Warm deep charcoal with burgundy undertone.
@@ -87,8 +97,10 @@ extension VentlyInk on BuildContext {
       ? Colors.white.withOpacity(0.06)
       : Colors.white.withOpacity(lightOpacity);
 
-  /// Adaptive hairline border for glass surfaces.
-  Color get glassBorder => Colors.white.withOpacity(isDark ? 0.08 : 0.65);
+  /// Adaptive hairline border for glass surfaces — a warm hairline in light
+  /// (the mockups' near-invisible card outline), subtle white in dark.
+  Color get glassBorder =>
+      isDark ? Colors.white.withOpacity(0.08) : VentlyColors.softMauve;
 }
 
 /// Brand gradients pulled from the launch adverts — the glossy berry sweep,

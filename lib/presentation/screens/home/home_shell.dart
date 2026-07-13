@@ -169,19 +169,21 @@ class _GlassNavBar extends ConsumerWidget {
                         Theme.of(context).colorScheme.surface.withOpacity(0.66),
                       ]
                     : [
-                        Colors.white.withOpacity(0.78),
-                        Colors.white.withOpacity(0.52),
+                        Colors.white.withOpacity(0.97),
+                        Colors.white.withOpacity(0.92),
                       ],
               ),
               borderRadius: BorderRadius.circular(32),
               border: Border.all(
-                color: Colors.white.withOpacity(isDark ? 0.12 : 0.75),
+                color: isDark
+                    ? Colors.white.withOpacity(0.12)
+                    : VentlyColors.softMauve,
                 width: 1.2,
               ),
               boxShadow: [
                 BoxShadow(
                   color: VentlyColors.berryMagenta
-                      .withOpacity(isDark ? 0.22 : 0.14),
+                      .withOpacity(isDark ? 0.22 : 0.08),
                   blurRadius: 30,
                   spreadRadius: -4,
                   offset: const Offset(0, 12),

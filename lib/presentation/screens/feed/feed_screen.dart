@@ -1606,16 +1606,20 @@ class _CategoryRail extends ConsumerWidget {
                     .read(feedFilterProvider.notifier)
                     .update((s) => s.copyWith(category: key));
               },
-              selectedColor: scheme.primary,
+              // Monochrome chips — selected is the ink pill, so vent cards
+              // and rose actions stay the loudest things on screen.
+              selectedColor: context.ink,
               labelStyle: TextStyle(
-                color: selected ? Colors.white : scheme.onSurface,
+                color: selected
+                    ? Theme.of(context).scaffoldBackgroundColor
+                    : scheme.onSurface,
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
               ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
                 side: BorderSide(
-                  color: selected ? scheme.primary : VentlyColors.softMauve,
+                  color: selected ? context.ink : VentlyColors.softMauve,
                 ),
               ),
               backgroundColor: Theme.of(context).cardColor,

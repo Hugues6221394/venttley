@@ -47,9 +47,9 @@ class VentlyTheme {
           color: VentlyColors.berryMagenta,
         ),
       ),
-      dividerColor: VentlyColors.softMauve.withOpacity(0.5),
+      dividerColor: VentlyColors.softMauve,
       dividerTheme: const DividerThemeData(
-        color: Color(0x80E5A1B4),
+        color: VentlyColors.softMauve,
         thickness: 0.6,
       ),
       cardTheme: CardTheme(
@@ -57,7 +57,7 @@ class VentlyTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radius),
-          side: const BorderSide(color: Color(0x40E5A1B4)),
+          side: const BorderSide(color: VentlyColors.softMauve),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -117,8 +117,9 @@ class VentlyTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: Colors.white,
-        selectedColor: VentlyColors.berryMagenta,
-        secondarySelectedColor: VentlyColors.berryMagenta,
+        selectedColor: VentlyColors.deepBurgundy,
+        secondarySelectedColor: VentlyColors.deepBurgundy,
+        checkmarkColor: Colors.white,
         labelStyle: GoogleFonts.plusJakartaSans(
           color: VentlyColors.deepBurgundy,
           fontWeight: FontWeight.w600,
