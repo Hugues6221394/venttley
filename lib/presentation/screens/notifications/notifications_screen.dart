@@ -90,26 +90,71 @@ class NotificationsScreen extends ConsumerWidget {
                     ),
                     children: [
                       if (invites.isNotEmpty) ...[
-                        Padding(
-                          padding:
-                              const EdgeInsets.fromLTRB(20, 8, 20, 4),
-                          child: Text(
-                            'Tribe invitations',
-                            style: TextStyle(
-                              fontSize: 11,
-                              letterSpacing: 1.2,
-                              fontWeight: FontWeight.w800,
-                              color: scheme.primary,
-                            ),
-                          ),
-                        ),
+                        _SectionHeader(label: 'Tribe invitations'),
                         for (final inv in invites) _InviteCard(invite: inv),
                         const SizedBox(height: 8),
                       ],
-                      for (final n in items)
-                        _NotificationTile(item: n),
+                      ..._sectioned(context, items),
                     ],
                   ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Instagram-style time buckets: Today / This Week / Earlier.
+List<Widget> _sectioned(BuildContext context, List<NotificationItem> items) {
+  final now = DateTime.now();
+  final midnight = DateTime(now.year, now.month, now.day);
+  final weekAgo = now.subtract(const Duration(days: 7));
+
+  final today = <NotificationItem>[];
+  final week = <NotificationItem>[];
+  final earlier = <NotificationItem>[];
+  for (final n in items) {
+    final t = n.createdAt.toLocal();
+    if (t.isAfter(midnight)) {
+      today.add(n);
+    } else if (t.isAfter(weekAgo)) {
+      week.add(n);
+    } else {
+      earlier.add(n);
+    }
+  }
+
+  return [
+    if (today.isNotEmpty) ...[
+      _SectionHeader(label: 'Today'),
+      for (final n in today) _NotificationTile(item: n),
+    ],
+    if (week.isNotEmpty) ...[
+      _SectionHeader(label: 'This week'),
+      for (final n in week) _NotificationTile(item: n),
+    ],
+    if (earlier.isNotEmpty) ...[
+      _SectionHeader(label: 'Earlier'),
+      for (final n in earlier) _NotificationTile(item: n),
+    ],
+  ];
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          letterSpacing: 1.2,
+          fontWeight: FontWeight.w800,
+          color: scheme.primary,
         ),
       ),
     );
@@ -365,12 +410,38 @@ class _NotificationTile extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    DateFormat.MMMd().add_jm().format(item.createdAt),
+                    _relativeTime(item.createdAt),
                     style: TextStyle(
                       fontSize: 11,
                       color: scheme.onSurface.withOpacity(0.55),
                     ),
                   ),
+                  if (item.kind == 'friend_request' && unread &&
+                      item.payload['friendship_id'] != null) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: _FrostedButton(
+                            label: 'Accept',
+                            icon: Icons.check_rounded,
+                            primary: true,
+                            onPressed: () => _respondToRequest(
+                                context, ref, accept: true),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _FrostedButton(
+                            label: 'Decline',
+                            onPressed: () => _respondToRequest(
+                                context, ref, accept: false),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -379,6 +450,41 @@ class _NotificationTile extends ConsumerWidget {
       ),
       ),
     );
+  }
+
+  Future<void> _respondToRequest(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool accept,
+  }) async {
+    final friendshipId = item.payload['friendship_id'] as String?;
+    if (friendshipId == null) return;
+    final repo = ref.read(repositoryProvider);
+    try {
+      if (accept) {
+        await repo.acceptFriendRequest(friendshipId);
+      } else {
+        await repo.declineFriendRequest(friendshipId);
+      }
+      await repo.markNotificationRead(item.id);
+      ref.invalidate(myFriendsProvider);
+      ref.invalidate(incomingFriendRequestsProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update request: $e')),
+        );
+      }
+    }
+  }
+
+  String _relativeTime(DateTime t) {
+    final d = DateTime.now().difference(t.toLocal());
+    if (d.inMinutes < 1) return 'just now';
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    if (d.inDays < 7) return '${d.inDays}d ago';
+    return DateFormat.MMMd().format(t.toLocal());
   }
 
   IconData _iconFor(String kind) {
@@ -391,6 +497,14 @@ class _NotificationTile extends ConsumerWidget {
       case 'admin_broadcast': return Icons.campaign_outlined;
       case 'tribe_invite':    return Icons.group_add_outlined;
       case 'post_like':       return Icons.favorite_border;
+      case 'comment_like':    return Icons.favorite_border;
+      case 'mention':         return Icons.alternate_email;
+      case 'friend_request':  return Icons.person_add_alt_1_outlined;
+      case 'friend_accepted': return Icons.people_alt_outlined;
+      case 'whisper_reply':   return Icons.graphic_eq_rounded;
+      case 'whisper_reaction':return Icons.volunteer_activism_outlined;
+      case 'admin_broadcast':
+      case 'system':          return Icons.campaign_outlined;
       default:                return Icons.notifications_outlined;
     }
   }

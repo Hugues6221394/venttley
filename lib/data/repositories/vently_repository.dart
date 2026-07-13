@@ -1347,6 +1347,12 @@ class VentlyRepository {
     return Future.value(const <WhisperComment>[]);
   }
 
+  Stream<List<WhisperComment>> watchWhisperComments(String whisperId) {
+    final live = _live;
+    if (live != null) return live.watchWhisperComments(whisperId);
+    return Stream.value(const <WhisperComment>[]);
+  }
+
   Future<String> addWhisperComment(
     String whisperId,
     String content, {
@@ -2281,6 +2287,34 @@ class VentlyRepository {
     return _mock.markRoomRead(roomId);
   }
 
+  /// Fires on any friendships change involving the caller (realtime).
+  Stream<int> watchFriendshipEvents() {
+    final live = _live;
+    if (live != null) return live.watchFriendshipEvents();
+    return Stream.value(0);
+  }
+
+  /// Stamp delivered_at on peer messages the client just received.
+  Future<int> markRoomDelivered(String roomId) {
+    final live = _live;
+    if (live != null) return live.markRoomDelivered(roomId);
+    return Future.value(0);
+  }
+
+  /// Presence heartbeat (resume + ~60s while foregrounded).
+  Future<void> touchLastSeen() {
+    final live = _live;
+    if (live != null) return live.touchLastSeen();
+    return Future.value();
+  }
+
+  /// Peer presence tier: online | recent | offline | hidden.
+  Future<({String state, DateTime? lastSeen})> peerPresence(String userId) {
+    final live = _live;
+    if (live != null) return live.peerPresence(userId);
+    return Future.value((state: 'online', lastSeen: DateTime.now()));
+  }
+
   /// Unread peer messages in active DM rooms (Inbox tab badge).
   Future<int> unreadChatMessageCount() {
     final live = _live;
@@ -2634,6 +2668,12 @@ class VentlyRepository {
     final live = _live;
     if (live != null) return live.notifications();
     return Future.value(_mock.notifications());
+  }
+
+  Stream<List<NotificationItem>> watchNotifications() {
+    final live = _live;
+    if (live != null) return live.watchNotifications();
+    return Stream.value(_mock.notifications());
   }
 
   Future<void> markNotificationRead(String id) async {

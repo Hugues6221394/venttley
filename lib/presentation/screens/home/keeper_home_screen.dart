@@ -456,7 +456,7 @@ class _TopBar extends StatelessWidget {
 class _BellButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final unread = ref.watch(unreadNotificationsCountProvider).valueOrNull ?? 0;
+    final unread = ref.watch(unreadNotificationsCountProvider);
     return Stack(
       clipBehavior: Clip.none,
       children: [

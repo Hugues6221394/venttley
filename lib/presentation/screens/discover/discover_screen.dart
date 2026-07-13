@@ -143,7 +143,7 @@ class _DiscoverTopBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final unread =
-        ref.watch(unreadNotificationsCountProvider).valueOrNull ?? 0;
+        ref.watch(unreadNotificationsCountProvider);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 16, 6),
       child: Row(

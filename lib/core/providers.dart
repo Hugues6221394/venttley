@@ -645,13 +645,23 @@ final crisisResourcesProvider =
 // ----------------------------------------------------------------------
 
 /// All accepted friendships of the current user.
-final myFriendsProvider = FutureProvider.autoDispose<List<FriendSummary>>(
-    (ref) async => ref.watch(repositoryProvider).myFriends());
+final myFriendsProvider =
+    FutureProvider.autoDispose<List<FriendSummary>>((ref) async {
+  ref.watch(friendshipEventsProvider); // live: re-fetch on realtime change
+  return ref.watch(repositoryProvider).myFriends();
+});
 
 /// Incoming pending requests addressed to the current user.
+/// Ticks on every friendships change involving me — makes friend-request
+/// lists + badges live (friendships joined the publication in 0112).
+final friendshipEventsProvider = StreamProvider.autoDispose<int>(
+    (ref) => ref.watch(repositoryProvider).watchFriendshipEvents());
+
 final incomingFriendRequestsProvider =
-    FutureProvider.autoDispose<List<FriendRequest>>(
-        (ref) async => ref.watch(repositoryProvider).incomingFriendRequests());
+    FutureProvider.autoDispose<List<FriendRequest>>((ref) async {
+  ref.watch(friendshipEventsProvider); // re-fetch on realtime change
+  return ref.watch(repositoryProvider).incomingFriendRequests();
+});
 
 /// Outgoing pending requests the current user sent.
 final outgoingFriendRequestsProvider =
@@ -723,14 +733,19 @@ final promptAnswersProvider =
 final promptsProvider = FutureProvider.autoDispose<List<PlugPrompt>>(
     (ref) async => ref.watch(repositoryProvider).prompts());
 
-final notificationsProvider = FutureProvider.autoDispose<List<NotificationItem>>(
-    (ref) async => ref.watch(repositoryProvider).notifications());
+/// Live notification feed — realtime via the notifications publication
+/// (migration 0113), so the bell list + badge update the instant a like,
+/// reply, or friend request lands.
+final notificationsProvider =
+    StreamProvider.autoDispose<List<NotificationItem>>(
+        (ref) => ref.watch(repositoryProvider).watchNotifications());
 
 /// Unread notification count — derived from notificationsProvider so it
 /// updates whenever the list does. Used by the bell-icon badge.
 final unreadNotificationsCountProvider =
-    FutureProvider.autoDispose<int>((ref) async {
-  final items = await ref.watch(notificationsProvider.future);
+    Provider.autoDispose<int>((ref) {
+  final items =
+      ref.watch(notificationsProvider).valueOrNull ?? const <NotificationItem>[];
   return items.where((n) => !n.isRead).length;
 });
 
@@ -832,6 +847,15 @@ final typingProvider =
     StreamProvider.autoDispose.family<bool, String>(
         (ref, roomId) =>
             ref.watch(repositoryProvider).watchTyping(roomId));
+
+/// Peer presence tier (online / recent / offline / hidden) — re-polled
+/// every 30s while watched so the chat header stays honest.
+final peerPresenceProvider = FutureProvider.autoDispose
+    .family<({String state, DateTime? lastSeen}), String>((ref, userId) {
+  final timer = Timer(const Duration(seconds: 30), () => ref.invalidateSelf());
+  ref.onDispose(timer.cancel);
+  return ref.watch(repositoryProvider).peerPresence(userId);
+});
 
 final roomByIdProvider =
     FutureProvider.autoDispose.family<ChatRoom?, String>((ref, roomId) async {
@@ -1060,11 +1084,12 @@ final userPublicTribesProvider =
   (ref, userId) => ref.watch(repositoryProvider).userPublicTribes(userId),
 );
 
-/// Flat comments on a Whisper (migration 0059).
+/// Live comments on a Whisper (migration 0059, realtime via 0111) —
+/// re-emits on every insert/soft-delete so open sheets stay current.
 final whisperCommentsProvider =
-    FutureProvider.autoDispose.family<List<WhisperComment>, String>(
+    StreamProvider.autoDispose.family<List<WhisperComment>, String>(
   (ref, whisperId) =>
-      ref.watch(repositoryProvider).listWhisperComments(whisperId),
+      ref.watch(repositoryProvider).watchWhisperComments(whisperId),
 );
 
 /// Shared audio player for the Whispers feed — kept alive for fast return.

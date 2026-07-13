@@ -616,7 +616,17 @@ class SupabaseBackend {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'chat_messages',
-          callback: (_) => _emitRooms(),
+          callback: (payload) {
+            _emitRooms();
+            // The client has now received this message — stamp the
+            // "delivered" tick for the sender (migration 0114). RLS
+            // already scopes events to rooms we belong to.
+            final roomId = payload.newRecord['room_id'] as String?;
+            final senderId = payload.newRecord['sender_id'] as String?;
+            if (roomId != null && senderId != null && senderId != _uid) {
+              unawaited(markRoomDelivered(roomId));
+            }
+          },
         )
         .subscribe();
   }
@@ -1640,6 +1650,37 @@ class SupabaseBackend {
           ),
         )
         .toList();
+  }
+
+  /// Realtime stream of comments on a whisper — re-fetches through the
+  /// list RPC on every Postgres change so joins (pseudonym/avatar) stay
+  /// correct. Mirrors [watchMessages].
+  Stream<List<WhisperComment>> watchWhisperComments(String whisperId) {
+    final controller = StreamController<List<WhisperComment>>();
+    Future<void> emit() async {
+      try {
+        controller.add(await listWhisperComments(whisperId));
+      } catch (_) {/* listener retries on next event */}
+    }
+
+    final channel = _client
+        .channel('whisper_comments:$whisperId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'whisper_comments',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'whisper_id',
+            value: whisperId,
+          ),
+          callback: (_) => emit(),
+        )
+        .subscribe();
+
+    controller.onListen = emit;
+    controller.onCancel = () => channel.unsubscribe();
+    return controller.stream;
   }
 
   Future<String> addWhisperComment(
@@ -3913,6 +3954,7 @@ class SupabaseBackend {
   ChatMessage _messageFromRow(Map<String, dynamic> r) {
     final uid = _uid;
     final rawRead = r['read_at'] as String?;
+    final rawDelivered = r['delivered_at'] as String?;
     final rawEdited = r['edited_at'] as String?;
     final rawDeleted = r['deleted_at'] as String?;
     return ChatMessage(
@@ -3926,6 +3968,8 @@ class SupabaseBackend {
       attachedPostSnapshot:
           SharedPostSnapshot.fromJson(r['attached_post_snapshot']),
       readAt: rawRead == null ? null : DateTime.parse(rawRead),
+      deliveredAt:
+          rawDelivered == null ? null : DateTime.parse(rawDelivered),
       attachedMediaPath: r['attached_media_path'] as String?,
       attachedMediaType: r['attached_media_type'] as String?,
       parentMessageId: r['parent_message_id'] as String?,
@@ -4106,6 +4150,53 @@ class SupabaseBackend {
     final res =
         await _client.rpc('mark_chat_room_read', params: {'p_room_id': roomId});
     return (res as int?) ?? 0;
+  }
+
+  /// Tick stream that fires on any friendships change visible to the
+  /// caller (RLS scopes events to rows where auth.uid() participates).
+  /// Drives live friend-request badges + accept flows.
+  Stream<int> watchFriendshipEvents() {
+    final controller = StreamController<int>();
+    var tick = 0;
+    final channel = _client
+        .channel('friendships:events')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'friendships',
+          callback: (_) => controller.add(++tick),
+        )
+        .subscribe();
+    controller.onListen = () => controller.add(0);
+    controller.onCancel = () => channel.unsubscribe();
+    return controller.stream;
+  }
+
+  /// Stamp delivered_at on peer messages in [roomId] — called when the
+  /// client actually receives them (chat open / realtime arrival).
+  Future<int> markRoomDelivered(String roomId) async {
+    final res = await _client
+        .rpc('mark_room_delivered', params: {'p_room_id': roomId});
+    return (res as int?) ?? 0;
+  }
+
+  /// Presence heartbeat — call on resume + every ~60s while foregrounded.
+  Future<void> touchLastSeen() async {
+    await _client.rpc('touch_last_seen');
+  }
+
+  /// Peer presence tier: online | recent | offline | hidden (+ last_seen).
+  Future<({String state, DateTime? lastSeen})> peerPresence(
+      String userId) async {
+    final rows = await _client
+        .rpc('peer_presence', params: {'p_user_id': userId}) as List<dynamic>;
+    if (rows.isEmpty) return (state: 'hidden', lastSeen: null);
+    final r = rows.first as Map<String, dynamic>;
+    final raw = r['last_seen'] as String?;
+    return (
+      state: (r['state'] as String?) ?? 'hidden',
+      lastSeen: raw == null ? null : DateTime.parse(raw),
+    );
   }
 
   /// Unread peer messages across all active DM rooms — powers the Inbox badge.
@@ -4503,6 +4594,40 @@ class SupabaseBackend {
         .eq('user_id', uid)
         .eq('is_read', false);
   }
+  /// Realtime stream of the caller's notifications — the bell list + badge
+  /// update the instant a row lands (publication: migration 0113).
+  Stream<List<NotificationItem>> watchNotifications() {
+    final controller = StreamController<List<NotificationItem>>();
+    Future<void> emit() async {
+      try {
+        controller.add(await notifications());
+      } catch (_) {/* listener retries on next event */}
+    }
+
+    final uid = _uid;
+    RealtimeChannel? channel;
+    if (uid != null) {
+      channel = _client
+          .channel('notifications:$uid')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'notifications',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: uid,
+            ),
+            callback: (_) => emit(),
+          )
+          .subscribe();
+    }
+
+    controller.onListen = emit;
+    controller.onCancel = () => channel?.unsubscribe();
+    return controller.stream;
+  }
+
   Future<List<NotificationItem>> notifications() async {
     final uid = _uid;
     if (uid == null) return const [];
@@ -4510,7 +4635,8 @@ class SupabaseBackend {
         .from('notifications')
         .select()
         .eq('user_id', uid)
-        .order('created_at', ascending: false)
+        // Grouped rows bump updated_at on every collapse — float them.
+        .order('updated_at', ascending: false)
         .limit(50);
     return rows.map<NotificationItem>((r) {
       final payload =
@@ -4520,7 +4646,8 @@ class SupabaseBackend {
         kind: r['kind'] as String,
         title: (payload['title'] as String?) ?? _kindLabel(r['kind'] as String),
         body: (payload['body'] as String?) ?? '',
-        createdAt: DateTime.parse(r['created_at'] as String),
+        createdAt: DateTime.parse(
+            (r['updated_at'] ?? r['created_at']) as String),
         isRead: r['is_read'] as bool,
         payload: payload,
       );

@@ -828,6 +828,10 @@ class ChatMessage {
   /// for messages the caller didn't send.
   final DateTime? readAt;
 
+  /// When the recipient's client received this message (mark_room_delivered
+  /// RPC, migration 0114). Drives the WhatsApp-style ✓ / ✓✓ / seen ticks.
+  final DateTime? deliveredAt;
+
   /// Per-reaction tallies from chat_message_reactions_summary. Empty
   /// map = no reactions. Keys are the same six values as PostReactions.
   final Map<String, int> reactionCounts;
@@ -853,6 +857,7 @@ class ChatMessage {
     this.attachedPostId,
     this.attachedPostSnapshot,
     this.readAt,
+    this.deliveredAt,
     this.reactionCounts = const {},
     this.myReaction,
     this.attachedMediaPath,

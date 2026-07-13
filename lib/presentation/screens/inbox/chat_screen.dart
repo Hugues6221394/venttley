@@ -307,19 +307,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ],
                       ],
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.shield_outlined,
-                            size: 10, color: scheme.primary),
-                        const SizedBox(width: 3),
-                        Text('Private',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w700,
-                            )),
-                      ],
+                    _PresenceLine(
+                      peerUserId: r.peerUserId,
+                      accent: scheme.primary,
                     ),
                   ],
                 ),
@@ -1045,10 +1035,21 @@ class _Bubble extends ConsumerWidget {
                     ),
                   ),
                 ],
-                if (showSeen) ...[
+                if (message.sentByMe && !message.isDeleted) ...[
                   const SizedBox(width: 6),
-                  Icon(Icons.done_all,
-                      size: 12, color: scheme.primary.withOpacity(0.85)),
+                  // WhatsApp-style ticks: ✓ sent, ✓✓ delivered,
+                  // accent ✓✓ seen (delivered_at — migration 0114).
+                  Icon(
+                    message.readAt != null || message.deliveredAt != null
+                        ? Icons.done_all
+                        : Icons.done,
+                    size: 12,
+                    color: message.readAt != null
+                        ? scheme.primary.withOpacity(0.85)
+                        : scheme.onSurface.withOpacity(0.45),
+                  ),
+                ],
+                if (showSeen) ...[
                   const SizedBox(width: 2),
                   Text(
                     'Seen',
@@ -1267,6 +1268,77 @@ class _EditContextChip extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Presence subtitle under the peer's name: green-dot Online, Active
+/// recently, Last seen Xh ago — or the "Private" fallback when the peer
+/// hides their last seen (migration 0114).
+class _PresenceLine extends ConsumerWidget {
+  const _PresenceLine({required this.peerUserId, required this.accent});
+  final String? peerUserId;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final id = peerUserId;
+    final presence =
+        id == null ? null : ref.watch(peerPresenceProvider(id)).valueOrNull;
+
+    String label;
+    Color color = accent;
+    bool dot = false;
+    switch (presence?.state) {
+      case 'online':
+        label = 'Online';
+        color = VentlyColors.onlineGreen;
+        dot = true;
+        break;
+      case 'recent':
+        label = 'Active recently';
+        break;
+      case 'offline':
+        label = 'Last seen ${_ago(presence!.lastSeen)}';
+        break;
+      default:
+        label = 'Private';
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (dot)
+          Container(
+            width: 7,
+            height: 7,
+            margin: const EdgeInsets.only(right: 4),
+            decoration: BoxDecoration(
+              color: VentlyColors.onlineGreen,
+              shape: BoxShape.circle,
+            ),
+          )
+        else ...[
+          Icon(Icons.shield_outlined, size: 10, color: accent),
+          const SizedBox(width: 3),
+        ],
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: color,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _ago(DateTime? t) {
+    if (t == null) return 'a while ago';
+    final d = DateTime.now().difference(t.toLocal());
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    return '${d.inDays}d ago';
   }
 }
 

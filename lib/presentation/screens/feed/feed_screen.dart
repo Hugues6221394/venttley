@@ -1639,7 +1639,7 @@ class _BellAction extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final unread =
-        ref.watch(unreadNotificationsCountProvider).valueOrNull ?? 0;
+        ref.watch(unreadNotificationsCountProvider);
     return Stack(
       clipBehavior: Clip.none,
       children: [

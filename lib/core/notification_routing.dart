@@ -44,8 +44,19 @@ class NotificationPayload {
         return tribeChat(slug, messageId: messageId);
       case 'comment_reply':
       case 'post_like':
+      case 'comment_like':
+      case 'mention':
         final postId = payload['post_id'] as String?;
         return postId == null ? null : post(postId);
+      case 'whisper_reply':
+      case 'whisper_reaction':
+        final whisperId = payload['whisper_id'] as String?;
+        return whisperId == null ? null : 'whisper:$whisperId';
+      case 'friend_request':
+        return friends();
+      case 'friend_accepted':
+        final friendId = payload['friend_id'] as String?;
+        return friendId == null ? friends() : user(friendId);
       case 'message_request':
         final roomId = payload['room_id'] as String?;
         return roomId == null ? null : chat(roomId);
@@ -101,6 +112,8 @@ String? routeForNotificationPayload(String? payload) {
       final slug = id.substring(0, slash);
       final messageId = Uri.encodeComponent(id.substring(slash + 1));
       return '/tribe/$slug/chat?message=$messageId';
+    case 'whisper':
+      return id == null || id.isEmpty ? null : '/whisper/$id';
     case 'user':
       return id == null || id.isEmpty ? null : '/user/$id';
     case 'friends':

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -133,10 +135,48 @@ class VentlyApp extends ConsumerStatefulWidget {
   ConsumerState<VentlyApp> createState() => _VentlyAppState();
 }
 
-class _VentlyAppState extends ConsumerState<VentlyApp> {
+class _VentlyAppState extends ConsumerState<VentlyApp>
+    with WidgetsBindingObserver {
+  /// Presence heartbeat — stamps users.last_seen_at every ~60s while the
+  /// app is foregrounded so peers see Online / Active recently (0114).
+  Timer? _presenceTimer;
+
+  void _startPresenceHeartbeat() {
+    _presenceTimer?.cancel();
+    if (ref.read(sessionProvider) == null) return;
+    ref.read(repositoryProvider).touchLastSeen();
+    _presenceTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => ref.read(repositoryProvider).touchLastSeen(),
+    );
+  }
+
+  void _stopPresenceHeartbeat() {
+    _presenceTimer?.cancel();
+    _presenceTimer = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startPresenceHeartbeat();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _stopPresenceHeartbeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopPresenceHeartbeat();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       ref.read(sessionProvider.notifier).restore();
       AnalyticsService.instance.track(Events.appOpened);
@@ -170,6 +210,9 @@ class _VentlyAppState extends ConsumerState<VentlyApp> {
         PushRegistrationService.instance
             .init(ref.read(repositoryProvider));
         ref.invalidate(tribeChatInboxProvider);
+        _startPresenceHeartbeat();
+      } else {
+        _stopPresenceHeartbeat();
       }
     });
     ref.listen(pendingNotificationPayloadProvider, (prev, next) {
