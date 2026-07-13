@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
+import '../theme/motion.dart';
 import 'profile_avatar.dart';
 import 'report_reason_sheet.dart';
 import 'user_link.dart';
@@ -22,6 +23,7 @@ Future<void> showChatOptionsSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
+    sheetAnimationStyle: VentlyMotion.sheetSpring,
     builder: (_) => _ChatOptionsSheet(room: room, onSearch: onSearch),
   );
 }

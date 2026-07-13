@@ -112,7 +112,9 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                     itemCount: grouped.length,
                     itemBuilder: (ctx, i) {
                       final entry = grouped[i];
-                      return Column(
+                      return FadeSlideIn(
+                        index: i.clamp(0, 5),
+                        child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Padding(
@@ -129,6 +131,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                           for (final f in entry.friends)
                             RepaintBoundary(child: _FriendRow(friend: f)),
                         ],
+                        ),
                       );
                     },
                   ),

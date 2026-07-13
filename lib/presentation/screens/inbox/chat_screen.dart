@@ -16,6 +16,7 @@ import '../../widgets/chat_audio_bubble.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/report_reason_sheet.dart';
+import '../../widgets/skeleton.dart';
 import '../../widgets/crisis_support_sheet.dart';
 import '../../widgets/chat_options_sheet.dart';
 import '../../widgets/verified_badge.dart';
@@ -169,7 +170,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const ChatSkeleton(),
       );
     }
     if (r == null) {

@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../../core/constants.dart';
 import '../theme/colors.dart';
+import '../theme/motion.dart';
 
 /// A Tenor-backed GIF search sheet. Returns the chosen GIF's URL (a remote
 /// hotlink — no upload needed) or null if dismissed. Needs
@@ -14,6 +15,7 @@ Future<String?> showGifPickerSheet(BuildContext context) {
   return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
+    sheetAnimationStyle: VentlyMotion.sheetSpring,
     backgroundColor: Theme.of(context).colorScheme.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),

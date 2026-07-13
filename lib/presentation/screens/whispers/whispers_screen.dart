@@ -1099,11 +1099,12 @@ class _CaptionBlock extends StatelessWidget {
             whisper.title!,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            // Whisper titles are emotional content — serif display voice.
+            style: VentlyTokens.display(
+              context,
+              fontSize: 24,
+              height: 1.2,
               color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-              height: 1.3,
             ),
           ),
         if (whisper.description != null && whisper.description!.isNotEmpty) ...[

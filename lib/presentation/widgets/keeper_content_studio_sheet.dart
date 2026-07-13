@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../theme/colors.dart';
+import '../theme/motion.dart';
 import '../navigation/compose_navigation.dart';
 
 /// Keeper Content Studio — operational create menu (prompts, polls, etc.).
@@ -15,6 +16,7 @@ Future<void> showKeeperContentStudioSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
+    sheetAnimationStyle: VentlyMotion.sheetSpring,
     builder: (ctx) => const _KeeperContentStudioSheet(),
   );
 }

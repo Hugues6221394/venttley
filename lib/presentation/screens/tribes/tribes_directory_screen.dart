@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
+import '../../widgets/premium_motion.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/skeleton.dart';
@@ -134,7 +135,11 @@ class _TribesDirectoryScreenState
                         ),
                         child: ListView.builder(
                           itemCount: tribes.length,
-                          itemBuilder: (_, i) => _TribeCard(tribe: tribes[i]),
+                          cacheExtent: 800,
+                          itemBuilder: (_, i) => FadeSlideIn(
+                            index: i.clamp(0, 5),
+                            child: _TribeCard(tribe: tribes[i]),
+                          ),
                         ),
                       ),
           ),

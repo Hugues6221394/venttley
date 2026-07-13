@@ -20,6 +20,7 @@ import '../../widgets/tribe/tribe_member_sheet.dart';
 import '../../widgets/tribe/tribe_rules_sheet.dart';
 import '../../widgets/tribe/tribe_message_actions.dart';
 import '../../widgets/report_reason_sheet.dart';
+import '../../widgets/skeleton.dart';
 import '../../widgets/crisis_support_sheet.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tribe/tribe_chat_poll_card.dart';
@@ -289,7 +290,7 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
     return tribeAsync.when(
       loading: () => Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        body: const Center(child: CircularProgressIndicator()),
+        body: const SafeArea(child: ChatSkeleton()),
       ),
       error: (e, _) => Scaffold(
         appBar: AppBar(),

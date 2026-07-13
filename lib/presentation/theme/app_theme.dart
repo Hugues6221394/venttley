@@ -40,9 +40,10 @@ class VentlyTheme {
         scrolledUnderElevation: 0,
         centerTitle: false,
         iconTheme: const IconThemeData(color: VentlyColors.deepBurgundy),
-        titleTextStyle: GoogleFonts.plusJakartaSans(
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
+        // Screen titles use the serif display voice — Instrument Serif ships
+        // a single weight, so it reads elegant rather than bold.
+        titleTextStyle: GoogleFonts.instrumentSerif(
+          fontSize: 26,
           color: VentlyColors.berryMagenta,
         ),
       ),
@@ -176,9 +177,8 @@ class VentlyTheme {
         scrolledUnderElevation: 0,
         centerTitle: false,
         iconTheme: const IconThemeData(color: VentlyColors.softOffWhite),
-        titleTextStyle: GoogleFonts.plusJakartaSans(
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
+        titleTextStyle: GoogleFonts.instrumentSerif(
+          fontSize: 26,
           color: VentlyColors.berryDesat,
         ),
       ),

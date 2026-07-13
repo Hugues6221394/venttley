@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../theme/colors.dart';
+import '../theme/motion.dart';
 
 /// Unified create menu — opened from the Post tab and home CTAs.
 ///
@@ -14,6 +15,7 @@ Future<void> showQuickCreateSheet(BuildContext context, WidgetRef ref) async {
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
+    sheetAnimationStyle: VentlyMotion.sheetSpring,
     builder: (ctx) => const _QuickCreateSheet(),
   );
 }
