@@ -896,8 +896,8 @@ class _ReactionChoice extends StatelessWidget {
 // AUTHOR CRUD HELPERS — used from the PostCard popup menu
 // =========================================================================
 
-/// Inline edit dialog. The RPC enforces a 15-minute edit window; we
-/// surface a friendly error when that's exceeded.
+/// Inline creator edit dialog. The database enforces ownership and keeps
+/// edits available for the full lifetime of the vent.
 Future<void> openEditPostDialog(
   BuildContext context,
   WidgetRef ref,
@@ -930,11 +930,10 @@ Future<void> openEditPostDialog(
       ],
     ),
   );
+  final next = controller.text.trim();
   controller.dispose();
   if (saved != true) return;
-
-  final next = controller.text.trim();
-  if (next.isEmpty) return;
+  if (next.isEmpty && !post.hasImage && !post.hasAudio) return;
   try {
     await ref.read(repositoryProvider).editPost(
           postId: post.postId,
@@ -1005,9 +1004,6 @@ Future<void> confirmDeletePost(
 /// act on. Keeps the failure path quiet.
 String _friendlyError(Object e) {
   final s = e.toString();
-  if (s.contains('edit window expired')) {
-    return 'The 15-minute edit window has passed.';
-  }
   if (s.contains('not your post')) {
     return "You can only edit your own vents.";
   }

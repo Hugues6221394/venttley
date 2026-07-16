@@ -8,10 +8,9 @@ import '../../domain/entities/entities.dart';
 import '../../domain/keeper/keeper_mode.dart';
 import '../../domain/keeper/keeper_studio_v2.dart';
 import '../../domain/tribe/tribe_chat_hub.dart';
+import '../../domain/tribe/tribe_management.dart';
 import 'supabase_backend.dart'
-    show
-        UsernameTakenException,
-        InvalidCredentialsException;
+    show UsernameTakenException, InvalidCredentialsException;
 
 /// In-memory backend used when [VentlyConfig.useMockBackend] is true.
 ///
@@ -32,6 +31,7 @@ class MockBackend {
   final Map<String, ({String blob, String salt})> _recovery = {};
   final List<PlugProfile> _plugz = [];
   final List<Tribe> _tribes = [];
+  final List<Space> _spaces = [];
   final List<Post> _posts = [];
   final Map<String, List<ThreadedComment>> _commentsByPost = {};
   final Map<String, String> _myReactions = {};
@@ -44,6 +44,9 @@ class MockBackend {
   final Map<String, List<ChatMessage>> _messages = {};
   final List<PlugPrompt> _prompts = [];
   final List<NotificationItem> _notifications = [];
+  final Map<String, List<TribeRuleItem>> _managementRules = {};
+  final List<TribeJoinRequest> _managementJoinRequests = [];
+  final List<TribeAuditEvent> _managementAudit = [];
 
   /// Friend graph. Each tuple is (a, b, status, requestedBy, createdAt,
   /// note) with a < b lexically. Mirrors migration 0024's `friendships`.
@@ -53,7 +56,8 @@ class MockBackend {
   // Stream controllers for live UI updates.
   final _postsController = StreamController<List<Post>>.broadcast();
   final _roomsController = StreamController<List<ChatRoom>>.broadcast();
-  final _notificationsController = StreamController<List<NotificationItem>>.broadcast();
+  final _notificationsController =
+      StreamController<List<NotificationItem>>.broadcast();
 
   Stream<List<Post>> get postsStream => _postsController.stream;
   Stream<List<ChatRoom>> get roomsStream => _roomsController.stream;
@@ -125,6 +129,13 @@ class MockBackend {
   /// only — the live backend uses Supabase's persisted auth session.
   String? passwordOf(String username) => _passwords[username.toLowerCase()];
 
+  bool verifyCurrentPassword(String password) {
+    final me = _me;
+    if (me == null || password.isEmpty) return false;
+    final stored = _passwords[me.anonymousPseudonym.toLowerCase()];
+    return stored == null ? true : stored == password;
+  }
+
   /// Update the password for [username] — used by the recover-with-phrase
   /// flow when the user sets a new password after restoring their account.
   void resetPassword({required String username, required String newPassword}) {
@@ -149,9 +160,9 @@ class MockBackend {
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
     final filtered = _posts.where((p) {
       final byCategory = category == null || p.categoryName == category;
-      final byMood     = mood == null || p.postMood == mood;
-      final byTribe    = tribeSlug == null || p.tribeSlug == tribeSlug;
-      final byWhisper  = !p.isWhisper || p.createdAt.isAfter(cutoff);
+      final byMood = mood == null || p.postMood == mood;
+      final byTribe = tribeSlug == null || p.tribeSlug == tribeSlug;
+      final byWhisper = !p.isWhisper || p.createdAt.isAfter(cutoff);
       // Mock posts don't carry a location_bucket. When the caller asks for
       // a local feed, return empty so the UI exercises the fallback path.
       final byLocation = locationBucket == null;
@@ -159,10 +170,8 @@ class MockBackend {
     }).toList();
 
     if (sort == 'hot' || sort == 'foryou') {
-      final myTribeSlugs = _tribes
-          .where((t) => t.joinedByMe)
-          .map((t) => t.slug)
-          .toSet();
+      final myTribeSlugs =
+          _tribes.where((t) => t.joinedByMe).map((t) => t.slug).toSet();
       double score(Post p) {
         final base = (p.likesCount + p.commentsCount) + 1;
         final ageHours =
@@ -176,6 +185,7 @@ class MockBackend {
         }
         return s;
       }
+
       filtered.sort((a, b) => score(b).compareTo(score(a)));
     } else {
       filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -205,8 +215,14 @@ class MockBackend {
     required String category,
     required String mood,
     String? tribeId,
+    String? spaceId,
     String? personaId,
     bool isWhisper = false,
+    String? imageUrl,
+    String? audioUrl,
+    int? audioDurationSeconds,
+    String? pollQuestion,
+    List<String>? pollOptions,
   }) async {
     final me = _me;
     if (me == null) throw StateError('No active session');
@@ -237,10 +253,47 @@ class MockBackend {
       tribeId: tribe?.tribeId,
       tribeName: tribe?.name,
       tribeSlug: tribe?.slug,
+      spaceId: spaceId,
+      imageUrl: imageUrl,
+      audioUrl: audioUrl,
+      audioDurationSeconds: audioDurationSeconds,
     );
     _posts.insert(0, post);
+    if (pollQuestion != null && pollOptions != null) {
+      createPoll(
+        postId: post.postId,
+        question: pollQuestion,
+        optionTexts: pollOptions,
+      );
+    }
     _emitPosts();
     return post;
+  }
+
+  bool editPost({required String postId, required String newContent}) {
+    final index = _posts.indexWhere((post) => post.postId == postId);
+    if (index == -1) throw StateError('post not found');
+    final post = _posts[index];
+    if (!post.ownedBy(_me?.userId)) throw StateError('not your post');
+    if (newContent.trim().isEmpty && !post.hasImage && !post.hasAudio) {
+      throw StateError('post content or media required');
+    }
+    _posts[index] = post.copyWith(
+      content: newContent,
+      editedAt: DateTime.now(),
+    );
+    _postsController.add(List.unmodifiable(_posts));
+    return true;
+  }
+
+  bool deletePost(String postId) {
+    final index = _posts.indexWhere((post) => post.postId == postId);
+    if (index == -1) throw StateError('post not found');
+    final post = _posts[index];
+    if (!post.ownedBy(_me?.userId)) throw StateError('not your post');
+    _posts[index] = post.copyWith(deletedAt: DateTime.now());
+    _postsController.add(List.unmodifiable(_posts));
+    return true;
   }
 
   void toggleLike(String postId) => react(postId, 'hug');
@@ -259,8 +312,8 @@ class MockBackend {
       result = reaction;
     } else if (current == reaction) {
       _myReactions.remove(postId);
-      _posts[i] = _posts[i].copyWith(
-          likesCount: max(_posts[i].likesCount - 1, 0));
+      _posts[i] =
+          _posts[i].copyWith(likesCount: max(_posts[i].likesCount - 1, 0));
       result = null;
     } else {
       _myReactions[postId] = reaction;
@@ -436,6 +489,511 @@ class MockBackend {
     return updated;
   }
 
+  TribeManagementOverview tribeManagementOverview(String tribeId) {
+    final tribe = _tribes.firstWhere(
+      (item) => item.tribeId == tribeId,
+      orElse: () => throw StateError('Tribe not found'),
+    );
+    if (_me?.userId != tribe.keeperId) {
+      throw StateError('Only the Plug can manage this Tribe');
+    }
+    final settings = TribeGovernanceSettings.fromJson(
+      tribe.managementSettings,
+    );
+    return TribeManagementOverview(
+      tribeId: tribe.tribeId,
+      name: tribe.name,
+      slug: tribe.slug,
+      description: tribe.description,
+      category: tribe.category,
+      tags: tribe.tags,
+      visibility: tribe.visibility,
+      lifecycleStatus: tribe.lifecycleStatus,
+      lifecycleReason: tribe.lifecycleReason,
+      avatarUrl: tribe.avatarUrl,
+      bannerUrl: tribe.bannerUrl,
+      welcomeMessage: tribe.welcomeMessage,
+      deletionRequestedAt: tribe.deletionRequestedAt,
+      deletionPurgeAt: tribe.deletionPurgeAt,
+      memberCount: tribe.memberCount,
+      postCount: _posts
+          .where((post) => post.tribeId == tribeId && !post.isDeleted)
+          .length,
+      spaceCount: _spaces
+          .where(
+              (space) => space.tribeId == tribeId && space.archivedAt == null)
+          .length,
+      pendingJoinRequests: _managementJoinRequests
+          .where((request) => request.requestId.startsWith('$tribeId:'))
+          .length,
+      pendingInvitations: _invites
+          .where((invite) => invite.tribeId == tribeId && invite.isPending)
+          .length,
+      openReports:
+          tribeReports(tribeId).where((report) => !report.isResolved).length,
+      settings: settings,
+      rules: List.unmodifiable(_managementRules[tribeId] ?? const []),
+    );
+  }
+
+  TribeManagementOverview updateTribeConfiguration({
+    required String tribeId,
+    String? name,
+    String? description,
+    String? category,
+    List<String>? tags,
+    String? visibility,
+    String? avatarUrl,
+    String? bannerUrl,
+    String? welcomeMessage,
+    TribeGovernanceSettings? settings,
+  }) {
+    final i = _tribes.indexWhere((tribe) => tribe.tribeId == tribeId);
+    if (i == -1) throw StateError('Tribe not found');
+    final current = _tribes[i];
+    if (_me?.userId != current.keeperId) {
+      throw StateError('Only the Plug can manage this Tribe');
+    }
+    _tribes[i] = current.copyWith(
+      name: name,
+      description: description,
+      category: category,
+      isPrivate: visibility == null ? null : visibility != 'public',
+      avatarUrl: avatarUrl,
+      bannerUrl: bannerUrl,
+      welcomeMessage: welcomeMessage,
+      visibility: visibility,
+      tags: tags,
+      managementSettings: settings?.toJson(),
+    );
+    _addManagementAudit(tribeId, 'TRIBE_CONFIGURATION_UPDATED');
+    return tribeManagementOverview(tribeId);
+  }
+
+  TribeManagementOverview replaceTribeRules(
+    String tribeId,
+    List<TribeRuleItem> rules,
+  ) {
+    tribeManagementOverview(tribeId);
+    _managementRules[tribeId] = [
+      for (var i = 0; i < rules.length; i++) rules[i].copyWith(position: i),
+    ];
+    _addManagementAudit(tribeId, 'TRIBE_RULES_REPLACED');
+    return tribeManagementOverview(tribeId);
+  }
+
+  List<TribeJoinRequest> tribeJoinRequests(String tribeId) =>
+      _managementJoinRequests
+          .where((request) => request.requestId.startsWith('$tribeId:'))
+          .toList(growable: false);
+
+  String requestTribeMembership(String tribeId, {String? note}) {
+    final me = _me;
+    if (me == null) throw StateError('Not signed in');
+    final tribe = _tribes.firstWhere((item) => item.tribeId == tribeId);
+    if (!tribe.acceptsNewActivity) {
+      throw StateError('This Tribe is not accepting members');
+    }
+    final settings = TribeGovernanceSettings.fromJson(
+      tribe.managementSettings,
+    );
+    if (tribe.visibility != 'public' || settings.joinApprovalRequired) {
+      _managementJoinRequests.removeWhere(
+        (request) => request.requestId == '$tribeId:${me.userId}',
+      );
+      _managementJoinRequests.add(TribeJoinRequest(
+        requestId: '$tribeId:${me.userId}',
+        userId: me.userId,
+        pseudonym: me.anonymousPseudonym,
+        avatarSeed: me.avatarSeed,
+        profilePhotoUrl: me.profilePhotoUrl,
+        note: note,
+        createdAt: DateTime.now(),
+      ));
+      return 'pending';
+    }
+    joinTribe(tribeId);
+    return 'joined';
+  }
+
+  void respondTribeJoinRequest(String requestId, {required bool approve}) {
+    final request = _managementJoinRequests.firstWhere(
+      (item) => item.requestId == requestId,
+    );
+    final tribeId = requestId.split(':').first;
+    tribeManagementOverview(tribeId);
+    if (approve) _joinedTribes.add(tribeId);
+    _managementJoinRequests.remove(request);
+    _addManagementAudit(
+      tribeId,
+      approve ? 'JOIN_REQUEST_APPROVED' : 'JOIN_REQUEST_REJECTED',
+    );
+  }
+
+  void manageTribeMember({
+    required String tribeId,
+    required String userId,
+    required String action,
+    String? reason,
+    DateTime? muteUntil,
+  }) {
+    switch (action) {
+      case 'promote':
+        promoteToMod(tribeId: tribeId, userId: userId);
+        break;
+      case 'demote':
+        demoteToMember(tribeId: tribeId, userId: userId);
+        break;
+      case 'remove':
+      case 'ban':
+        kickMember(tribeId: tribeId, userId: userId, reason: reason);
+        break;
+      case 'warn':
+      case 'mute':
+      case 'unmute':
+        break;
+      default:
+        throw ArgumentError.value(action, 'action');
+    }
+    _addManagementAudit(tribeId, 'MEMBER_${action.toUpperCase()}');
+  }
+
+  String initiateTribeTransfer({
+    required String tribeId,
+    required String toUserId,
+    bool keepPreviousOwnerAsMod = true,
+  }) {
+    tribeManagementOverview(tribeId);
+    final transferId = _uuid.v4();
+    _addManagementAudit(tribeId, 'OWNERSHIP_TRANSFER_INITIATED');
+    return transferId;
+  }
+
+  void respondTribeTransfer(String transferId, {required bool accept}) {
+    if (transferId.isEmpty) throw StateError('Transfer not found');
+  }
+
+  TribeManagementOverview setTribeLifecycle({
+    required String tribeId,
+    required String action,
+    String? reason,
+    String? confirmedName,
+  }) {
+    final i = _tribes.indexWhere((tribe) => tribe.tribeId == tribeId);
+    if (i == -1) throw StateError('Tribe not found');
+    final current = _tribes[i];
+    if (_me?.userId != current.keeperId) throw StateError('Not the owner');
+    if (action == 'request_delete' && confirmedName != current.name) {
+      throw const FormatException('Type the Tribe name exactly.');
+    }
+    final status = switch (action) {
+      'pause' => 'paused',
+      'archive' => 'archived',
+      'request_delete' => 'pending_deletion',
+      'activate' || 'cancel_delete' => 'active',
+      _ => throw ArgumentError.value(action, 'action'),
+    };
+    _tribes[i] = current.copyWith(lifecycleStatus: status);
+    _addManagementAudit(tribeId, 'TRIBE_${action.toUpperCase()}');
+    return tribeManagementOverview(tribeId);
+  }
+
+  List<TribeAuditEvent> tribeAuditLog(String tribeId, {int limit = 100}) =>
+      _managementAudit
+          .where((event) => event.targetId == tribeId)
+          .take(limit)
+          .toList(growable: false);
+
+  List<TribeManagedPost> managedTribePosts(
+    String tribeId, {
+    int limit = 100,
+  }) {
+    tribeManagementOverview(tribeId);
+    return _posts
+        .where((post) => post.tribeId == tribeId && !post.isDeleted)
+        .take(limit)
+        .map((post) => TribeManagedPost(
+              postId: post.postId,
+              authorId: post.authorId,
+              authorPseudonym: post.authorPseudonym,
+              authorAvatarSeed: post.authorAvatarSeed,
+              authorProfilePhotoUrl: post.authorProfilePhotoUrl,
+              content: post.content,
+              categoryName: post.categoryName,
+              postMood: post.postMood,
+              spaceId: post.spaceId,
+              likesCount: post.likesCount,
+              commentsCount: post.commentsCount,
+              createdAt: post.createdAt,
+              isApproved: true,
+              isPinned:
+                  (_pinnedByTribe[tribeId] ?? const []).contains(post.postId),
+              lockedAt: post.lockedAt,
+            ))
+        .toList(growable: false);
+  }
+
+  String manageTribeSpace({
+    required String tribeId,
+    required String action,
+    String? spaceId,
+    String? name,
+    String? description,
+    String? iconName,
+    String? weeklyTheme,
+    String? postingPermission,
+    bool? isPinned,
+    DateTime? activatesAt,
+    DateTime? deactivatesAt,
+    String? reason,
+  }) {
+    tribeManagementOverview(tribeId);
+    final tribe = _tribes.firstWhere((item) => item.tribeId == tribeId);
+    final now = DateTime.now();
+
+    if (action == 'create') {
+      final trimmedName = name?.trim() ?? '';
+      if (trimmedName.length < 2 || trimmedName.length > 60) {
+        throw const FormatException('Space names must be 2-60 characters.');
+      }
+      var slug = trimmedName
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+          .replaceAll(RegExp(r'^-+|-+$'), '');
+      if (slug.isEmpty) slug = 'space';
+      final baseSlug = slug;
+      var suffix = 2;
+      while (_spaces
+          .any((space) => space.tribeId == tribeId && space.slug == slug)) {
+        slug = '$baseSlug-${suffix++}';
+      }
+      final id = _uuid.v4();
+      _spaces.add(Space(
+        spaceId: id,
+        tribeId: tribeId,
+        tribeSlug: tribe.slug,
+        tribeName: tribe.name,
+        slug: slug,
+        name: trimmedName,
+        description: _emptyToNull(description),
+        weeklyTheme: _emptyToNull(weeklyTheme),
+        iconName: _emptyToNull(iconName),
+        isDefault: false,
+        isPinned: isPinned ?? false,
+        postingPermission: postingPermission ?? 'members',
+        activatesAt: activatesAt,
+        deactivatesAt: deactivatesAt,
+        createdAt: now,
+        updatedAt: now,
+        ventCount: 0,
+        ventsToday: 0,
+      ));
+      _addManagementAudit(tribeId, 'SPACE_CREATE');
+      return id;
+    }
+
+    final index = _spaces.indexWhere(
+      (space) => space.spaceId == spaceId && space.tribeId == tribeId,
+    );
+    if (index == -1) throw StateError('Space not found');
+    final current = _spaces[index];
+    switch (action) {
+      case 'update':
+        final trimmedName = name?.trim();
+        if (trimmedName != null &&
+            (trimmedName.length < 2 || trimmedName.length > 60)) {
+          throw const FormatException('Space names must be 2-60 characters.');
+        }
+        _spaces[index] = _copySpace(
+          current,
+          name: trimmedName,
+          description: description,
+          iconName: iconName,
+          weeklyTheme: weeklyTheme,
+          postingPermission: postingPermission,
+          isPinned: isPinned,
+          activatesAt: activatesAt,
+          deactivatesAt: deactivatesAt,
+          updatedAt: now,
+        );
+        break;
+      case 'archive':
+        if (current.isDefault) {
+          throw StateError('The General Space cannot be archived');
+        }
+        _spaces[index] = _copySpace(
+          current,
+          archivedAt: now,
+          updatedAt: now,
+        );
+        break;
+      case 'restore':
+        _spaces[index] = _copySpace(
+          current,
+          clearArchivedAt: true,
+          updatedAt: now,
+        );
+        break;
+      case 'delete':
+        if (current.isDefault) {
+          throw StateError('The General Space cannot be deleted');
+        }
+        final defaultSpace = _spaces.firstWhereOrNull(
+          (space) => space.tribeId == tribeId && space.isDefault,
+        );
+        if (defaultSpace == null) throw StateError('General Space not found');
+        for (var i = 0; i < _posts.length; i++) {
+          if (_posts[i].spaceId == current.spaceId) {
+            _posts[i] = _posts[i].copyWith(spaceId: defaultSpace.spaceId);
+          }
+        }
+        _spaces.removeAt(index);
+        break;
+      default:
+        throw ArgumentError.value(action, 'action');
+    }
+    _addManagementAudit(tribeId, 'SPACE_${action.toUpperCase()}');
+    return current.spaceId;
+  }
+
+  List<Space> spacesByTribe(String tribeId) {
+    final items =
+        _spaces.where((space) => space.tribeId == tribeId).map((space) {
+      final posts = _posts.where(
+          (post) => post.spaceId == space.spaceId && post.deletedAt == null);
+      final today = DateTime.now().subtract(const Duration(hours: 24));
+      return _copySpace(
+        space,
+        ventCount: posts.length,
+        ventsToday: posts.where((post) => post.createdAt.isAfter(today)).length,
+      );
+    }).toList();
+    items.sort((a, b) {
+      if (a.isArchived != b.isArchived) return a.isArchived ? 1 : -1;
+      if (a.isDefault != b.isDefault) return a.isDefault ? -1 : 1;
+      if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+      return a.createdAt.compareTo(b.createdAt);
+    });
+    return List.unmodifiable(items);
+  }
+
+  Space? spaceById(String spaceId) =>
+      _spaces.firstWhereOrNull((space) => space.spaceId == spaceId);
+
+  List<Post> postsInSpace({
+    required String spaceId,
+    String sort = 'fresh',
+    int limit = 60,
+  }) {
+    final items = _posts
+        .where((post) => post.spaceId == spaceId && !post.isDeleted)
+        .toList();
+    if (sort == 'unanswered') {
+      items.removeWhere((post) => post.commentsCount != 0);
+    }
+    items.sort((a, b) => switch (sort) {
+          'trending' => b.likesCount.compareTo(a.likesCount),
+          'helpful' => b.commentsCount.compareTo(a.commentsCount),
+          _ => b.createdAt.compareTo(a.createdAt),
+        });
+    return List.unmodifiable(items.take(limit));
+  }
+
+  void _ensureDefaultSpace(Tribe tribe, {DateTime? createdAt}) {
+    if (_spaces
+        .any((space) => space.tribeId == tribe.tribeId && space.isDefault)) {
+      return;
+    }
+    final now = createdAt ?? DateTime.now();
+    _spaces.add(Space(
+      spaceId: _uuid.v4(),
+      tribeId: tribe.tribeId,
+      tribeSlug: tribe.slug,
+      tribeName: tribe.name,
+      slug: 'general',
+      name: 'General',
+      description: 'The main room - everything goes here.',
+      iconName: 'home',
+      isDefault: true,
+      createdAt: now,
+      updatedAt: now,
+      ventCount: 0,
+      ventsToday: 0,
+    ));
+  }
+
+  Space _copySpace(
+    Space space, {
+    String? name,
+    String? description,
+    String? iconName,
+    String? weeklyTheme,
+    String? postingPermission,
+    bool? isPinned,
+    DateTime? activatesAt,
+    DateTime? deactivatesAt,
+    DateTime? archivedAt,
+    bool clearArchivedAt = false,
+    DateTime? updatedAt,
+    int? ventCount,
+    int? ventsToday,
+  }) {
+    return Space(
+      spaceId: space.spaceId,
+      tribeId: space.tribeId,
+      tribeSlug: space.tribeSlug,
+      tribeName: space.tribeName,
+      slug: space.slug,
+      name: name ?? space.name,
+      description:
+          description == null ? space.description : _emptyToNull(description),
+      weeklyTheme:
+          weeklyTheme == null ? space.weeklyTheme : _emptyToNull(weeklyTheme),
+      themeColor: space.themeColor,
+      isDefault: space.isDefault,
+      archivedAt: clearArchivedAt ? null : (archivedAt ?? space.archivedAt),
+      createdAt: space.createdAt,
+      updatedAt: updatedAt ?? space.updatedAt,
+      ventCount: ventCount ?? space.ventCount,
+      ventsToday: ventsToday ?? space.ventsToday,
+      lastVentAt: space.lastVentAt,
+      iconName: iconName == null ? space.iconName : _emptyToNull(iconName),
+      isPinned: isPinned ?? space.isPinned,
+      postingPermission: postingPermission ?? space.postingPermission,
+      activatesAt: activatesAt ?? space.activatesAt,
+      deactivatesAt: deactivatesAt ?? space.deactivatesAt,
+    );
+  }
+
+  String? _emptyToNull(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  void manageTribePost({
+    required String tribeId,
+    required String postId,
+    required String action,
+    String? targetSpaceId,
+  }) {
+    tribeManagementOverview(tribeId);
+    _addManagementAudit(tribeId, 'POST_${action.toUpperCase()}');
+  }
+
+  void _addManagementAudit(String tribeId, String action) {
+    _managementAudit.insert(
+      0,
+      TribeAuditEvent(
+        auditId: _uuid.v4(),
+        action: action,
+        actorPseudonym: _me?.anonymousPseudonym,
+        targetType: 'tribe',
+        targetId: tribeId,
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
+
   // -------------------- Profile location --------------------
   AppUser updateMyAvatar(String seed) {
     final me = _me;
@@ -475,7 +1033,8 @@ class MockBackend {
     final me = _me;
     if (me == null) throw StateError('Not signed in');
     final safeExt = extension.replaceAll('.', '').toLowerCase();
-    final path = '${me.userId}/mock-${bytes.length}.${safeExt.isEmpty ? 'jpg' : safeExt}';
+    final path =
+        '${me.userId}/mock-${bytes.length}.${safeExt.isEmpty ? 'jpg' : safeExt}';
     return (path: path, url: 'mock://post-media/$path');
   }
 
@@ -547,9 +1106,8 @@ class MockBackend {
         hits.add(SearchHit(
           hitKind: 'post',
           hitId: p.postId,
-          title: p.content.length > 220
-              ? p.content.substring(0, 220)
-              : p.content,
+          title:
+              p.content.length > 220 ? p.content.substring(0, 220) : p.content,
           subtitle: p.authorPseudonym,
           avatarSeed: p.authorAvatarSeed,
           profilePhotoUrl: p.authorProfilePhotoUrl,
@@ -598,7 +1156,8 @@ class MockBackend {
   }
 
   // -------------------- Co-mod hierarchy --------------------
-  final Map<String, Map<String, String>> _tribeRoles = {}; // tribeId -> userId -> role
+  final Map<String, Map<String, String>> _tribeRoles =
+      {}; // tribeId -> userId -> role
 
   String _roleFor(String tribeId, String userId) {
     final tribe = _tribes.firstWhereOrNull((t) => t.tribeId == tribeId);
@@ -627,7 +1186,9 @@ class MockBackend {
       }
     }
     final me = _me;
-    if (me != null && me.userId != tribe.keeperId && _joinedTribes.contains(tribeId)) {
+    if (me != null &&
+        me.userId != tribe.keeperId &&
+        _joinedTribes.contains(tribeId)) {
       out.add(TribeMemberRow(
         userId: me.userId,
         pseudonym: me.anonymousPseudonym,
@@ -670,28 +1231,43 @@ class MockBackend {
 
   // -------------------- Badges + streaks --------------------
   final List<BadgeDefinition> _badgeCatalogue = const [
-    BadgeDefinition(key: 'first_vent', label: 'First Vent',
-        description: 'Your first confession.', icon: '⭐', tier: 'bronze'),
-    BadgeDefinition(key: 'seven_day_venter', label: '7-Day Venter',
-        description: 'Seven consecutive days posting.', icon: '🌙', tier: 'silver'),
-    BadgeDefinition(key: 'keeper', label: 'Plug',
-        description: 'Started your own Tribe.', icon: '🌿', tier: 'silver'),
-    BadgeDefinition(key: 'whisper_keeper', label: 'Whisper Plug',
-        description: 'Posted ten Whispers.', icon: '🌒', tier: 'bronze'),
+    BadgeDefinition(
+        key: 'first_vent',
+        label: 'First Vent',
+        description: 'Your first confession.',
+        icon: '⭐',
+        tier: 'bronze'),
+    BadgeDefinition(
+        key: 'seven_day_venter',
+        label: '7-Day Venter',
+        description: 'Seven consecutive days posting.',
+        icon: '🌙',
+        tier: 'silver'),
+    BadgeDefinition(
+        key: 'keeper',
+        label: 'Plug',
+        description: 'Started your own Tribe.',
+        icon: '🌿',
+        tier: 'silver'),
+    BadgeDefinition(
+        key: 'whisper_keeper',
+        label: 'Whisper Plug',
+        description: 'Posted ten Whispers.',
+        icon: '🌒',
+        tier: 'bronze'),
   ];
   final Map<String, List<UserBadge>> _userBadges = {};
 
   List<BadgeDefinition> badgeCatalogue() => _badgeCatalogue;
-  List<UserBadge> badgesFor(String userId) =>
-      _userBadges[userId] ?? const [];
+  List<UserBadge> badgesFor(String userId) => _userBadges[userId] ?? const [];
   List<UserStreak> myStreaks() => const [];
 
   // -------------------- User lookup --------------------
   AppUser? findUserByPseudonym(String pseudonym) {
     final q = pseudonym.trim().replaceAll('@', '').toLowerCase();
     if (q.isEmpty) return null;
-    return _users.firstWhereOrNull(
-        (u) => u.anonymousPseudonym.toLowerCase() == q);
+    return _users
+        .firstWhereOrNull((u) => u.anonymousPseudonym.toLowerCase() == q);
   }
 
   // -------------------- Tribe invitations --------------------
@@ -758,8 +1334,7 @@ class MockBackend {
     Duration closesIn = const Duration(days: 3),
   }) {
     final options = [
-      for (final t in optionTexts)
-        PollOption(optionId: _uuid.v4(), text: t),
+      for (final t in optionTexts) PollOption(optionId: _uuid.v4(), text: t),
     ];
     final poll = PostPoll(
       pollId: _uuid.v4(),
@@ -799,7 +1374,8 @@ class MockBackend {
 
   List<Post> mySaved() => _posts
       .where((p) => _savedPosts.contains(p.postId))
-      .map((p) => p.copyWith(savedByMe: true, myReaction: _myReactions[p.postId]))
+      .map((p) =>
+          p.copyWith(savedByMe: true, myReaction: _myReactions[p.postId]))
       .toList();
 
   List<Post> myVents() {
@@ -870,7 +1446,8 @@ class MockBackend {
     }
     final i = _posts.indexWhere((p) => p.postId == postId);
     if (i != -1) {
-      _posts[i] = _posts[i].copyWith(commentsCount: _posts[i].commentsCount + 1);
+      _posts[i] =
+          _posts[i].copyWith(commentsCount: _posts[i].commentsCount + 1);
       _emitPosts();
     }
     return comment;
@@ -999,6 +1576,7 @@ class MockBackend {
         if (c.region == 'global') return 1;
         return 2;
       }
+
       final r = rank(a).compareTo(rank(b));
       return r != 0 ? r : a.sortOrder.compareTo(b.sortOrder);
     });
@@ -1028,15 +1606,15 @@ class MockBackend {
     final me = _me;
     if (me == null) return FriendStatus.none;
     if (me.userId == otherUserId) return FriendStatus.self;
-    final blockedByMe = _blocks.any(
-        (b) => b.blockerId == me.userId && b.blockedId == otherUserId);
+    final blockedByMe = _blocks
+        .any((b) => b.blockerId == me.userId && b.blockedId == otherUserId);
     if (blockedByMe) return FriendStatus.blockedByMe;
-    final blockedMe = _blocks.any(
-        (b) => b.blockerId == otherUserId && b.blockedId == me.userId);
+    final blockedMe = _blocks
+        .any((b) => b.blockerId == otherUserId && b.blockedId == me.userId);
     if (blockedMe) return FriendStatus.blockedMe;
     final pair = _pair(me.userId, otherUserId);
-    final row = _friendships.firstWhereOrNull(
-        (f) => f.userA == pair.a && f.userB == pair.b);
+    final row = _friendships
+        .firstWhereOrNull((f) => f.userA == pair.a && f.userB == pair.b);
     if (row == null) return FriendStatus.none;
     if (row.status == 'accepted') return FriendStatus.friends;
     return row.requestedBy == me.userId
@@ -1054,8 +1632,8 @@ class MockBackend {
       throw StateError('a block prevents this request');
     }
     final pair = _pair(me.userId, otherUserId);
-    var row = _friendships.firstWhereOrNull(
-        (f) => f.userA == pair.a && f.userB == pair.b);
+    var row = _friendships
+        .firstWhereOrNull((f) => f.userA == pair.a && f.userB == pair.b);
     if (row != null) return row.friendshipId;
     row = _MockFriendship(
       friendshipId: _uuid.v4(),
@@ -1073,8 +1651,8 @@ class MockBackend {
   Future<void> acceptFriendRequest(String friendshipId) async {
     final me = _me;
     if (me == null) return;
-    final row = _friendships
-        .firstWhereOrNull((f) => f.friendshipId == friendshipId);
+    final row =
+        _friendships.firstWhereOrNull((f) => f.friendshipId == friendshipId);
     if (row == null) return;
     if (row.requestedBy == me.userId) {
       throw StateError('cannot accept your own request');
@@ -1111,8 +1689,7 @@ class MockBackend {
     ));
     // Blocks tear down any existing friendship in either status.
     final pair = _pair(me.userId, otherUserId);
-    _friendships
-        .removeWhere((f) => f.userA == pair.a && f.userB == pair.b);
+    _friendships.removeWhere((f) => f.userA == pair.a && f.userB == pair.b);
   }
 
   Future<void> unblockUser(String otherUserId) async {
@@ -1234,8 +1811,7 @@ class MockBackend {
   Future<List<Post>> pinnedPosts(String tribeId) async {
     final ids = _pinnedByTribe[tribeId] ?? const <String>[];
     return [
-      for (final id in ids)
-        ..._posts.where((p) => p.postId == id),
+      for (final id in ids) ..._posts.where((p) => p.postId == id),
     ];
   }
 
@@ -1361,8 +1937,7 @@ class MockBackend {
     String? welcomeMessage,
     String? themeColor,
   }) async {
-    _brandingByTribe[tribeId] =
-        (welcome: welcomeMessage, theme: themeColor);
+    _brandingByTribe[tribeId] = (welcome: welcomeMessage, theme: themeColor);
   }
 
   Future<void> spotlightMember({
@@ -1380,9 +1955,7 @@ class MockBackend {
     final u = _findUser(otherUserId);
     if (u == null) return null;
     final relation = await friendStatus(otherUserId);
-    final theirPosts = _posts
-        .where((p) => p.authorId == otherUserId)
-        .toList()
+    final theirPosts = _posts.where((p) => p.authorId == otherUserId).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final theirTribesIds = _joinedTribes; // mock doesn't track per-user
 
@@ -1406,19 +1979,23 @@ class MockBackend {
     for (final p in theirPosts) {
       moodCounts[p.postMood] = (moodCounts[p.postMood] ?? 0) + 1;
     }
-    final topMoods = moodCounts.entries.map((e) => MoodCount(
-          mood: e.key,
-          count: e.value,
-        )).toList()
+    final topMoods = moodCounts.entries
+        .map((e) => MoodCount(
+              mood: e.key,
+              count: e.value,
+            ))
+        .toList()
       ..sort((a, b) => b.count.compareTo(a.count));
 
     final mostLiked = theirPosts.isEmpty
         ? null
-        : (theirPosts.toList()..sort((a, b) => b.likesCount.compareTo(a.likesCount)))
+        : (theirPosts.toList()
+              ..sort((a, b) => b.likesCount.compareTo(a.likesCount)))
             .first;
     final mostCommented = theirPosts.isEmpty
         ? null
-        : (theirPosts.toList()..sort((a, b) => b.commentsCount.compareTo(a.commentsCount)))
+        : (theirPosts.toList()
+              ..sort((a, b) => b.commentsCount.compareTo(a.commentsCount)))
             .first;
     ProfileHighlightPost? toHl(Post? p) => p == null
         ? null
@@ -1448,9 +2025,8 @@ class MockBackend {
       safetyTier: 'standard',
       vents: theirPosts.length,
       comments: isFriend ? 0 : null,
-      reactionsReceived: isFriend
-          ? theirPosts.fold<int>(0, (s, p) => s + p.likesCount)
-          : null,
+      reactionsReceived:
+          isFriend ? theirPosts.fold<int>(0, (s, p) => s + p.likesCount) : null,
       activeTribes: mutualTribesList.length,
       badgesCount: isFriend ? 0 : null,
       currentStreak: isFriend ? 0 : null,
@@ -1471,19 +2047,16 @@ class MockBackend {
   Future<List<BlockedUser>> myBlocks() async {
     final me = _me;
     if (me == null) return const [];
-    return _blocks
-        .where((b) => b.blockerId == me.userId)
-        .map((b) {
-          final u = _findUser(b.blockedId);
-          return BlockedUser(
-            userId: b.blockedId,
-            pseudonym: u?.anonymousPseudonym ?? 'anonymous',
-            avatarSeed: u?.avatarSeed ?? 'default-orb',
-            reason: b.reason,
-            createdAt: b.createdAt,
-          );
-        })
-        .toList()
+    return _blocks.where((b) => b.blockerId == me.userId).map((b) {
+      final u = _findUser(b.blockedId);
+      return BlockedUser(
+        userId: b.blockedId,
+        pseudonym: u?.anonymousPseudonym ?? 'anonymous',
+        avatarSeed: u?.avatarSeed ?? 'default-orb',
+        reason: b.reason,
+        createdAt: b.createdAt,
+      );
+    }).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
@@ -1504,7 +2077,8 @@ class MockBackend {
         final next = !n.likedByMe;
         siblings[i] = n.copyWith(
           likedByMe: next,
-          likesCount: next ? n.likesCount + 1 : (n.likesCount - 1).clamp(0, 1 << 30),
+          likesCount:
+              next ? n.likesCount + 1 : (n.likesCount - 1).clamp(0, 1 << 30),
         );
         return true;
       }
@@ -1526,8 +2100,8 @@ class MockBackend {
     final q = search?.trim().toLowerCase();
     return _tribes
         .where((t) => category == null || t.category == category)
-        .where((t) =>
-            q == null || q.isEmpty || t.name.toLowerCase().contains(q))
+        .where(
+            (t) => q == null || q.isEmpty || t.name.toLowerCase().contains(q))
         .map((t) => t.copyWith(joinedByMe: _joinedTribes.contains(t.tribeId)))
         .toList()
       ..sort((a, b) => b.memberCount.compareTo(a.memberCount));
@@ -1674,10 +2248,8 @@ class MockBackend {
     int limit = 20,
     int offset = 0,
   }) {
-    final slugs = _tribes
-        .where((t) => t.keeperId == keeperId)
-        .map((t) => t.slug)
-        .toSet();
+    final slugs =
+        _tribes.where((t) => t.keeperId == keeperId).map((t) => t.slug).toSet();
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
     final filtered = _posts
         .where((p) =>
@@ -1699,6 +2271,11 @@ class MockBackend {
     required String category,
     String? description,
     bool isPrivate = false,
+    List<String> tags = const [],
+    String? visibility,
+    String? welcomeMessage,
+    TribeGovernanceSettings settings = const TribeGovernanceSettings(),
+    List<TribeRuleItem> rules = const [],
   }) {
     final me = _me;
     final slug = name
@@ -1713,6 +2290,10 @@ class MockBackend {
       category: category,
       memberCount: 1,
       isPrivate: isPrivate,
+      visibility: visibility ?? (isPrivate ? 'private' : 'public'),
+      tags: tags,
+      welcomeMessage: welcomeMessage,
+      managementSettings: settings.toJson(),
       createdAt: DateTime.now(),
       keeperId: me?.userId,
       keeperPseudonym: me?.anonymousPseudonym,
@@ -1721,7 +2302,9 @@ class MockBackend {
       joinedByMe: true,
     );
     _tribes.add(t);
+    _ensureDefaultSpace(t);
     _joinedTribes.add(t.tribeId);
+    _managementRules[t.tribeId] = rules;
     return t;
   }
 
@@ -1771,6 +2354,10 @@ class MockBackend {
         lastMessagePreview: last?.plaintext,
         lastMessageAt: last?.createdAt,
         lastOwnMessageRead: lastOwn?.readAt != null,
+        peerUserId: room.peerUserId,
+        isGroup: room.isGroup,
+        groupTitle: room.groupTitle,
+        memberCount: room.memberCount,
       );
     }
 
@@ -1800,16 +2387,18 @@ class MockBackend {
       initiatedByMe: room.initiatedByMe,
     );
     _rooms[i] = updated;
-    _messages.putIfAbsent(roomId, () => [
-      ChatMessage(
-        messageId: _uuid.v4(),
-        roomId: roomId,
-        senderId: 'peer',
-        plaintext: room.requestPreview,
-        createdAt: room.createdAt,
-        sentByMe: false,
-      ),
-    ]);
+    _messages.putIfAbsent(
+        roomId,
+        () => [
+              ChatMessage(
+                messageId: _uuid.v4(),
+                roomId: roomId,
+                senderId: 'peer',
+                plaintext: room.requestPreview,
+                createdAt: room.createdAt,
+                sentByMe: false,
+              ),
+            ]);
     _emitRooms();
     return updated;
   }
@@ -1852,10 +2441,38 @@ class MockBackend {
     return r;
   }
 
+  ChatRoom createGroupChat({
+    required String title,
+    required String friendUserId,
+    required String friendPseudonym,
+    required String friendAvatarSeed,
+  }) {
+    final cleanTitle = title.trim();
+    if (cleanTitle.length < 2 || cleanTitle.length > 80) {
+      throw ArgumentError('Group name must be 2 to 80 characters.');
+    }
+    final room = ChatRoom(
+      roomId: _uuid.v4(),
+      peerPseudonym: cleanTitle,
+      peerAvatarSeed: 'group-$friendAvatarSeed',
+      peerUserId: null,
+      requestPreview: 'Private group with @$friendPseudonym',
+      roomStatus: 'active',
+      createdAt: DateTime.now(),
+      initiatedByMe: true,
+      isGroup: true,
+      groupTitle: cleanTitle,
+      memberCount: 2,
+    );
+    _rooms.add(room);
+    _messages[room.roomId] = const [];
+    _emitRooms();
+    return room;
+  }
+
   // No-ops for typing indicators in mock — broadcast lives on Supabase.
   void broadcastTyping(String roomId) {}
-  Stream<bool> watchTyping(String roomId) =>
-      Stream<bool>.value(false);
+  Stream<bool> watchTyping(String roomId) => Stream<bool>.value(false);
 
   /// Toggle/swap/clear a reaction on a message in-memory. Mirrors the
   /// `set_chat_message_reaction` RPC semantic so the dev experience
@@ -2170,8 +2787,11 @@ class MockBackend {
         keeperIsVerified: true,
       ),
     ]);
-    final ur     = _tribes[0];
-    final kInst  = _tribes[1];
+    for (final tribe in _tribes) {
+      _ensureDefaultSpace(tribe, createdAt: tribe.createdAt);
+    }
+    final ur = _tribes[0];
+    final kInst = _tribes[1];
 
     final now = DateTime.now();
     _posts.addAll([
@@ -2350,7 +2970,8 @@ class MockBackend {
         roomId: _uuid.v4(),
         peerPseudonym: '@SilentSoul',
         peerAvatarSeed: 'mauve-flame-5050',
-        requestPreview: 'Hey, are you there? I really needed to vent about something that happened today.',
+        requestPreview:
+            'Hey, are you there? I really needed to vent about something that happened today.',
         roomStatus: 'active',
         createdAt: now.subtract(const Duration(hours: 6)),
         initiatedByMe: false,
@@ -2363,7 +2984,8 @@ class MockBackend {
         messageId: _uuid.v4(),
         roomId: _rooms.last.roomId,
         senderId: 'peer',
-        plaintext: 'Hey, are you there? I really needed to vent about something that happened today.',
+        plaintext:
+            'Hey, are you there? I really needed to vent about something that happened today.',
         createdAt: now.subtract(const Duration(hours: 6)),
         sentByMe: false,
       ),

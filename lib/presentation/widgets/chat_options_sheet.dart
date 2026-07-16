@@ -15,18 +15,42 @@ import 'vently_notification_bell.dart';
 /// Search / Mute quick actions, then Theme · Nicknames · Disappearing messages
 /// · Privacy & safety (block/report) · Create group. Prefs are per-user, per
 /// room (migration 0098).
+enum _ChatOptionsAction { profile, search, createGroup }
+
 Future<void> showChatOptionsSheet(
   BuildContext context, {
   required ChatRoom room,
   required VoidCallback onSearch,
-}) {
-  return showModalBottomSheet<void>(
+}) async {
+  final action = await showModalBottomSheet<_ChatOptionsAction>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     sheetAnimationStyle: VentlyMotion.sheetSpring,
     builder: (_) => _ChatOptionsSheet(room: room, onSearch: onSearch),
   );
+  if (action == null || !context.mounted) return;
+  switch (action) {
+    case _ChatOptionsAction.profile:
+      openUserProfile(context, room.peerUserId);
+      break;
+    case _ChatOptionsAction.search:
+      onSearch();
+      break;
+    case _ChatOptionsAction.createGroup:
+      final friendId = room.peerUserId;
+      if (friendId == null) return;
+      final location = Uri(
+        path: '/group-chat/new',
+        queryParameters: {
+          'friendId': friendId,
+          'friendName': room.peerPseudonym,
+          'friendAvatar': room.peerAvatarSeed,
+        },
+      ).toString();
+      await context.push(location);
+      break;
+  }
 }
 
 /// Named DM themes → accent colour. Applied to the chat header + own bubbles.
@@ -109,21 +133,22 @@ class _ChatOptionsSheet extends ConsumerWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _Quick(
-                  icon: Icons.person_outline_rounded,
-                  label: 'Profile',
-                  onTap: () {
-                    Navigator.pop(context);
-                    openUserProfile(context, room.peerUserId);
-                  },
-                ),
+                if (!room.isGroup)
+                  _Quick(
+                    icon: Icons.person_outline_rounded,
+                    label: 'Profile',
+                    onTap: () => Navigator.pop(
+                      context,
+                      _ChatOptionsAction.profile,
+                    ),
+                  ),
                 _Quick(
                   icon: Icons.search_rounded,
                   label: 'Search',
-                  onTap: () {
-                    Navigator.pop(context);
-                    onSearch();
-                  },
+                  onTap: () => Navigator.pop(
+                    context,
+                    _ChatOptionsAction.search,
+                  ),
                 ),
                 _Quick(
                   icon: prefs.muted
@@ -143,12 +168,13 @@ class _ChatOptionsSheet extends ConsumerWidget {
               accent: kChatThemes[prefs.theme] ?? VentlyColors.berryMagenta,
               onTap: () => _pickTheme(context, ref, prefs.theme),
             ),
-            _Tile(
-              icon: Icons.badge_outlined,
-              title: 'Nicknames',
-              trailing: prefs.peerNickname ?? 'Set',
-              onTap: () => _setNickname(context, ref, prefs.peerNickname),
-            ),
+            if (!room.isGroup)
+              _Tile(
+                icon: Icons.badge_outlined,
+                title: 'Nicknames',
+                trailing: prefs.peerNickname ?? 'Set',
+                onTap: () => _setNickname(context, ref, prefs.peerNickname),
+              ),
             _Tile(
               icon: Icons.timer_outlined,
               title: 'Disappearing messages',
@@ -157,26 +183,28 @@ class _ChatOptionsSheet extends ConsumerWidget {
               onTap: () => _pickDisappearing(context, ref, disappearing),
             ),
             const Divider(height: 28),
-            _Tile(
-              icon: Icons.group_add_outlined,
-              title: 'Create a group chat',
-              onTap: () {
-                Navigator.pop(context);
-                context.push('/tribes/new');
-              },
-            ),
+            if (!room.isGroup && room.peerUserId != null)
+              _Tile(
+                icon: Icons.group_add_outlined,
+                title: 'Create a group chat',
+                onTap: () => Navigator.pop(
+                  context,
+                  _ChatOptionsAction.createGroup,
+                ),
+              ),
             _Tile(
               icon: Icons.flag_outlined,
               title: 'Report',
               danger: true,
               onTap: () => _report(context, ref),
             ),
-            _Tile(
-              icon: isBlocked ? Icons.lock_open_rounded : Icons.block_rounded,
-              title: isBlocked ? 'Unblock' : 'Block',
-              danger: !isBlocked,
-              onTap: () => _toggleBlock(context, ref, isBlocked),
-            ),
+            if (!room.isGroup)
+              _Tile(
+                icon: isBlocked ? Icons.lock_open_rounded : Icons.block_rounded,
+                title: isBlocked ? 'Unblock' : 'Block',
+                danger: !isBlocked,
+                onTap: () => _toggleBlock(context, ref, isBlocked),
+              ),
           ],
         ),
       ),

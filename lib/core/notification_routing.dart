@@ -37,6 +37,8 @@ class NotificationPayload {
       case 'tribe_invite':
         final slug = payload['tribe_slug'] as String?;
         return slug == null ? null : tribe(slug);
+      case 'tribe_ownership_transfer':
+        return notifications();
       case 'tribe_chat_message':
       case 'tribe_message':
         final slug = payload['tribe_slug'] as String?;

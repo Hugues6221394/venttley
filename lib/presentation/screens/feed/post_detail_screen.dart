@@ -325,6 +325,12 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     final visibleCommentCount = commentsAsync.valueOrNull == null
         ? post.commentsCount
         : _countComments(comments);
+    final me = ref.watch(sessionProvider);
+    final tribe = post.tribeSlug == null
+        ? null
+        : ref.watch(tribeBySlugProvider(post.tribeSlug!)).valueOrNull;
+    final canHighlightComment =
+        me != null && tribe != null && tribe.keeperId == me.userId;
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -458,6 +464,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                             comment: comment,
                             postId: widget.postId,
                             postAuthorId: post.authorId,
+                            canHighlightComment: canHighlightComment,
                             onReply: _setReplyTarget,
                           );
                         },
@@ -753,6 +760,7 @@ class _CommentNode extends ConsumerStatefulWidget {
     required this.onReply,
     required this.postId,
     required this.postAuthorId,
+    required this.canHighlightComment,
   });
   final ThreadedComment comment;
   final ValueChanged<ThreadedComment> onReply;
@@ -761,6 +769,9 @@ class _CommentNode extends ConsumerStatefulWidget {
   /// Author of the parent vent. Needed for the "Pin" affordance: only
   /// the vent's author can pin one comment to the top of their thread.
   final String? postAuthorId;
+
+  /// Tribe keepers can highlight a helpful response in a thread they manage.
+  final bool canHighlightComment;
 
   @override
   ConsumerState<_CommentNode> createState() => _CommentNodeState();
@@ -832,7 +843,8 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
     final isDeleted = comment.isDeleted;
     final iAmPostOwner =
         widget.postAuthorId != null && widget.postAuthorId == me?.userId;
-    final canShowMenu = !isDeleted && (isMine || iAmPostOwner);
+    final canShowMenu =
+        !isDeleted && (isMine || iAmPostOwner || widget.canHighlightComment);
     final nested = depth > 0;
     final replyCount = _countAll(comment.children);
     final content = Column(
@@ -954,13 +966,17 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                                   child: Text('Delete'),
                                 ),
                               ],
-                              if (iAmPostOwner)
+                              if (iAmPostOwner || widget.canHighlightComment)
                                 PopupMenuItem(
                                   value: comment.isPinned ? 'unpin' : 'pin',
                                   child: Text(
-                                    comment.isPinned
-                                        ? 'Unpin from top'
-                                        : 'Pin to top',
+                                    widget.canHighlightComment && !iAmPostOwner
+                                        ? (comment.isPinned
+                                            ? 'Remove helpful highlight'
+                                            : 'Highlight as helpful')
+                                        : (comment.isPinned
+                                            ? 'Unpin from top'
+                                            : 'Pin to top'),
                                   ),
                                 ),
                             ],
@@ -1104,6 +1120,7 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                       comment: child,
                       postId: widget.postId,
                       postAuthorId: widget.postAuthorId,
+                      canHighlightComment: widget.canHighlightComment,
                       onReply: widget.onReply,
                     ),
                 ],
@@ -1311,6 +1328,7 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                         comment: c,
                         postId: widget.postId,
                         postAuthorId: widget.postAuthorId,
+                        canHighlightComment: widget.canHighlightComment,
                         onReply: widget.onReply),
                 ],
               ),

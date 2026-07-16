@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/providers.dart';
 import '../../../domain/keeper/keeper_studio_v2.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/keeper_prompt_composer_sheet.dart';
 import 'keeper_studio_scaffold.dart';
 
 /// Engagement calendar — scheduled prompts + cadence suggestions.
@@ -42,8 +42,11 @@ class KeeperEngagementCalendarScreen extends ConsumerWidget {
           children: [
             if (tribe != null)
               FilledButton.icon(
-                onPressed: () =>
-                    context.push('/tribe/${tribe.slug}/manage?tab=prompts'),
+                onPressed: () => showKeeperPromptComposer(
+                  context,
+                  tribeId: tribe.tribeId,
+                  scheduleRequired: true,
+                ),
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: const Text('Schedule new prompt',
                     style: TextStyle(fontWeight: FontWeight.w900)),
@@ -52,11 +55,14 @@ class KeeperEngagementCalendarScreen extends ConsumerWidget {
             _SectionTitle('Upcoming', count: cal.scheduled.length),
             const SizedBox(height: 8),
             if (cal.scheduled.isEmpty)
-              const _EmptyHint('Nothing scheduled yet — plan your next check-in.')
+              const _EmptyHint(
+                  'Nothing scheduled yet — plan your next check-in.')
             else
-              ...cal.scheduled.map((p) => _PromptTile(prompt: p, upcoming: true)),
+              ...cal.scheduled
+                  .map((p) => _PromptTile(prompt: p, upcoming: true)),
             const SizedBox(height: 18),
-            _SectionTitle('Recently published', count: cal.recentPublished.length),
+            _SectionTitle('Recently published',
+                count: cal.recentPublished.length),
             const SizedBox(height: 8),
             if (cal.recentPublished.isEmpty)
               const _EmptyHint('Published prompts will appear here.')

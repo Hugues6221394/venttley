@@ -6,6 +6,7 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/media_preview_viewer.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tribe_avatar.dart';
@@ -21,6 +22,38 @@ class TribeDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
+  bool _hasMedia(Tribe tribe) =>
+      (tribe.bannerUrl ?? '').trim().isNotEmpty ||
+      (tribe.avatarUrl ?? '').trim().isNotEmpty;
+
+  Future<void> _previewMedia(
+    BuildContext context,
+    Tribe tribe, {
+    required bool openCover,
+  }) async {
+    final bannerUrl = (tribe.bannerUrl ?? '').trim();
+    final avatarUrl = (tribe.avatarUrl ?? '').trim();
+    final items = <MediaPreviewItem>[
+      if (bannerUrl.isNotEmpty)
+        MediaPreviewItem(url: bannerUrl, label: 'Cover photo'),
+      if (avatarUrl.isNotEmpty)
+        MediaPreviewItem(url: avatarUrl, label: 'Profile photo'),
+    ];
+    if (items.isEmpty) return;
+    final preferredUrl = openCover && bannerUrl.isNotEmpty
+        ? bannerUrl
+        : !openCover && avatarUrl.isNotEmpty
+            ? avatarUrl
+            : items.first.url;
+    final initialIndex = items.indexWhere((item) => item.url == preferredUrl);
+    await showMediaPreview(
+      context,
+      items: items,
+      initialIndex: initialIndex < 0 ? 0 : initialIndex,
+      title: tribe.name,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -64,7 +97,9 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
               child: TextButton.icon(
                 icon: const Icon(Icons.tune_rounded, size: 16),
                 label: const Text('Manage'),
-                onPressed: () => context.push('/tribe/${tribe.slug}/manage'),
+                onPressed: () => context.push(
+                  '/tribe/${tribe.slug}/manage/settings',
+                ),
               ),
             ),
         ],
@@ -89,6 +124,14 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                         avatarUrl: tribe.avatarUrl,
                         width: double.infinity,
                         height: 112,
+                        semanticLabel: 'Preview ${tribe.name} cover photo',
+                        onTap: _hasMedia(tribe)
+                            ? () => _previewMedia(
+                                  context,
+                                  tribe,
+                                  openCover: true,
+                                )
+                            : null,
                       ),
                       Padding(
                         padding: const EdgeInsets.all(18),
@@ -101,6 +144,15 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                                   avatarUrl: tribe.avatarUrl,
                                   fallbackUrl: tribe.bannerUrl,
                                   size: 56,
+                                  semanticLabel:
+                                      'Preview ${tribe.name} profile photo',
+                                  onTap: _hasMedia(tribe)
+                                      ? () => _previewMedia(
+                                            context,
+                                            tribe,
+                                            openCover: false,
+                                          )
+                                      : null,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
@@ -116,7 +168,9 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        '${PostCard.compactNumber(tribe.memberCount)} members • $categoryLabel${tribe.isPrivate ? ' • Private' : ''}',
+                                        '${PostCard.compactNumber(tribe.memberCount)} members • $categoryLabel'
+                                        '${tribe.visibility == 'public' ? '' : ' • ${tribe.visibility == 'invite_only' ? 'Invite-only' : 'Private'}'}'
+                                        '${tribe.lifecycleStatus == 'active' ? '' : ' • ${tribe.lifecycleStatus == 'paused' ? 'Paused' : 'Archived'}'}',
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: scheme.onSurface
@@ -131,6 +185,38 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                             if (tribe.description != null) ...[
                               const SizedBox(height: 12),
                               Text(tribe.description!),
+                            ],
+                            if (!tribe.acceptsNewActivity) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(11),
+                                decoration: BoxDecoration(
+                                  color: VentlyColors.roseTint,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.pause_circle_outline_rounded,
+                                      size: 18,
+                                      color: VentlyColors.berryMagenta,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        tribe.isPaused
+                                            ? 'This Tribe is paused. Existing content remains available, but joins and posting are closed.'
+                                            : 'This Tribe is read-only.',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ],
                             if (tribe.keeperPseudonym != null) ...[
                               const SizedBox(height: 12),
@@ -170,7 +256,8 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                                 Expanded(child: _JoinAction(tribe: tribe)),
                                 const SizedBox(width: 8),
                                 OutlinedButton.icon(
-                                  onPressed: tribe.joinedByMe
+                                  onPressed: tribe.joinedByMe &&
+                                          tribe.acceptsNewActivity
                                       ? () {
                                           ref
                                               .read(composeTargetTribeProvider
@@ -215,7 +302,9 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                         tribe.keeperId != null &&
                         tribe.keeperId == me.userId)
                       TextButton.icon(
-                        onPressed: () => _openCreateSpace(context, tribe),
+                        onPressed: () => context.push(
+                          '/tribe/${tribe.slug}/manage/settings/spaces',
+                        ),
                         icon: const Icon(Icons.add, size: 16),
                         label: const Text('New Space'),
                       ),
@@ -257,69 +346,6 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _openCreateSpace(BuildContext context, Tribe tribe) async {
-    final nameCtl = TextEditingController();
-    final descCtl = TextEditingController();
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('New Space'),
-        content: SizedBox(
-          width: 480,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtl,
-                maxLength: 50,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Space name',
-                  hintText: 'Anxiety Check-in',
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: descCtl,
-                maxLines: 2,
-                maxLength: 160,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Description (optional)',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-    if (saved != true) return;
-    if (nameCtl.text.trim().isEmpty) return;
-    try {
-      await ref.read(repositoryProvider).createSpace(
-            tribeId: tribe.tribeId,
-            name: nameCtl.text.trim(),
-            description:
-                descCtl.text.trim().isEmpty ? null : descCtl.text.trim(),
-          );
-      ref.invalidate(spacesByTribeProvider(tribe.tribeId));
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Couldn\'t create Space: $e')));
-      }
-    }
   }
 }
 
@@ -467,11 +493,26 @@ class _JoinAction extends ConsumerWidget {
     }
     return ElevatedButton.icon(
       icon: const Icon(Icons.add, size: 16),
-      onPressed: () async {
-        await repo.joinTribe(tribe.tribeId);
-        invalidate();
-      },
-      label: const Text('Join Tribe'),
+      onPressed: tribe.acceptsNewActivity
+          ? () async {
+              try {
+                final status = await repo.requestTribeMembership(tribe.tribeId);
+                invalidate();
+                if (!context.mounted || status != 'pending') return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Request sent. The Plug will review it.'),
+                  ),
+                );
+              } catch (error) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Could not join this Tribe: $error')),
+                );
+              }
+            }
+          : null,
+      label: Text(tribe.acceptsNewActivity ? 'Join Tribe' : 'Joining paused'),
     );
   }
 }

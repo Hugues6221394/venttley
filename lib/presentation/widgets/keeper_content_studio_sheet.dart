@@ -6,19 +6,83 @@ import '../../core/providers.dart';
 import '../theme/colors.dart';
 import '../theme/motion.dart';
 import '../navigation/compose_navigation.dart';
+import 'keeper_prompt_composer_sheet.dart';
+
+enum KeeperContentStudioAction {
+  prompt,
+  poll,
+  announcement,
+  pinPost,
+  schedule,
+  welcomeMessage,
+  newSpace,
+  rules,
+}
 
 /// Keeper Content Studio — operational create menu (prompts, polls, etc.).
 Future<void> showKeeperContentStudioSheet(
   BuildContext context,
   WidgetRef ref,
 ) async {
-  await showModalBottomSheet<void>(
+  final action = await showModalBottomSheet<KeeperContentStudioAction>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     sheetAnimationStyle: VentlyMotion.sheetSpring,
     builder: (ctx) => const _KeeperContentStudioSheet(),
   );
+  if (action == null || !context.mounted) return;
+  final tribe = ref.read(primaryKeeperTribeProvider);
+  if (tribe == null) return;
+
+  switch (action) {
+    case KeeperContentStudioAction.prompt:
+      await showKeeperPromptComposer(
+        context,
+        tribeId: tribe.tribeId,
+      );
+      return;
+    case KeeperContentStudioAction.poll:
+      ref.read(composeTargetTribeProvider.notifier).state = tribe;
+      ref.read(composeTargetSpaceProvider.notifier).state = null;
+      openCompose(context, ref, format: 'poll');
+      return;
+    case KeeperContentStudioAction.announcement:
+      ref.read(composeTargetTribeProvider.notifier).state = tribe;
+      ref.read(composeTargetSpaceProvider.notifier).state = null;
+      openCompose(
+        context,
+        ref,
+        category: tribe.category,
+        draft: 'Announcement: ',
+      );
+      return;
+    case KeeperContentStudioAction.pinPost:
+      context.push(
+        '/tribe/${tribe.slug}/manage/settings/content?filter=pinned',
+      );
+      return;
+    case KeeperContentStudioAction.schedule:
+      await showKeeperPromptComposer(
+        context,
+        tribeId: tribe.tribeId,
+        scheduleRequired: true,
+      );
+      return;
+    case KeeperContentStudioAction.welcomeMessage:
+      context.push(
+        '/tribe/${tribe.slug}/manage/settings/identity?focus=welcome',
+      );
+      return;
+    case KeeperContentStudioAction.newSpace:
+      context.push(
+        '/tribe/${tribe.slug}/manage/settings/spaces?create=true',
+      );
+      return;
+    case KeeperContentStudioAction.rules:
+      context.push('/tribe/${tribe.slug}/manage/settings/rules');
+      return;
+  }
 }
 
 class _KeeperContentStudioSheet extends ConsumerWidget {
@@ -38,8 +102,7 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
         return Container(
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(28)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: ListView(
             controller: scroll,
@@ -83,55 +146,73 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                     icon: Icons.lightbulb_outline_rounded,
                     label: 'Prompt',
                     enabled: slug != null,
-                    onTap: () => _goManage(context, slug, tab: 'prompts'),
+                    onTap: () => Navigator.pop(
+                      context,
+                      KeeperContentStudioAction.prompt,
+                    ),
                   ),
                   _StudioChip(
                     icon: Icons.poll_rounded,
                     label: 'Poll',
                     enabled: slug != null,
-                    onTap: () {
-                      Navigator.pop(context);
-                      openCompose(context, ref, format: 'poll');
-                    },
+                    onTap: () => Navigator.pop(
+                      context,
+                      KeeperContentStudioAction.poll,
+                    ),
                   ),
                   _StudioChip(
                     icon: Icons.campaign_outlined,
                     label: 'Announcement',
                     enabled: slug != null,
-                    onTap: () {
-                      Navigator.pop(context);
-                      openCompose(context, ref, category: 'healing_corner');
-                    },
+                    onTap: () => Navigator.pop(
+                      context,
+                      KeeperContentStudioAction.announcement,
+                    ),
                   ),
                   _StudioChip(
                     icon: Icons.push_pin_outlined,
                     label: 'Pin post',
                     enabled: slug != null,
-                    onTap: () => _goManage(context, slug, tab: 'pins'),
+                    onTap: () => Navigator.pop(
+                      context,
+                      KeeperContentStudioAction.pinPost,
+                    ),
                   ),
                   _StudioChip(
                     icon: Icons.schedule_rounded,
                     label: 'Schedule',
                     enabled: slug != null,
-                    onTap: () => _goManage(context, slug, tab: 'prompts'),
+                    onTap: () => Navigator.pop(
+                      context,
+                      KeeperContentStudioAction.schedule,
+                    ),
                   ),
                   _StudioChip(
                     icon: Icons.waving_hand_outlined,
                     label: 'Welcome msg',
                     enabled: slug != null,
-                    onTap: () => context.push('/tribe/$slug/edit'),
+                    onTap: () => Navigator.pop(
+                      context,
+                      KeeperContentStudioAction.welcomeMessage,
+                    ),
                   ),
                   _StudioChip(
                     icon: Icons.add_box_outlined,
                     label: 'New space',
                     enabled: slug != null,
-                    onTap: () => _goManage(context, slug, tab: 'spaces'),
+                    onTap: () => Navigator.pop(
+                      context,
+                      KeeperContentStudioAction.newSpace,
+                    ),
                   ),
                   _StudioChip(
                     icon: Icons.rule_rounded,
                     label: 'Rules',
                     enabled: slug != null,
-                    onTap: () => context.push('/tribe/$slug/edit'),
+                    onTap: () => Navigator.pop(
+                      context,
+                      KeeperContentStudioAction.rules,
+                    ),
                   ),
                 ],
               ),
@@ -151,13 +232,6 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
         );
       },
     );
-  }
-
-  void _goManage(BuildContext context, String? slug, {String? tab}) {
-    if (slug == null) return;
-    Navigator.pop(context);
-    final q = tab != null ? '?tab=$tab' : '';
-    context.push('/tribe/$slug/manage$q');
   }
 }
 

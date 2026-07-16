@@ -14,6 +14,7 @@ import '../screens/friends/friend_profile_screen.dart';
 import '../screens/friends/friends_screen.dart';
 import '../screens/home/home_shell.dart';
 import '../screens/inbox/chat_screen.dart';
+import '../screens/inbox/create_group_chat_screen.dart';
 import '../screens/whispers/create_whisper_screen.dart';
 import '../widgets/keep_alive.dart';
 import '../screens/onboarding/email_signup_screen.dart';
@@ -37,11 +38,17 @@ import '../screens/tribes/create_tribe_screen.dart';
 import '../screens/tribes/edit_tribe_screen.dart';
 import '../screens/tribes/tribe_chat_screen.dart';
 import '../screens/tribes/tribe_chat_hub_screen.dart';
+import '../screens/tribes/tribe_audit_screen.dart';
+import '../screens/tribes/tribe_content_management_screen.dart';
 import '../screens/tribes/tribe_detail_screen.dart';
+import '../screens/tribes/tribe_members_management_screen.dart';
 import '../screens/tribes/space_home_screen.dart';
 import '../screens/tribes/tribe_manage_screen.dart';
 import '../screens/tribes/tribe_moderation_screen.dart';
 import '../screens/tribes/tribe_reports_screen.dart';
+import '../screens/tribes/tribe_rules_editor_screen.dart';
+import '../screens/tribes/tribe_settings_screen.dart';
+import '../screens/tribes/tribe_spaces_management_screen.dart';
 import '../screens/tribes/tribes_directory_screen.dart';
 import '../screens/keeper/keeper_moderation_center_screen.dart';
 import '../screens/keeper/keeper_engagement_calendar_screen.dart';
@@ -199,6 +206,56 @@ final routerProvider = Provider<GoRouter>((ref) {
                       builder: (ctx, st) =>
                           EditTribeScreen(slug: st.pathParameters['slug']!),
                     ),
+                    GoRoute(
+                      path: 'settings',
+                      builder: (ctx, st) => TribeSettingsScreen(
+                        slug: st.pathParameters['slug']!,
+                      ),
+                      routes: [
+                        GoRoute(
+                          path: 'identity',
+                          builder: (ctx, st) => EditTribeScreen(
+                            slug: st.pathParameters['slug']!,
+                            focusWelcome:
+                                st.uri.queryParameters['focus'] == 'welcome',
+                          ),
+                        ),
+                        GoRoute(
+                          path: 'rules',
+                          builder: (ctx, st) => TribeRulesEditorScreen(
+                            slug: st.pathParameters['slug']!,
+                          ),
+                        ),
+                        GoRoute(
+                          path: 'members',
+                          builder: (ctx, st) => TribeMembersManagementScreen(
+                            slug: st.pathParameters['slug']!,
+                          ),
+                        ),
+                        GoRoute(
+                          path: 'spaces',
+                          builder: (ctx, st) => TribeSpacesManagementScreen(
+                            slug: st.pathParameters['slug']!,
+                            openCreate:
+                                st.uri.queryParameters['create'] == 'true',
+                          ),
+                        ),
+                        GoRoute(
+                          path: 'content',
+                          builder: (ctx, st) => TribeContentManagementScreen(
+                            slug: st.pathParameters['slug']!,
+                            initialFilter:
+                                st.uri.queryParameters['filter'] ?? 'all',
+                          ),
+                        ),
+                        GoRoute(
+                          path: 'audit',
+                          builder: (ctx, st) => TribeAuditScreen(
+                            slug: st.pathParameters['slug']!,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ],
@@ -293,6 +350,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         redirect: (_, __) => '/feed',
       ),
       // DM chat box — root navigator, no footer nav inside conversations.
+      GoRoute(
+        path: '/group-chat/new',
+        builder: (ctx, st) => CreateGroupChatScreen(
+          friendUserId: st.uri.queryParameters['friendId'] ?? '',
+          friendPseudonym: st.uri.queryParameters['friendName'] ?? '@friend',
+          friendAvatarSeed:
+              st.uri.queryParameters['friendAvatar'] ?? 'default-orb',
+        ),
+      ),
       GoRoute(
         path: '/chat/:roomId',
         builder: (ctx, st) => ChatScreen(roomId: st.pathParameters['roomId']!),

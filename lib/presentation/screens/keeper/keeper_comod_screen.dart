@@ -42,8 +42,9 @@ class KeeperComodScreen extends ConsumerWidget {
           children: [
             if (tribe != null && matrix.callerIsKeeper)
               FilledButton.icon(
-                onPressed: () =>
-                    context.push('/tribe/${tribe.slug}/manage?tab=members'),
+                onPressed: () => context.push(
+                  '/tribe/${tribe.slug}/manage/settings/members',
+                ),
                 icon: const Icon(Icons.person_add_alt_1, size: 18),
                 label: const Text('Promote members to mod',
                     style: TextStyle(fontWeight: FontWeight.w900)),

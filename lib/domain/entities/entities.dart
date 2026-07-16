@@ -114,6 +114,10 @@ class TribeMemberRow {
   final String? profilePhotoUrl;
   final String role; // member | mod | keeper
   final DateTime joinedAt;
+  final DateTime? mutedUntil;
+  final int warningCount;
+  final DateTime? lastWarnedAt;
+  final String? memberNote;
 
   const TribeMemberRow({
     required this.userId,
@@ -122,10 +126,16 @@ class TribeMemberRow {
     required this.role,
     required this.joinedAt,
     this.profilePhotoUrl,
+    this.mutedUntil,
+    this.warningCount = 0,
+    this.lastWarnedAt,
+    this.memberNote,
   });
 
   bool get isKeeper => role == 'keeper';
   bool get isMod => role == 'mod';
+  bool get isMuted => mutedUntil?.isAfter(DateTime.now()) ?? false;
+  bool get hasWarnings => warningCount > 0;
 }
 
 class BadgeDefinition {
@@ -222,6 +232,17 @@ class Tribe {
   /// Pinned group-chat message (migration 0064).
   final String? pinnedMessageId;
 
+  /// Ownership/lifecycle controls (tribe_lifecycle_management).
+  final String lifecycleStatus;
+  final String visibility;
+  final List<String> tags;
+  final DateTime? pausedAt;
+  final DateTime? archivedAt;
+  final DateTime? deletionRequestedAt;
+  final DateTime? deletionPurgeAt;
+  final String? lifecycleReason;
+  final Map<String, dynamic> managementSettings;
+
   const Tribe({
     required this.tribeId,
     required this.name,
@@ -251,28 +272,47 @@ class Tribe {
     this.isPremium = false,
     this.chatSettings = const TribeChatSettings(),
     this.pinnedMessageId,
+    this.lifecycleStatus = 'active',
+    this.visibility = 'public',
+    this.tags = const [],
+    this.pausedAt,
+    this.archivedAt,
+    this.deletionRequestedAt,
+    this.deletionPurgeAt,
+    this.lifecycleReason,
+    this.managementSettings = const {},
   });
 
   Tribe copyWith({
+    String? name,
+    String? description,
+    String? category,
     int? memberCount,
     bool? joinedByMe,
+    bool? isPrivate,
     String? avatarUrl,
     String? bannerUrl,
+    String? keeperId,
+    String? keeperPseudonym,
     String? welcomeMessage,
     String? themeColor,
+    String? lifecycleStatus,
+    String? visibility,
+    List<String>? tags,
+    Map<String, dynamic>? managementSettings,
   }) {
     return Tribe(
       tribeId: tribeId,
-      name: name,
+      name: name ?? this.name,
       slug: slug,
-      description: description,
-      category: category,
+      description: description ?? this.description,
+      category: category ?? this.category,
       memberCount: memberCount ?? this.memberCount,
-      isPrivate: isPrivate,
+      isPrivate: isPrivate ?? this.isPrivate,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       bannerUrl: bannerUrl ?? this.bannerUrl,
-      keeperId: keeperId,
-      keeperPseudonym: keeperPseudonym,
+      keeperId: keeperId ?? this.keeperId,
+      keeperPseudonym: keeperPseudonym ?? this.keeperPseudonym,
       keeperAvatarSeed: keeperAvatarSeed,
       keeperProfilePhotoUrl: keeperProfilePhotoUrl,
       keeperIsVerified: keeperIsVerified,
@@ -290,8 +330,22 @@ class Tribe {
       isPremium: isPremium,
       chatSettings: chatSettings,
       pinnedMessageId: pinnedMessageId,
+      lifecycleStatus: lifecycleStatus ?? this.lifecycleStatus,
+      visibility: visibility ?? this.visibility,
+      tags: tags ?? this.tags,
+      pausedAt: pausedAt,
+      archivedAt: archivedAt,
+      deletionRequestedAt: deletionRequestedAt,
+      deletionPurgeAt: deletionPurgeAt,
+      lifecycleReason: lifecycleReason,
+      managementSettings: managementSettings ?? this.managementSettings,
     );
   }
+
+  bool get isPaused => lifecycleStatus == 'paused';
+  bool get isArchived => lifecycleStatus == 'archived';
+  bool get isPendingDeletion => lifecycleStatus == 'pending_deletion';
+  bool get acceptsNewActivity => lifecycleStatus == 'active';
 }
 
 /// A Space — focused conversation room inside a Tribe.
@@ -318,6 +372,11 @@ class Space {
   final int ventCount;
   final int ventsToday;
   final DateTime? lastVentAt;
+  final String? iconName;
+  final bool isPinned;
+  final String postingPermission;
+  final DateTime? activatesAt;
+  final DateTime? deactivatesAt;
 
   const Space({
     required this.spaceId,
@@ -336,6 +395,11 @@ class Space {
     this.themeColor,
     this.archivedAt,
     this.lastVentAt,
+    this.iconName,
+    this.isPinned = false,
+    this.postingPermission = 'members',
+    this.activatesAt,
+    this.deactivatesAt,
   });
 
   bool get isArchived => archivedAt != null;
@@ -553,6 +617,7 @@ class Post {
     String? content,
     DateTime? editedAt,
     DateTime? deletedAt,
+    Object? spaceId = _unset,
   }) {
     return Post(
       postId: postId,
@@ -582,7 +647,7 @@ class Post {
       tribeId: tribeId,
       tribeName: tribeName,
       tribeSlug: tribeSlug,
-      spaceId: spaceId,
+      spaceId: spaceId == _unset ? this.spaceId : spaceId as String?,
       myReaction:
           myReaction == _unset ? this.myReaction : myReaction as String?,
       savedByMe: savedByMe ?? this.savedByMe,
@@ -826,6 +891,12 @@ class ChatRoom {
   /// Whether the caller's most recent message has been read by the peer.
   final bool lastOwnMessageRead;
 
+  /// Named private room created from an existing friendship. Group rooms use
+  /// the same proven message transport as DMs while keeping their own title.
+  final bool isGroup;
+  final String? groupTitle;
+  final int memberCount;
+
   const ChatRoom({
     required this.roomId,
     required this.peerPseudonym,
@@ -839,6 +910,9 @@ class ChatRoom {
     this.lastMessagePreview,
     this.lastMessageAt,
     this.lastOwnMessageRead = false,
+    this.isGroup = false,
+    this.groupTitle,
+    this.memberCount = 2,
   });
 }
 

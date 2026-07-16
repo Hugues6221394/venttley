@@ -11,12 +11,14 @@ class TribeAvatar extends StatelessWidget {
     this.fallbackUrl,
     this.size = 44,
     this.onTap,
+    this.semanticLabel,
   });
 
   final String? avatarUrl;
   final String? fallbackUrl;
   final double size;
   final VoidCallback? onTap;
+  final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -44,10 +46,14 @@ class TribeAvatar extends StatelessWidget {
       ),
     );
     if (onTap == null) return child;
-    return InkWell(
-      onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: child,
+    return Semantics(
+      button: true,
+      label: semanticLabel ?? 'Preview Tribe profile image',
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: child,
+      ),
     );
   }
 }
@@ -63,6 +69,8 @@ class TribeCoverPreview extends StatelessWidget {
     this.width = 76,
     this.height = 58,
     this.borderRadius = 8,
+    this.onTap,
+    this.semanticLabel,
   });
 
   final String? bannerUrl;
@@ -70,13 +78,15 @@ class TribeCoverPreview extends StatelessWidget {
   final double width;
   final double height;
   final double borderRadius;
+  final VoidCallback? onTap;
+  final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final resolvedWidth = width.isFinite ? width : constraints.maxWidth;
-        return RepaintBoundary(
+        final preview = RepaintBoundary(
           child: Container(
             width: width,
             height: height,
@@ -97,6 +107,16 @@ class TribeCoverPreview extends StatelessWidget {
                 color: VentlyColors.berryMagenta,
               ),
             ),
+          ),
+        );
+        if (onTap == null) return preview;
+        return Semantics(
+          button: true,
+          label: semanticLabel ?? 'Preview Tribe cover image',
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(borderRadius),
+            child: preview,
           ),
         );
       },

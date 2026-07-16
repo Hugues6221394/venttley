@@ -476,6 +476,41 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
     }
   }
 
+  Future<void> _respondToTransfer(bool accept) async {
+    final transferId = item.payload['transfer_id'] as String?;
+    if (transferId == null || _responding) return;
+    setState(() => _responding = true);
+    try {
+      final repository = ref.read(repositoryProvider);
+      await repository.respondTribeTransfer(
+        transferId: transferId,
+        accept: accept,
+      );
+      await repository.markNotificationRead(item.id);
+      ref.invalidate(notificationsProvider);
+      ref.invalidate(tribesIKeepProvider);
+      ref.invalidate(keeperOverviewProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            accept
+                ? 'Ownership accepted. The Tribe is now in your Studio.'
+                : 'Ownership transfer declined.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not update this transfer.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _responding = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final unread = !item.isRead;
@@ -483,6 +518,9 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
     final hasRequestActions = item.kind == 'friend_request' &&
         unread &&
         item.payload['friendship_id'] != null;
+    final hasTransferActions = item.kind == 'tribe_ownership_transfer' &&
+        unread &&
+        item.payload['transfer_id'] != null;
 
     return Semantics(
       button: true,
@@ -542,7 +580,7 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      if (hasRequestActions) ...[
+                      if (hasRequestActions || hasTransferActions) ...[
                         const SizedBox(height: 10),
                         Row(
                           children: [
@@ -553,7 +591,9 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
                                 busy: _responding,
                                 onPressed: _responding
                                     ? null
-                                    : () => _respondToRequest(true),
+                                    : () => hasTransferActions
+                                        ? _respondToTransfer(true)
+                                        : _respondToRequest(true),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -562,7 +602,9 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
                                 label: 'Decline',
                                 onPressed: _responding
                                     ? null
-                                    : () => _respondToRequest(false),
+                                    : () => hasTransferActions
+                                        ? _respondToTransfer(false)
+                                        : _respondToRequest(false),
                               ),
                             ),
                           ],
@@ -902,6 +944,7 @@ Color _accentFor(String kind) {
       return const Color(0xFF7C5BD6);
     case 'tribe_prompt':
     case 'tribe_invite':
+    case 'tribe_ownership_transfer':
       return VentlyTokens.trendingAmber;
     case 'moderation_action':
       return VentlyTokens.dangerRed;
@@ -922,6 +965,7 @@ IconData _iconFor(String kind) {
     case 'tribe_message':
       return Icons.forum_outlined;
     case 'tribe_invite':
+    case 'tribe_ownership_transfer':
       return Icons.group_add_outlined;
     case 'post_like':
     case 'comment_like':

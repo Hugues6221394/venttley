@@ -14,6 +14,7 @@ import '../../../data/services/draft_store.dart';
 import '../../../data/services/moderation_service.dart';
 import '../../../data/services/outbox.dart';
 import '../../../domain/entities/entities.dart';
+import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/mood_chip.dart';
@@ -213,9 +214,25 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       }
     }
     final space = ref.read(composeTargetSpaceProvider);
-    final tribe = ref.read(composeTargetTribeProvider);
+    final selectedTribe = ref.read(composeTargetTribeProvider);
+    final repository = ref.read(repositoryProvider);
+    final tribe = selectedTribe ??
+        (space == null ? null : await repository.tribeBySlug(space.tribeSlug));
+    if (!mounted) return;
     final effectiveTribeId = space?.tribeId ?? tribe?.tribeId;
-    final effectiveTribeSlug = tribe?.slug;
+    final effectiveTribeSlug = space?.tribeSlug ?? tribe?.slug;
+    if (_includePoll &&
+        tribe != null &&
+        !TribeGovernanceSettings.fromJson(tribe.managementSettings)
+            .allowPolls) {
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Polls are disabled in this Tribe.'),
+        ),
+      );
+      return;
+    }
     final persona = ref.read(activePersonaProvider);
     final operationId = OutboxService.newOperationId();
     final outbox = await ref.read(outboxProvider.future);
@@ -298,6 +315,9 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
             isWhisper: _isWhisper,
             imagePath: imagePath,
             imageUrl: imageUrl,
+            pollQuestion: _includePoll ? _pollQ.text.trim() : null,
+            pollOptions:
+                _includePoll ? [_pollA.text.trim(), _pollB.text.trim()] : null,
             idempotencyKey: operationId,
           );
     } catch (e) {
@@ -329,22 +349,6 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       unawaited(
         ref.read(repositoryProvider).setPostCrisis(post.postId, level),
       );
-    }
-    if (_includePoll) {
-      try {
-        await ref.read(repositoryProvider).createPoll(
-          postId: post.postId,
-          question: _pollQ.text.trim(),
-          optionTexts: [_pollA.text.trim(), _pollB.text.trim()],
-        );
-      } catch (e) {
-        // Post landed; poll attach failed. Surface a soft error.
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Posted, but poll failed: $e')),
-          );
-        }
-      }
     }
     ref.read(composeTargetTribeProvider.notifier).state = null;
     ref.read(composeTargetSpaceProvider.notifier).state = null;
@@ -451,9 +455,14 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.close, size: 16),
-                          onPressed: () => ref
-                              .read(composeTargetTribeProvider.notifier)
-                              .state = null,
+                          onPressed: () {
+                            ref
+                                .read(composeTargetTribeProvider.notifier)
+                                .state = null;
+                            ref
+                                .read(composeTargetSpaceProvider.notifier)
+                                .state = null;
+                          },
                           tooltip: 'Post to general feed instead',
                         ),
                       ],
@@ -577,44 +586,49 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    TextButton.icon(
-                      onPressed: _openPhotoSourceSheet,
-                      icon: Icon(
-                        _pendingImageBytes != null
-                            ? Icons.image
-                            : Icons.image_outlined,
-                        size: 18,
-                        color: scheme.primary,
+                SizedBox(
+                  height: 48,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      TextButton.icon(
+                        onPressed: _openPhotoSourceSheet,
+                        icon: Icon(
+                          _pendingImageBytes != null
+                              ? Icons.image
+                              : Icons.image_outlined,
+                          size: 18,
+                          color: scheme.primary,
+                        ),
+                        label: Text(
+                            _pendingImageBytes != null ? 'Photo on' : 'Photo'),
                       ),
-                      label: Text(
-                          _pendingImageBytes != null ? 'Photo on' : 'Photo'),
-                    ),
-                    TextButton.icon(
-                      onPressed: () =>
-                          setState(() => _includePoll = !_includePoll),
-                      icon: Icon(
-                        _includePoll ? Icons.poll : Icons.poll_outlined,
-                        size: 18,
-                        color: scheme.primary,
+                      TextButton.icon(
+                        onPressed: () =>
+                            setState(() => _includePoll = !_includePoll),
+                        icon: Icon(
+                          _includePoll ? Icons.poll : Icons.poll_outlined,
+                          size: 18,
+                          color: scheme.primary,
+                        ),
+                        label: Text(_includePoll ? 'Poll on' : 'Poll'),
                       ),
-                      label: Text(_includePoll ? 'Poll on' : 'Poll'),
-                    ),
-                    TextButton.icon(
-                      onPressed: () => setState(() => _isWhisper = !_isWhisper),
-                      icon: Icon(
-                        _isWhisper
-                            ? Icons.nightlight
-                            : Icons.nightlight_outlined,
-                        size: 18,
-                        color: scheme.primary,
+                      TextButton.icon(
+                        onPressed: () =>
+                            setState(() => _isWhisper = !_isWhisper),
+                        icon: Icon(
+                          _isWhisper
+                              ? Icons.nightlight
+                              : Icons.nightlight_outlined,
+                          size: 18,
+                          color: scheme.primary,
+                        ),
+                        label: Text(_isWhisper ? 'Story - 24h' : '24h Story'),
                       ),
-                      label: Text(_isWhisper ? 'Story - 24h' : '24h Story'),
-                    ),
-                    const Spacer(),
-                    MoodChip(mood: _mood, dense: true),
-                  ],
+                      const SizedBox(width: 8),
+                      MoodChip(mood: _mood, dense: true),
+                    ],
+                  ),
                 ),
                 if (_includePoll)
                   GlassCard(

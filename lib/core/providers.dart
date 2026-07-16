@@ -13,6 +13,7 @@ import '../data/services/whisper_player.dart';
 import '../domain/entities/entities.dart';
 import '../domain/home/home_discovery.dart';
 import '../domain/tribe/tribe_chat_hub.dart';
+import '../domain/tribe/tribe_management.dart';
 import '../domain/tribe/tribe_recommendations.dart';
 import '../domain/keeper/keeper_overview.dart';
 import '../domain/keeper/keeper_mode.dart';
@@ -571,6 +572,22 @@ final tribeBySlugProvider = FutureProvider.autoDispose.family<Tribe?, String>(
 /// Tribes the current user keeps (manages). Plug Dashboard data source.
 final tribesIKeepProvider = FutureProvider.autoDispose<List<Tribe>>(
     (ref) async => ref.watch(repositoryProvider).tribesIKeep());
+
+final tribeManagementProvider = FutureProvider.autoDispose
+    .family<TribeManagementOverview, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).tribeManagementOverview(tribeId));
+
+final tribeJoinRequestsProvider = FutureProvider.autoDispose
+    .family<List<TribeJoinRequest>, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).tribeJoinRequests(tribeId));
+
+final tribeAuditLogProvider = FutureProvider.autoDispose
+    .family<List<TribeAuditEvent>, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).tribeAuditLog(tribeId));
+
+final managedTribePostsProvider = FutureProvider.autoDispose
+    .family<List<TribeManagedPost>, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).managedTribePosts(tribeId));
 
 /// Authoritative keeper mode from `is_keeper_mode` RPC (0062).
 final keeperModeProvider = FutureProvider.autoDispose<KeeperMode>((ref) async {

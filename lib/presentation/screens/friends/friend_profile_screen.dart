@@ -11,6 +11,7 @@ import '../../theme/colors.dart';
 import '../../widgets/badge_shelf.dart';
 import '../../widgets/friend_action_button.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/media_preview_viewer.dart';
 import '../../widgets/profile_stats_panel.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tagged_text.dart';
@@ -58,8 +59,7 @@ class FriendProfileScreen extends ConsumerWidget {
       ),
       body: VentlyPremiumBackground(
         child: async.when(
-          loading: () =>
-              const Center(child: CircularProgressIndicator()),
+          loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) =>
               _NotAvailable(message: 'Could not load profile.\n$e'),
           data: (profile) {
@@ -208,8 +208,9 @@ class _VentsTabState extends ConsumerState<_VentsTab> {
   }
 
   Future<void> _loadMore() async {
-    final first = ref.read(userPostsProvider(widget.profile.userId)).valueOrNull ??
-        const <Post>[];
+    final first =
+        ref.read(userPostsProvider(widget.profile.userId)).valueOrNull ??
+            const <Post>[];
     setState(() => _loadingMore = true);
     try {
       final offset = first.length + _extraPosts.length;
@@ -407,7 +408,8 @@ class _VibeLevelBar extends StatelessWidget {
             children: [
               Text(
                 'Vibe level $tier',
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
               ),
               const Spacer(),
               if (mood != null)
@@ -456,149 +458,178 @@ class _Hero extends ConsumerWidget {
         borderRadius: 24,
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: scheme.primary.withOpacity(0.35),
-                    blurRadius: 22,
-                    spreadRadius: 1,
+            _PublicProfilePhoto(profile: profile),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '@${profile.pseudonym}',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                if (profile.isVerified) ...[
+                  const SizedBox(width: 6),
+                  Icon(Icons.verified, size: 18, color: scheme.primary),
+                ],
+                if ((profile.pronouns ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      profile.pronouns!.trim(),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.primary,
+                      ),
+                    ),
                   ),
                 ],
-                border: Border.all(color: scheme.primary, width: 2.5),
-              ),
-              child: ProfileAvatar(
-                avatarSeed: profile.avatarSeed,
-                label: profile.pseudonym,
-                profilePhotoUrl: profile.profilePhotoUrl,
-                size: 96,
-                showVerifiedBadge: profile.isVerified,
-              ),
-            ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '@${profile.pseudonym}',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
-              if (profile.isVerified) ...[
-                const SizedBox(width: 6),
-                Icon(Icons.verified, size: 18, color: scheme.primary),
               ],
-              if ((profile.pronouns ?? '').trim().isNotEmpty) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    profile.pronouns!.trim(),
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.primary,
-                    ),
+            ),
+            // Friends (total connections) directly under the username.
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: GestureDetector(
+                onTap: () =>
+                    context.push('/user/${profile.userId}/stat/connections'),
+                child: RichText(
+                  text: TextSpan(
+                    style: TextStyle(color: scheme.onSurface.withOpacity(0.75)),
+                    children: [
+                      TextSpan(
+                        text: PostCard.compactNumber(profile.connectionsCount),
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      TextSpan(
+                        text: profile.connectionsCount == 1
+                            ? ' Connection'
+                            : ' Connections',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
                   ),
                 ),
+              ),
+            ),
+            if ((profile.bio ?? '').trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 10, 8, 0),
+                child: TaggedText(
+                  profile.bio!.trim(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    height: 1.35,
+                    color: scheme.onSurface.withOpacity(0.82),
+                  ),
+                ),
+              ),
+            if (profile.currentMood != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${Moods.emoji(profile.currentMood!)}  feeling ${Moods.label(profile.currentMood!).toLowerCase()}',
+                  style: TextStyle(color: scheme.onSurface.withOpacity(0.7)),
+                ),
+              ),
+            const SizedBox(height: 6),
+            Text(
+              daysSince < 7
+                  ? 'Just joined'
+                  : daysSince < 365
+                      ? 'Joined ${daysSince ~/ 7} weeks ago'
+                      : 'Joined ${(daysSince / 365).toStringAsFixed(1)} years ago',
+              style: TextStyle(
+                fontSize: 12,
+                color: scheme.onSurface.withOpacity(0.55),
+              ),
+            ),
+            const SizedBox(height: 14),
+            _StatsBanner(profile: profile),
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                FriendActionButton(
+                  otherUserId: profile.userId,
+                  otherPseudonym: profile.pseudonym,
+                ),
+                if (profile.isFriend) ...[
+                  const SizedBox(width: 8),
+                  _MessageButton(profile: profile),
+                ],
               ],
-            ],
-          ),
-          // Friends (total connections) directly under the username.
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: GestureDetector(
-              onTap: () =>
-                  context.push('/user/${profile.userId}/stat/connections'),
-              child: RichText(
-                text: TextSpan(
-                  style: TextStyle(color: scheme.onSurface.withOpacity(0.75)),
-                  children: [
-                    TextSpan(
-                      text: PostCard.compactNumber(profile.connectionsCount),
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    TextSpan(
-                      text: profile.connectionsCount == 1
-                          ? ' Connection'
-                          : ' Connections',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ],
+            ),
+            if (!profile.isFriend && profile.relation != FriendStatus.self)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Friends can DM. Send a request to unlock messaging.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: scheme.onSurface.withOpacity(0.55),
+                  ),
                 ),
               ),
-            ),
-          ),
-          if ((profile.bio ?? '').trim().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 10, 8, 0),
-              child: TaggedText(
-                profile.bio!.trim(),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  height: 1.35,
-                  color: scheme.onSurface.withOpacity(0.82),
-                ),
-              ),
-            ),
-          if (profile.currentMood != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                '${Moods.emoji(profile.currentMood!)}  feeling ${Moods.label(profile.currentMood!).toLowerCase()}',
-                style: TextStyle(color: scheme.onSurface.withOpacity(0.7)),
-              ),
-            ),
-          const SizedBox(height: 6),
-          Text(
-            daysSince < 7
-                ? 'Just joined'
-                : daysSince < 365
-                    ? 'Joined ${daysSince ~/ 7} weeks ago'
-                    : 'Joined ${(daysSince / 365).toStringAsFixed(1)} years ago',
-            style: TextStyle(
-              fontSize: 12,
-              color: scheme.onSurface.withOpacity(0.55),
-            ),
-          ),
-          const SizedBox(height: 14),
-          _StatsBanner(profile: profile),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              FriendActionButton(
-                otherUserId: profile.userId,
-                otherPseudonym: profile.pseudonym,
-              ),
-              if (profile.isFriend) ...[
-                const SizedBox(width: 8),
-                _MessageButton(profile: profile),
-              ],
-            ],
-          ),
-          if (!profile.isFriend && profile.relation != FriendStatus.self)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Friends can DM. Send a request to unlock messaging.',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: scheme.onSurface.withOpacity(0.55),
-                ),
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _PublicProfilePhoto extends StatelessWidget {
+  const _PublicProfilePhoto({required this.profile});
+
+  final UserProfileView profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final photoUrl = (profile.profilePhotoUrl ?? '').trim();
+    final avatar = Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withOpacity(0.35),
+            blurRadius: 22,
+            spreadRadius: 1,
+          ),
+        ],
+        border: Border.all(color: scheme.primary, width: 2.5),
+      ),
+      child: ProfileAvatar(
+        avatarSeed: profile.avatarSeed,
+        label: profile.pseudonym,
+        profilePhotoUrl: profile.profilePhotoUrl,
+        size: 96,
+        showVerifiedBadge: profile.isVerified,
+      ),
+    );
+    if (photoUrl.isEmpty) return avatar;
+    return Semantics(
+      button: true,
+      label: 'Preview @${profile.pseudonym} profile photo',
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () => showMediaPreview(
+          context,
+          items: [
+            MediaPreviewItem(url: photoUrl, label: 'Profile photo'),
+          ],
+          title: '@${profile.pseudonym}',
+        ),
+        child: avatar,
       ),
     );
   }
@@ -870,8 +901,7 @@ class _MoodRingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect =
-        Rect.fromLTWH(4, 4, size.width - 8, size.height - 8);
+    final rect = Rect.fromLTWH(4, 4, size.width - 8, size.height - 8);
     final ring = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 8
@@ -1045,7 +1075,9 @@ class _MutualsSection extends StatelessWidget {
                       height: 36,
                       child: Stack(
                         children: [
-                          for (var i = 0; i < profile.mutualFriendSample.length; i++)
+                          for (var i = 0;
+                              i < profile.mutualFriendSample.length;
+                              i++)
                             Positioned(
                               left: i * 24.0,
                               child: UserProfileLink(
@@ -1206,8 +1238,10 @@ class _NotAvailable extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.lock_person, size: 36,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
+            Icon(Icons.lock_person,
+                size: 36,
+                color:
+                    Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
             const SizedBox(height: 8),
             Text(
               message,
@@ -1276,7 +1310,8 @@ class _ActivityHeatmap extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text('Activity', style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text('Activity',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
                 const Spacer(),
                 Text(
                   '$total in 90 days',
@@ -1514,8 +1549,7 @@ class _WhisperMiniCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mm = (whisper.audioDurationSeconds ~/ 60);
-    final ss =
-        (whisper.audioDurationSeconds % 60).toString().padLeft(2, '0');
+    final ss = (whisper.audioDurationSeconds % 60).toString().padLeft(2, '0');
     return InkWell(
       onTap: () => context.push('/whispers'),
       borderRadius: BorderRadius.circular(20),
@@ -1525,8 +1559,7 @@ class _WhisperMiniCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border:
-              Border.all(color: VentlyColors.softMauve.withOpacity(0.42)),
+          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.42)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1555,8 +1588,7 @@ class _WhisperMiniCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 Icon(Icons.favorite_border,
-                    size: 12,
-                    color: context.ink.withOpacity(0.6)),
+                    size: 12, color: context.ink.withOpacity(0.6)),
                 const SizedBox(width: 3),
                 Text(
                   '${whisper.likesCount}',
@@ -1584,8 +1616,7 @@ class _WhisperMiniCard extends StatelessWidget {
             ),
             const Spacer(),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: const Color(0xFFFFE3EC),
                 borderRadius: BorderRadius.circular(10),
@@ -1661,7 +1692,8 @@ class _TribesSection extends ConsumerWidget {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: VentlyColors.berryMagenta.withOpacity(0.12),
+                              color:
+                                  VentlyColors.berryMagenta.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Icon(Icons.diversity_3,
@@ -1687,8 +1719,7 @@ class _TribesSection extends ConsumerWidget {
                                   '${PostCard.compactNumber(t.memberCount)} members'
                                   '${t.isPrivate ? " • Private" : ""}',
                                   style: TextStyle(
-                                    color:
-                                        context.ink.withOpacity(0.6),
+                                    color: context.ink.withOpacity(0.6),
                                     fontWeight: FontWeight.w700,
                                     fontSize: 11.5,
                                   ),

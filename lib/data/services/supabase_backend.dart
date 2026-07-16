@@ -12,6 +12,7 @@ import '../../domain/home/home_discovery.dart';
 import '../../domain/keeper/keeper_mode.dart';
 import '../../domain/keeper/keeper_studio_v2.dart';
 import '../../domain/tribe/tribe_chat_hub.dart';
+import '../../domain/tribe/tribe_management.dart';
 import 'identity_service.dart';
 
 /// Coerces JSONB `{text: "…"}` or plain strings into a nullable String.
@@ -40,6 +41,12 @@ int? _coerceInt(dynamic raw) {
   if (raw is int) return raw;
   if (raw is num) return raw.toInt();
   return int.tryParse(raw.toString());
+}
+
+DateTime? _coerceDate(dynamic raw) {
+  if (raw is DateTime) return raw;
+  if (raw is String && raw.isNotEmpty) return DateTime.tryParse(raw);
+  return null;
 }
 
 /// Live Supabase backend.
@@ -516,6 +523,13 @@ class SupabaseBackend {
     await _client.auth.updateUser(UserAttributes(password: newPassword));
   }
 
+  /// Re-authenticate a destructive owner action without changing credentials.
+  Future<void> reauthenticate(String password) async {
+    final email = _client.auth.currentUser?.email;
+    if (email == null) throw StateError('You are not signed in.');
+    await _client.auth.signInWithPassword(email: email, password: password);
+  }
+
   /// Attach (or change) a real recovery email on an account. Supabase emails
   /// a confirmation to the new address; the change finalises when the link is
   /// confirmed. Login-by-username keeps working either way.
@@ -742,6 +756,8 @@ class SupabaseBackend {
     String? audioPath,
     String? audioUrl,
     int? audioDurationSeconds,
+    String? pollQuestion,
+    List<String>? pollOptions,
     String? idempotencyKey,
   }) async {
     final uid = _uid;
@@ -763,6 +779,8 @@ class SupabaseBackend {
         'p_audio_path': audioPath,
         'p_audio_url': audioUrl,
         'p_audio_duration_seconds': audioDurationSeconds,
+        'p_poll_question': pollQuestion,
+        'p_poll_options': pollOptions,
       },
     ) as String;
     if (hasImage) {
@@ -2714,7 +2732,7 @@ class SupabaseBackend {
     final rows = await _client
         .from('tribe_members')
         .select(
-          'role, joined_at, '
+          'role, joined_at, muted_until, warning_count, last_warned_at, member_note, '
           'users!inner(user_id, anonymous_pseudonym, avatar_seed, profile_photo_url)',
         )
         .eq('tribe_id', tribeId)
@@ -2728,6 +2746,10 @@ class SupabaseBackend {
         profilePhotoUrl: u['profile_photo_url'] as String?,
         role: r['role'] as String,
         joinedAt: DateTime.parse(r['joined_at'] as String),
+        mutedUntil: _coerceDate(r['muted_until']),
+        warningCount: (r['warning_count'] as num?)?.toInt() ?? 0,
+        lastWarnedAt: _coerceDate(r['last_warned_at']),
+        memberNote: r['member_note'] as String?,
       );
     }).toList();
   }
@@ -3186,6 +3208,245 @@ class SupabaseBackend {
     return _tribeFromRow(row);
   }
 
+  // ===================== Tribe ownership & lifecycle =====================
+
+  Future<TribeManagementOverview> tribeManagementOverview(
+      String tribeId) async {
+    final raw = await _client.rpc(
+      'tribe_management_overview',
+      params: {'p_tribe_id': tribeId},
+    );
+    return TribeManagementOverview.fromJson(
+      Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<TribeManagementOverview> updateTribeConfiguration({
+    required String tribeId,
+    String? name,
+    String? description,
+    String? category,
+    List<String>? tags,
+    String? visibility,
+    String? avatarUrl,
+    String? bannerUrl,
+    String? welcomeMessage,
+    TribeGovernanceSettings? settings,
+  }) async {
+    final raw = await _client.rpc('update_tribe_configuration', params: {
+      'p_tribe_id': tribeId,
+      if (name != null) 'p_name': name,
+      if (description != null) 'p_description': description,
+      if (category != null) 'p_category': category,
+      if (tags != null) 'p_tags': tags,
+      if (visibility != null) 'p_visibility': visibility,
+      if (avatarUrl != null) 'p_avatar_url': avatarUrl,
+      if (bannerUrl != null) 'p_banner_url': bannerUrl,
+      if (welcomeMessage != null) 'p_welcome_message': welcomeMessage,
+      if (settings != null) 'p_settings': settings.toJson(),
+    });
+    return TribeManagementOverview.fromJson(
+      Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<TribeManagementOverview> replaceTribeRules(
+    String tribeId,
+    List<TribeRuleItem> rules,
+  ) async {
+    final raw = await _client.rpc('replace_tribe_rules', params: {
+      'p_tribe_id': tribeId,
+      'p_rules': [for (final rule in rules) rule.toJson()],
+    });
+    return TribeManagementOverview.fromJson(
+      Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<List<TribeJoinRequest>> tribeJoinRequests(String tribeId) async {
+    final rows = await _client
+        .from('tribe_join_requests')
+        .select(
+          'request_id, user_id, note, created_at, '
+          'users!inner(anonymous_pseudonym, avatar_seed, profile_photo_url)',
+        )
+        .eq('tribe_id', tribeId)
+        .eq('status', 'pending')
+        .order('created_at');
+    return rows.map<TribeJoinRequest>((row) {
+      final user = Map<String, dynamic>.from(row['users'] as Map);
+      return TribeJoinRequest.fromJson({
+        ...Map<String, dynamic>.from(row),
+        ...user,
+      });
+    }).toList(growable: false);
+  }
+
+  Future<void> respondTribeJoinRequest({
+    required String requestId,
+    required bool approve,
+    String? reason,
+  }) async {
+    await _client.rpc('respond_tribe_join_request', params: {
+      'p_request_id': requestId,
+      'p_approve': approve,
+      if (reason != null) 'p_reason': reason,
+    });
+  }
+
+  Future<String> requestTribeMembership(
+    String tribeId, {
+    String? note,
+  }) async {
+    final status = await _client.rpc('request_tribe_membership', params: {
+      'p_tribe_id': tribeId,
+      if (note != null) 'p_note': note,
+    });
+    if (status == 'joined') _joinedTribes.add(tribeId);
+    return status as String;
+  }
+
+  Future<void> manageTribeMember({
+    required String tribeId,
+    required String userId,
+    required String action,
+    String? reason,
+    DateTime? muteUntil,
+  }) async {
+    await _client.rpc('manage_tribe_member', params: {
+      'p_tribe_id': tribeId,
+      'p_user_id': userId,
+      'p_action': action,
+      if (reason != null) 'p_reason': reason,
+      if (muteUntil != null)
+        'p_mute_until': muteUntil.toUtc().toIso8601String(),
+    });
+  }
+
+  Future<String> initiateTribeTransfer({
+    required String tribeId,
+    required String toUserId,
+    bool keepPreviousOwnerAsMod = true,
+  }) async {
+    final id = await _client.rpc('initiate_tribe_transfer', params: {
+      'p_tribe_id': tribeId,
+      'p_to_user_id': toUserId,
+      'p_keep_previous_owner_as_mod': keepPreviousOwnerAsMod,
+    });
+    return id as String;
+  }
+
+  Future<void> respondTribeTransfer({
+    required String transferId,
+    required bool accept,
+  }) async {
+    await _client.rpc('respond_tribe_transfer', params: {
+      'p_transfer_id': transferId,
+      'p_accept': accept,
+    });
+  }
+
+  Future<TribeManagementOverview> setTribeLifecycle({
+    required String tribeId,
+    required String action,
+    String? reason,
+    String? confirmedName,
+  }) async {
+    final raw = await _client.rpc('set_tribe_lifecycle', params: {
+      'p_tribe_id': tribeId,
+      'p_action': action,
+      if (reason != null) 'p_reason': reason,
+      if (confirmedName != null) 'p_confirmed_name': confirmedName,
+    });
+    return TribeManagementOverview.fromJson(
+      Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<List<TribeAuditEvent>> tribeAuditLog(
+    String tribeId, {
+    int limit = 100,
+  }) async {
+    final rows = await _client
+        .from('tribe_audit_log')
+        .select(
+          'audit_id, action, target_type, target_id, reason, created_at, '
+          'actor:actor_id(anonymous_pseudonym)',
+        )
+        .eq('tribe_id', tribeId)
+        .order('created_at', ascending: false)
+        .limit(limit.clamp(1, 250));
+    return rows
+        .map<TribeAuditEvent>(
+            (row) => TribeAuditEvent.fromJson(Map<String, dynamic>.from(row)))
+        .toList(growable: false);
+  }
+
+  Future<List<TribeManagedPost>> managedTribePosts(
+    String tribeId, {
+    int limit = 100,
+  }) async {
+    final rows = await _client.rpc('managed_tribe_posts', params: {
+      'p_tribe_id': tribeId,
+      'p_limit': limit.clamp(1, 250),
+    }) as List<dynamic>;
+    return rows
+        .whereType<Map>()
+        .map((row) => TribeManagedPost.fromJson(
+              Map<String, dynamic>.from(row),
+            ))
+        .toList(growable: false);
+  }
+
+  Future<String> manageTribeSpace({
+    required String tribeId,
+    required String action,
+    String? spaceId,
+    String? name,
+    String? description,
+    String? iconName,
+    String? weeklyTheme,
+    String? postingPermission,
+    bool? isPinned,
+    DateTime? activatesAt,
+    DateTime? deactivatesAt,
+    String? reason,
+  }) async {
+    final id = await _client.rpc('manage_tribe_space', params: {
+      'p_tribe_id': tribeId,
+      'p_action': action,
+      if (spaceId != null) 'p_space_id': spaceId,
+      if (name != null) 'p_name': name,
+      if (description != null) 'p_description': description,
+      if (iconName != null) 'p_icon_name': iconName,
+      if (weeklyTheme != null) 'p_weekly_theme': weeklyTheme,
+      if (postingPermission != null) 'p_posting_permission': postingPermission,
+      if (isPinned != null) 'p_is_pinned': isPinned,
+      if (activatesAt != null)
+        'p_activates_at': activatesAt.toUtc().toIso8601String(),
+      if (deactivatesAt != null)
+        'p_deactivates_at': deactivatesAt.toUtc().toIso8601String(),
+      if (reason != null) 'p_reason': reason,
+    });
+    return id as String;
+  }
+
+  Future<void> manageTribePost({
+    required String tribeId,
+    required String postId,
+    required String action,
+    String? targetSpaceId,
+    String? reason,
+  }) async {
+    await _client.rpc('manage_tribe_post', params: {
+      'p_tribe_id': tribeId,
+      'p_post_id': postId,
+      'p_action': action,
+      if (targetSpaceId != null) 'p_target_space_id': targetSpaceId,
+      if (reason != null) 'p_reason': reason,
+    });
+  }
+
   // ===================================================================
   // POLLS  (post_polls + poll_options + poll_votes — see migration 0001)
   // ===================================================================
@@ -3551,6 +3812,11 @@ class SupabaseBackend {
       ventCount: (r['vent_count'] as int?) ?? 0,
       ventsToday: (r['vents_today'] as int?) ?? 0,
       lastVentAt: lastVentRaw == null ? null : DateTime.parse(lastVentRaw),
+      iconName: r['icon_name'] as String?,
+      isPinned: (r['is_pinned'] as bool?) ?? false,
+      postingPermission: (r['posting_permission'] as String?) ?? 'members',
+      activatesAt: _coerceDate(r['activates_at']),
+      deactivatesAt: _coerceDate(r['deactivates_at']),
     );
   }
 
@@ -3792,42 +4058,35 @@ class SupabaseBackend {
     required String category,
     String? description,
     bool isPrivate = false,
+    List<String> tags = const [],
+    String? visibility,
+    String? welcomeMessage,
+    TribeGovernanceSettings settings = const TribeGovernanceSettings(),
+    List<TribeRuleItem> rules = const [],
   }) async {
-    final uid = _uid;
-    if (uid == null) throw StateError('Not signed in');
-    final slug = _slugify(name);
-    final row = await _client
-        .from('tribes')
-        .insert({
-          'name': name,
-          'slug': slug,
-          'category': category,
-          'description': description,
-          'is_private': isPrivate,
-          'keeper_id': uid,
-        })
-        .select('tribe_id')
-        .single();
-    final tribeId = row['tribe_id'] as String;
-    // Keeper auto-joins their own tribe.
-    await _client.from('tribe_members').insert({
-      'tribe_id': tribeId,
-      'user_id': uid,
+    if (_uid == null) throw StateError('Not signed in');
+    final tribeId = await _client.rpc('create_managed_tribe', params: {
+      'p_name': name,
+      'p_category': category,
+      if (description != null) 'p_description': description,
+      'p_visibility': visibility ?? (isPrivate ? 'private' : 'public'),
+      'p_tags': tags,
+      if (welcomeMessage != null) 'p_welcome_message': welcomeMessage,
+      'p_settings': settings.toJson(),
+      'p_rules': [for (final rule in rules) rule.toJson()],
     });
+    final row = await _client
+        .from('tribe_directory')
+        .select()
+        .eq('tribe_id', tribeId as String)
+        .single();
     _joinedTribes.add(tribeId);
-    final created = await tribeBySlug(slug);
-    return created!;
+    return _tribeFromRow(row);
   }
 
   Future<void> joinTribe(String tribeId) async {
-    final uid = _uid;
-    if (uid == null) return;
-    if (_joinedTribes.contains(tribeId)) return;
-    await _client.from('tribe_members').insert({
-      'tribe_id': tribeId,
-      'user_id': uid,
-    });
-    _joinedTribes.add(tribeId);
+    if (_uid == null || _joinedTribes.contains(tribeId)) return;
+    await requestTribeMembership(tribeId);
   }
 
   Future<void> leaveTribe(String tribeId) async {
@@ -3840,11 +4099,6 @@ class SupabaseBackend {
         .eq('user_id', uid);
     _joinedTribes.remove(tribeId);
   }
-
-  String _slugify(String s) => s
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-      .replaceAll(RegExp(r'^-+|-+$'), '');
 
   // ===================================================================
   // CHAT  (plaintext stored server-side; column names are historical —
@@ -3861,27 +4115,34 @@ class SupabaseBackend {
           if (tab == 'active') return r['room_status'] == 'active';
           return true;
         })
-        .map<ChatRoom>((r) => ChatRoom(
-              roomId: r['room_id'] as String,
-              peerPseudonym: r['peer_pseudonym'] == null
-                  ? '@anonymous'
-                  : '@${r['peer_pseudonym']}',
-              peerAvatarSeed:
-                  (r['peer_avatar_seed'] as String?) ?? 'default-orb',
-              peerUserId: r['peer_id'] as String?,
-              requestPreview: (r['request_preview'] as String?) ?? '',
-              roomStatus: r['room_status'] as String,
-              createdAt: DateTime.parse(r['created_at'] as String),
-              initiatedByMe: r['initiated_by_me'] as bool,
-              unreadCount: (r['unread_count'] as int?) ?? 0,
-              lastMessagePreview: r['last_message_preview'] as String?,
-              lastMessageAt: r['last_message_at'] == null
-                  ? null
-                  : DateTime.parse(r['last_message_at'] as String),
-              lastOwnMessageRead:
-                  (r['last_own_message_read'] as bool?) ?? false,
-            ))
+        .map<ChatRoom>(_chatRoomFromInboxRow)
         .toList();
+  }
+
+  ChatRoom _chatRoomFromInboxRow(Map<String, dynamic> row) {
+    final isGroup = row['is_group'] == true;
+    final rawName = row['peer_pseudonym'] as String?;
+    return ChatRoom(
+      roomId: row['room_id'] as String,
+      peerPseudonym: isGroup
+          ? (rawName ?? 'Private group')
+          : (rawName == null ? '@anonymous' : '@$rawName'),
+      peerAvatarSeed: (row['peer_avatar_seed'] as String?) ?? 'default-orb',
+      peerUserId: row['peer_id'] as String?,
+      requestPreview: (row['request_preview'] as String?) ?? '',
+      roomStatus: row['room_status'] as String,
+      createdAt: DateTime.parse(row['created_at'] as String),
+      initiatedByMe: row['initiated_by_me'] as bool,
+      unreadCount: (row['unread_count'] as int?) ?? 0,
+      lastMessagePreview: row['last_message_preview'] as String?,
+      lastMessageAt: row['last_message_at'] == null
+          ? null
+          : DateTime.parse(row['last_message_at'] as String),
+      lastOwnMessageRead: (row['last_own_message_read'] as bool?) ?? false,
+      isGroup: isGroup,
+      groupTitle: row['group_title'] as String?,
+      memberCount: (row['member_count'] as int?) ?? 2,
+    );
   }
 
   Future<bool> canDm(String peerUserId) async {
@@ -3946,6 +4207,23 @@ class SupabaseBackend {
       createdAt: DateTime.parse(row['created_at'] as String),
       initiatedByMe: (row['initiated_by_me'] as bool?) ?? true,
     );
+  }
+
+  Future<ChatRoom> createGroupChat({
+    required String title,
+    required String friendUserId,
+  }) async {
+    if (_uid == null) throw StateError('Not signed in');
+    final roomId = await _client.rpc('create_group_chat', params: {
+      'p_title': title,
+      'p_friend_id': friendUserId,
+    }) as String;
+    final row = await _client
+        .from('inbox_rooms')
+        .select()
+        .eq('room_id', roomId)
+        .single();
+    return _chatRoomFromInboxRow(row);
   }
 
   Future<ChatRoom> acceptRequest(String roomId) async {
@@ -4880,6 +5158,20 @@ class SupabaseBackend {
             : null,
       ),
       pinnedMessageId: r['pinned_message_id'] as String?,
+      lifecycleStatus: (r['lifecycle_status'] as String?) ?? 'active',
+      visibility: (r['visibility'] as String?) ??
+          ((r['is_private'] as bool?) == true ? 'private' : 'public'),
+      tags: ((r['tags'] as List<dynamic>?) ?? const [])
+          .map((e) => e.toString())
+          .toList(growable: false),
+      pausedAt: _coerceDate(r['paused_at']),
+      archivedAt: _coerceDate(r['archived_at']),
+      deletionRequestedAt: _coerceDate(r['deletion_requested_at']),
+      deletionPurgeAt: _coerceDate(r['deletion_purge_at']),
+      lifecycleReason: r['lifecycle_reason'] as String?,
+      managementSettings: r['settings'] is Map
+          ? Map<String, dynamic>.from(r['settings'] as Map)
+          : const {},
     );
   }
 

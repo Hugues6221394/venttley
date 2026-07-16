@@ -231,12 +231,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ref.watch(messagesProvider(widget.roomId)).valueOrNull ?? const [];
     final prefs = ref.watch(dmRoomPrefsProvider(widget.roomId)).valueOrNull ??
         DmRoomPrefs.empty;
-    final peerName = (prefs.peerNickname?.trim().isNotEmpty ?? false)
-        ? prefs.peerNickname!.trim()
-        : r.peerPseudonym;
+    final peerName = r.isGroup
+        ? (r.groupTitle ?? r.peerPseudonym)
+        : (prefs.peerNickname?.trim().isNotEmpty ?? false)
+            ? prefs.peerNickname!.trim()
+            : r.peerPseudonym;
     // DM peers are always accepted friends, so reuse the cached friends list
     // to know whether the peer is verified (no extra fetch).
     final peerVerified = () {
+      if (r.isGroup) return false;
       final pid = r.peerUserId;
       if (pid == null) return false;
       final friends =
@@ -357,10 +360,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           ],
                         ],
                       ),
-                      _PresenceLine(
-                        peerUserId: r.peerUserId,
-                        accent: scheme.primary,
-                      ),
+                      if (r.isGroup)
+                        Text(
+                          '${r.memberCount} members',
+                          style: TextStyle(
+                            color: scheme.onSurface.withOpacity(0.58),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        )
+                      else
+                        _PresenceLine(
+                          peerUserId: r.peerUserId,
+                          accent: scheme.primary,
+                        ),
                     ],
                   ),
                 ),
@@ -390,7 +403,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Private chat — only you and your peer see this. Moderators can review reported chats.',
+                      r.isGroup
+                          ? 'Private group chat - only members see this. Moderators can review reported chats.'
+                          : 'Private chat - only you and your peer see this. Moderators can review reported chats.',
                       style: TextStyle(
                         color: scheme.primary,
                         fontWeight: FontWeight.w700,
@@ -486,7 +501,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             ),
             _TypingChip(
-              peerPseudonym: r.peerPseudonym,
+              peerPseudonym: r.isGroup ? 'Someone' : r.peerPseudonym,
               visible: peerTyping,
             ),
             if (_replyingTo != null)

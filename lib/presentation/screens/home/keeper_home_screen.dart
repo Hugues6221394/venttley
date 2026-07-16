@@ -14,6 +14,7 @@ import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../widgets/keeper_prompt_composer_sheet.dart';
 import '../../navigation/compose_navigation.dart';
 
 /// Keeper / Plug homepage — Tribe Control Center (Creator Studio).
@@ -155,7 +156,7 @@ class _KeeperWelcome extends StatelessWidget {
     // keeper's pseudonym here. Identity lives on the profile tab only.
     final reports = overview.totalOpenReports;
     final quiet = overview.totalPosts24h == 0;
-    final slug = overview.tribes.isNotEmpty ? overview.tribes.first.slug : null;
+    final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
 
     final (IconData icon, String hint, VoidCallback? onTap) = reports > 0
         ? (
@@ -167,9 +168,12 @@ class _KeeperWelcome extends StatelessWidget {
             ? (
                 Icons.auto_awesome_rounded,
                 "It's quiet right now.\nSend a Prompt to spark a conversation.",
-                slug == null
+                primary == null
                     ? null
-                    : () => context.push('/tribe/$slug/manage?tab=prompts'),
+                    : () => showKeeperPromptComposer(
+                          context,
+                          tribeId: primary.tribeId,
+                        ),
               )
             : (
                 Icons.favorite_rounded,
@@ -283,6 +287,10 @@ class _KeeperWelcome extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   _HeroCallout(icon: icon, hint: hint, onTap: onTap),
+                  if (primary != null) ...[
+                    const SizedBox(height: 10),
+                    _ManageTribeAction(tribe: primary),
+                  ],
                 ],
               ),
             ),
@@ -300,6 +308,71 @@ class _KeeperWelcome extends StatelessWidget {
           borderRadius: BorderRadius.circular(6),
         ),
       );
+}
+
+/// Persistent Plugz ownership action, kept above metrics and activity cards.
+class _ManageTribeAction extends StatelessWidget {
+  const _ManageTribeAction({required this.tribe});
+
+  final Tribe tribe;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Manage Tribe ${tribe.name}',
+      child: SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: FilledButton(
+          key: const ValueKey('plug-studio-primary-manage-tribe'),
+          onPressed: () => context.push('/tribe/${tribe.slug}/manage/settings'),
+          style: FilledButton.styleFrom(
+            backgroundColor: VentlyColors.berryMagenta,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.admin_panel_settings_outlined, size: 21),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Manage Tribe',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      tribe.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(.78),
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_rounded, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// The action callout inside the keeper welcome hero.
@@ -950,7 +1023,8 @@ class _QuickActionsRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final slug = overview.tribes.isNotEmpty ? overview.tribes.first.slug : null;
+    final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
+    final slug = primary?.slug;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
       child: SingleChildScrollView(
@@ -960,33 +1034,61 @@ class _QuickActionsRow extends ConsumerWidget {
             _QuickAction(
               icon: Icons.lightbulb_outline,
               label: 'Prompt',
-              onTap: slug == null
+              onTap: primary == null
                   ? null
-                  : () => context.push('/tribe/$slug/manage?tab=prompts'),
+                  : () => showKeeperPromptComposer(
+                        context,
+                        tribeId: primary.tribeId,
+                      ),
             ),
             _QuickAction(
               icon: Icons.campaign_outlined,
               label: 'Announce',
-              onTap: () =>
-                  openCompose(context, ref, category: 'healing_corner'),
+              onTap: primary == null
+                  ? null
+                  : () {
+                      ref.read(composeTargetTribeProvider.notifier).state =
+                          primary;
+                      ref.read(composeTargetSpaceProvider.notifier).state =
+                          null;
+                      openCompose(
+                        context,
+                        ref,
+                        category: primary.category,
+                        draft: 'Announcement: ',
+                      );
+                    },
             ),
             _QuickAction(
               icon: Icons.poll_outlined,
               label: 'Poll',
-              onTap: () => openCompose(context, ref, format: 'poll'),
+              onTap: primary == null
+                  ? null
+                  : () {
+                      ref.read(composeTargetTribeProvider.notifier).state =
+                          primary;
+                      ref.read(composeTargetSpaceProvider.notifier).state =
+                          null;
+                      openCompose(context, ref, format: 'poll');
+                    },
             ),
             _QuickAction(
               icon: Icons.person_add_alt_1,
               label: 'Invite',
               onTap: slug == null
                   ? null
-                  : () => context.push('/tribe/$slug/manage?tab=members'),
+                  : () => context.push(
+                        '/tribe/$slug/manage/settings/members',
+                      ),
             ),
             _QuickAction(
               icon: Icons.rule_rounded,
               label: 'Rules',
-              onTap:
-                  slug == null ? null : () => context.push('/tribe/$slug/edit'),
+              onTap: slug == null
+                  ? null
+                  : () => context.push(
+                        '/tribe/$slug/manage/settings/rules',
+                      ),
             ),
           ],
         ),
@@ -1634,7 +1736,10 @@ class _TribeControlCard extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.open_in_new_rounded, size: 20),
                   color: VentlyColors.berryMagenta,
-                  onPressed: () => context.push('/tribe/${tribe.slug}/manage'),
+                  tooltip: 'Manage Tribe',
+                  onPressed: () => context.push(
+                    '/tribe/${tribe.slug}/manage/settings',
+                  ),
                 ),
               ],
             ),
@@ -1653,8 +1758,10 @@ class _TribeControlCard extends StatelessWidget {
               children: [
                 _ActionChip(
                   icon: Icons.dashboard_customize_outlined,
-                  label: 'Manage',
-                  onTap: () => context.push('/tribe/${tribe.slug}/manage'),
+                  label: 'Manage Tribe',
+                  onTap: () => context.push(
+                    '/tribe/${tribe.slug}/manage/settings',
+                  ),
                 ),
                 _ActionChip(
                   icon: Icons.gavel_rounded,
