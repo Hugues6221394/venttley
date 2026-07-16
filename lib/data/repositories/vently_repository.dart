@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/analytics_events.dart';
 import '../../core/constants.dart';
 import '../../domain/entities/entities.dart';
+import '../../domain/home/home_discovery.dart';
 import '../../domain/keeper/keeper_mode.dart';
 import '../../domain/keeper/keeper_studio_v2.dart';
 import '../../domain/tribe/tribe_chat_hub.dart';
@@ -21,10 +22,13 @@ import '../services/telemetry_service.dart';
 ///   * [MockBackend]      — when `VentlyConfig.useMockBackend` is true
 ///   * [SupabaseBackend]  — when the live Supabase project is reachable
 class VentlyRepository {
-  VentlyRepository({MockBackend? mock, IdentityService? identity})
-      : _mock = mock ?? MockBackend.instance,
+  VentlyRepository({
+    MockBackend? mock,
+    IdentityService? identity,
+    bool forceMock = false,
+  })  : _mock = mock ?? MockBackend.instance,
         _identity = identity ?? IdentityService(),
-        _live = VentlyConfig.useMockBackend
+        _live = forceMock || VentlyConfig.useMockBackend
             ? null
             : SupabaseBackend.of(Supabase.instance.client);
 
@@ -292,8 +296,7 @@ class VentlyRepository {
     return user;
   }
 
-  static final RegExp _emailPattern =
-      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+  static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   /// Sign in an existing account.
   Future<AppUser> signIn({
@@ -392,6 +395,7 @@ class VentlyRepository {
           sort: sort,
         ));
       }
+
       sub = live.postsStream.listen((_) => emit());
       controller.onListen = emit;
       controller.onCancel = () => sub.cancel();
@@ -564,8 +568,7 @@ class VentlyRepository {
   }) async {
     final live = _live;
     if (live != null) {
-      return live.kickMember(
-          tribeId: tribeId, userId: userId, reason: reason);
+      return live.kickMember(tribeId: tribeId, userId: userId, reason: reason);
     }
     _mock.kickMember(tribeId: tribeId, userId: userId, reason: reason);
   }
@@ -649,6 +652,7 @@ class VentlyRepository {
     String? audioPath,
     String? audioUrl,
     int? audioDurationSeconds,
+    String? idempotencyKey,
   }) async {
     final live = _live;
     final Post post;
@@ -666,6 +670,7 @@ class VentlyRepository {
         audioPath: audioPath,
         audioUrl: audioUrl,
         audioDurationSeconds: audioDurationSeconds,
+        idempotencyKey: idempotencyKey,
       );
     } else {
       post = await _mock.createPost(
@@ -681,12 +686,12 @@ class VentlyRepository {
     AnalyticsService.instance.track(
       isWhisper ? Events.storyPublished : Events.postCreated,
       props: {
-        'category':     category,
-        'mood':         mood,
-        'has_image':    imageUrl != null,
-        'has_audio':    audioUrl != null,
-        'has_tribe':    tribeId != null,
-        'has_persona':  personaId != null,
+        'category': category,
+        'mood': mood,
+        'has_image': imageUrl != null,
+        'has_audio': audioUrl != null,
+        'has_tribe': tribeId != null,
+        'has_persona': personaId != null,
         'content_chars': content.length,
       },
     );
@@ -705,6 +710,15 @@ class VentlyRepository {
     final live = _live;
     if (live != null) return live.trendingCategories(limit: limit);
     return Future.value(_mock.trendingCategories(limit: limit));
+  }
+
+  Future<List<TrendingTopic>> trendingTopicStats({int limit = 8}) {
+    final live = _live;
+    if (live != null) return live.trendingTopicStats(limit: limit);
+    final posts = _mock.feed(sort: 'hot', limit: 100000);
+    return Future.value(
+      HomeDiscovery.topicStatsFromPosts(posts, limit: limit),
+    );
   }
 
   Future<List<TrendingVoice>> trendingVoices({int limit = 6}) {
@@ -970,6 +984,7 @@ class VentlyRepository {
     int? audioDurationSeconds,
     String? replyToMessageId,
     Map<String, dynamic>? metadata,
+    String? idempotencyKey,
   }) {
     final live = _live;
     if (live != null) {
@@ -984,6 +999,7 @@ class VentlyRepository {
         audioDurationSeconds: audioDurationSeconds,
         replyToMessageId: replyToMessageId,
         metadata: metadata,
+        idempotencyKey: idempotencyKey,
       );
     }
     return Future.value('mock-message-id');
@@ -1358,6 +1374,7 @@ class VentlyRepository {
     String content, {
     String? personaId,
     String? parentId,
+    String? idempotencyKey,
   }) {
     final live = _live;
     if (live != null) {
@@ -1366,6 +1383,7 @@ class VentlyRepository {
         content,
         personaId: personaId,
         parentId: parentId,
+        idempotencyKey: idempotencyKey,
       );
     }
     return Future.value('mock-comment-id');
@@ -1383,6 +1401,34 @@ class VentlyRepository {
     final live = _live;
     if (live != null) return live.searchTagCandidates(prefix);
     return Future.value(const <TagCandidate>[]);
+  }
+
+  /// Server-evaluated feature flags (flag_key -> enabled for this user).
+  Future<Map<String, bool>> myFeatureFlags() {
+    final live = _live;
+    if (live != null) return live.myFeatureFlags();
+    return Future.value(const <String, bool>{});
+  }
+
+  /// Live flag map — refetches when any flag row changes.
+  Stream<Map<String, bool>> watchFeatureFlags() {
+    final live = _live;
+    if (live != null) return live.watchFeatureFlags();
+    return Stream.value(const <String, bool>{});
+  }
+
+  /// Typo-tolerant search typeahead.
+  Future<List<SearchSuggestion>> searchSuggestions(String prefix) {
+    final live = _live;
+    if (live != null) return live.searchSuggestions(prefix);
+    return Future.value(const <SearchSuggestion>[]);
+  }
+
+  /// Busiest categories/tribes of the last 24h.
+  Future<List<SearchSuggestion>> trendingSearches() {
+    final live = _live;
+    if (live != null) return live.trendingSearches();
+    return Future.value(const <SearchSuggestion>[]);
   }
 
   /// Delete a whisper comment (author or whisper owner).
@@ -1455,12 +1501,12 @@ class VentlyRepository {
     AnalyticsService.instance.track(
       Events.whisperPublished,
       props: {
-        'category':         category,
-        'voice_filter':     voiceFilter,
+        'category': category,
+        'voice_filter': voiceFilter,
         'duration_seconds': audioDurationSeconds,
-        'has_background':   backgroundImageUrl != null,
-        'has_title':        title != null && title.isNotEmpty,
-        'has_persona':      personaId != null,
+        'has_background': backgroundImageUrl != null,
+        'has_title': title != null && title.isNotEmpty,
+        'has_persona': personaId != null,
       },
     );
     return id;
@@ -1622,11 +1668,9 @@ class VentlyRepository {
   }) {
     final live = _live;
     if (live != null) {
-      return live.spotlightMember(
-          tribeId: tribeId, userId: userId, note: note);
+      return live.spotlightMember(tribeId: tribeId, userId: userId, note: note);
     }
-    return _mock.spotlightMember(
-        tribeId: tribeId, userId: userId, note: note);
+    return _mock.spotlightMember(tribeId: tribeId, userId: userId, note: note);
   }
 
   // ===================== User lookup =====================
@@ -1639,8 +1683,7 @@ class VentlyRepository {
       return (
         userId: row['user_id'] as String,
         pseudonym: row['anonymous_pseudonym'] as String,
-        avatarSeed:
-            (row['avatar_seed'] as String?) ?? 'default-orb',
+        avatarSeed: (row['avatar_seed'] as String?) ?? 'default-orb',
       );
     }
     final u = _mock.findUserByPseudonym(pseudonym);
@@ -1951,6 +1994,7 @@ class VentlyRepository {
     String? personaId,
     String? imageUrl,
     String? imagePath,
+    String? idempotencyKey,
   }) {
     final live = _live;
     if (live != null) {
@@ -1961,6 +2005,7 @@ class VentlyRepository {
         personaId: personaId,
         imageUrl: imageUrl,
         imagePath: imagePath,
+        idempotencyKey: idempotencyKey,
       );
     }
     return _mock.addComment(
@@ -1999,7 +2044,9 @@ class VentlyRepository {
       key,
       () async {
         final live = _live;
-        if (live != null) return live.tribes(category: category, search: search);
+        if (live != null) {
+          return live.tribes(category: category, search: search);
+        }
         return _mock.tribes(category: category, search: search);
       },
       ttl: const Duration(minutes: 1),
@@ -2386,6 +2433,7 @@ class VentlyRepository {
     String? attachedMediaPath,
     String? attachedMediaType,
     String? parentMessageId,
+    String? idempotencyKey,
   }) async {
     final live = _live;
     final ChatMessage msg;
@@ -2397,6 +2445,7 @@ class VentlyRepository {
         attachedMediaPath: attachedMediaPath,
         attachedMediaType: attachedMediaType,
         parentMessageId: parentMessageId,
+        idempotencyKey: idempotencyKey,
       );
     } else {
       msg = _mock.sendMessage(
@@ -2412,10 +2461,10 @@ class VentlyRepository {
           ? Events.chatMessageReplied
           : Events.chatMessageSent,
       props: {
-        'has_image':         attachedMediaPath != null,
+        'has_image': attachedMediaPath != null,
         'has_attached_post': attachedPostId != null,
-        'is_reply':          parentMessageId != null,
-        'content_chars':     plaintext.length,
+        'is_reply': parentMessageId != null,
+        'content_chars': plaintext.length,
       },
     );
     return msg;
@@ -2689,8 +2738,7 @@ class VentlyRepository {
     if (live != null) {
       return live.addPromptAnswer(promptId: promptId, text: text);
     }
-    return Future.value(
-        _mock.addPromptAnswer(promptId: promptId, text: text));
+    return Future.value(_mock.addPromptAnswer(promptId: promptId, text: text));
   }
 
   // ===================== Notifications =====================
@@ -2721,8 +2769,8 @@ class VentlyRepository {
   int _ageFrom(DateTime birth) {
     final now = DateTime.now();
     var age = now.year - birth.year;
-    final hasBirthdayPassed =
-        now.month > birth.month || (now.month == birth.month && now.day >= birth.day);
+    final hasBirthdayPassed = now.month > birth.month ||
+        (now.month == birth.month && now.day >= birth.day);
     if (!hasBirthdayPassed) age -= 1;
     return age;
   }

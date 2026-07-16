@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
+import '../../domain/entities/entities.dart';
 import '../screens/compose/compose_screen.dart';
 import '../screens/compose/create_story_screen.dart';
 import '../screens/discover/discover_screen.dart';
@@ -75,7 +76,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (ctx, st) =>
             RecoveryKeyScreen(phrase: (st.extra as String?) ?? ''),
       ),
-      GoRoute(path: '/onboarding/recover', builder: (_, __) => const RecoverScreen()),
+      GoRoute(
+          path: '/onboarding/recover',
+          builder: (_, __) => const RecoverScreen()),
       GoRoute(
         path: '/onboarding/email',
         builder: (_, __) => const EmailSignupScreen(),
@@ -85,8 +88,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const PhoneSignInScreen(),
       ),
 
-      // Bottom-nav shell. 5 branches: Home / Whispers / Post / Inbox /
-      // Profile. Social apps keep the footer nav on nearly every screen,
+      // Bottom-nav shell. Five stateful branches plus the Friends shortcut:
+      // Home / Whispers / Post / Friends / Inbox / Profile. Social apps keep
+      // the footer nav on nearly every screen,
       // so the browse/detail routes live INSIDE the branches (nav stays
       // visible). Only chat boxes, full-screen creators/viewers and
       // onboarding escape to the root navigator via [rootNavigatorKey].
@@ -103,15 +107,21 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(
                 path: '/friends', builder: (_, __) => const FriendsScreen()),
             GoRoute(
-                path: '/discover',
-                builder: (_, __) => const DiscoverScreen()),
+                path: '/discover', builder: (_, __) => const DiscoverScreen()),
             GoRoute(
                 path: '/tribes',
                 builder: (_, __) => const TribesDirectoryScreen()),
             GoRoute(
               path: '/post/:id',
-              builder: (ctx, st) =>
-                  PostDetailScreen(postId: st.pathParameters['id']!),
+              builder: (ctx, st) {
+                final postId = st.pathParameters['id']!;
+                final extra = st.extra;
+                return PostDetailScreen(
+                  postId: postId,
+                  initialPost:
+                      extra is Post && extra.postId == postId ? extra : null,
+                );
+              },
               routes: [
                 GoRoute(
                   path: 'share',
@@ -123,8 +133,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(
               path: '/plug/:name',
               builder: (ctx, st) => PlugProfileScreen(
-                displayName:
-                    Uri.decodeComponent(st.pathParameters['name']!),
+                displayName: Uri.decodeComponent(st.pathParameters['name']!),
               ),
             ),
             GoRoute(
@@ -160,15 +169,15 @@ final routerProvider = Provider<GoRouter>((ref) {
                     GoRoute(
                       path: 'hub',
                       parentNavigatorKey: rootNavigatorKey,
-                      builder: (ctx, st) => TribeChatHubScreen(
-                          slug: st.pathParameters['slug']!),
+                      builder: (ctx, st) =>
+                          TribeChatHubScreen(slug: st.pathParameters['slug']!),
                     ),
                   ],
                 ),
                 GoRoute(
                   path: 'space/:spaceId',
-                  builder: (ctx, st) => SpaceHomeScreen(
-                      spaceId: st.pathParameters['spaceId']!),
+                  builder: (ctx, st) =>
+                      SpaceHomeScreen(spaceId: st.pathParameters['spaceId']!),
                 ),
                 GoRoute(
                   path: 'manage',
@@ -177,8 +186,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                   routes: [
                     GoRoute(
                       path: 'reports',
-                      builder: (ctx, st) => TribeReportsScreen(
-                          slug: st.pathParameters['slug']!),
+                      builder: (ctx, st) =>
+                          TribeReportsScreen(slug: st.pathParameters['slug']!),
                     ),
                     GoRoute(
                       path: 'moderation',
@@ -271,7 +280,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       GoRoute(
         path: '/verify-email',
-        builder: (_, st) => VerifyEmailScreen(email: st.uri.queryParameters['email']),
+        builder: (_, st) =>
+            VerifyEmailScreen(email: st.uri.queryParameters['email']),
       ),
       GoRoute(
         path: '/whisper/:id',

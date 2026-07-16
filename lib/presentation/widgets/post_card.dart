@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -46,8 +47,7 @@ class PostCard extends ConsumerWidget {
     final iAmKeeper = () {
       final slug = post.tribeSlug;
       if (slug == null || me == null) return false;
-      final tribe =
-          ref.watch(tribeBySlugProvider(slug)).valueOrNull;
+      final tribe = ref.watch(tribeBySlugProvider(slug)).valueOrNull;
       return tribe?.keeperId != null && tribe!.keeperId == me.userId;
     }();
     final tribeForPost = post.tribeSlug == null
@@ -63,8 +63,7 @@ class PostCard extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Icon(Icons.do_not_disturb_on_outlined,
-                  size: 14, color: muted),
+              Icon(Icons.do_not_disturb_on_outlined, size: 14, color: muted),
               const SizedBox(width: 8),
               Text(
                 'Vent removed by author',
@@ -117,8 +116,8 @@ class PostCard extends ConsumerWidget {
                             Flexible(
                               child: post.authorId != null
                                   ? InkWell(
-                                      onTap: () => context.push(
-                                          '/user/${post.authorId}'),
+                                      onTap: () => context
+                                          .push('/user/${post.authorId}'),
                                       child: Text(
                                         post.authorPseudonym,
                                         style: const TextStyle(
@@ -190,9 +189,7 @@ class PostCard extends ConsumerWidget {
                             ],
                             if (post.isLocked) ...[
                               const SizedBox(width: 6),
-                              Icon(Icons.lock_outline,
-                                  size: 12,
-                                  color: muted),
+                              Icon(Icons.lock_outline, size: 12, color: muted),
                             ],
                             if (post.isEdited) ...[
                               const SizedBox(width: 4),
@@ -285,7 +282,7 @@ class PostCard extends ConsumerWidget {
                   _ReactionButton(post: post),
                   const SizedBox(width: 16),
                   _PillAction(
-                    icon: Icons.chat_bubble_outline,
+                    icon: CupertinoIcons.chat_bubble,
                     label: PostCard.compactNumber(post.commentsCount),
                     onTap: onComment,
                   ),
@@ -325,11 +322,8 @@ class PostCard extends ConsumerWidget {
                       } else if (v == 'delete') {
                         confirmDeletePost(context, ref, post);
                       } else if (v == 'lock' || v == 'unlock') {
-                        await ref
-                            .read(repositoryProvider)
-                            .setPostCommentsLock(
-                                postId: post.postId,
-                                locked: v == 'lock');
+                        await ref.read(repositoryProvider).setPostCommentsLock(
+                            postId: post.postId, locked: v == 'lock');
                         ref.invalidate(postByIdProvider(post.postId));
                         ref.invalidate(feedPostsProvider);
                       } else if (v == 'keeper_pick') {
@@ -454,8 +448,8 @@ class PostCard extends ConsumerWidget {
     final d = DateTime.now().difference(ts);
     if (d.inMinutes < 1) return 'just now';
     if (d.inMinutes < 60) return '${d.inMinutes}m ago';
-    if (d.inHours   < 24) return '${d.inHours}h ago';
-    if (d.inDays    < 7)  return '${d.inDays}d ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    if (d.inDays < 7) return '${d.inDays}d ago';
     return DateFormat.MMMd().format(ts);
   }
 
@@ -472,14 +466,14 @@ class PostCard extends ConsumerWidget {
 Future<void> openReportPostSheet(
     BuildContext context, WidgetRef ref, String postId) async {
   const reasons = <(String, String)>[
-    ('self_harm',       'Self-harm or suicide concern'),
-    ('hate',            'Hate speech'),
-    ('harassment',      'Harassment or bullying'),
-    ('sexual_content',  'Sexual content'),
-    ('violence',        'Violence or threats'),
-    ('privacy',         'Personal info / doxxing'),
-    ('spam',            'Spam or scam'),
-    ('other',           'Something else'),
+    ('self_harm', 'Self-harm or suicide concern'),
+    ('hate', 'Hate speech'),
+    ('harassment', 'Harassment or bullying'),
+    ('sexual_content', 'Sexual content'),
+    ('violence', 'Violence or threats'),
+    ('privacy', 'Personal info / doxxing'),
+    ('spam', 'Spam or scam'),
+    ('other', 'Something else'),
   ];
   final choice = await showModalBottomSheet<String>(
     context: context,
@@ -567,7 +561,8 @@ class _PillAction extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             label,
-            style: TextStyle(color: muted, fontWeight: FontWeight.w600, fontSize: 12),
+            style: TextStyle(
+                color: muted, fontWeight: FontWeight.w600, fontSize: 12),
           ),
         ],
       ),
@@ -646,8 +641,8 @@ class PromptCard extends StatelessWidget {
                 child: CustomPaint(
                   painter: _HeartBubbleBgPainter(scheme.primary),
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 26, vertical: 24),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 26, vertical: 24),
                     child: Text(
                       '"${prompt.promptText}"',
                       textAlign: TextAlign.center,
@@ -655,9 +650,7 @@ class PromptCard extends StatelessWidget {
                         fontStyle: FontStyle.italic,
                         fontSize: 16,
                         height: 1.4,
-                        color: isDark
-                            ? VentlyColors.softOffWhite
-                            : context.ink,
+                        color: isDark ? VentlyColors.softOffWhite : context.ink,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -673,8 +666,8 @@ class PromptCard extends StatelessWidget {
                     controller: controller,
                     decoration: const InputDecoration(
                       hintText: 'Answer Anonymously...',
-                      contentPadding: EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
                   ),
                 ),
@@ -703,8 +696,7 @@ class PromptCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  decoration:
-                      onTap == null ? null : TextDecoration.underline,
+                  decoration: onTap == null ? null : TextDecoration.underline,
                   color: scheme.onSurface.withOpacity(0.65),
                 ),
               ),
@@ -769,7 +761,8 @@ class _ReactionButton extends ConsumerWidget {
       // The default reaction renders as the filled brand heart.
       glyph = Icon(Icons.favorite, size: 18, color: color);
     } else {
-      glyph = Text(PostReactions.emoji(r), style: const TextStyle(fontSize: 16));
+      glyph =
+          Text(PostReactions.emoji(r), style: const TextStyle(fontSize: 16));
     }
 
     return GestureDetector(

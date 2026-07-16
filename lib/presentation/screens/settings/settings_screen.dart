@@ -14,6 +14,7 @@ import '../../../data/services/moderation_service.dart';
 import '../../theme/colors.dart';
 import '../../widgets/blocked_accounts_sheet.dart';
 import '../../widgets/recovery_phrase_dialog.dart';
+import '../../widgets/vently_notification_bell.dart';
 
 /// Account, appearance, privacy, and safety settings.
 class SettingsScreen extends ConsumerWidget {
@@ -38,7 +39,10 @@ class SettingsScreen extends ConsumerWidget {
               leading: CircleAvatar(
                 backgroundColor: scheme.primary.withOpacity(0.14),
                 child: Text(
-                  me.anonymousPseudonym.replaceAll('@', '').characters.first
+                  me.anonymousPseudonym
+                      .replaceAll('@', '')
+                      .characters
+                      .first
                       .toUpperCase(),
                   style: TextStyle(
                     color: scheme.primary,
@@ -51,19 +55,22 @@ class SettingsScreen extends ConsumerWidget {
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
               subtitle: ref.watch(keeperModeProvider).when(
-                data: (mode) => Text(
-                  mode.label,
-                  style: TextStyle(color: scheme.onSurface.withOpacity(0.6)),
-                ),
-                loading: () => Text(
-                  me.userRole == 'plug' ? 'Verified Plug' : 'Member',
-                  style: TextStyle(color: scheme.onSurface.withOpacity(0.6)),
-                ),
-                error: (_, __) => Text(
-                  me.userRole == 'plug' ? 'Verified Plug' : 'Member',
-                  style: TextStyle(color: scheme.onSurface.withOpacity(0.6)),
-                ),
-              ),
+                    data: (mode) => Text(
+                      mode.label,
+                      style:
+                          TextStyle(color: scheme.onSurface.withOpacity(0.6)),
+                    ),
+                    loading: () => Text(
+                      me.userRole == 'plug' ? 'Verified Plug' : 'Member',
+                      style:
+                          TextStyle(color: scheme.onSurface.withOpacity(0.6)),
+                    ),
+                    error: (_, __) => Text(
+                      me.userRole == 'plug' ? 'Verified Plug' : 'Member',
+                      style:
+                          TextStyle(color: scheme.onSurface.withOpacity(0.6)),
+                    ),
+                  ),
             ),
           ],
           const _SectionHeader('Appearance'),
@@ -76,9 +83,8 @@ class SettingsScreen extends ConsumerWidget {
                     child: _AppearanceOption(
                       mode: option,
                       selected: themeMode == option,
-                      onTap: () => ref
-                          .read(themeModeProvider.notifier)
-                          .setMode(option),
+                      onTap: () =>
+                          ref.read(themeModeProvider.notifier).setMode(option),
                     ),
                   ),
                   if (option != VentlyThemeMode.values.last)
@@ -86,6 +92,19 @@ class SettingsScreen extends ConsumerWidget {
                 ],
               ],
             ),
+          ),
+          const _SectionHeader('Data & network'),
+          SwitchListTile(
+            secondary: const Icon(Icons.data_saver_on_rounded,
+                color: VentlyColors.berryMagenta),
+            title: const Text('Data Saver',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: const Text(
+                'Lighter images, no whisper autoplay, less prefetch'),
+            activeColor: VentlyColors.berryMagenta,
+            value: ref.watch(dataSaverProvider),
+            onChanged: (v) =>
+                ref.read(dataSaverProvider.notifier).setEnabled(v),
           ),
           const _SectionHeader('Account'),
           ListTile(
@@ -102,8 +121,8 @@ class SettingsScreen extends ConsumerWidget {
                 color: VentlyColors.berryMagenta),
             title: const Text('Password & security',
                 style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: const Text(
-                'Password, recovery email, 2FA, active sessions'),
+            subtitle:
+                const Text('Password, recovery email, 2FA, active sessions'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => context.push('/profile/password-security'),
           ),
@@ -140,16 +159,15 @@ class SettingsScreen extends ConsumerWidget {
             title: const Text('Blocked accounts',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             subtitle: Text(
-              blocks.isEmpty
-                  ? 'No one blocked'
-                  : '${blocks.length} blocked',
+              blocks.isEmpty ? 'No one blocked' : '${blocks.length} blocked',
             ),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => showBlockedAccountsSheet(context),
           ),
           ListTile(
-            leading: const Icon(Icons.notifications_outlined,
-                color: VentlyColors.berryMagenta),
+            leading: const VentlyNotificationBell(
+              color: VentlyColors.berryMagenta,
+            ),
             title: const Text('Notification alerts',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             subtitle: const Text(
@@ -157,8 +175,9 @@ class SettingsScreen extends ConsumerWidget {
             ),
             trailing: Switch.adaptive(
               value: notificationsOn,
-              onChanged: (v) =>
-                  ref.read(pushNotificationsEnabledProvider.notifier).setEnabled(v),
+              onChanged: (v) => ref
+                  .read(pushNotificationsEnabledProvider.notifier)
+                  .setEnabled(v),
             ),
           ),
           ListTile(
@@ -489,9 +508,8 @@ class _AppearanceOption extends StatelessWidget {
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color: selected
-            ? scheme.primary.withOpacity(0.14)
-            : context.glass(0.55),
+        color:
+            selected ? scheme.primary.withOpacity(0.14) : context.glass(0.55),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: selected ? scheme.primary : context.glassBorder,

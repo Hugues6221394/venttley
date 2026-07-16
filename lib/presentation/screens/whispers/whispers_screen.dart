@@ -59,6 +59,8 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
     if (_completeSub != null) return;
     _completeSub = controller.processingStream.listen((state) {
       if (!mounted) return;
+      // Data Saver: never auto-advance — each whisper is a paid download.
+      if (ref.read(dataSaverProvider)) return;
       if (state == ProcessingState.completed && !controller.loopEnabled) {
         _advanceToNext();
       }

@@ -6,9 +6,13 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/connection.dart';
 import '../../../core/providers.dart';
+import '../../../data/services/draft_store.dart';
+import '../../../data/services/outbox.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
+import '../../theme/vently_tokens.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tagged_text.dart';
 import '../../widgets/user_profile_link.dart';
@@ -18,10 +22,19 @@ import '../../widgets/post_card.dart';
 import '../../widgets/sensitive_media_veil.dart';
 import '../../widgets/chat_audio_bubble.dart';
 import '../../widgets/gif_picker_sheet.dart';
+import '../../widgets/vently_error_state.dart';
+
+enum _ThreadSort { top, newest }
 
 class PostDetailScreen extends ConsumerStatefulWidget {
-  const PostDetailScreen({super.key, required this.postId});
+  const PostDetailScreen({
+    super.key,
+    required this.postId,
+    this.initialPost,
+  });
+
   final String postId;
+  final Post? initialPost;
 
   @override
   ConsumerState<PostDetailScreen> createState() => _PostDetailScreenState();
@@ -29,8 +42,10 @@ class PostDetailScreen extends ConsumerStatefulWidget {
 
 class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   final _replyController = TextEditingController();
+  final _replyFocus = FocusNode();
   String? _replyingToId;
   String? _replyingToName;
+  _ThreadSort _threadSort = _ThreadSort.top;
 
   // Pending reply attachment: EITHER a device photo (bytes, uploaded on send)
   // OR a GIF (remote Tenor url, used directly). Never both.
@@ -39,12 +54,67 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   String? _pendingGifUrl;
   bool _sending = false;
 
-  bool get _hasAttachment => _pendingImageBytes != null || _pendingGifUrl != null;
+  bool get _hasAttachment =>
+      _pendingImageBytes != null || _pendingGifUrl != null;
+
+  DraftSaver? _draftSaver;
+
+  @override
+  void initState() {
+    super.initState();
+    // Per-thread reply draft: restore + auto-save.
+    ref.read(draftStoreProvider.future).then((store) {
+      if (!mounted) return;
+      _draftSaver = DraftSaver(
+        store: store,
+        draftKey: 'comment.${widget.postId}',
+        controller: _replyController,
+      );
+      if (_draftSaver!.restore()) setState(() {});
+    });
+  }
 
   @override
   void dispose() {
+    _draftSaver?.dispose();
     _replyController.dispose();
+    _replyFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshThread() async {
+    await Future.wait<Object?>([
+      ref.refresh(postByIdProvider(widget.postId).future),
+      ref.refresh(commentsProvider(widget.postId).future),
+    ]);
+  }
+
+  List<ThreadedComment> _orderedComments(List<ThreadedComment> comments) {
+    final pinned = comments.where((comment) => comment.isPinned).toList()
+      ..sort((a, b) =>
+          (b.pinnedAt ?? b.createdAt).compareTo(a.pinnedAt ?? a.createdAt));
+    final regular = comments.where((comment) => !comment.isPinned).toList();
+    if (_threadSort == _ThreadSort.newest) {
+      regular.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    } else {
+      regular.sort((a, b) {
+        final aScore = a.likesCount + _countComments(a.children);
+        final bScore = b.likesCount + _countComments(b.children);
+        final scoreOrder = bScore.compareTo(aScore);
+        return scoreOrder != 0
+            ? scoreOrder
+            : b.createdAt.compareTo(a.createdAt);
+      });
+    }
+    return [...pinned, ...regular];
+  }
+
+  int _countComments(List<ThreadedComment> comments) {
+    var count = comments.length;
+    for (final comment in comments) {
+      count += _countComments(comment.children);
+    }
+    return count;
   }
 
   Future<void> _pickDeviceImage() async {
@@ -104,22 +174,30 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       }
     }
 
+    final operationId = OutboxService.newOperationId();
+    final outbox = await ref.read(outboxProvider.future);
+    final persona = ref.read(activePersonaProvider);
+    String? imageUrl = _pendingGifUrl;
+    String? imagePath;
+    StagedOutboxMedia? stagedMedia;
     setState(() => _sending = true);
     try {
       final repo = ref.read(repositoryProvider);
-      String? imageUrl;
-      String? imagePath;
       if (_pendingImageBytes != null) {
+        stagedMedia = await outbox.stageMedia(
+          operationId: operationId,
+          bytes: _pendingImageBytes!,
+          extension: _pendingImageExt ?? 'jpg',
+          contentType: 'image/jpeg',
+          mediaType: 'image',
+        );
         final up = await repo.uploadPostImage(
           bytes: _pendingImageBytes!,
           extension: _pendingImageExt ?? 'jpg',
         );
         imageUrl = up.url;
         imagePath = up.path;
-      } else if (_pendingGifUrl != null) {
-        imageUrl = _pendingGifUrl;
       }
-      final persona = ref.read(activePersonaProvider);
       await repo.addComment(
         postId: widget.postId,
         parentId: _replyingToId,
@@ -127,8 +205,11 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
         personaId: persona?.personaId,
         imageUrl: imageUrl,
         imagePath: imagePath,
+        idempotencyKey: operationId,
       );
+      await outbox.discardStagedMedia(stagedMedia?.path);
       if (!mounted) return;
+      await _draftSaver?.clear();
       ref.invalidate(commentsProvider(widget.postId));
       ref.invalidate(postByIdProvider(widget.postId));
       ref.invalidate(feedPostsProvider);
@@ -141,18 +222,70 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
         _pendingGifUrl = null;
         _sending = false;
       });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _sending = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Couldn\'t post reply: $e')));
+    } catch (_) {
+      if (_pendingImageBytes != null && stagedMedia == null) {
+        if (!mounted) return;
+        setState(() => _sending = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not securely preserve the photo. Your draft is still saved.',
+            ),
+          ),
+        );
+        return;
+      }
+      try {
+        await outbox.enqueue(
+          OutboxKind.comment,
+          {
+            'postId': widget.postId,
+            'parentId': _replyingToId,
+            'content': text,
+            'personaId': persona?.personaId,
+            'imageUrl': imageUrl,
+            'imagePath': imagePath,
+            if (stagedMedia != null) ...stagedMedia.toPayload(),
+          },
+          operationId: operationId,
+        );
+        await _draftSaver?.clear();
+        _replyController.clear();
+        if (!mounted) return;
+        setState(() {
+          _replyingToId = null;
+          _replyingToName = null;
+          _pendingImageBytes = null;
+          _pendingImageExt = null;
+          _pendingGifUrl = null;
+          _sending = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "You're offline - reply queued, it will post automatically.",
+            ),
+          ),
+        );
+        return;
+      } catch (queueError) {
+        if (!mounted) return;
+        setState(() => _sending = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Couldn't preserve reply: $queueError. Your draft is still saved.",
+            ),
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final postAsync = ref.watch(postByIdProvider(widget.postId));
-    final post = postAsync.valueOrNull;
+    final post = postAsync.valueOrNull ?? widget.initialPost;
     if (postAsync.isLoading && post == null) {
       return Scaffold(
         backgroundColor: Colors.transparent,
@@ -160,15 +293,38 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
         body: const Center(child: CircularProgressIndicator()),
       );
     }
+    if (postAsync.hasError && post == null) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(),
+        body: VentlyErrorState(
+          error: postAsync.error!,
+          title: 'Couldn\'t open this post',
+          onRetry: () => ref.invalidate(postByIdProvider(widget.postId)),
+        ),
+      );
+    }
     if (post == null) {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(),
-        body: const Center(child: Text('Post not found')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'This post is no longer available.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
       );
     }
-    final comments =
-        ref.watch(commentsProvider(widget.postId)).valueOrNull ?? const [];
+    final commentsAsync = ref.watch(commentsProvider(widget.postId));
+    final comments = commentsAsync.valueOrNull ?? const <ThreadedComment>[];
+    final orderedComments = _orderedComments(comments);
+    final visibleCommentCount = commentsAsync.valueOrNull == null
+        ? post.commentsCount
+        : _countComments(comments);
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -182,118 +338,135 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       body: Column(
         children: [
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.only(bottom: 80),
-              children: [
-                if (post.crisisLevel != null)
-                  _CrisisHelplineBanner(level: post.crisisLevel!),
-                PostCard(post: post),
-                // The vent's own attached photo / voice note. PostCard renders
-                // only text, so the thread would otherwise open caption-only.
-                if (post.hasImage && post.imageUrl != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: SensitiveMediaVeil(
-                      veiled: post.mediaNeedsVeil,
-                      pending: post.mediaStatus == 'pending',
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: GestureDetector(
-                          onTap: () => _openFullImage(context, post.imageUrl!),
-                          child: Image.network(
-                            post.imageUrl!,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              height: 160,
-                              color: const Color(0xFFFFE5ED),
-                              alignment: Alignment.center,
-                              child: const Icon(Icons.image_outlined,
-                                  color: VentlyColors.berryMagenta),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                if (post.hasAudio && post.audioUrl != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: ChatAudioBubble(
-                      messageId: post.postId,
-                      audioUrl: post.audioUrl!,
-                      durationSeconds: post.audioDurationSeconds ?? 0,
-                      lightOnDark: false,
-                    ),
-                  ),
-                if (post.authorId != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                    child: Row(
+            child: RefreshIndicator(
+              onRefresh: _refreshThread,
+              child: CustomScrollView(
+                key: const PageStorageKey<String>('post-thread-scroll'),
+                physics: const AlwaysScrollableScrollPhysics(),
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                cacheExtent: 720,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Column(
                       children: [
-                        TextButton(
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            minimumSize: Size.zero,
-                            tapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          onPressed: () =>
-                              context.push('/user/${post.authorId}'),
-                          child: Text(
-                            'View profile',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Theme.of(context).colorScheme.primary,
+                        if (post.crisisLevel != null)
+                          _CrisisHelplineBanner(level: post.crisisLevel!),
+                        PostCard(post: post),
+                        // PostCard renders text only on this surface.
+                        if (post.hasImage && post.imageUrl != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                            child: SensitiveMediaVeil(
+                              veiled: post.mediaNeedsVeil,
+                              pending: post.mediaStatus == 'pending',
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: GestureDetector(
+                                  onTap: () =>
+                                      _openFullImage(context, post.imageUrl!),
+                                  child: Image.network(
+                                    post.imageUrl!,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      height: 160,
+                                      color: VentlyColors.roseTint,
+                                      alignment: Alignment.center,
+                                      child: const Icon(Icons.image_outlined,
+                                          color: VentlyColors.berryMagenta),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                        const Spacer(),
-                        FriendActionButton(
-                          otherUserId: post.authorId!,
-                          otherPseudonym:
-                              post.authorPseudonym.replaceFirst('@', ''),
-                          dense: true,
-                        ),
+                        if (post.hasAudio && post.audioUrl != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                            child: ChatAudioBubble(
+                              messageId: post.postId,
+                              audioUrl: post.audioUrl!,
+                              durationSeconds: post.audioDurationSeconds ?? 0,
+                              lightOnDark: false,
+                            ),
+                          ),
+                        if (post.authorId != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+                            child: Row(
+                              children: [
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  onPressed: () =>
+                                      context.push('/user/${post.authorId}'),
+                                  child: const Text(
+                                    'View profile',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                                const Spacer(),
+                                FriendActionButton(
+                                  otherUserId: post.authorId!,
+                                  otherPseudonym: post.authorPseudonym
+                                      .replaceFirst('@', ''),
+                                  dense: true,
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
-                  child: Text(
-                    'Thread',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w800),
+                  SliverToBoxAdapter(
+                    child: _ThreadHeader(
+                      count: visibleCommentCount,
+                      sort: _threadSort,
+                      onSortChanged: (value) =>
+                          setState(() => _threadSort = value),
+                    ),
                   ),
-                ),
-                if (comments.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-                    child: Text(
-                      'No comments yet. Be the first kind voice in this thread.',
-                      style: TextStyle(color: Colors.black54),
+                  if (commentsAsync.isLoading && orderedComments.isEmpty)
+                    const SliverToBoxAdapter(child: _CommentsLoading())
+                  else if (commentsAsync.hasError && orderedComments.isEmpty)
+                    SliverToBoxAdapter(
+                      child: _CommentsError(
+                        onRetry: () =>
+                            ref.invalidate(commentsProvider(widget.postId)),
+                      ),
+                    )
+                  else if (orderedComments.isEmpty)
+                    const SliverToBoxAdapter(child: _CommentsEmpty())
+                  else
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final comment = orderedComments[index];
+                          return _CommentNode(
+                            key: ValueKey(comment.commentId),
+                            comment: comment,
+                            postId: widget.postId,
+                            postAuthorId: post.authorId,
+                            onReply: _setReplyTarget,
+                          );
+                        },
+                        childCount: orderedComments.length,
+                      ),
                     ),
-                  )
-                else
-                  // Hoist pinned comments above the chronological thread
-                  // (migration 0051). Sort is stable so pinned items keep
-                  // their original ordering by pinned_at.
-                  for (final c in [
-                    ...comments.where((c) => c.isPinned),
-                    ...comments.where((c) => !c.isPinned),
-                  ])
-                    _CommentNode(
-                      key: ValueKey(c.commentId),
-                      comment: c,
-                      postId: widget.postId,
-                      postAuthorId: post.authorId,
-                      onReply: (cm) => _setReplyTarget(cm),
-                    ),
-              ],
+                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                ],
+              ),
             ),
           ),
           if (post.isLocked)
@@ -301,6 +474,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
           else
             _ReplyComposer(
               controller: _replyController,
+              focusNode: _replyFocus,
               replyingToName: _replyingToName,
               sending: _sending,
               imageBytes: _pendingImageBytes,
@@ -323,6 +497,9 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     setState(() {
       _replyingToId = c.commentId;
       _replyingToName = c.authorPseudonym;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _replyFocus.requestFocus();
     });
   }
 
@@ -356,6 +533,219 @@ void _openFullImageView(BuildContext context, String url) {
   );
 }
 
+class _ThreadHeader extends StatelessWidget {
+  const _ThreadHeader({
+    required this.count,
+    required this.sort,
+    required this.onSortChanged,
+  });
+
+  final int count;
+  final _ThreadSort sort;
+  final ValueChanged<_ThreadSort> onSortChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
+      child: Row(
+        children: [
+          Text('Replies', style: VentlyTokens.sectionTitle(context)),
+          const SizedBox(width: 7),
+          Container(
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 22),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: VentlyColors.roseTint,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              PostCard.compactNumber(count),
+              style: const TextStyle(
+                color: VentlyColors.roseDeep,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const Spacer(),
+          SizedBox(
+            height: 34,
+            child: SegmentedButton<_ThreadSort>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: _ThreadSort.top, label: Text('Top')),
+                ButtonSegment(value: _ThreadSort.newest, label: Text('Newest')),
+              ],
+              selected: {sort},
+              onSelectionChanged: (selection) => onSortChanged(selection.first),
+              style: ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                padding: const WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 10),
+                ),
+                textStyle: const WidgetStatePropertyAll(
+                  TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                ),
+                shape: WidgetStatePropertyAll(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentsLoading extends StatelessWidget {
+  const _CommentsLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Loading replies',
+      child: Column(
+        children: [
+          for (var i = 0; i < 3; i++)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: VentlyColors.softMauve.withOpacity(0.7),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _SkeletonLine(width: i.isEven ? 118 : 142),
+                        const SizedBox(height: 10),
+                        const _SkeletonLine(),
+                        const SizedBox(height: 7),
+                        const _SkeletonLine(width: 210),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonLine extends StatelessWidget {
+  const _SkeletonLine({this.width});
+  final double? width;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width ?? double.infinity,
+      height: 9,
+      decoration: BoxDecoration(
+        color: VentlyColors.softMauve.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(5),
+      ),
+    );
+  }
+}
+
+class _CommentsError extends StatelessWidget {
+  const _CommentsError({required this.onRetry});
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 26, 24, 34),
+      child: Column(
+        children: [
+          Icon(Icons.cloud_off_outlined, color: context.inkMuted, size: 30),
+          const SizedBox(height: 10),
+          Text(
+            'Replies couldn’t load',
+            style: TextStyle(
+              color: context.ink,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Your draft is safe. Check your connection and try again.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.inkMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded, size: 17),
+            label: const Text('Try again'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentsEmpty extends StatelessWidget {
+  const _CommentsEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 30, 28, 42),
+      child: Column(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: VentlyColors.roseTint,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.chat_bubble_outline_rounded,
+              color: VentlyColors.berryMagenta,
+              size: 22,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Start the conversation',
+            style: TextStyle(
+              color: context.ink,
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'Be the first kind voice in this thread.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.inkMuted, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CommentNode extends ConsumerStatefulWidget {
   const _CommentNode({
     super.key,
@@ -367,6 +757,7 @@ class _CommentNode extends ConsumerStatefulWidget {
   final ThreadedComment comment;
   final ValueChanged<ThreadedComment> onReply;
   final String postId;
+
   /// Author of the parent vent. Needed for the "Pin" affordance: only
   /// the vent's author can pin one comment to the top of their thread.
   final String? postAuthorId;
@@ -398,16 +789,15 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
     }
   }
 
-  /// Adaptive indentation: min(d * 12, 36px). Beyond depth 4 we collapse.
-  double _indent(int depth) => (depth * 12).clamp(0, 36).toDouble();
-
   Future<void> _toggleLike() async {
     if (_likeInFlight) return;
+    HapticFeedback.selectionClick();
     final wasLiked = _likedByMe;
     setState(() {
       _likeInFlight = true;
       _likedByMe = !wasLiked;
-      _likesCount = wasLiked ? (_likesCount - 1).clamp(0, 1 << 30) : _likesCount + 1;
+      _likesCount =
+          wasLiked ? (_likesCount - 1).clamp(0, 1 << 30) : _likesCount + 1;
     });
     try {
       final result = await ref
@@ -425,6 +815,9 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
         _likesCount = widget.comment.likesCount;
         _likeInFlight = false;
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update this reaction.')),
+      );
     }
   }
 
@@ -440,251 +833,305 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
     final iAmPostOwner =
         widget.postAuthorId != null && widget.postAuthorId == me?.userId;
     final canShowMenu = !isDeleted && (isMine || iAmPostOwner);
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16 + _indent(depth), 6, 16, 6),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.35)),
-        ),
-        child: Column(
+    final nested = depth > 0;
+    final replyCount = _countAll(comment.children);
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            InkWell(
-              onTap: hasChildren ? () => setState(() => _collapsed = !_collapsed) : null,
-              borderRadius: BorderRadius.circular(8),
-              child: Row(
+            if (comment.authorId != null)
+              UserProfileLink(
+                userId: comment.authorId!,
+                pseudonym: comment.authorPseudonym.replaceFirst('@', ''),
+                avatarSeed: comment.authorAvatarSeed,
+                profilePhotoUrl: comment.authorProfilePhotoUrl,
+                size: nested ? 30 : 36,
+              )
+            else
+              ProfileAvatar(
+                avatarSeed: comment.authorAvatarSeed,
+                label: comment.authorPseudonym,
+                profilePhotoUrl: comment.authorProfilePhotoUrl,
+                size: nested ? 30 : 36,
+              ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (comment.authorId != null)
-                    UserProfileLink(
-                      userId: comment.authorId!,
-                      pseudonym: comment.authorPseudonym.replaceFirst('@', ''),
-                      avatarSeed: comment.authorAvatarSeed,
-                      profilePhotoUrl: comment.authorProfilePhotoUrl,
-                      size: 28,
-                    )
-                  else
-                    ProfileAvatar(
-                      avatarSeed: comment.authorAvatarSeed,
-                      label: comment.authorPseudonym,
-                      profilePhotoUrl: comment.authorProfilePhotoUrl,
-                      size: 28,
-                    ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: comment.authorId != null
-                              ? InkWell(
-                                  onTap: () =>
-                                      context.push('/user/${comment.authorId}'),
-                                  child: Text(
-                                    comment.authorPseudonym,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 13),
-                                  ),
-                                )
-                              : Text(
-                                  comment.authorPseudonym,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w800, fontSize: 13),
-                                ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: InkWell(
+                          onTap: comment.authorId == null
+                              ? null
+                              : () => context.push('/user/${comment.authorId}'),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Text(
+                            comment.authorPseudonym,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: nested ? 13 : 14,
+                            ),
+                          ),
                         ),
-                        if (comment.authorIsVerified) ...[
-                          const SizedBox(width: 4),
-                          const VerifiedBadge(size: 13),
-                        ],
+                      ),
+                      if (comment.authorIsVerified) ...[
+                        const SizedBox(width: 4),
+                        const VerifiedBadge(size: 13),
+                      ],
+                      if (comment.authorId == widget.postAuthorId) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: scheme.primary.withOpacity(0.09),
+                            borderRadius:
+                                BorderRadius.circular(VentlyTokens.radiusChip),
+                          ),
+                          child: Text(
+                            'Author',
+                            style: TextStyle(
+                              color: scheme.primary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 6),
+                      Text(
+                        _ago(comment.createdAt) +
+                            (comment.isEdited ? ' · edited' : ''),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: scheme.onSurface.withOpacity(0.52),
+                        ),
+                      ),
+                      const Spacer(),
+                      if (comment.isPinned)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 2),
+                          child: Icon(
+                            Icons.push_pin_outlined,
+                            size: 14,
+                            color: VentlyColors.berryMagenta,
+                          ),
+                        ),
+                      if (canShowMenu)
+                        SizedBox(
+                          width: 30,
+                          height: 30,
+                          child: PopupMenuButton<String>(
+                            tooltip: 'Comment options',
+                            padding: EdgeInsets.zero,
+                            icon: Icon(
+                              Icons.more_horiz,
+                              size: 18,
+                              color: scheme.onSurface.withOpacity(0.55),
+                            ),
+                            onSelected: (value) {
+                              if (value == 'edit') _openEditCommentDialog();
+                              if (value == 'delete') _confirmDeleteComment();
+                              if (value == 'pin') _togglePin(pin: true);
+                              if (value == 'unpin') _togglePin(pin: false);
+                            },
+                            itemBuilder: (_) => [
+                              if (isMine) ...const [
+                                PopupMenuItem(
+                                  value: 'edit',
+                                  child: Text('Edit'),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Text('Delete'),
+                                ),
+                              ],
+                              if (iAmPostOwner)
+                                PopupMenuItem(
+                                  value: comment.isPinned ? 'unpin' : 'pin',
+                                  child: Text(
+                                    comment.isPinned
+                                        ? 'Unpin from top'
+                                        : 'Pin to top',
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  if (isDeleted)
+                    Text(
+                      'Comment removed by author',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic,
+                        color: scheme.onSurface.withOpacity(0.52),
+                      ),
+                    )
+                  else ...[
+                    if (comment.content.trim().isNotEmpty)
+                      TaggedText(
+                        comment.content,
+                        style: const TextStyle(fontSize: 14.5, height: 1.42),
+                      ),
+                    if (comment.imageUrl != null) ...[
+                      if (comment.content.trim().isNotEmpty)
+                        const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () =>
+                            _openFullImageView(context, comment.imageUrl!),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 320),
+                          child: AspectRatio(
+                            aspectRatio: 16 / 10,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: CachedNetworkImage(
+                                imageUrl: comment.imageUrl!,
+                                fit: BoxFit.cover,
+                                memCacheWidth: 640,
+                                maxWidthDiskCache: 960,
+                                placeholder: (_, __) => Container(
+                                  color:
+                                      VentlyColors.softMauve.withOpacity(0.16),
+                                ),
+                                errorWidget: (_, __, ___) => Container(
+                                  color:
+                                      VentlyColors.softMauve.withOpacity(0.16),
+                                  alignment: Alignment.center,
+                                  child: const Icon(
+                                    Icons.broken_image_outlined,
+                                    color: VentlyColors.berryMagenta,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                  if (!isDeleted) ...[
+                    const SizedBox(height: 7),
+                    Row(
+                      children: [
+                        _CommentAction(
+                          icon: _likedByMe
+                              ? Icons.favorite
+                              : Icons.favorite_border,
+                          label: _likesCount == 0
+                              ? 'Like'
+                              : PostCard.compactNumber(_likesCount),
+                          selected: _likedByMe,
+                          onTap: _toggleLike,
+                        ),
+                        const SizedBox(width: 16),
+                        _CommentAction(
+                          icon: Icons.chat_bubble_outline_rounded,
+                          label: 'Reply',
+                          onTap: () => widget.onReply(comment),
+                        ),
                       ],
                     ),
-                  ),
-                  if (hasChildren)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: Icon(
-                        _collapsed ? Icons.expand_more : Icons.expand_less,
-                        size: 16,
-                        color: scheme.onSurface.withOpacity(0.55),
-                      ),
-                    ),
-                  if (comment.isPinned) ...const [
-                    Icon(Icons.push_pin,
-                        size: 12, color: VentlyColors.berryMagenta),
-                    SizedBox(width: 4),
                   ],
-                  Text(
-                    _ago(comment.createdAt) + (comment.isEdited ? ' · edited' : ''),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: scheme.onSurface.withOpacity(0.55),
-                    ),
-                  ),
-                  if (canShowMenu)
-                    SizedBox(
-                      width: 28,
-                      child: PopupMenuButton<String>(
-                        tooltip: 'More',
+                  if (hasChildren) ...[
+                    const SizedBox(height: 5),
+                    TextButton.icon(
+                      onPressed: depth >= 3
+                          ? () => _openDeeperReplies(context, comment)
+                          : () => setState(() => _collapsed = !_collapsed),
+                      style: TextButton.styleFrom(
                         padding: EdgeInsets.zero,
-                        icon: Icon(Icons.more_horiz,
-                            size: 16, color: scheme.onSurface.withOpacity(0.55)),
-                        onSelected: (v) {
-                          if (v == 'edit') _openEditCommentDialog();
-                          if (v == 'delete') _confirmDeleteComment();
-                          if (v == 'pin') _togglePin(pin: true);
-                          if (v == 'unpin') _togglePin(pin: false);
-                        },
-                        itemBuilder: (_) => [
-                          if (isMine) ...const [
-                            PopupMenuItem(value: 'edit', child: Text('Edit')),
-                            PopupMenuItem(
-                                value: 'delete', child: Text('Delete')),
-                          ],
-                          if (iAmPostOwner)
-                            PopupMenuItem(
-                              value: comment.isPinned ? 'unpin' : 'pin',
-                              child: Text(comment.isPinned
-                                  ? 'Unpin from top'
-                                  : 'Pin to top'),
-                            ),
-                        ],
+                        minimumSize: const Size(0, 30),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        foregroundColor: scheme.primary,
                       ),
+                      icon: Icon(
+                        depth >= 3
+                            ? Icons.arrow_forward_rounded
+                            : (_collapsed
+                                ? Icons.keyboard_arrow_down_rounded
+                                : Icons.keyboard_arrow_up_rounded),
+                        size: 17,
+                      ),
+                      label: Text(
+                        depth >= 3
+                            ? 'View $replyCount more replies'
+                            : _collapsed
+                                ? 'View $replyCount ${replyCount == 1 ? 'reply' : 'replies'}'
+                                : 'Hide replies',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (hasChildren && !_collapsed && depth < 3)
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            child: Container(
+              margin: const EdgeInsets.only(left: 17, top: 6),
+              padding: const EdgeInsets.only(left: 10),
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(
+                    color: VentlyColors.softMauve.withOpacity(0.62),
+                  ),
+                ),
+              ),
+              child: Column(
+                children: [
+                  for (final child in comment.children)
+                    _CommentNode(
+                      key: ValueKey(child.commentId),
+                      comment: child,
+                      postId: widget.postId,
+                      postAuthorId: widget.postAuthorId,
+                      onReply: widget.onReply,
                     ),
                 ],
               ),
             ),
-            const SizedBox(height: 6),
-            if (isDeleted)
-              Text(
-                'Comment removed by author',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontStyle: FontStyle.italic,
-                  color: scheme.onSurface.withOpacity(0.55),
+          ),
+      ],
+    );
+
+    return RepaintBoundary(
+      key: ValueKey('comment-${comment.commentId}'),
+      child: Container(
+        color: comment.isPinned
+            ? scheme.primary.withOpacity(0.025)
+            : Colors.transparent,
+        padding: EdgeInsets.fromLTRB(nested ? 0 : 20, 12, 20, 12),
+        child: Column(
+          children: [
+            content,
+            if (!nested)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Divider(
+                  height: 1,
+                  thickness: 0.6,
+                  color: VentlyColors.softMauve.withOpacity(0.42),
                 ),
-              )
-            else ...[
-              if (comment.content.trim().isNotEmpty)
-                TaggedText(comment.content,
-                    style: const TextStyle(fontSize: 14, height: 1.35)),
-              if (comment.imageUrl != null) ...[
-                if (comment.content.trim().isNotEmpty)
-                  const SizedBox(height: 6),
-                GestureDetector(
-                  onTap: () => _openFullImageView(context, comment.imageUrl!),
-                  child: ConstrainedBox(
-                    constraints:
-                        const BoxConstraints(maxHeight: 220, maxWidth: 260),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: CachedNetworkImage(
-                        imageUrl: comment.imageUrl!,
-                        fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(
-                          height: 120,
-                          width: 160,
-                          color: const Color(0xFFFFE3EC),
-                        ),
-                        errorWidget: (_, __, ___) => Container(
-                          height: 120,
-                          width: 160,
-                          color: const Color(0xFFFFE3EC),
-                          alignment: Alignment.center,
-                          child: const Icon(Icons.broken_image_outlined,
-                              color: VentlyColors.berryMagenta),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-            const SizedBox(height: 6),
-            if (!isDeleted)
-            Row(
-              children: [
-                InkWell(
-                  onTap: _toggleLike,
-                  borderRadius: BorderRadius.circular(6),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _likedByMe ? Icons.favorite : Icons.favorite_border,
-                          size: 14,
-                          color: _likedByMe
-                              ? scheme.primary
-                              : scheme.onSurface.withOpacity(0.55),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          PostCard.compactNumber(_likesCount),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: _likedByMe
-                                ? scheme.primary
-                                : scheme.onSurface.withOpacity(0.55),
-                            fontWeight: _likedByMe ? FontWeight.w700 : FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                TextButton(
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(0, 0),
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  onPressed: () => widget.onReply(comment),
-                  child: const Text('Reply',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      )),
-                ),
-                if (hasChildren && _collapsed) ...[
-                  const SizedBox(width: 6),
-                  Text(
-                    '${_countAll(comment.children)} hidden',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: scheme.onSurface.withOpacity(0.55),
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            if (hasChildren && !_collapsed)
-              comment.depth >= 3
-                  ? Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: TextButton.icon(
-                        onPressed: () => _openDeeperReplies(context, comment),
-                        icon: const Icon(Icons.arrow_forward, size: 14),
-                        label: Text(
-                            'View deeper replies (${_countAll(comment.children)})'),
-                      ),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (final child in comment.children)
-                          _CommentNode(key: ValueKey(child.commentId), comment: child, postId: widget.postId, postAuthorId: widget.postAuthorId, onReply: widget.onReply),
-                      ],
-                    ),
+              ),
           ],
         ),
       ),
@@ -703,8 +1150,8 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
     final d = DateTime.now().difference(ts);
     if (d.inMinutes < 1) return 'now';
     if (d.inMinutes < 60) return '${d.inMinutes}m';
-    if (d.inHours < 24)   return '${d.inHours}h';
-    if (d.inDays < 7)     return '${d.inDays}d';
+    if (d.inHours < 24) return '${d.inHours}h';
+    if (d.inDays < 7) return '${d.inDays}d';
     return DateFormat.MMMd().format(ts);
   }
 
@@ -720,8 +1167,8 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Couldn\'t update pin: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Couldn\'t update pin: $e')));
     }
   }
 
@@ -751,19 +1198,18 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
     if (updated == null || updated.isEmpty) return;
     if (updated == widget.comment.content) return;
     try {
-      final ok = await ref
-          .read(repositoryProvider)
-          .editComment(commentId: widget.comment.commentId, newContent: updated);
+      final ok = await ref.read(repositoryProvider).editComment(
+          commentId: widget.comment.commentId, newContent: updated);
       if (!mounted) return;
       if (ok) {
         ref.invalidate(commentsProvider(widget.postId));
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Comment updated')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Comment updated')));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_friendlyError(e))));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_friendlyError(e))));
     }
   }
 
@@ -798,14 +1244,16 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_friendlyError(e))));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_friendlyError(e))));
     }
   }
 
   String _friendlyError(Object e) {
     final s = e.toString();
-    if (s.contains('edit window')) return 'The 5-minute edit window has passed.';
+    if (s.contains('edit window')) {
+      return 'The 5-minute edit window has passed.';
+    }
     if (s.contains('not_author')) return 'You can only edit your own comments.';
     if (s.contains('empty')) return 'Comment can\'t be empty.';
     return 'Something went wrong. Try again.';
@@ -858,8 +1306,56 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                 controller: controller,
                 children: [
                   for (final c in root.children)
-                    _CommentNode(key: ValueKey(c.commentId), comment: c, postId: widget.postId, postAuthorId: widget.postAuthorId, onReply: widget.onReply),
+                    _CommentNode(
+                        key: ValueKey(c.commentId),
+                        comment: c,
+                        postId: widget.postId,
+                        postAuthorId: widget.postAuthorId,
+                        onReply: widget.onReply),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CommentAction extends StatelessWidget {
+  const _CommentAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color =
+        selected ? scheme.primary : scheme.onSurface.withOpacity(0.58);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
@@ -878,8 +1374,7 @@ class _LockedFooter extends StatelessWidget {
       decoration: BoxDecoration(
         color: VentlyColors.softMauve.withOpacity(0.18),
         border: Border(
-          top: BorderSide(
-              color: VentlyColors.softMauve.withOpacity(0.6)),
+          top: BorderSide(color: VentlyColors.softMauve.withOpacity(0.6)),
         ),
       ),
       child: Row(
@@ -903,6 +1398,7 @@ class _LockedFooter extends StatelessWidget {
 class _ReplyComposer extends StatelessWidget {
   const _ReplyComposer({
     required this.controller,
+    required this.focusNode,
     required this.replyingToName,
     required this.onClear,
     required this.onSend,
@@ -914,6 +1410,7 @@ class _ReplyComposer extends StatelessWidget {
     required this.onClearAttachment,
   });
   final TextEditingController controller;
+  final FocusNode focusNode;
   final String? replyingToName;
   final VoidCallback onClear;
   final VoidCallback onSend;
@@ -928,12 +1425,12 @@ class _ReplyComposer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
+    final scheme = Theme.of(context).colorScheme;
+    final primary = scheme.primary;
     return SafeArea(
+      top: false,
       child: Container(
-        // Clears the floating shell nav pill — this screen now renders
-        // inside the bottom-nav shell (IG-style persistent footer).
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
           border: Border(
@@ -947,24 +1444,35 @@ class _ReplyComposer extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (replyingToName != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.fromLTRB(10, 7, 6, 7),
+                decoration: BoxDecoration(
+                  color: primary.withOpacity(0.065),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: primary.withOpacity(0.13)),
+                ),
                 child: Row(
                   children: [
-                    Icon(Icons.reply, size: 14, color: primary),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Replying to $replyingToName',
-                      style: TextStyle(
-                        color: primary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
+                    Icon(Icons.reply_rounded, size: 16, color: primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Replying to $replyingToName',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: primary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
-                    const Spacer(),
-                    InkWell(
-                      onTap: onClear,
-                      child: const Icon(Icons.close, size: 14),
+                    IconButton(
+                      tooltip: 'Cancel reply',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: onClear,
+                      icon: const Icon(Icons.close_rounded, size: 17),
                     ),
                   ],
                 ),
@@ -979,7 +1487,7 @@ class _ReplyComposer extends StatelessWidget {
                     clipBehavior: Clip.none,
                     children: [
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                         child: SizedBox(
                           width: 84,
                           height: 84,
@@ -1011,53 +1519,147 @@ class _ReplyComposer extends StatelessWidget {
               ),
             TagAutocomplete(
               controller: controller,
-              child: Row(
-              children: [
-                IconButton(
-                  tooltip: 'Add photo',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.image_outlined),
-                  color: primary,
-                  onPressed: sending ? null : onPickImage,
-                ),
-                IconButton(
-                  tooltip: 'Add GIF',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.gif_box_outlined),
-                  color: primary,
-                  onPressed: sending ? null : onPickGif,
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    minLines: 1,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      hintText: 'Add a supportive comment...',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                sending
-                    ? const Padding(
-                        padding: EdgeInsets.all(10),
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child:
-                              CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : IconButton(
-                        icon: const Icon(Icons.send_rounded),
-                        color: primary,
-                        onPressed: onSend,
+              child: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: controller,
+                builder: (context, value, _) {
+                  final canSend = !sending &&
+                      (value.text.trim().isNotEmpty || _hasAttachment);
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      _ComposerToolButton(
+                        tooltip: 'Add photo',
+                        icon: Icons.image_outlined,
+                        onPressed: sending ? null : onPickImage,
                       ),
-              ],
+                      const SizedBox(width: 6),
+                      _ComposerToolButton(
+                        tooltip: 'Add GIF',
+                        icon: Icons.gif_box_outlined,
+                        onPressed: sending ? null : onPickGif,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          minLines: 1,
+                          maxLines: 4,
+                          maxLength: 600,
+                          buildCounter: (
+                            _, {
+                            required currentLength,
+                            required isFocused,
+                            required maxLength,
+                          }) =>
+                              null,
+                          textCapitalization: TextCapitalization.sentences,
+                          keyboardType: TextInputType.multiline,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(600),
+                          ],
+                          decoration: InputDecoration(
+                            hintText: replyingToName == null
+                                ? 'Add a supportive comment...'
+                                : 'Write a reply...',
+                            filled: true,
+                            fillColor: VentlyColors.softMauve.withOpacity(0.09),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 11,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide.none,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: VentlyColors.softMauve.withOpacity(0.38),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: primary.withOpacity(0.55),
+                                width: 1.2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Semantics(
+                        button: true,
+                        enabled: canSend,
+                        label: 'Send comment',
+                        child: SizedBox(
+                          width: 42,
+                          height: 42,
+                          child: FilledButton(
+                            onPressed: canSend
+                                ? () {
+                                    HapticFeedback.lightImpact();
+                                    onSend();
+                                  }
+                                : null,
+                            style: FilledButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              shape: const CircleBorder(),
+                              disabledBackgroundColor:
+                                  scheme.onSurface.withOpacity(0.08),
+                            ),
+                            child: sending
+                                ? const SizedBox(
+                                    width: 17,
+                                    height: 17,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.arrow_upward_rounded,
+                                    size: 21),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ComposerToolButton extends StatelessWidget {
+  const _ComposerToolButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 36,
+      height: 42,
+      child: IconButton(
+        tooltip: tooltip,
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        onPressed: onPressed,
+        icon: Icon(icon, size: 21),
+        color: scheme.primary,
+        disabledColor: scheme.onSurface.withOpacity(0.28),
       ),
     );
   }
@@ -1071,14 +1673,14 @@ class _ReportSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     const categories = [
-      ('harassment',     'Harassment or bullying'),
-      ('hate',           'Hate speech or slurs'),
-      ('self_harm',      'Self-harm or suicide'),
-      ('privacy',        'Doxxing or personal info'),
-      ('spam',           'Spam or scam'),
+      ('harassment', 'Harassment or bullying'),
+      ('hate', 'Hate speech or slurs'),
+      ('self_harm', 'Self-harm or suicide'),
+      ('privacy', 'Doxxing or personal info'),
+      ('spam', 'Spam or scam'),
       ('sexual_content', 'Sexual content'),
-      ('violence',       'Violence or threats'),
-      ('other',          'Something else'),
+      ('violence', 'Violence or threats'),
+      ('other', 'Something else'),
     ];
     return SafeArea(
       child: Padding(
@@ -1116,8 +1718,7 @@ class _ReportSheet extends ConsumerWidget {
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text(
-                            'Thank you — a moderator will review.'),
+                        content: Text('Thank you — a moderator will review.'),
                       ),
                     );
                   } catch (e) {
@@ -1202,7 +1803,8 @@ class _CrisisHelplineBanner extends ConsumerWidget {
                           children: [
                             Text(
                               r.label,
-                              style: const TextStyle(fontWeight: FontWeight.w700),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700),
                             ),
                             Text(
                               r.reach,

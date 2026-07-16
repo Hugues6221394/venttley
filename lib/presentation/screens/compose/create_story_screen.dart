@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/connection.dart';
 import '../../../core/providers.dart';
 import '../../../core/user_friendly_errors.dart';
+import '../../../data/services/outbox.dart';
 import '../../theme/colors.dart';
 
 /// Create Vent Story screen — Image #9.
@@ -60,9 +62,7 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
   Future<void> _ingestPicked(XFile? picked) async {
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
-    final ext = picked.name.contains('.')
-        ? picked.name.split('.').last
-        : 'jpg';
+    final ext = picked.name.contains('.') ? picked.name.split('.').last : 'jpg';
     setState(() {
       _mode = _StoryMode.photo;
       _imageBytes = bytes;
@@ -92,11 +92,22 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
   Future<void> _share() async {
     if (!_canShare) return;
     setState(() => _busy = true);
+    final captionText = _caption.text.trim();
+    final operationId = OutboxService.newOperationId();
+    final outbox = await ref.read(outboxProvider.future);
+    StagedOutboxMedia? stagedMedia;
+    String? imageUrl;
+    String? imagePath;
     try {
       final repo = ref.read(repositoryProvider);
-      String? imageUrl;
-      String? imagePath;
       if (_imageBytes != null) {
+        stagedMedia = await outbox.stageMedia(
+          operationId: operationId,
+          bytes: _imageBytes!,
+          extension: _imageExtension,
+          contentType: _imageContentType,
+          mediaType: 'image',
+        );
         final upload = await repo.uploadPostImage(
           bytes: _imageBytes!,
           extension: _imageExtension,
@@ -105,7 +116,6 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
         imageUrl = upload.url;
         imagePath = upload.path;
       }
-      final captionText = _caption.text.trim();
       await repo.createPost(
         content: captionText.isEmpty ? 'Shared a moment.' : captionText,
         category: 'late_night',
@@ -113,7 +123,9 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
         isWhisper: true,
         imagePath: imagePath,
         imageUrl: imageUrl,
+        idempotencyKey: operationId,
       );
+      await outbox.discardStagedMedia(stagedMedia?.path);
       ref.invalidate(feedPostsProvider);
       ref.invalidate(homeStatsProvider);
       ref.invalidate(homeFriendStoriesProvider);
@@ -125,6 +137,35 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
         const SnackBar(content: Text('Story posted for 24 hours.')),
       );
     } catch (e) {
+      if (_imageBytes == null || stagedMedia != null) {
+        try {
+          await outbox.enqueue(
+            OutboxKind.post,
+            {
+              'content': captionText.isEmpty ? 'Shared a moment.' : captionText,
+              'category': 'late_night',
+              'mood': 'healing',
+              'isWhisper': true,
+              'imagePath': imagePath,
+              'imageUrl': imageUrl,
+              if (stagedMedia != null) ...stagedMedia.toPayload(),
+            },
+            operationId: operationId,
+          );
+          if (!mounted) return;
+          context.go('/feed');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Story queued and will post automatically.',
+              ),
+            ),
+          );
+          return;
+        } catch (_) {
+          // Fall through to the persistent error state below.
+        }
+      }
       if (!mounted) return;
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -175,8 +216,7 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
                     const SizedBox(height: 18),
                     _PrivacyDurationCard(
                       friendsOnly: _friendsOnly,
-                      onFriendsToggle: (v) =>
-                          setState(() => _friendsOnly = v),
+                      onFriendsToggle: (v) => setState(() => _friendsOnly = v),
                     ),
                   ],
                 ),
@@ -212,8 +252,7 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
                             Text(
                               'Share to Story',
                               style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 15),
+                                  fontWeight: FontWeight.w900, fontSize: 15),
                             ),
                             SizedBox(width: 6),
                             Icon(Icons.send_rounded, size: 16),

@@ -9,6 +9,7 @@ import '../theme/motion.dart';
 import 'profile_avatar.dart';
 import 'report_reason_sheet.dart';
 import 'user_link.dart';
+import 'vently_notification_bell.dart';
 
 /// Instagram-style DM options sheet, opened from the chat header. Profile /
 /// Search / Mute quick actions, then Theme · Nicknames · Disappearing messages
@@ -51,13 +52,14 @@ class _ChatOptionsSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final prefs =
-        ref.watch(dmRoomPrefsProvider(room.roomId)).valueOrNull ?? DmRoomPrefs.empty;
+    final prefs = ref.watch(dmRoomPrefsProvider(room.roomId)).valueOrNull ??
+        DmRoomPrefs.empty;
     final disappearing =
         ref.watch(roomDisappearingProvider(room.roomId)).valueOrNull ?? 0;
-    final blocks = ref.watch(myBlocksProvider).valueOrNull ?? const <BlockedUser>[];
-    final isBlocked =
-        room.peerUserId != null && blocks.any((b) => b.userId == room.peerUserId);
+    final blocks =
+        ref.watch(myBlocksProvider).valueOrNull ?? const <BlockedUser>[];
+    final isBlocked = room.peerUserId != null &&
+        blocks.any((b) => b.userId == room.peerUserId);
     final displayName = prefs.peerNickname?.trim().isNotEmpty == true
         ? prefs.peerNickname!.trim()
         : room.peerPseudonym;
@@ -70,8 +72,7 @@ class _ChatOptionsSheet extends ConsumerWidget {
       builder: (context, scroll) => Container(
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: ListView(
           controller: scroll,
@@ -126,8 +127,8 @@ class _ChatOptionsSheet extends ConsumerWidget {
                 ),
                 _Quick(
                   icon: prefs.muted
-                      ? Icons.notifications_off_rounded
-                      : Icons.notifications_none_rounded,
+                      ? VentlyNotificationBell.mutedIconData
+                      : VentlyNotificationBell.iconData,
                   label: prefs.muted ? 'Muted' : 'Mute',
                   active: prefs.muted,
                   onTap: () => _set(ref, room.roomId, muted: !prefs.muted),
@@ -243,7 +244,9 @@ class _ChatOptionsSheet extends ConsumerWidget {
     );
     if (picked != null) {
       // Conversation-level (shared) + server-side hard-delete via cron (0099).
-      await ref.read(repositoryProvider).setRoomDisappearing(room.roomId, picked);
+      await ref
+          .read(repositoryProvider)
+          .setRoomDisappearing(room.roomId, picked);
       ref.invalidate(roomDisappearingProvider(room.roomId));
     }
   }
@@ -283,7 +286,8 @@ class _ChatOptionsSheet extends ConsumerWidget {
   }
 
   Future<void> _report(BuildContext context, WidgetRef ref) async {
-    final reason = await showReportReasonSheet(context, title: 'Report this chat');
+    final reason =
+        await showReportReasonSheet(context, title: 'Report this chat');
     if (reason == null) return;
     await ref
         .read(repositoryProvider)
@@ -345,8 +349,7 @@ class _Quick extends StatelessWidget {
                     ? VentlyColors.berryMagenta.withOpacity(0.15)
                     : context.glass(0.7),
               ),
-              child: Icon(icon,
-                  color: VentlyColors.berryMagenta, size: 22),
+              child: Icon(icon, color: VentlyColors.berryMagenta, size: 22),
             ),
             const SizedBox(height: 6),
             Text(label,
@@ -395,11 +398,11 @@ class _Tile extends StatelessWidget {
               child: Text(trailing!,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                      fontSize: 12,
-                      color: context.ink.withOpacity(0.5))),
+                      fontSize: 12, color: context.ink.withOpacity(0.5))),
             ),
           const SizedBox(width: 4),
-          const Icon(Icons.chevron_right_rounded, color: VentlyColors.softMauve),
+          const Icon(Icons.chevron_right_rounded,
+              color: VentlyColors.softMauve),
         ],
       ),
       onTap: onTap,

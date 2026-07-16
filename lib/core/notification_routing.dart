@@ -7,7 +7,8 @@ import '../data/services/analytics_service.dart';
 import '../presentation/router/app_router.dart';
 
 /// Payload queued when a notification is tapped before the router is ready.
-final pendingNotificationPayloadProvider = StateProvider<String?>((ref) => null);
+final pendingNotificationPayloadProvider =
+    StateProvider<String?>((ref) => null);
 
 /// Canonical local-notification payload format: `<kind>:<id>` or bare `<kind>`.
 ///
@@ -132,7 +133,11 @@ String? routeForNotificationPayload(String? payload) {
 }
 
 /// Navigate from a notification payload. Shell tabs use [GoRouter.go]; others push.
-void navigateFromNotificationPayload(GoRouter router, String payload) {
+void navigateFromNotificationPayload(
+  GoRouter router,
+  String payload, {
+  Object? extra,
+}) {
   final route = routeForNotificationPayload(payload);
   if (route == null) return;
 
@@ -144,9 +149,9 @@ void navigateFromNotificationPayload(GoRouter router, String payload) {
       path.startsWith('/profile');
 
   if (isShell) {
-    router.go(route);
+    router.go(route, extra: extra);
   } else {
-    router.push(route);
+    router.push(route, extra: extra);
   }
 
   AnalyticsService.instance.track(

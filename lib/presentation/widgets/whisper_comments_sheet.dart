@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/connection.dart';
 import '../../core/providers.dart';
+import '../../data/services/draft_store.dart';
+import '../../data/services/outbox.dart';
 import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
 import 'glass_card.dart';
@@ -46,8 +49,25 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
   /// When set, the next send is a reply to this comment.
   WhisperComment? _replyingTo;
 
+  DraftSaver? _draftSaver;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.read(draftStoreProvider.future).then((store) {
+      if (!mounted) return;
+      _draftSaver = DraftSaver(
+        store: store,
+        draftKey: 'whisper.${widget.whisper.whisperId}',
+        controller: _controller,
+      );
+      if (_draftSaver!.restore()) setState(() {});
+    });
+  }
+
   @override
   void dispose() {
+    _draftSaver?.dispose();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -79,6 +99,7 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
       return;
     }
 
+    final operationId = OutboxService.newOperationId();
     setState(() => _sending = true);
     try {
       final persona = ref.read(activePersonaProvider);
@@ -89,14 +110,43 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
             personaId: persona?.personaId,
             // Single-level threading: replying to a reply attaches to its
             // top-level parent, IG-style.
-            parentId: target == null ? null : (target.parentId ?? target.commentId),
+            parentId:
+                target == null ? null : (target.parentId ?? target.commentId),
+            idempotencyKey: operationId,
           );
+      await _draftSaver?.clear();
       ref.invalidate(whisperCommentsProvider(widget.whisper.whisperId));
       ref.invalidate(whispersFeedProvider);
       _controller.clear();
       setState(() => _replyingTo = null);
     } catch (e) {
-      if (mounted) {
+      // Offline: queue the comment for automatic retry.
+      final outbox = ref.read(outboxProvider).valueOrNull;
+      if (outbox != null) {
+        final persona = ref.read(activePersonaProvider);
+        final target = _replyingTo;
+        await outbox.enqueue(
+          OutboxKind.whisperComment,
+          {
+            'whisperId': widget.whisper.whisperId,
+            'content': text,
+            'personaId': persona?.personaId,
+            'parentId':
+                target == null ? null : (target.parentId ?? target.commentId),
+          },
+          operationId: operationId,
+        );
+        await _draftSaver?.clear();
+        _controller.clear();
+        if (mounted) {
+          setState(() => _replyingTo = null);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text(
+                    "You're offline — comment queued, it will post automatically.")),
+          );
+        }
+      } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not post comment: $e')),
         );
@@ -144,9 +194,7 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
 
   Future<void> _toggleLike(WhisperComment c) async {
     try {
-      await ref
-          .read(repositoryProvider)
-          .toggleWhisperCommentLike(c.commentId);
+      await ref.read(repositoryProvider).toggleWhisperCommentLike(c.commentId);
       ref.invalidate(whisperCommentsProvider(widget.whisper.whisperId));
     } catch (_) {/* transient — next realtime tick corrects */}
   }
@@ -257,8 +305,7 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
                               _CommentTile(
                                 comment: c,
                                 onReply: () => _startReply(c),
-                                onDelete:
-                                    c.canDelete ? () => _delete(c) : null,
+                                onDelete: c.canDelete ? () => _delete(c) : null,
                                 onLike: () => _toggleLike(c),
                               ),
                               for (final r in kids)
@@ -268,9 +315,8 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
                                   child: _CommentTile(
                                     comment: r,
                                     onReply: () => _startReply(r),
-                                    onDelete: r.canDelete
-                                        ? () => _delete(r)
-                                        : null,
+                                    onDelete:
+                                        r.canDelete ? () => _delete(r) : null,
                                     onLike: () => _toggleLike(r),
                                     compact: true,
                                   ),
@@ -316,11 +362,9 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
                                 ),
                               ),
                               InkWell(
-                                onTap: () =>
-                                    setState(() => _replyingTo = null),
+                                onTap: () => setState(() => _replyingTo = null),
                                 child: const Icon(Icons.close_rounded,
-                                    size: 16,
-                                    color: VentlyColors.berryMagenta),
+                                    size: 16, color: VentlyColors.berryMagenta),
                               ),
                             ],
                           ),

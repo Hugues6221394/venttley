@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,13 +9,17 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
+import '../../../domain/tribe/tribe_recommendations.dart';
 import '../../theme/colors.dart';
 import '../../widgets/blocked_accounts_sheet.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/premium_motion.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../widgets/vently_error_state.dart';
+import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/verified_badge.dart';
 
 /// Friends — Image #15.
@@ -32,16 +38,33 @@ class FriendsScreen extends ConsumerStatefulWidget {
   ConsumerState<FriendsScreen> createState() => _FriendsScreenState();
 }
 
+enum _FriendSort { favorites, alphabetical }
+
+enum _CircleView { friends, tribes }
+
 class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   final TextEditingController _query = TextEditingController();
+  final TextEditingController _tribeQuery = TextEditingController();
+  Timer? _tribeSearchDebounce;
+  _FriendSort _sort = _FriendSort.favorites;
+  _CircleView _view = _CircleView.friends;
+  String? _tribeCategory;
+  String _tribeSearch = '';
 
   @override
   void dispose() {
+    _tribeSearchDebounce?.cancel();
     _query.dispose();
+    _tribeQuery.dispose();
     super.dispose();
   }
 
   Future<void> _refresh() async {
+    if (_view == _CircleView.tribes) {
+      ref.invalidate(tribesProvider);
+      ref.invalidate(recommendedTribesProvider);
+      return;
+    }
     ref.invalidate(myFriendsProvider);
     ref.invalidate(incomingFriendRequestsProvider);
     ref.invalidate(outgoingFriendRequestsProvider);
@@ -55,6 +78,13 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     final incoming = ref.watch(incomingFriendRequestsProvider).valueOrNull ??
         const <FriendRequest>[];
     final suggestionsAsync = ref.watch(friendSuggestionsProvider);
+    final tribeQuery = TribeQuery(
+      category: _tribeCategory,
+      search: _tribeSearch,
+    );
+    final recommendationsAsync = _view == _CircleView.tribes
+        ? ref.watch(recommendedTribesProvider(tribeQuery))
+        : null;
 
     final filteredFriends =
         _applyQuery(friendsAsync.valueOrNull ?? const [], _query.text);
@@ -66,80 +96,152 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
         child: SafeArea(
           bottom: false,
           child: RefreshIndicator(
-          onRefresh: _refresh,
-          color: VentlyColors.berryMagenta,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(
-                child: _FriendsHeader(onMenu: () => _openMoreSheet(context)),
-              ),
-              SliverToBoxAdapter(
-                child: _InstantConnectCard(me: me),
-              ),
-              if (incoming.isNotEmpty)
+            onRefresh: _refresh,
+            color: VentlyColors.berryMagenta,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
                 SliverToBoxAdapter(
-                  child: _RequestsSection(incoming: incoming),
+                  child: _FriendsHeader(onMenu: () => _openMoreSheet(context)),
                 ),
-              SliverToBoxAdapter(
-                child: _QuickSuggestionsSection(async: suggestionsAsync),
-              ),
-              SliverToBoxAdapter(
-                child: _MyFriendsHeader(
-                  total: friendsAsync.valueOrNull?.length ?? 0,
-                  query: _query,
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-              if (friendsAsync.isLoading && friendsAsync.valueOrNull == null)
-                const SliverToBoxAdapter(child: _ListSkeleton())
-              else if (filteredFriends.isEmpty)
                 SliverToBoxAdapter(
-                  child: _EmptyState(
-                    icon: Icons.diversity_3_rounded,
-                    title: friendsAsync.valueOrNull?.isEmpty ?? true
-                        ? 'No friends yet.'
-                        : 'No matches.',
-                    body: friendsAsync.valueOrNull?.isEmpty ?? true
-                        ? 'Share your link, scan a QR, or pick a Quick Suggestion above.'
-                        : 'Try a different name.',
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 116),
-                  sliver: SliverList.builder(
-                    itemCount: grouped.length,
-                    itemBuilder: (ctx, i) {
-                      final entry = grouped[i];
-                      return FadeSlideIn(
-                        index: i.clamp(0, 5),
-                        child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
-                            child: Text(
-                              entry.letter,
-                              style: const TextStyle(
-                                color: VentlyColors.berryMagenta,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                          for (final f in entry.friends)
-                            RepaintBoundary(child: _FriendRow(friend: f)),
-                        ],
-                        ),
-                      );
+                  child: _CircleViewTabs(
+                    selected: _view,
+                    onSelected: (view) {
+                      FocusScope.of(context).unfocus();
+                      setState(() => _view = view);
                     },
                   ),
                 ),
-            ],
+                if (_view == _CircleView.friends) ...[
+                  SliverToBoxAdapter(
+                    child: _InstantConnectCard(me: me),
+                  ),
+                  if (incoming.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: _RequestsSection(incoming: incoming),
+                    ),
+                  if ((friendsAsync.valueOrNull?.isEmpty ?? false))
+                    SliverToBoxAdapter(
+                      child: _QuickSuggestionsSection(async: suggestionsAsync),
+                    ),
+                  SliverToBoxAdapter(
+                    child: _MyFriendsHeader(
+                      total: friendsAsync.valueOrNull?.length ?? 0,
+                      query: _query,
+                      onChanged: (_) => setState(() {}),
+                      onSort: _openSortSheet,
+                    ),
+                  ),
+                  if (friendsAsync.isLoading &&
+                      friendsAsync.valueOrNull == null)
+                    const SliverToBoxAdapter(child: _ListSkeleton())
+                  else if (filteredFriends.isEmpty)
+                    SliverToBoxAdapter(
+                      child: _EmptyState(
+                        icon: Icons.diversity_3_rounded,
+                        title: friendsAsync.valueOrNull?.isEmpty ?? true
+                            ? 'No friends yet.'
+                            : 'No matches.',
+                        body: friendsAsync.valueOrNull?.isEmpty ?? true
+                            ? 'Share your link, scan a QR, or pick a Quick Suggestion above.'
+                            : 'Try a different name.',
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 116),
+                      sliver: SliverList.builder(
+                        itemCount: grouped.length,
+                        itemBuilder: (ctx, i) {
+                          final entry = grouped[i];
+                          return FadeSlideIn(
+                            index: i.clamp(0, 5),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(4, 14, 4, 6),
+                                  child: Text(
+                                    entry.letter,
+                                    style: const TextStyle(
+                                      color: VentlyColors.berryMagenta,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                for (final f in entry.friends)
+                                  RepaintBoundary(
+                                    child: _FriendRow(friend: f),
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ] else ...[
+                  SliverToBoxAdapter(
+                    child: _TribeExploreControls(
+                      query: _tribeQuery,
+                      selectedCategory: _tribeCategory,
+                      onQueryChanged: _onTribeQueryChanged,
+                      onCategoryChanged: (category) =>
+                          setState(() => _tribeCategory = category),
+                    ),
+                  ),
+                  if (recommendationsAsync!.isLoading &&
+                      recommendationsAsync.valueOrNull == null)
+                    const SliverToBoxAdapter(child: _ListSkeleton())
+                  else if (recommendationsAsync.hasError &&
+                      recommendationsAsync.valueOrNull == null)
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: 300,
+                        child: VentlyErrorState(
+                          error: recommendationsAsync.error!,
+                          title: 'Couldn\'t load Tribes',
+                          onRetry: () => ref.invalidate(
+                            recommendedTribesProvider(tribeQuery),
+                          ),
+                        ),
+                      ),
+                    )
+                  else if ((recommendationsAsync.valueOrNull?.isEmpty ?? true))
+                    const SliverToBoxAdapter(
+                      child: _EmptyState(
+                        icon: Icons.travel_explore_rounded,
+                        title: 'No Tribes found.',
+                        body: 'Try another search or category.',
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 6, 20, 116),
+                      sliver: SliverList.builder(
+                        itemCount: recommendationsAsync.valueOrNull!.length,
+                        itemBuilder: (context, index) {
+                          final recommendation =
+                              recommendationsAsync.valueOrNull![index];
+                          return RepaintBoundary(
+                            child: FadeSlideIn(
+                              index: index.clamp(0, 5),
+                              child: _RecommendedTribeCard(
+                                key: ValueKey(recommendation.tribe.tribeId),
+                                recommendation: recommendation,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -152,18 +254,33 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
         .toList();
   }
 
+  void _onTribeQueryChanged(String value) {
+    _tribeSearchDebounce?.cancel();
+    final search = value.trim();
+    if (search.isEmpty) {
+      setState(() => _tribeSearch = '');
+      return;
+    }
+
+    // Rebuild immediately for the clear button, but wait for a short pause
+    // before changing the provider key and issuing a directory request.
+    setState(() {});
+    _tribeSearchDebounce = Timer(const Duration(milliseconds: 260), () {
+      if (mounted) setState(() => _tribeSearch = search);
+    });
+  }
+
   List<_AlphabeticalGroup> _groupAlphabetically(List<FriendSummary> friends) {
-    final sorted = [...friends]
-      ..sort((a, b) {
-        final fav = (b.isFavorite ? 1 : 0) - (a.isFavorite ? 1 : 0);
-        if (fav != 0) return fav;
+    final sorted = [...friends]..sort((a, b) {
+        if (_sort == _FriendSort.favorites) {
+          final fav = (b.isFavorite ? 1 : 0) - (a.isFavorite ? 1 : 0);
+          if (fav != 0) return fav;
+        }
         return a.pseudonym.toLowerCase().compareTo(b.pseudonym.toLowerCase());
       });
     final groups = <String, List<FriendSummary>>{};
     for (final f in sorted) {
-      final letter = f.pseudonym.isEmpty
-          ? '#'
-          : f.pseudonym[0].toUpperCase();
+      final letter = f.pseudonym.isEmpty ? '#' : f.pseudonym[0].toUpperCase();
       groups.putIfAbsent(letter, () => []).add(f);
     }
     final keys = groups.keys.toList()..sort();
@@ -198,8 +315,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.shield_outlined,
-                    color: context.ink),
+                leading: Icon(Icons.shield_outlined, color: context.ink),
                 title: const Text('Blocked accounts',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -209,8 +325,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.outbox_outlined,
-                    color: context.ink),
+                leading: Icon(Icons.outbox_outlined, color: context.ink),
                 title: const Text('Sent requests',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -218,6 +333,55 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                   _openOutgoingSheet(context);
                 },
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openSortSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Sort friends',
+                style: TextStyle(
+                  color: context.ink,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final option in _FriendSort.values)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    _sort == option
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    color: VentlyColors.berryMagenta,
+                  ),
+                  title: Text(
+                    option == _FriendSort.favorites
+                        ? 'Favorites first'
+                        : 'A to Z',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  onTap: () {
+                    setState(() => _sort = option);
+                    Navigator.pop(sheetContext);
+                  },
+                ),
             ],
           ),
         ),
@@ -248,6 +412,428 @@ class _AlphabeticalGroup {
 }
 
 // =========================================================================
+// CIRCLE VIEW SWITCHER + TRIBE DISCOVERY
+// =========================================================================
+
+class _CircleViewTabs extends StatelessWidget {
+  const _CircleViewTabs({
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final _CircleView selected;
+  final ValueChanged<_CircleView> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 48,
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: VentlyColors.softMauve),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _CircleViewTab(
+              icon: Icons.people_alt_outlined,
+              label: 'Friends',
+              selected: selected == _CircleView.friends,
+              onTap: () => onSelected(_CircleView.friends),
+            ),
+          ),
+          Expanded(
+            child: _CircleViewTab(
+              icon: Icons.diversity_3_outlined,
+              label: 'Explore Tribes',
+              selected: selected == _CircleView.tribes,
+              onTap: () => onSelected(_CircleView.tribes),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CircleViewTab extends StatelessWidget {
+  const _CircleViewTab({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? Colors.white : context.inkMuted;
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(7),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: selected ? VentlyColors.berryMagenta : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: foreground),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: foreground,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TribeExploreControls extends StatelessWidget {
+  const _TribeExploreControls({
+    required this.query,
+    required this.selectedCategory,
+    required this.onQueryChanged,
+    required this.onCategoryChanged,
+  });
+
+  final TextEditingController query;
+  final String? selectedCategory;
+  final ValueChanged<String> onQueryChanged;
+  final ValueChanged<String?> onCategoryChanged;
+
+  static const _categories = <(String?, String, IconData)>[
+    (null, 'All', Icons.public_rounded),
+    ('campus', 'Campus', Icons.school_outlined),
+    ('city', 'City', Icons.location_city_outlined),
+    ('interest_group', 'Interest', Icons.interests_outlined),
+    ('hobby', 'Hobby', Icons.palette_outlined),
+    ('support', 'Support', Icons.favorite_outline_rounded),
+    ('venting', 'Venting', Icons.bedtime_outlined),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 12, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Recommended Tribes',
+                      style: TextStyle(
+                        color: context.ink,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Picked from your feed and what is active now',
+                      style: TextStyle(
+                        color: context.inkMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Create a Tribe',
+                onPressed: () => context.push('/tribes/new'),
+                icon: const Icon(Icons.add_circle_outline_rounded),
+                color: VentlyColors.berryMagenta,
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: TextField(
+            controller: query,
+            textInputAction: TextInputAction.search,
+            onChanged: onQueryChanged,
+            decoration: InputDecoration(
+              hintText: 'Search Tribes',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: query.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      onPressed: () {
+                        query.clear();
+                        onQueryChanged('');
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 42,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: _categories.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final (key, label, icon) = _categories[index];
+              final selected = key == selectedCategory;
+              return ChoiceChip(
+                selected: selected,
+                showCheckmark: false,
+                onSelected: (_) => onCategoryChanged(key),
+                avatar: Icon(
+                  icon,
+                  size: 16,
+                  color: selected ? Colors.white : VentlyColors.berryMagenta,
+                ),
+                label: Text(label),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+}
+
+class _RecommendedTribeCard extends ConsumerStatefulWidget {
+  const _RecommendedTribeCard({
+    super.key,
+    required this.recommendation,
+  });
+
+  final TribeRecommendation recommendation;
+
+  @override
+  ConsumerState<_RecommendedTribeCard> createState() =>
+      _RecommendedTribeCardState();
+}
+
+class _RecommendedTribeCardState extends ConsumerState<_RecommendedTribeCard> {
+  late bool _joined;
+  late int _memberCount;
+  bool _joining = false;
+
+  Tribe get tribe => widget.recommendation.tribe;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncFromTribe();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RecommendedTribeCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.recommendation.tribe.tribeId != tribe.tribeId ||
+        (!_joining && tribe.joinedByMe != _joined)) {
+      _syncFromTribe();
+    }
+  }
+
+  void _syncFromTribe() {
+    _joined = tribe.joinedByMe;
+    _memberCount = tribe.memberCount;
+  }
+
+  void _open() => context.push('/tribe/${tribe.slug}');
+
+  Future<void> _join() async {
+    if (_joining || _joined) return _open();
+    setState(() => _joining = true);
+    try {
+      await ref.read(repositoryProvider).joinTribe(tribe.tribeId);
+      if (!mounted) return;
+      setState(() {
+        _joined = true;
+        _memberCount += 1;
+      });
+      ref.invalidate(tribesProvider);
+      ref.invalidate(recommendedTribesProvider);
+      ref.invalidate(tribeBySlugProvider(tribe.slug));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('You joined ${tribe.name}.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not join this Tribe. Try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _joining = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final category = switch (tribe.category) {
+      'interest_group' => 'Interest',
+      String value when value.isNotEmpty =>
+        '${value[0].toUpperCase()}${value.substring(1)}',
+      _ => 'Community',
+    };
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: VentlyColors.softMauve),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _open,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                TribeCoverPreview(
+                  bannerUrl: tribe.bannerUrl,
+                  avatarUrl: tribe.avatarUrl,
+                  width: 76,
+                  height: 58,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              tribe.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: context.ink,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          if (tribe.isPrivate) ...[
+                            const SizedBox(width: 5),
+                            Icon(
+                              Icons.lock_outline_rounded,
+                              size: 14,
+                              color: context.inkMuted,
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_compactCount(_memberCount)} members · $category',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.inkMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.auto_awesome_rounded,
+                            size: 13,
+                            color: VentlyColors.berryMagenta,
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              widget.recommendation.reason,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: VentlyColors.berryMagenta,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 82,
+                  height: 40,
+                  child: _joined
+                      ? OutlinedButton(
+                          onPressed: _open,
+                          child: const Text('View'),
+                        )
+                      : FilledButton(
+                          onPressed: _joining ? null : _join,
+                          child: _joining
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Join'),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _compactCount(int value) {
+  if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}M';
+  if (value >= 1000) return '${(value / 1000).toStringAsFixed(1)}K';
+  return '$value';
+}
+
+// =========================================================================
 // HEADER
 // =========================================================================
 
@@ -257,28 +843,43 @@ class _FriendsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 12, 4),
+      padding: const EdgeInsets.fromLTRB(20, 16, 18, 18),
       child: Row(
         children: [
-          IconButton(
-            icon: Icon(Icons.menu_rounded,
-                color: context.ink),
-            onPressed: onMenu,
-          ),
-          const Text(
-            'Venttly',
-            style: TextStyle(
-              color: VentlyColors.berryMagenta,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.4,
+          Expanded(
+            child: Text(
+              'Your circle',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: context.ink,
+                fontSize: 31,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'serif',
+                letterSpacing: 0,
+              ),
             ),
           ),
-          const Spacer(),
           IconButton(
-            icon: const Icon(Icons.notifications_none_rounded,
-                color: VentlyColors.berryMagenta),
-            onPressed: () => context.push('/notifications'),
+            tooltip: 'More',
+            icon: Icon(Icons.more_horiz_rounded, color: context.inkMuted),
+            onPressed: onMenu,
+          ),
+          const SizedBox(width: 4),
+          SizedBox.square(
+            dimension: 46,
+            child: IconButton(
+              tooltip: 'Notifications',
+              icon: VentlyNotificationBell(
+                color: context.ink,
+                size: 23,
+              ),
+              style: IconButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                side: const BorderSide(color: VentlyColors.softMauve),
+              ),
+              onPressed: () => context.push('/notifications'),
+            ),
           ),
         ],
       ),
@@ -296,43 +897,52 @@ class _InstantConnectCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 6, 20, 18),
-      child: GlassCard(
-        child: Column(
-          children: [
-            Row(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: context.glassBorder),
+            ),
+            child: Row(
               children: [
                 Container(
-                  width: 56,
-                  height: 56,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFFDFEA),
-                    shape: BoxShape.circle,
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: context.isDark
+                        ? VentlyColors.berryDesat.withOpacity(0.14)
+                        : VentlyColors.roseTint,
+                    borderRadius: BorderRadius.circular(18),
                   ),
                   alignment: Alignment.center,
                   child: const Icon(Icons.qr_code_2_rounded,
-                      color: VentlyColors.berryMagenta, size: 30),
+                      color: VentlyColors.roseDeep, size: 31),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Instant Connect',
+                        'Instant connect',
                         style: TextStyle(
                           color: context.ink,
                           fontWeight: FontWeight.w900,
-                          fontSize: 16,
+                          fontSize: 17,
                         ),
                       ),
-                      const SizedBox(height: 3),
-                      const Text(
-                        'Share your profile or add a friend.',
+                      const SizedBox(height: 5),
+                      Text(
+                        "Share your profile or scan a friend's code - no numbers, no real names.",
                         style: TextStyle(
-                          color: Color(0xFF8B5566),
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
+                          color: context.inkMuted,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          height: 1.45,
                         ),
                       ),
                     ],
@@ -340,53 +950,51 @@ class _InstantConnectCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: me == null
-                        ? null
-                        : () => _shareLink(context, me!),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: FilledButton(
+                    onPressed:
+                        me == null ? null : () => _shareLink(context, me!),
                     style: FilledButton.styleFrom(
                       backgroundColor: VentlyColors.berryMagenta,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(20),
                       ),
+                      elevation: 0,
                     ),
-                    icon: const Icon(Icons.ios_share, size: 16),
-                    label: const Text(
-                      'Share Link',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
+                    child: const Text('Share link',
+                        style: TextStyle(fontWeight: FontWeight.w900)),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: me == null
-                        ? null
-                        : () => _showMyQr(context, me!),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: FilledButton(
+                    onPressed:
+                        me == null ? null : () => _showMyQr(context, me!),
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFFFE3EC),
-                      foregroundColor: VentlyColors.berryMagenta,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: VentlyColors.roseTint,
+                      foregroundColor: VentlyColors.roseDeep,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(20),
                       ),
+                      elevation: 0,
                     ),
-                    icon: const Icon(Icons.qr_code_scanner, size: 16),
-                    label: const Text(
-                      'My QR',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
+                    child: const Text('My QR',
+                        style: TextStyle(fontWeight: FontWeight.w900)),
                   ),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -442,12 +1050,11 @@ class _InstantConnectCard extends StatelessWidget {
               _RealQrCard(handle: me.anonymousPseudonym),
               const SizedBox(height: 14),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: context.isDark
-                      ? context.glass()
-                      : VentlyColors.cardBlush,
+                  color:
+                      context.isDark ? context.glass() : VentlyColors.cardBlush,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
@@ -534,29 +1141,19 @@ class _RequestsSection extends ConsumerWidget {
             child: Row(
               children: [
                 Text(
-                  'Friend Requests',
+                  'Requests',
                   style: TextStyle(
                     color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 18,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  width: 22,
-                  height: 22,
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(
+                Text(
+                  ' · ${incoming.length}',
+                  style: const TextStyle(
                     color: VentlyColors.berryMagenta,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Text(
-                    '${incoming.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
               ],
@@ -590,127 +1187,134 @@ class _RequestsSection extends ConsumerWidget {
   }
 }
 
-class _RequestCard extends ConsumerWidget {
+class _RequestCard extends ConsumerStatefulWidget {
   const _RequestCard({required this.request});
   final FriendRequest request;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return GlassCard(
+  ConsumerState<_RequestCard> createState() => _RequestCardState();
+}
+
+class _RequestCardState extends ConsumerState<_RequestCard> {
+  bool _busy = false;
+
+  Future<void> _decide({required bool accept}) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      if (accept) {
+        await ref
+            .read(repositoryProvider)
+            .acceptFriendRequest(widget.request.friendshipId);
+        ref.invalidate(myFriendsProvider);
+        ref.invalidate(friendSuggestionsProvider);
+      } else {
+        await ref
+            .read(repositoryProvider)
+            .declineFriendRequest(widget.request.friendshipId);
+      }
+      ref.invalidate(incomingFriendRequestsProvider);
+      ref.invalidate(friendStatusProvider(widget.request.otherUserId));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update this request: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final request = widget.request;
+    return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: context.glassBorder),
+      ),
+      child: Row(
         children: [
           InkWell(
-            borderRadius: BorderRadius.circular(12),
+            customBorder: const CircleBorder(),
             onTap: () => openUserProfile(context, request.otherUserId),
-            child: Row(
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    ProfileAvatar(
-                      avatarSeed: request.otherAvatarSeed,
-                      label: request.otherPseudonym,
-                      size: 44,
-                    ),
-                    Positioned(
-                      right: -2,
-                      bottom: -2,
-                      child: Container(
-                        width: 13,
-                        height: 13,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF21C76A),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        request.otherPseudonym,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: context.ink,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _relative(request.createdAt),
-                        style: TextStyle(
-                          color: context.ink.withOpacity(0.55),
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right_rounded,
-                    color: VentlyColors.softMauve),
-              ],
+            child: ProfileAvatar(
+              avatarSeed: request.otherAvatarSeed,
+              label: request.otherPseudonym,
+              size: 48,
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton(
-                  onPressed: () async {
-                    await ref
-                        .read(repositoryProvider)
-                        .acceptFriendRequest(request.friendshipId);
-                    ref.invalidate(incomingFriendRequestsProvider);
-                    ref.invalidate(myFriendsProvider);
-                    ref.invalidate(friendSuggestionsProvider);
-                    ref.invalidate(friendStatusProvider(request.otherUserId));
-                  },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: VentlyColors.berryMagenta,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+          const SizedBox(width: 13),
+          Expanded(
+            child: InkWell(
+              onTap: () => openUserProfile(context, request.otherUserId),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    request.otherPseudonym,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.ink,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
                     ),
                   ),
-                  child: const Text('Accept',
-                      style: TextStyle(fontWeight: FontWeight.w900)),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton(
-                  onPressed: () async {
-                    await ref
-                        .read(repositoryProvider)
-                        .declineFriendRequest(request.friendshipId);
-                    ref.invalidate(incomingFriendRequestsProvider);
-                    ref.invalidate(friendStatusProvider(request.otherUserId));
-                  },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFE3EC),
-                    foregroundColor: VentlyColors.berryMagenta,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_relative(request.createdAt)} · ${request.otherKarma} karma',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.inkMuted,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
                     ),
                   ),
-                  child: const Text('Ignore',
-                      style: TextStyle(fontWeight: FontWeight.w900)),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
+          const SizedBox(width: 8),
+          if (_busy)
+            const SizedBox.square(
+              dimension: 42,
+              child: Padding(
+                padding: EdgeInsets.all(11),
+                child: CircularProgressIndicator(strokeWidth: 2.4),
+              ),
+            )
+          else ...[
+            SizedBox.square(
+              dimension: 42,
+              child: IconButton(
+                tooltip: 'Accept',
+                onPressed: () => _decide(accept: true),
+                icon: const Icon(Icons.check_rounded, color: Colors.white),
+                style: IconButton.styleFrom(
+                  backgroundColor: VentlyColors.berryMagenta,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox.square(
+              dimension: 42,
+              child: IconButton(
+                tooltip: 'Ignore',
+                onPressed: () => _decide(accept: false),
+                icon: const Icon(Icons.close_rounded,
+                    color: VentlyColors.roseDeep),
+                style: IconButton.styleFrom(
+                  backgroundColor: VentlyColors.roseTint,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -741,8 +1345,8 @@ class _QuickSuggestionsSection extends StatelessWidget {
               decoration: BoxDecoration(
                 color: context.glass(0.9),
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                    color: VentlyColors.softMauve.withOpacity(0.3)),
+                border:
+                    Border.all(color: VentlyColors.softMauve.withOpacity(0.3)),
               ),
             ),
           ),
@@ -797,9 +1401,7 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
     if (_busy || _sent) return;
     setState(() => _busy = true);
     try {
-      await ref
-          .read(repositoryProvider)
-          .sendFriendRequest(widget.s.userId);
+      await ref.read(repositoryProvider).sendFriendRequest(widget.s.userId);
       ref.invalidate(outgoingFriendRequestsProvider);
       ref.invalidate(friendSuggestionsProvider);
       if (!mounted) return;
@@ -823,84 +1425,83 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
       child: SizedBox(
         width: 132,
         child: Column(
-        children: [
-          ProfileAvatar(
-            avatarSeed: widget.s.avatarSeed,
-            label: widget.s.pseudonym,
-            profilePhotoUrl: widget.s.profilePhotoUrl,
-            size: 58,
-            showVerifiedBadge: widget.s.isVerified,
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  widget.s.pseudonym,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: context.ink,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
+          children: [
+            ProfileAvatar(
+              avatarSeed: widget.s.avatarSeed,
+              label: widget.s.pseudonym,
+              profilePhotoUrl: widget.s.profilePhotoUrl,
+              size: 58,
+              showVerifiedBadge: widget.s.isVerified,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    widget.s.pseudonym,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.ink,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
-              ),
-              if (widget.s.isVerified) ...[
-                const SizedBox(width: 3),
-                const VerifiedBadge(size: 13),
+                if (widget.s.isVerified) ...[
+                  const SizedBox(width: 3),
+                  const VerifiedBadge(size: 13),
+                ],
               ],
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            widget.s.rationale,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: context.ink.withOpacity(0.6),
-              fontSize: 10.5,
-              fontWeight: FontWeight.w800,
             ),
-          ),
-          const Spacer(),
-          SizedBox(
-            width: double.infinity,
-            height: 30,
-            child: FilledButton(
-              onPressed: _add,
-              style: FilledButton.styleFrom(
-                backgroundColor: _sent
-                    ? VentlyColors.softMauve.withOpacity(0.4)
-                    : const Color(0xFFFFE3EC),
-                foregroundColor: VentlyColors.berryMagenta,
-                padding: EdgeInsets.zero,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                elevation: 0,
+            const SizedBox(height: 2),
+            Text(
+              widget.s.rationale,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: context.ink.withOpacity(0.6),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
               ),
-              child: _busy
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: VentlyColors.berryMagenta),
-                    )
-                  : Text(
-                      _sent ? 'PENDING' : 'ADD',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 11,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
             ),
-          ),
-        ],
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              height: 30,
+              child: FilledButton(
+                onPressed: _add,
+                style: FilledButton.styleFrom(
+                  backgroundColor: _sent
+                      ? VentlyColors.softMauve.withOpacity(0.4)
+                      : const Color(0xFFFFE3EC),
+                  foregroundColor: VentlyColors.berryMagenta,
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                ),
+                child: _busy
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: VentlyColors.berryMagenta),
+                      )
+                    : Text(
+                        _sent ? 'PENDING' : 'ADD',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 11,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+              ),
+            ),
+          ],
         ),
       ),
     ).animate().fadeIn(duration: 220.ms);
@@ -916,10 +1517,12 @@ class _MyFriendsHeader extends StatelessWidget {
     required this.total,
     required this.query,
     required this.onChanged,
+    required this.onSort,
   });
   final int total;
   final TextEditingController query;
   final ValueChanged<String> onChanged;
+  final VoidCallback onSort;
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -927,23 +1530,36 @@ class _MyFriendsHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          RichText(
-            text: TextSpan(
-              style: TextStyle(
-                color: context.ink,
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-              ),
-              children: [
-                const TextSpan(text: 'My Friends '),
-                TextSpan(
-                  text: '($total)',
-                  style: const TextStyle(
-                      color: VentlyColors.berryMagenta,
-                      fontWeight: FontWeight.w900),
+          Row(
+            children: [
+              RichText(
+                text: TextSpan(
+                  style: TextStyle(
+                    color: context.ink,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                  ),
+                  children: [
+                    const TextSpan(text: 'Friends'),
+                    TextSpan(
+                      text: ' · $total',
+                      style: const TextStyle(
+                        color: VentlyColors.berryMagenta,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: onSort,
+                child: const Text(
+                  'Sort',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           Container(
@@ -998,18 +1614,22 @@ class _FriendRow extends ConsumerWidget {
       child: Material(
         color: Colors.transparent,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 13),
+          decoration: const BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: VentlyColors.softMauve),
+            ),
+          ),
           child: Row(
             children: [
               ProfileAvatar(
                 avatarSeed: friend.avatarSeed,
                 label: friend.pseudonym,
                 profilePhotoUrl: friend.profilePhotoUrl,
-                size: 48,
+                size: 52,
                 showVerifiedBadge: friend.isVerified,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1025,7 +1645,7 @@ class _FriendRow extends ConsumerWidget {
                             style: TextStyle(
                               color: context.ink,
                               fontWeight: FontWeight.w900,
-                              fontSize: 14,
+                              fontSize: 16,
                             ),
                           ),
                         ),
@@ -1040,8 +1660,8 @@ class _FriendRow extends ConsumerWidget {
                       'Friends since ${_relative(friend.acceptedAt)}',
                       style: TextStyle(
                         color: context.ink.withOpacity(0.55),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
                       ),
                     ),
                   ],
@@ -1050,8 +1670,8 @@ class _FriendRow extends ConsumerWidget {
               _FavoriteHeart(friend: friend),
               IconButton(
                 visualDensity: VisualDensity.compact,
-                icon: Icon(Icons.more_vert_rounded,
-                    color: context.ink, size: 20),
+                icon: Icon(Icons.more_horiz_rounded,
+                    color: context.inkMuted, size: 20),
                 onPressed: () => _showActions(context, ref),
               ),
             ],
@@ -1097,8 +1717,7 @@ class _FriendRow extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.person_outline,
-                    color: context.ink),
+                leading: Icon(Icons.person_outline, color: context.ink),
                 title: const Text('View profile',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -1108,8 +1727,7 @@ class _FriendRow extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.chat_bubble_outline,
-                    color: context.ink),
+                leading: Icon(Icons.chat_bubble_outline, color: context.ink),
                 title: const Text('Message',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () async {
@@ -1136,8 +1754,10 @@ class _FriendRow extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.notifications_off_outlined,
-                    color: context.ink),
+                leading: VentlyNotificationBell(
+                  color: context.ink,
+                  muted: true,
+                ),
                 title: const Text('Mute notifications',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -1151,8 +1771,7 @@ class _FriendRow extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.person_remove_alt_1,
-                    color: context.ink),
+                leading: Icon(Icons.person_remove_alt_1, color: context.ink),
                 title: const Text('Remove friend',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () async {
@@ -1223,9 +1842,7 @@ class _FavoriteHeartState extends ConsumerState<_FavoriteHeart> {
     return IconButton(
       icon: Icon(
         _on ? Icons.favorite : Icons.favorite_border,
-        color: _on
-            ? const Color(0xFF21C76A)
-            : context.ink.withOpacity(0.5),
+        color: _on ? const Color(0xFF21C76A) : context.ink.withOpacity(0.5),
         size: 18,
       ),
       onPressed: _toggle,
@@ -1242,9 +1859,8 @@ class _OutgoingSheet extends ConsumerWidget {
   const _OutgoingSheet();
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final outgoing =
-        ref.watch(outgoingFriendRequestsProvider).valueOrNull ??
-            const <FriendRequest>[];
+    final outgoing = ref.watch(outgoingFriendRequestsProvider).valueOrNull ??
+        const <FriendRequest>[];
     return DraggableScrollableSheet(
       initialChildSize: 0.55,
       expand: false,
@@ -1277,8 +1893,7 @@ class _OutgoingSheet extends ConsumerWidget {
                     : ListView.separated(
                         controller: controller,
                         itemCount: outgoing.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 6),
+                        separatorBuilder: (_, __) => const SizedBox(height: 6),
                         itemBuilder: (ctx, i) {
                           final r = outgoing[i];
                           return Container(
@@ -1288,8 +1903,8 @@ class _OutgoingSheet extends ConsumerWidget {
                               color: context.glass(0.9),
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
-                                  color: VentlyColors.softMauve
-                                      .withOpacity(0.3)),
+                                  color:
+                                      VentlyColors.softMauve.withOpacity(0.3)),
                             ),
                             child: Row(
                               children: [
@@ -1314,8 +1929,7 @@ class _OutgoingSheet extends ConsumerWidget {
                                       Text(
                                         'Sent ${_relative(r.createdAt)}',
                                         style: TextStyle(
-                                          color: context.ink
-                                              .withOpacity(0.55),
+                                          color: context.ink.withOpacity(0.55),
                                           fontSize: 11,
                                           fontWeight: FontWeight.w700,
                                         ),
@@ -1422,8 +2036,8 @@ class _ListSkeleton extends StatelessWidget {
             decoration: BoxDecoration(
               color: context.glass(0.9),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                  color: VentlyColors.softMauve.withOpacity(0.3)),
+              border:
+                  Border.all(color: VentlyColors.softMauve.withOpacity(0.3)),
             ),
           ),
         ),

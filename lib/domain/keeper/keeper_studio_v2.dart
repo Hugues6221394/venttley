@@ -1,5 +1,5 @@
-/// Plugz Creator Studio V2 — RPC payloads for moderation, calendar,
-/// insights, co-mod grid, and export reports.
+// Plugz Creator Studio V2 - RPC payloads for moderation, calendar,
+// insights, co-mod grid, and export reports.
 
 String _str(dynamic v, [String fallback = '']) {
   if (v == null) return fallback;
@@ -69,8 +69,7 @@ class KeeperModerationQueue {
     final raw = json['items'] as List? ?? const [];
     return KeeperModerationQueue(
       items: raw
-          .map((e) =>
-              KeeperModerationItem.fromJson(e as Map<String, dynamic>))
+          .map((e) => KeeperModerationItem.fromJson(e as Map<String, dynamic>))
           .toList(),
       keywordFilterCount: _int(json['keyword_filter_count']),
       warnings30d: _int(json['warnings_30d']),
@@ -143,8 +142,7 @@ class KeeperEngagementCalendar {
     List<KeeperCalendarPrompt> parseList(String key) {
       final raw = json[key] as List? ?? const [];
       return raw
-          .map((e) =>
-              KeeperCalendarPrompt.fromJson(e as Map<String, dynamic>))
+          .map((e) => KeeperCalendarPrompt.fromJson(e as Map<String, dynamic>))
           .toList();
     }
 

@@ -1,0 +1,114 @@
+name: Production quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    name: Flutter analysis and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.24.5
+          cache: true
+      - run: flutter pub get
+      - name: Verify production-readiness formatting
+        run: >-
+          dart format --output=none --set-exit-if-changed
+          lib/core/connection.dart
+          lib/core/constants.dart
+          lib/core/logger.dart
+          lib/core/pii_scrubber.dart
+          lib/data/repositories/vently_repository.dart
+          lib/data/services/draft_store.dart
+          lib/data/services/moderation_service.dart
+          lib/data/services/outbox.dart
+          lib/data/services/pending_media_store.dart
+          lib/data/services/sensitive_store.dart
+          lib/data/services/supabase_backend.dart
+          lib/data/services/telemetry_service.dart
+          lib/main.dart
+          lib/presentation/screens/compose/compose_screen.dart
+          lib/presentation/screens/compose/create_story_screen.dart
+          lib/presentation/screens/feed/post_detail_screen.dart
+          lib/presentation/screens/inbox/chat_screen.dart
+          lib/presentation/screens/tribes/tribe_chat_screen.dart
+          lib/presentation/widgets/connection_banner.dart
+          lib/presentation/widgets/whisper_comments_sheet.dart
+          test/draft_store_test.dart
+          test/moderation_service_test.dart
+          test/outbox_test.dart
+          test/pending_media_store_test.dart
+          test/pii_scrubber_test.dart
+          test/production_safety_contract_test.dart
+      - run: flutter analyze
+      - run: flutter test --coverage
+
+  admin:
+    name: Admin console typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+
+  database:
+    name: Migration replay and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: supabase/setup-cli@v2.1.1
+        with:
+          version: 2.107.0
+      - name: Start isolated Postgres
+        run: supabase db start
+      - name: Replay every migration from zero
+        run: supabase db reset --local --no-seed
+      - name: Run pgTAP authorization and idempotency contracts
+        run: supabase test db supabase/tests/database --local
+      - name: Lint application schemas
+        run: >-
+          supabase db lint --local --schema public,private
+          --level warning --fail-on error
+
+  edge-functions:
+    name: Edge Function checks and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: denoland/setup-deno@v2.0.5
+        with:
+          deno-version: lts
+          cache: true
+      - name: Check moderation function formatting
+        run: >-
+          deno fmt --check
+          supabase/functions/moderate
+          supabase/functions/_shared
+      - name: Type-check moderation entrypoint
+        run: deno check supabase/functions/moderate/index.ts
+      - name: Run isolated moderation tests
+        run: deno test supabase/functions/moderate/handler_test.ts

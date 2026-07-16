@@ -31,6 +31,10 @@ class ProfileAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = profilePhotoUrl?.trim();
+    final decodeSize = (size * MediaQuery.devicePixelRatioOf(context))
+        .ceil()
+        .clamp(1, 512)
+        .toInt();
     final core = url == null || url.isEmpty
         ? AnonymousAvatar(
             seed: avatarSeed,
@@ -44,6 +48,10 @@ class ProfileAvatar extends StatelessWidget {
               width: size,
               height: size,
               fit: BoxFit.cover,
+              memCacheWidth: decodeSize,
+              memCacheHeight: decodeSize,
+              maxWidthDiskCache: decodeSize,
+              maxHeightDiskCache: decodeSize,
               placeholder: (_, __) => AnonymousAvatar(
                 seed: avatarSeed,
                 label: label,

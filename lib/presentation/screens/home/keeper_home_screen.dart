@@ -12,6 +12,7 @@ import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_error_state.dart';
+import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../navigation/compose_navigation.dart';
 
@@ -49,7 +50,8 @@ class KeeperHomeScreen extends ConsumerWidget {
             ),
             data: (overview) {
               if (overview.tribes.isEmpty) {
-                return _EmptyKeeperState(me: me, onRefresh: () => _refresh(ref));
+                return _EmptyKeeperState(
+                    me: me, onRefresh: () => _refresh(ref));
               }
               return RefreshIndicator(
                 color: VentlyColors.berryMagenta,
@@ -122,8 +124,7 @@ class KeeperHomeScreen extends ConsumerWidget {
                           child: _TribeControlCard(
                             tribe: tribe,
                             stats: stats,
-                            engagement:
-                                overview.engagementScoreFor(stats),
+                            engagement: overview.engagementScoreFor(stats),
                           ),
                         );
                       },
@@ -188,9 +189,8 @@ class _KeeperWelcome extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
-        border: isDark
-            ? Border.all(color: Colors.white.withOpacity(0.06))
-            : null,
+        border:
+            isDark ? Border.all(color: Colors.white.withOpacity(0.06)) : null,
         boxShadow: [
           BoxShadow(
             color: VentlyColors.berryMagenta.withOpacity(isDark ? 0.18 : 0.12),
@@ -461,8 +461,7 @@ class _BellButton extends ConsumerWidget {
       clipBehavior: Clip.none,
       children: [
         IconButton(
-          icon: Icon(Icons.notifications_none_rounded,
-              color: context.ink),
+          icon: VentlyNotificationBell(color: context.ink),
           onPressed: () => context.push('/notifications'),
         ),
         if (unread > 0)
@@ -496,9 +495,7 @@ class _CommandStrip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
-    final stats = primary != null
-        ? overview.statsFor(primary.tribeId)
-        : null;
+    final stats = primary != null ? overview.statsFor(primary.tribeId) : null;
     final health = _healthScore(overview, stats);
     final members = primary?.memberCount ?? overview.totalMembers;
     final reports = overview.totalOpenReports;
@@ -534,7 +531,8 @@ class _CommandStrip extends ConsumerWidget {
                   context.go('/feed');
                 },
                 child: const Text('Member feed',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                    style:
+                        TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
               ),
             ],
           ),
@@ -776,8 +774,7 @@ class _PriorityQueue extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.w800,
-                              color:
-                                  context.ink.withOpacity(0.55),
+                              color: context.ink.withOpacity(0.55),
                             ),
                           ),
                         ],
@@ -798,6 +795,7 @@ class _PriorityQueue extends StatelessWidget {
 // Legacy hero (unused — kept for reference during migration)
 // ---------------------------------------------------------------------------
 
+// ignore: unused_element
 class _HeroPanel extends ConsumerWidget {
   const _HeroPanel({required this.me, required this.overview});
   final AppUser? me;
@@ -806,9 +804,7 @@ class _HeroPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
-    final stats = primary != null
-        ? overview.statsFor(primary.tribeId)
-        : null;
+    final stats = primary != null ? overview.statsFor(primary.tribeId) : null;
     final health = _healthScore(overview, stats);
 
     return Padding(
@@ -892,8 +888,8 @@ class _HeroPanel extends ConsumerWidget {
                   ),
                   const SizedBox(width: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(99),
@@ -989,9 +985,8 @@ class _QuickActionsRow extends ConsumerWidget {
             _QuickAction(
               icon: Icons.rule_rounded,
               label: 'Rules',
-              onTap: slug == null
-                  ? null
-                  : () => context.push('/tribe/$slug/edit'),
+              onTap:
+                  slug == null ? null : () => context.push('/tribe/$slug/edit'),
             ),
           ],
         ),
@@ -1098,7 +1093,8 @@ class _V2Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: context.isDark ? Theme.of(context).colorScheme.surface : Colors.white,
+      color:
+          context.isDark ? Theme.of(context).colorScheme.surface : Colors.white,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
@@ -1106,7 +1102,9 @@ class _V2Tile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: context.isDark ? Theme.of(context).colorScheme.surface : Colors.white,
+            color: context.isDark
+                ? Theme.of(context).colorScheme.surface
+                : Colors.white,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
@@ -1210,7 +1208,9 @@ class _QuickAction extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: 10),
       child: Material(
-        color: context.isDark ? Theme.of(context).colorScheme.surface : Colors.white,
+        color: context.isDark
+            ? Theme.of(context).colorScheme.surface
+            : Colors.white,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: onTap,
@@ -1221,7 +1221,9 @@ class _QuickAction extends StatelessWidget {
               width: 96,
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
-                color: context.isDark ? Theme.of(context).colorScheme.surface : Colors.white,
+                color: context.isDark
+                    ? Theme.of(context).colorScheme.surface
+                    : Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
@@ -1240,8 +1242,8 @@ class _QuickAction extends StatelessWidget {
                       color: VentlyColors.berryMagenta.withOpacity(0.12),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(icon,
-                        color: VentlyColors.berryMagenta, size: 21),
+                    child:
+                        Icon(icon, color: VentlyColors.berryMagenta, size: 21),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -1830,8 +1832,7 @@ class _KeeperDrawer extends ConsumerWidget {
                     label: 'Control Center',
                     onTap: () {
                       Navigator.pop(context);
-                      ref.read(keeperMemberViewProvider.notifier).state =
-                          false;
+                      ref.read(keeperMemberViewProvider.notifier).state = false;
                       context.go('/feed');
                     },
                   ),
@@ -1840,8 +1841,7 @@ class _KeeperDrawer extends ConsumerWidget {
                     label: 'Member feed',
                     onTap: () {
                       Navigator.pop(context);
-                      ref.read(keeperMemberViewProvider.notifier).state =
-                          true;
+                      ref.read(keeperMemberViewProvider.notifier).state = true;
                       context.go('/feed');
                     },
                   ),
@@ -2064,6 +2064,7 @@ class _EmptyKeeperState extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _ErrorState extends StatelessWidget {
   const _ErrorState({required this.message, required this.onRetry});
   final String message;

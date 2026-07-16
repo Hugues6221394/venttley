@@ -125,7 +125,7 @@ class TribeMemberRow {
   });
 
   bool get isKeeper => role == 'keeper';
-  bool get isMod    => role == 'mod';
+  bool get isMod => role == 'mod';
 }
 
 class BadgeDefinition {
@@ -150,7 +150,7 @@ class UserBadge {
 }
 
 class UserStreak {
-  final String kind;        // posting | commenting | reactions
+  final String kind; // posting | commenting | reactions
   final int currentCount;
   final int longestCount;
   final DateTime lastEventAt;
@@ -188,7 +188,8 @@ class Tribe {
   final String name;
   final String slug;
   final String? description;
-  final String category; // campus | city | interest_group | hobby | support | venting
+  final String
+      category; // campus | city | interest_group | hobby | support | venting
   final int memberCount;
   final bool isPrivate;
   final String? avatarUrl;
@@ -196,6 +197,7 @@ class Tribe {
   final String? keeperId;
   final String? keeperPseudonym;
   final String? keeperAvatarSeed;
+  final String? keeperProfilePhotoUrl;
   final bool keeperIsVerified;
   final DateTime createdAt;
   final bool joinedByMe;
@@ -206,6 +208,7 @@ class Tribe {
   final String? spotlightUserId;
   final String? spotlightPseudonym;
   final String? spotlightAvatarSeed;
+  final String? spotlightProfilePhotoUrl;
   final String? spotlightNote;
   final DateTime? spotlightSetAt;
 
@@ -233,6 +236,7 @@ class Tribe {
     this.keeperId,
     this.keeperPseudonym,
     this.keeperAvatarSeed,
+    this.keeperProfilePhotoUrl,
     this.keeperIsVerified = false,
     this.joinedByMe = false,
     this.welcomeMessage,
@@ -240,6 +244,7 @@ class Tribe {
     this.spotlightUserId,
     this.spotlightPseudonym,
     this.spotlightAvatarSeed,
+    this.spotlightProfilePhotoUrl,
     this.spotlightNote,
     this.spotlightSetAt,
     this.rules,
@@ -269,6 +274,7 @@ class Tribe {
       keeperId: keeperId,
       keeperPseudonym: keeperPseudonym,
       keeperAvatarSeed: keeperAvatarSeed,
+      keeperProfilePhotoUrl: keeperProfilePhotoUrl,
       keeperIsVerified: keeperIsVerified,
       createdAt: createdAt,
       joinedByMe: joinedByMe ?? this.joinedByMe,
@@ -277,11 +283,13 @@ class Tribe {
       spotlightUserId: spotlightUserId,
       spotlightPseudonym: spotlightPseudonym,
       spotlightAvatarSeed: spotlightAvatarSeed,
+      spotlightProfilePhotoUrl: spotlightProfilePhotoUrl,
       spotlightNote: spotlightNote,
       spotlightSetAt: spotlightSetAt,
       rules: rules,
       isPremium: isPremium,
       chatSettings: chatSettings,
+      pinnedMessageId: pinnedMessageId,
     );
   }
 }
@@ -417,6 +425,7 @@ class ScheduledPrompt {
 
 class Post {
   final String postId;
+
   /// Stable author identity. Always present, but the UI should treat it
   /// as opaque — never display the raw UUID. Used by the friend-action
   /// chip and report flows to identify the author.
@@ -438,33 +447,42 @@ class Post {
   final int likesCount;
   final int commentsCount;
   final int viewCount;
+
   /// Optional attached image URL (post-media bucket, public). Drives the
   /// rounded image card on the feed.
   final String? imageUrl;
+
   /// Optional attached voice-note URL (post-media bucket, public). Drives
   /// the waveform playback card on the feed.
   final String? audioUrl;
   final int? audioDurationSeconds;
   final DateTime createdAt;
+
   /// Author-only edit timestamp (migration 0047). Drives the "(edited)"
   /// footer on the post detail screen + feed card.
   final DateTime? editedAt;
+
   /// Soft-delete marker. When set, the feed/card renders a tombstone
   /// "Vent removed by author" instead of the body.
   final DateTime? deletedAt;
+
   /// Author-only lock on new replies (migration 0051). When set the
   /// thread renders read-only with a "comments locked" footer.
   final DateTime? lockedAt;
+
   /// Keeper-only highlight (migration 0051). Drives the Keeper's Pick
   /// chip on the card and the Keeper Picks smart sort in a Space.
   final bool isKeeperPick;
   final DateTime? keeperPickAt;
-  final String? myReaction; // null | hug | love | strong | hope | pray | felt | proud
+  final String?
+      myReaction; // null | hug | love | strong | hope | pray | felt | proud
   final bool savedByMe;
+
   /// Null when the safety classifier saw nothing concerning. `'elevated'` for
   /// Tier-2 (LLM) self-harm matches, `'high'` for Tier-1 keyword hits. Drives
   /// the helpline banner on the post detail screen.
   final String? crisisLevel;
+
   /// Media safety verdict (migration 0087): 'clean' | 'pending' | 'sensitive' |
   /// 'blocked'. 'blocked' posts are soft-deleted server-side and never arrive.
   /// The feed veils the image for 'pending'/'sensitive'.
@@ -510,8 +528,8 @@ class Post {
   bool get hasImage => imageUrl != null && imageUrl!.isNotEmpty;
   bool get hasAudio => audioUrl != null && audioUrl!.isNotEmpty;
   bool get isDeleted => deletedAt != null;
-  bool get isEdited  => editedAt  != null;
-  bool get isLocked  => lockedAt  != null;
+  bool get isEdited => editedAt != null;
+  bool get isLocked => lockedAt != null;
   bool ownedBy(String? userId) => authorId != null && authorId == userId;
 
   /// True when the caller has any reaction on this post.
@@ -587,32 +605,54 @@ class Post {
 /// another at a hard moment, not a Facebook button.
 class PostReactions {
   static const List<String> all = [
-    'hug', 'love', 'strong', 'hope', 'pray', 'felt', 'proud',
+    'hug',
+    'love',
+    'strong',
+    'hope',
+    'pray',
+    'felt',
+    'proud',
   ];
 
   static String emoji(String key) {
     switch (key) {
-      case 'hug':    return '\u{1FAC2}';                  // 🫂
-      case 'love':   return '\u{2764}\u{FE0F}';           // ❤️
-      case 'strong': return '\u{1F4AA}';                  // 💪
-      case 'hope':   return '\u{1F331}';                  // 🌱
-      case 'pray':   return '\u{1F64F}';                  // 🙏
-      case 'felt':   return '\u{1F97A}';                  // 🥺
-      case 'proud':  return '\u{1F44F}';                  // 👏
-      default:       return '\u{2764}\u{FE0F}';
+      case 'hug':
+        return '\u{1FAC2}'; // 🫂
+      case 'love':
+        return '\u{2764}\u{FE0F}'; // ❤️
+      case 'strong':
+        return '\u{1F4AA}'; // 💪
+      case 'hope':
+        return '\u{1F331}'; // 🌱
+      case 'pray':
+        return '\u{1F64F}'; // 🙏
+      case 'felt':
+        return '\u{1F97A}'; // 🥺
+      case 'proud':
+        return '\u{1F44F}'; // 👏
+      default:
+        return '\u{2764}\u{FE0F}';
     }
   }
 
   static String label(String key) {
     switch (key) {
-      case 'hug':    return 'I Relate';
-      case 'love':   return 'Sending Love';
-      case 'strong': return 'Stay Strong';
-      case 'hope':   return 'Hope';
-      case 'pray':   return 'Praying';
-      case 'felt':   return 'Felt This';
-      case 'proud':  return 'Proud of You';
-      default:       return key;
+      case 'hug':
+        return 'I Relate';
+      case 'love':
+        return 'Sending Love';
+      case 'strong':
+        return 'Stay Strong';
+      case 'hope':
+        return 'Hope';
+      case 'pray':
+        return 'Praying';
+      case 'felt':
+        return 'Felt This';
+      case 'proud':
+        return 'Proud of You';
+      default:
+        return key;
     }
   }
 }
@@ -646,8 +686,8 @@ class CrisisHelpline {
 class AutomodRule {
   final String pattern;
   final String matchType; // 'contains' | 'word' | 'regex'
-  final String category;  // maps to HazardCategory
-  final String action;    // 'flag' | 'block' | 'crisis'
+  final String category; // maps to HazardCategory
+  final String action; // 'flag' | 'block' | 'crisis'
 
   const AutomodRule({
     required this.pattern,
@@ -680,10 +720,12 @@ class ThreadedComment {
   final String authorPseudonym;
   final String authorAvatarSeed;
   final String? authorProfilePhotoUrl;
+
   /// True when the comment's author is a verified member — drives the tick
   /// next to their name in the thread.
   final bool authorIsVerified;
   final String content;
+
   /// Migration 0102 — optional photo / GIF attached to the reply.
   final String? imageUrl;
   final String path;
@@ -691,10 +733,13 @@ class ThreadedComment {
   final int likesCount;
   final bool likedByMe;
   final DateTime createdAt;
+
   /// Migration 0047 — author-only edit timestamp.
   final DateTime? editedAt;
+
   /// Soft-delete marker. UI renders a tombstone when set.
   final DateTime? deletedAt;
+
   /// Migration 0051 — set when the vent's author pinned this comment.
   /// Pinned comments render above the chronological thread.
   final DateTime? pinnedAt;
@@ -722,8 +767,8 @@ class ThreadedComment {
   }) : children = children ?? <ThreadedComment>[];
 
   bool get isDeleted => deletedAt != null;
-  bool get isEdited  => editedAt  != null;
-  bool get isPinned  => pinnedAt  != null;
+  bool get isEdited => editedAt != null;
+  bool get isPinned => pinnedAt != null;
   bool ownedBy(String? uid) => authorId != null && authorId == uid;
 
   ThreadedComment copyWith({
@@ -761,6 +806,7 @@ class ChatRoom {
   final String roomId;
   final String peerPseudonym;
   final String peerAvatarSeed;
+
   /// The peer's user id (from inbox_rooms.peer_id) — for opening their profile.
   final String? peerUserId;
   final String requestPreview;
@@ -800,7 +846,8 @@ class ChatMessage {
   final String messageId;
   final String roomId;
   final String senderId;
-  final String plaintext; // stored server-side as plaintext for moderation review.
+  final String
+      plaintext; // stored server-side as plaintext for moderation review.
   final DateTime createdAt;
   final bool sentByMe;
 
@@ -870,7 +917,7 @@ class ChatMessage {
   });
 
   bool get isDeleted => deletedAt != null;
-  bool get isEdited  => editedAt  != null;
+  bool get isEdited => editedAt != null;
 
   /// WhatsApp-style windows, mirrored by the server RPCs. Editing is
   /// allowed for 30 min after sending; "delete for everyone" for 24h.
@@ -993,8 +1040,7 @@ class PostPoll {
     this.myVoteOptionId,
   });
 
-  int get totalVotes =>
-      optionCounts.values.fold(0, (a, b) => a + b);
+  int get totalVotes => optionCounts.values.fold(0, (a, b) => a + b);
 
   bool get isClosed => DateTime.now().isAfter(closesAt);
   bool get hasVoted => myVoteOptionId != null;
@@ -1095,14 +1141,22 @@ class TribeReport {
 
   String get reasonLabel {
     switch (reason) {
-      case 'self_harm':      return 'Self-harm concern';
-      case 'hate':           return 'Hate speech';
-      case 'harassment':     return 'Harassment';
-      case 'sexual_content': return 'Sexual content';
-      case 'violence':       return 'Violence';
-      case 'privacy':        return 'Privacy / doxxing';
-      case 'spam':           return 'Spam';
-      default:               return 'Other';
+      case 'self_harm':
+        return 'Self-harm concern';
+      case 'hate':
+        return 'Hate speech';
+      case 'harassment':
+        return 'Harassment';
+      case 'sexual_content':
+        return 'Sexual content';
+      case 'violence':
+        return 'Violence';
+      case 'privacy':
+        return 'Privacy / doxxing';
+      case 'spam':
+        return 'Spam';
+      default:
+        return 'Other';
     }
   }
 }
@@ -1228,8 +1282,10 @@ class Whisper {
   final int commentsCount;
   final String? crisisLevel;
   final DateTime createdAt;
+
   /// Migration 0047 — author-only edit timestamp on title/description.
   final DateTime? editedAt;
+
   /// Soft-delete marker.
   final DateTime? deletedAt;
   final bool likedByMe;
@@ -1281,7 +1337,7 @@ class Whisper {
   });
 
   bool get isDeleted => deletedAt != null;
-  bool get isEdited  => editedAt  != null;
+  bool get isEdited => editedAt != null;
   bool ownedBy(String? uid) => authorId != null && authorId == uid;
 
   static const Object _unset = Object();
@@ -1321,9 +1377,8 @@ class Whisper {
         likedByMe: likedByMe ?? this.likedByMe,
         savedByMe: savedByMe ?? this.savedByMe,
         reactionCounts: reactionCounts ?? this.reactionCounts,
-        myReaction: myReaction == _unset
-            ? this.myReaction
-            : myReaction as String?,
+        myReaction:
+            myReaction == _unset ? this.myReaction : myReaction as String?,
         mediaStatus: mediaStatus,
       );
 }
@@ -1396,24 +1451,55 @@ class TagCandidate {
   });
 }
 
+/// One search typeahead / trending entry (migration 0119).
+/// kind: 'user' | 'tribe' | 'category'. value is what to search or route
+/// with (pseudonym, slug, category key), display is what to render.
+class SearchSuggestion {
+  final String kind;
+  final String value;
+  final String display;
+
+  const SearchSuggestion({
+    required this.kind,
+    required this.value,
+    required this.display,
+  });
+}
+
 /// Catalogue of available voice filters — labels for the picker on the
 /// create-whisper screen. DSP processing ships separately.
 class WhisperVoiceFilters {
   static const List<String> all = [
-    'none', 'anonymous', 'soft', 'deep_voice', 'robot', 'echo', 'synth', 'dark',
+    'none',
+    'anonymous',
+    'soft',
+    'deep_voice',
+    'robot',
+    'echo',
+    'synth',
+    'dark',
   ];
 
   static String label(String key) {
     switch (key) {
-      case 'none':       return 'Original';
-      case 'anonymous':  return 'Anonymous';
-      case 'soft':       return 'Soft';
-      case 'deep_voice': return 'Deep';
-      case 'robot':      return 'Robot';
-      case 'echo':       return 'Echo';
-      case 'synth':      return 'Synth';
-      case 'dark':       return 'Dark';
-      default:           return key;
+      case 'none':
+        return 'Original';
+      case 'anonymous':
+        return 'Anonymous';
+      case 'soft':
+        return 'Soft';
+      case 'deep_voice':
+        return 'Deep';
+      case 'robot':
+        return 'Robot';
+      case 'echo':
+        return 'Echo';
+      case 'synth':
+        return 'Synth';
+      case 'dark':
+        return 'Dark';
+      default:
+        return key;
     }
   }
 }
@@ -1469,6 +1555,7 @@ class TribeMessage {
   final String senderPseudonym;
   final String senderAvatarSeed;
   final String? senderProfilePhotoUrl;
+
   /// True when the sender is a verified member posting under their real
   /// identity (never for persona-sent messages — migration 0110).
   final bool senderIsVerified;
@@ -1480,6 +1567,7 @@ class TribeMessage {
   final int hugsCount;
   final DateTime createdAt;
   final DateTime? editedAt;
+
   /// Migration 0047 — soft-delete marker. UI renders a tombstone.
   final DateTime? deletedAt;
   final bool sentByMe;
@@ -1488,6 +1576,7 @@ class TribeMessage {
   final String? replySenderPseudonym;
   final bool huggedByMe;
   final bool isPinned;
+
   /// Poll / question cards — migration 0065.
   final Map<String, dynamic>? metadata;
   final String? pollMyVoteOptionId;
@@ -1528,7 +1617,7 @@ class TribeMessage {
   });
 
   bool get isDeleted => deletedAt != null;
-  bool get isEdited  => editedAt  != null;
+  bool get isEdited => editedAt != null;
   bool get hasImage => imageUrl != null && imageUrl!.isNotEmpty;
   bool get hasAudio => audioUrl != null && audioUrl!.isNotEmpty;
   bool get hasText => content != null && content!.trim().isNotEmpty;
@@ -1707,6 +1796,7 @@ class UserProfileView {
   /// Total accepted friendships. Drives the "30K Connections" KPI
   /// on the public profile (migration 0054).
   final int connectionsCount;
+
   /// Banner stats (migration 0107): total posts = vents + whispers; total
   /// hugs = 🫂 'hug' reactions received on the user's posts.
   final int postsTotal;
@@ -1916,7 +2006,7 @@ class SearchHit {
   });
 
   bool get isTribe => hitKind == 'tribe';
-  bool get isPost  => hitKind == 'post';
+  bool get isPost => hitKind == 'post';
   bool get isTopic => hitKind == 'topic';
 }
 

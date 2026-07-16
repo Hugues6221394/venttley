@@ -8,8 +8,11 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../animation/widgets/animated_button.dart';
 import '../../../core/constants.dart';
+import '../../../core/connection.dart';
 import '../../../core/providers.dart';
+import '../../../data/services/draft_store.dart';
 import '../../../data/services/moderation_service.dart';
+import '../../../data/services/outbox.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
@@ -46,6 +49,8 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   Uint8List? _pendingImageBytes;
   String _pendingImageExt = 'jpg';
   String _pendingImageMime = 'image/jpeg';
+
+  DraftSaver? _draftSaver;
 
   @override
   void initState() {
@@ -90,10 +95,23 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       ref.read(composeInitialCategoryProvider.notifier).state = null;
       ref.read(composeInitialDraftProvider.notifier).state = null;
     });
+
+    // Crash-safe draft: restore what the user typed last time (unless an
+    // explicit draft was handed in) and auto-save while they type.
+    ref.read(draftStoreProvider.future).then((store) {
+      if (!mounted) return;
+      _draftSaver = DraftSaver(
+        store: store,
+        draftKey: 'compose',
+        controller: _controller,
+      );
+      if (_draftSaver!.restore()) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _draftSaver?.dispose();
     _controller.dispose();
     _pollQ.dispose();
     _pollA.dispose();
@@ -180,8 +198,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       }
     }
     setState(() => _busy = true);
-    final moderation =
-        await ref.read(moderationServiceProvider).review(text);
+    final moderation = await ref.read(moderationServiceProvider).review(text);
     if (!mounted) return;
     if (moderation.isBlocked) {
       setState(() => _busy = false);
@@ -200,14 +217,53 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     final effectiveTribeId = space?.tribeId ?? tribe?.tribeId;
     final effectiveTribeSlug = tribe?.slug;
     final persona = ref.read(activePersonaProvider);
+    final operationId = OutboxService.newOperationId();
+    final outbox = await ref.read(outboxProvider.future);
 
-    // Upload the attached photo first so we can stamp the post row
-    // with a permanent URL. Failed uploads abort the send — we'd
-    // rather block than ship a vent with a missing image.
+    StagedOutboxMedia? stagedMedia;
+    Future<void> queuePost({String? imagePath, String? imageUrl}) async {
+      await outbox.enqueue(
+        OutboxKind.post,
+        {
+          'content': text,
+          'category': _category,
+          'mood': _mood,
+          'tribeId': effectiveTribeId,
+          'spaceId': space?.spaceId,
+          'personaId': persona?.personaId,
+          'isWhisper': _isWhisper,
+          'imagePath': imagePath,
+          'imageUrl': imageUrl,
+          if (stagedMedia != null) ...stagedMedia.toPayload(),
+        },
+        operationId: operationId,
+      );
+      await _draftSaver?.clear();
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "You're offline - your vent is queued and will post automatically.",
+          ),
+        ),
+      );
+      context.pop();
+    }
+
+    // Encrypt the original bytes before upload. If either the upload or the
+    // row write fails, the same outbox operation can finish both steps later.
     String? imagePath;
     String? imageUrl;
     if (_pendingImageBytes != null) {
       try {
+        stagedMedia = await outbox.stageMedia(
+          operationId: operationId,
+          bytes: _pendingImageBytes!,
+          extension: _pendingImageExt,
+          contentType: _pendingImageMime,
+          mediaType: 'image',
+        );
         final up = await ref.read(repositoryProvider).uploadPostImage(
               bytes: _pendingImageBytes!,
               extension: _pendingImageExt,
@@ -217,6 +273,11 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         imageUrl = up.url;
       } catch (e) {
         if (!mounted) return;
+        if (!_includePoll && stagedMedia != null) {
+          await queuePost();
+          return;
+        }
+        await outbox.discardStagedMedia(stagedMedia?.path);
         setState(() => _busy = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Photo upload failed: $e')),
@@ -225,27 +286,46 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       }
     }
 
-    final post = await ref.read(repositoryProvider).createPost(
-          content: text.isEmpty ? '' : text,
-          category: _category,
-          mood: _mood,
-          tribeId: effectiveTribeId,
-          spaceId: space?.spaceId,
-          personaId: persona?.personaId,
-          isWhisper: _isWhisper,
-          imagePath: imagePath,
-          imageUrl: imageUrl,
-        );
+    final Post post;
+    try {
+      post = await ref.read(repositoryProvider).createPost(
+            content: text.isEmpty ? '' : text,
+            category: _category,
+            mood: _mood,
+            tribeId: effectiveTribeId,
+            spaceId: space?.spaceId,
+            personaId: persona?.personaId,
+            isWhisper: _isWhisper,
+            imagePath: imagePath,
+            imageUrl: imageUrl,
+            idempotencyKey: operationId,
+          );
+    } catch (e) {
+      // Offline or flaky network: queue the vent for automatic retry so
+      // the user's words are never lost. Polls don't replay (rare combo).
+      if (!_includePoll) {
+        await queuePost(imagePath: imagePath, imageUrl: imageUrl);
+        return;
+      }
+      await outbox.discardStagedMedia(stagedMedia?.path);
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Couldn't post: $e — your draft is saved.")),
+      );
+      return;
+    }
+    await outbox.discardStagedMedia(stagedMedia?.path);
+    await _draftSaver?.clear();
     // Crisis tag — readers see the helpline banner if the safety classifier
     // surfaced self-harm signals. 'high' = Tier-1 keyword match (more
     // confident), 'elevated' = Tier-2 LLM-only signal. Best-effort: the post
     // is already saved, we just decorate it.
     if (moderation.surfaceCrisisHelpline) {
-      final level =
-          moderation.categories.contains(HazardCategory.selfHarm) &&
-                  moderation.reasons.any((r) => r.contains('care about you'))
-              ? 'high'
-              : 'elevated';
+      final level = moderation.categories.contains(HazardCategory.selfHarm) &&
+              moderation.reasons.any((r) => r.contains('care about you'))
+          ? 'high'
+          : 'elevated';
       unawaited(
         ref.read(repositoryProvider).setPostCrisis(post.postId, level),
       );
@@ -253,10 +333,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     if (_includePoll) {
       try {
         await ref.read(repositoryProvider).createPoll(
-              postId: post.postId,
-              question: _pollQ.text.trim(),
-              optionTexts: [_pollA.text.trim(), _pollB.text.trim()],
-            );
+          postId: post.postId,
+          question: _pollQ.text.trim(),
+          optionTexts: [_pollA.text.trim(), _pollB.text.trim()],
+        );
       } catch (e) {
         // Post landed; poll attach failed. Surface a soft error.
         if (mounted) {
@@ -277,7 +357,11 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     ref.invalidate(feedPostsProvider);
     if (space != null) {
       for (final s in [
-        'fresh', 'trending', 'helpful', 'unanswered', 'keeper'
+        'fresh',
+        'trending',
+        'helpful',
+        'unanswered',
+        'keeper'
       ]) {
         ref.invalidate(spacePostsProvider(
             SpaceFeedQuery(spaceId: space.spaceId, sort: s)));
@@ -349,8 +433,8 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 if (target != null)
                   GlassCard(
                     margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     borderRadius: 14,
                     child: Row(
                       children: [
@@ -378,7 +462,8 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 if (personas.isNotEmpty)
                   GlassCard(
                     margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     borderRadius: 14,
                     child: Row(
                       children: [
@@ -404,190 +489,194 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                       ],
                     ),
                   ),
-              Row(
-                children: [
-                  const Text('Category',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SizedBox(
-                      height: 36,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: [
-                          for (final c in FeedCategories.all)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              child: ChoiceChip(
-                                label: Text(FeedCategories.label(c)),
-                                selected: _category == c,
-                                onSelected: (_) => setState(() => _category = c),
+                Row(
+                  children: [
+                    const Text('Category',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: SizedBox(
+                        height: 36,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: [
+                            for (final c in FeedCategories.all)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                child: ChoiceChip(
+                                  label: Text(FeedCategories.label(c)),
+                                  selected: _category == c,
+                                  onSelected: (_) =>
+                                      setState(() => _category = c),
+                                ),
                               ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Text('Mood', style: TextStyle(fontWeight: FontWeight.w800)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SizedBox(
-                      height: 36,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: [
-                          for (final m in Moods.all)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              child: ChoiceChip(
-                                avatar: Text(Moods.emoji(m)),
-                                label: Text(Moods.label(m)),
-                                selected: _mood == m,
-                                onSelected: (_) => setState(() => _mood = m),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (_pendingImageBytes != null)
-                _PendingImageChip(
-                  bytes: _pendingImageBytes!,
-                  onClear: () =>
-                      setState(() => _pendingImageBytes = null),
-                ),
-              Expanded(
-                child: GlassCard(
-                  padding: const EdgeInsets.all(12),
-                  borderRadius: 20,
-                  child: TagAutocomplete(
-                    controller: _controller,
-                    fill: true,
-                    child: TextField(
-                      controller: _controller,
-                      maxLength: 1000,
-                      maxLines: null,
-                      expands: true,
-                      textAlignVertical: TextAlignVertical.top,
-                      decoration: const InputDecoration(
-                        hintText:
-                            'Drop the thought. Keep names out, keep it real.',
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: _openPhotoSourceSheet,
-                    icon: Icon(
-                      _pendingImageBytes != null
-                          ? Icons.image
-                          : Icons.image_outlined,
-                      size: 18,
-                      color: scheme.primary,
-                    ),
-                    label: Text(
-                        _pendingImageBytes != null ? 'Photo on' : 'Photo'),
-                  ),
-                  TextButton.icon(
-                    onPressed: () =>
-                        setState(() => _includePoll = !_includePoll),
-                    icon: Icon(
-                      _includePoll ? Icons.poll : Icons.poll_outlined,
-                      size: 18,
-                      color: scheme.primary,
-                    ),
-                    label: Text(_includePoll ? 'Poll on' : 'Poll'),
-                  ),
-                  TextButton.icon(
-                    onPressed: () =>
-                        setState(() => _isWhisper = !_isWhisper),
-                    icon: Icon(
-                      _isWhisper ? Icons.nightlight : Icons.nightlight_outlined,
-                      size: 18,
-                      color: scheme.primary,
-                    ),
-                    label: Text(_isWhisper ? 'Story - 24h' : '24h Story'),
-                  ),
-                  const Spacer(),
-                  MoodChip(mood: _mood, dense: true),
-                ],
-              ),
-              if (_includePoll)
-                GlassCard(
-                  margin: const EdgeInsets.only(top: 4),
-                  padding: const EdgeInsets.all(12),
-                  borderRadius: 16,
-                  child: Column(
-                    children: [
-                      TextField(
-                        controller: _pollQ,
-                        maxLength: 120,
-                        decoration: const InputDecoration(
-                          labelText: 'Poll question',
-                          hintText: 'e.g. Should I text them back?',
-                          counterText: '',
+                          ],
                         ),
                       ),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _pollA,
-                              maxLength: 60,
-                              decoration: const InputDecoration(
-                                labelText: 'Option A',
-                                counterText: '',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Text('Mood',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: SizedBox(
+                        height: 36,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: [
+                            for (final m in Moods.all)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                child: ChoiceChip(
+                                  avatar: Text(Moods.emoji(m)),
+                                  label: Text(Moods.label(m)),
+                                  selected: _mood == m,
+                                  onSelected: (_) => setState(() => _mood = m),
+                                ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              controller: _pollB,
-                              maxLength: 60,
-                              decoration: const InputDecoration(
-                                labelText: 'Option B',
-                                counterText: '',
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (_pendingImageBytes != null)
+                  _PendingImageChip(
+                    bytes: _pendingImageBytes!,
+                    onClear: () => setState(() => _pendingImageBytes = null),
+                  ),
+                Expanded(
+                  child: GlassCard(
+                    padding: const EdgeInsets.all(12),
+                    borderRadius: 20,
+                    child: TagAutocomplete(
+                      controller: _controller,
+                      fill: true,
+                      child: TextField(
+                        controller: _controller,
+                        maxLength: 1000,
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,
+                        decoration: const InputDecoration(
+                          hintText:
+                              'Drop the thought. Keep names out, keep it real.',
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              SafeArea(
-                top: false,
-                child: AnimatedButton(
-                  label: 'Post Anonymously',
-                  state: _success
-                      ? VentlyButtonState.success
-                      : _busy
-                          ? VentlyButtonState.loading
-                          : VentlyButtonState.idle,
-                  onPressed: _submit,
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: _openPhotoSourceSheet,
+                      icon: Icon(
+                        _pendingImageBytes != null
+                            ? Icons.image
+                            : Icons.image_outlined,
+                        size: 18,
+                        color: scheme.primary,
+                      ),
+                      label: Text(
+                          _pendingImageBytes != null ? 'Photo on' : 'Photo'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () =>
+                          setState(() => _includePoll = !_includePoll),
+                      icon: Icon(
+                        _includePoll ? Icons.poll : Icons.poll_outlined,
+                        size: 18,
+                        color: scheme.primary,
+                      ),
+                      label: Text(_includePoll ? 'Poll on' : 'Poll'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _isWhisper = !_isWhisper),
+                      icon: Icon(
+                        _isWhisper
+                            ? Icons.nightlight
+                            : Icons.nightlight_outlined,
+                        size: 18,
+                        color: scheme.primary,
+                      ),
+                      label: Text(_isWhisper ? 'Story - 24h' : '24h Story'),
+                    ),
+                    const Spacer(),
+                    MoodChip(mood: _mood, dense: true),
+                  ],
                 ),
-              ),
-            ],
+                if (_includePoll)
+                  GlassCard(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.all(12),
+                    borderRadius: 16,
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: _pollQ,
+                          maxLength: 120,
+                          decoration: const InputDecoration(
+                            labelText: 'Poll question',
+                            hintText: 'e.g. Should I text them back?',
+                            counterText: '',
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _pollA,
+                                maxLength: 60,
+                                decoration: const InputDecoration(
+                                  labelText: 'Option A',
+                                  counterText: '',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: _pollB,
+                                maxLength: 60,
+                                decoration: const InputDecoration(
+                                  labelText: 'Option B',
+                                  counterText: '',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                SafeArea(
+                  top: false,
+                  child: AnimatedButton(
+                    label: 'Post Anonymously',
+                    state: _success
+                        ? VentlyButtonState.success
+                        : _busy
+                            ? VentlyButtonState.loading
+                            : VentlyButtonState.idle,
+                    onPressed: _submit,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 
@@ -597,300 +686,303 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       body: VentlyPremiumBackground(
         child: SafeArea(
           child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    color: VentlyColors.berryMagenta,
-                    onPressed: () => context.go('/feed'),
-                  ),
-                  const SizedBox(width: 4),
-                  const Text(
-                    'Venttly',
-                    style: TextStyle(
-                      color: Color(0xFFB91452),
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.settings_outlined),
-                    color: context.ink,
-                    onPressed: () {},
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                child: Row(
                   children: [
-                    Container(
-                      height: 430,
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 22),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        gradient: const LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Color(0xFFFFB8CD),
-                            Color(0xFFE56F9B),
-                            Color(0xFFBD0E53),
-                          ],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: VentlyColors.berryMagenta.withOpacity(0.20),
-                            blurRadius: 24,
-                            offset: const Offset(0, 16),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 7),
-                            decoration: BoxDecoration(
-                              color: VentlyColors.deepBurgundy.withOpacity(0.16),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Text(
-                              'LIVE PREVIEW',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                          const Spacer(),
-                          Center(
-                            child: Container(
-                              width: 106,
-                              height: 106,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.18),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.22),
-                                ),
-                              ),
-                              child: const Icon(Icons.favorite_rounded,
-                                  color: Colors.white, size: 48),
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          TextField(
-                            controller: _controller,
-                            maxLength: 220,
-                            maxLines: 4,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              height: 1.28,
-                            ),
-                            decoration: InputDecoration(
-                              counterText: '',
-                              hintText: 'Share your mood today...',
-                              hintStyle: TextStyle(
-                                color: Colors.white.withOpacity(0.88),
-                                fontWeight: FontWeight.w800,
-                              ),
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                            ),
-                          ),
-                          const Spacer(),
-                        ],
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      color: VentlyColors.berryMagenta,
+                      onPressed: () => context.go('/feed'),
+                    ),
+                    const SizedBox(width: 4),
+                    const Text(
+                      'Venttly',
+                      style: TextStyle(
+                        color: Color(0xFFB91452),
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                    const SizedBox(height: 28),
-                    GridView.count(
-                      crossAxisCount: 2,
-                      childAspectRatio: 1.2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        _StoryCreateOption(
-                          icon: Icons.camera_alt_outlined,
-                          label: 'Capture Photo',
-                          color: VentlyColors.berryMagenta,
-                          onTap: () => _selectStoryPreset(
-                            category: 'funny_confessions',
-                            mood: 'happy',
-                          ),
-                        ),
-                        _StoryCreateOption(
-                          icon: Icons.image_outlined,
-                          label: 'Gallery',
-                          color: const Color(0xFFF79ABD),
-                          onTap: () => _selectStoryPreset(
-                            category: 'healing_corner',
-                            mood: 'healing',
-                          ),
-                        ),
-                        _StoryCreateOption(
-                          icon: Icons.edit_note_rounded,
-                          label: 'Text Only',
-                          color: const Color(0xFF008F4C),
-                          onTap: () => _selectStoryPreset(
-                            category: 'late_night',
-                            mood: 'overthinking',
-                          ),
-                        ),
-                        _StoryCreateOption(
-                          icon: Icons.mic_none_rounded,
-                          label: 'Audio Note',
-                          color: VentlyColors.berryMagenta,
-                          pale: true,
-                          onTap: () => _selectStoryPreset(
-                            category: 'late_night',
-                            mood: 'hopeful',
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.74),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: VentlyColors.softMauve.withOpacity(0.38),
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.visibility_outlined,
-                                  color: VentlyColors.berryMagenta),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Privacy Settings',
-                                      style: TextStyle(
-                                        color: context.ink,
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 15,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Friends only',
-                                      style: TextStyle(
-                                        color: context.ink,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Switch(
-                                value: _storyFriendsOnly,
-                                onChanged: (value) =>
-                                    setState(() => _storyFriendsOnly = value),
-                                activeColor: VentlyColors.berryMagenta,
-                              ),
-                            ],
-                          ),
-                          Divider(
-                            color: VentlyColors.softMauve.withOpacity(0.22),
-                          ),
-                          Row(
-                            children: [
-                              const Icon(Icons.timer_outlined,
-                                  color: VentlyColors.berryMagenta),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  'Story Duration',
-                                  style: TextStyle(
-                                    color: context.ink,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ),
-                              const Text(
-                                '24 Hours',
-                                style: TextStyle(
-                                  color: VentlyColors.softMauve,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.settings_outlined),
+                      color: context.ink,
+                      onPressed: () {},
                     ),
                   ],
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
-              child: SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: FilledButton(
-                  onPressed: _busy ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFB91452),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    elevation: 8,
-                    shadowColor: VentlyColors.berryMagenta.withOpacity(0.26),
-                  ),
-                  child: _busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                  child: Column(
+                    children: [
+                      Container(
+                        height: 430,
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(18, 16, 18, 22),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(24),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color(0xFFFFB8CD),
+                              Color(0xFFE56F9B),
+                              Color(0xFFBD0E53),
+                            ],
                           ),
-                        )
-                      : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Share to Story',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w900,
-                              ),
+                          boxShadow: [
+                            BoxShadow(
+                              color:
+                                  VentlyColors.berryMagenta.withOpacity(0.20),
+                              blurRadius: 24,
+                              offset: const Offset(0, 16),
                             ),
-                            SizedBox(width: 8),
-                            Icon(Icons.send_rounded, color: Colors.white),
                           ],
                         ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 7),
+                              decoration: BoxDecoration(
+                                color:
+                                    VentlyColors.deepBurgundy.withOpacity(0.16),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Text(
+                                'LIVE PREVIEW',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            Center(
+                              child: Container(
+                                width: 106,
+                                height: 106,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.18),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.22),
+                                  ),
+                                ),
+                                child: const Icon(Icons.favorite_rounded,
+                                    color: Colors.white, size: 48),
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            TextField(
+                              controller: _controller,
+                              maxLength: 220,
+                              maxLines: 4,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                height: 1.28,
+                              ),
+                              decoration: InputDecoration(
+                                counterText: '',
+                                hintText: 'Share your mood today...',
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withOpacity(0.88),
+                                  fontWeight: FontWeight.w800,
+                                ),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                              ),
+                            ),
+                            const Spacer(),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      GridView.count(
+                        crossAxisCount: 2,
+                        childAspectRatio: 1.2,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        children: [
+                          _StoryCreateOption(
+                            icon: Icons.camera_alt_outlined,
+                            label: 'Capture Photo',
+                            color: VentlyColors.berryMagenta,
+                            onTap: () => _selectStoryPreset(
+                              category: 'funny_confessions',
+                              mood: 'happy',
+                            ),
+                          ),
+                          _StoryCreateOption(
+                            icon: Icons.image_outlined,
+                            label: 'Gallery',
+                            color: const Color(0xFFF79ABD),
+                            onTap: () => _selectStoryPreset(
+                              category: 'healing_corner',
+                              mood: 'healing',
+                            ),
+                          ),
+                          _StoryCreateOption(
+                            icon: Icons.edit_note_rounded,
+                            label: 'Text Only',
+                            color: const Color(0xFF008F4C),
+                            onTap: () => _selectStoryPreset(
+                              category: 'late_night',
+                              mood: 'overthinking',
+                            ),
+                          ),
+                          _StoryCreateOption(
+                            icon: Icons.mic_none_rounded,
+                            label: 'Audio Note',
+                            color: VentlyColors.berryMagenta,
+                            pale: true,
+                            onTap: () => _selectStoryPreset(
+                              category: 'late_night',
+                              mood: 'hopeful',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.74),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: VentlyColors.softMauve.withOpacity(0.38),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.visibility_outlined,
+                                    color: VentlyColors.berryMagenta),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Privacy Settings',
+                                        style: TextStyle(
+                                          color: context.ink,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Friends only',
+                                        style: TextStyle(
+                                          color: context.ink,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Switch(
+                                  value: _storyFriendsOnly,
+                                  onChanged: (value) =>
+                                      setState(() => _storyFriendsOnly = value),
+                                  activeColor: VentlyColors.berryMagenta,
+                                ),
+                              ],
+                            ),
+                            Divider(
+                              color: VentlyColors.softMauve.withOpacity(0.22),
+                            ),
+                            Row(
+                              children: [
+                                const Icon(Icons.timer_outlined,
+                                    color: VentlyColors.berryMagenta),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Story Duration',
+                                    style: TextStyle(
+                                      color: context.ink,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ),
+                                const Text(
+                                  '24 Hours',
+                                  style: TextStyle(
+                                    color: VentlyColors.softMauve,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: FilledButton(
+                    onPressed: _busy ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFB91452),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      elevation: 8,
+                      shadowColor: VentlyColors.berryMagenta.withOpacity(0.26),
+                    ),
+                    child: _busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Share to Story',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Icon(Icons.send_rounded, color: Colors.white),
+                            ],
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 
@@ -981,7 +1073,8 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 6),
-              for (final r in kCrisisResources) Text('• ${r.label} — ${r.reach}'),
+              for (final r in kCrisisResources)
+                Text('• ${r.label} — ${r.reach}'),
             ],
           ],
         ),
@@ -999,7 +1092,8 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     return await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             title: const Text('Heads up'),
             content: Column(
               mainAxisSize: MainAxisSize.min,

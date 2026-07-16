@@ -8,7 +8,10 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/connection.dart';
 import '../../../core/providers.dart';
+import '../../../data/services/draft_store.dart';
+import '../../../data/services/outbox.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../../core/vently_haptics.dart';
@@ -67,11 +70,23 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
   TribeMessage? _replyTo;
   bool _deepLinkHandled = false;
 
+  DraftSaver? _draftSaver;
+
   @override
   void initState() {
     super.initState();
     _composer.addListener(_onComposerChanged);
     _search.addListener(() => setState(() {}));
+    // Per-tribe draft: restore unfinished text, auto-save while typing.
+    ref.read(draftStoreProvider.future).then((store) {
+      if (!mounted) return;
+      _draftSaver = DraftSaver(
+        store: store,
+        draftKey: 'tribechat.${widget.slug}',
+        controller: _composer,
+      );
+      if (_draftSaver!.restore()) setState(() {});
+    });
   }
 
   void _onComposerChanged() {
@@ -108,6 +123,7 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
   void dispose() {
     _heartbeat?.cancel();
     _typingDebounce?.cancel();
+    _draftSaver?.dispose();
     _composer.removeListener(_onComposerChanged);
     _composer.dispose();
     _search.dispose();
@@ -188,7 +204,6 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
     });
   }
 
-
   void _scrollToBottomSoon() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
@@ -206,6 +221,7 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
     setState(() => _sending = true);
     _composer.clear();
     final replyId = _replyTo?.messageId;
+    final operationId = OutboxService.newOperationId();
     setState(() => _replyTo = null);
     String? sentId;
     try {
@@ -214,13 +230,39 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
             tribeId: tribeId,
             content: text,
             replyToMessageId: replyId,
+            idempotencyKey: operationId,
           );
+      await _draftSaver?.clear();
       _scrollToBottomSoon();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not send: $e')),
-      );
+      // Offline: queue for automatic retry instead of dropping the text.
+      try {
+        final outbox = await ref.read(outboxProvider.future);
+        await outbox.enqueue(
+          OutboxKind.tribeMessage,
+          {
+            'tribeId': tribeId,
+            'content': text,
+            'replyToMessageId': replyId,
+          },
+          operationId: operationId,
+        );
+        await _draftSaver?.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  "You're offline — message queued, it will send automatically.")),
+        );
+      } catch (queueError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Could not preserve message: $queueError. Your draft is still saved.',
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -258,26 +300,61 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
     );
     if (picked == null) return;
     setState(() => _sending = true);
+    final operationId = OutboxService.newOperationId();
+    final outbox = await ref.read(outboxProvider.future);
+    StagedOutboxMedia? stagedMedia;
+    String? imagePath;
+    String? imageUrl;
     try {
       final bytes = await picked.readAsBytes();
-      final ext = picked.name.contains('.')
-          ? picked.name.split('.').last
-          : 'jpg';
+      final ext =
+          picked.name.contains('.') ? picked.name.split('.').last : 'jpg';
+      stagedMedia = await outbox.stageMedia(
+        operationId: operationId,
+        bytes: bytes,
+        extension: ext,
+        contentType: picked.mimeType ?? 'image/jpeg',
+        mediaType: 'image',
+      );
       final upload = await ref.read(repositoryProvider).uploadTribeChatImage(
             bytes: bytes,
             extension: ext,
+            contentType: picked.mimeType ?? 'image/jpeg',
           );
+      imagePath = upload.path;
+      imageUrl = upload.url;
       await ref.read(repositoryProvider).sendTribeMessage(
             tribeId: tribeId,
             content: null,
             imagePath: upload.path,
             imageUrl: upload.url,
+            idempotencyKey: operationId,
           );
+      await outbox.discardStagedMedia(stagedMedia.path);
       _scrollToBottomSoon();
-    } catch (e) {
+    } catch (_) {
+      if (stagedMedia != null) {
+        await outbox.enqueue(
+          OutboxKind.tribeMessage,
+          {
+            'tribeId': tribeId,
+            'content': null,
+            'imagePath': imagePath,
+            'imageUrl': imageUrl,
+            ...stagedMedia.toPayload(),
+          },
+          operationId: operationId,
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not send photo: $e')),
+        SnackBar(
+          content: Text(
+            stagedMedia == null
+                ? 'Could not preserve photo.'
+                : 'Photo queued and will send automatically.',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -358,23 +435,23 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
                               await ref
                                   .read(repositoryProvider)
                                   .unpinTribeMessage(tribe.tribeId);
-                              ref.invalidate(tribeMessagesProvider(tribe.tribeId));
+                              ref.invalidate(
+                                  tribeMessagesProvider(tribe.tribeId));
                               ref.invalidate(tribeBySlugProvider(tribe.slug));
                             }
                           : null,
                     ),
                   KeeperControlStrip(
                     tribe: tribe,
-                    onPinPrompt: () => showTribePromptComposer(
-                        context, tribeId: tribe.tribeId),
+                    onPinPrompt: () => showTribePromptComposer(context,
+                        tribeId: tribe.tribeId),
                     onSlowModeToggle: () async {
-                      final next = tribe.chatSettings.slowModeSeconds == 0
-                          ? 30
-                          : 0;
+                      final next =
+                          tribe.chatSettings.slowModeSeconds == 0 ? 30 : 0;
                       await ref.read(repositoryProvider).setTribeChatSettings(
-                            tribeId: tribe.tribeId,
-                            patch: {'slow_mode_seconds': next},
-                          );
+                        tribeId: tribe.tribeId,
+                        patch: {'slow_mode_seconds': next},
+                      );
                       ref.invalidate(tribeBySlugProvider(tribe.slug));
                     },
                   ),
@@ -386,12 +463,11 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
                         _search.clear();
                       }),
                     ),
-                  if (typingOthers.isNotEmpty)
-                    _TypingBar(names: typingOthers),
+                  if (typingOthers.isNotEmpty) _TypingBar(names: typingOthers),
                   Expanded(
                     child: messagesAsync.when(
-                      loading: () => const Center(
-                          child: CircularProgressIndicator()),
+                      loading: () =>
+                          const Center(child: CircularProgressIndicator()),
                       error: (e, _) => Center(child: Text('Error: $e')),
                       data: (messages) {
                         final query = _search.text;
@@ -435,8 +511,7 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
                             final prev = i == 0 ? null : messages[i - 1];
                             final showDateChip =
                                 prev == null || _newDayBoundary(prev, msg);
-                            final threadSize =
-                                replyCounts[msg.messageId] ?? 0;
+                            final threadSize = replyCounts[msg.messageId] ?? 0;
                             return RepaintBoundary(
                               key: _keyForMessage(msg.messageId),
                               child: Column(
@@ -452,15 +527,14 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
                                     onReply: (m) =>
                                         setState(() => _replyTo = m),
                                     onJumpTo: _jumpToMessage,
-                                    onQuestionTap: (m) =>
-                                        _openQuestionAnswers(context, ref, m, tribe),
+                                    onQuestionTap: (m) => _openQuestionAnswers(
+                                        context, ref, m, tribe),
                                   ),
                                   if (threadSize > 0)
                                     _TopicThreadChip(
                                       count: threadSize,
                                       alignEnd: msg.sentByMe,
-                                      onTap: () =>
-                                          _openTopicThread(msg, tribe),
+                                      onTap: () => _openTopicThread(msg, tribe),
                                     ),
                                 ],
                               ),
@@ -516,21 +590,59 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
         return;
       }
       setState(() => _sending = true);
+      final durationSeconds = result.duration.inSeconds.clamp(1, 300);
+      final operationId = OutboxService.newOperationId();
+      final outbox = await ref.read(outboxProvider.future);
+      StagedOutboxMedia? stagedMedia;
+      String? audioPath;
+      String? audioUrl;
       try {
+        stagedMedia = await outbox.stageMedia(
+          operationId: operationId,
+          bytes: result.bytes,
+          extension: 'm4a',
+          contentType: 'audio/mp4',
+          mediaType: 'audio',
+          durationSeconds: durationSeconds,
+        );
         final upload = await ref.read(repositoryProvider).uploadTribeChatAudio(
               bytes: result.bytes,
             );
+        audioPath = upload.path;
+        audioUrl = upload.url;
         await ref.read(repositoryProvider).sendTribeMessage(
               tribeId: tribeId,
               audioPath: upload.path,
               audioUrl: upload.url,
-              audioDurationSeconds: result.duration.inSeconds.clamp(1, 300),
+              audioDurationSeconds: durationSeconds,
+              idempotencyKey: operationId,
             );
+        await outbox.discardStagedMedia(stagedMedia.path);
         _scrollToBottomSoon();
-      } catch (e) {
+      } catch (_) {
+        if (stagedMedia != null) {
+          await outbox.enqueue(
+            OutboxKind.tribeMessage,
+            {
+              'tribeId': tribeId,
+              'content': null,
+              'audioPath': audioPath,
+              'audioUrl': audioUrl,
+              'audioDurationSeconds': durationSeconds,
+              ...stagedMedia.toPayload(),
+            },
+            operationId: operationId,
+          );
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Voice note failed: $e')),
+            SnackBar(
+              content: Text(
+                stagedMedia == null
+                    ? 'Could not preserve voice note.'
+                    : 'Voice note queued and will send automatically.',
+              ),
+            ),
           );
         }
       } finally {
@@ -637,8 +749,7 @@ class _ChatHeader extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Tribe rules',
-            icon: Icon(Icons.menu_book_outlined,
-                color: context.ink),
+            icon: Icon(Icons.menu_book_outlined, color: context.ink),
             onPressed: () => showTribeRulesSheet(context, tribe),
           ),
           IconButton(
@@ -649,8 +760,7 @@ class _ChatHeader extends StatelessWidget {
             onPressed: onToggleSearch,
           ),
           IconButton(
-            icon: Icon(Icons.info_outline,
-                color: context.ink),
+            icon: Icon(Icons.info_outline, color: context.ink),
             onPressed: onOpenHub,
           ),
         ],
@@ -1231,8 +1341,7 @@ class _MessageBubble extends ConsumerWidget {
                                     ? '$timeStr · edited'
                                     : timeStr,
                                 style: TextStyle(
-                                  color:
-                                      context.ink.withOpacity(0.5),
+                                  color: context.ink.withOpacity(0.5),
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -1240,8 +1349,7 @@ class _MessageBubble extends ConsumerWidget {
                               if (mine) ...[
                                 const SizedBox(width: 6),
                                 const Icon(Icons.done_all_rounded,
-                                    size: 13,
-                                    color: VentlyColors.berryMagenta),
+                                    size: 13, color: VentlyColors.berryMagenta),
                               ],
                             ],
                           ),
@@ -1339,8 +1447,9 @@ class _MessageBubble extends ConsumerWidget {
 
   Future<void> _deleteForMe(BuildContext context, WidgetRef ref) async {
     try {
-      final ok =
-          await ref.read(repositoryProvider).hideTribeMessage(message.messageId);
+      final ok = await ref
+          .read(repositoryProvider)
+          .hideTribeMessage(message.messageId);
       if (ok) ref.invalidate(tribeMessagesProvider(tribeId));
     } catch (e) {
       if (context.mounted) {
@@ -1365,11 +1474,9 @@ class _MessageBubble extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () =>
-                Navigator.pop(ctx, controller.text.trim()),
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
             child: const Text('Save'),
           ),
         ],
@@ -1385,8 +1492,8 @@ class _MessageBubble extends ConsumerWidget {
       if (ok) ref.invalidate(tribeMessagesProvider(tribeId));
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(_friendly(e))));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_friendly(e))));
       }
     }
   }
@@ -1526,8 +1633,7 @@ class _BubbleBody extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ConstrainedBox(
-              constraints:
-                  const BoxConstraints(maxHeight: 220, maxWidth: 260),
+              constraints: const BoxConstraints(maxHeight: 220, maxWidth: 260),
               child: CachedNetworkImage(
                 imageUrl: message.imageUrl!,
                 fit: BoxFit.cover,
@@ -1784,8 +1890,7 @@ class _Composer extends StatelessWidget {
                               decoration: InputDecoration(
                                 hintText: 'Share your thoughts…',
                                 hintStyle: TextStyle(
-                                  color: context.ink
-                                      .withOpacity(0.42),
+                                  color: context.ink.withOpacity(0.42),
                                   fontWeight: FontWeight.w700,
                                 ),
                                 border: InputBorder.none,
@@ -1984,8 +2089,7 @@ class _TopicThreadChip extends StatelessWidget {
             onTap: onTap,
             borderRadius: BorderRadius.circular(14),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: scheme.primary.withOpacity(0.10),
                 borderRadius: BorderRadius.circular(14),
@@ -1994,8 +2098,7 @@ class _TopicThreadChip extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.forum_outlined,
-                      size: 13, color: scheme.primary),
+                  Icon(Icons.forum_outlined, size: 13, color: scheme.primary),
                   const SizedBox(width: 5),
                   Text(
                     '$count ${count == 1 ? 'reply' : 'replies'} · Follow topic',
@@ -2127,8 +2230,7 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
                     ? const Center(child: CircularProgressIndicator())
                     : ListView.separated(
                         itemCount: thread.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 8),
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (_, i) {
                           final m = thread[i];
                           final isRoot = i == 0;
@@ -2142,8 +2244,7 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
                               border: Border.all(
                                 color: isRoot
                                     ? scheme.primary.withOpacity(0.30)
-                                    : VentlyColors.softMauve
-                                        .withOpacity(0.30),
+                                    : VentlyColors.softMauve.withOpacity(0.30),
                               ),
                             ),
                             child: Column(
@@ -2154,8 +2255,7 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
                                     ProfileAvatar(
                                       avatarSeed: m.senderAvatarSeed,
                                       label: m.senderPseudonym,
-                                      profilePhotoUrl:
-                                          m.senderProfilePhotoUrl,
+                                      profilePhotoUrl: m.senderProfilePhotoUrl,
                                       size: 24,
                                     ),
                                     const SizedBox(width: 8),
@@ -2185,8 +2285,8 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
                                       DateFormat.jm().format(m.createdAt),
                                       style: TextStyle(
                                         fontSize: 10,
-                                        color: scheme.onSurface
-                                            .withOpacity(0.5),
+                                        color:
+                                            scheme.onSurface.withOpacity(0.5),
                                       ),
                                     ),
                                   ],
@@ -2242,8 +2342,7 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Icon(Icons.send_rounded,
-                              color: Colors.white),
+                          : const Icon(Icons.send_rounded, color: Colors.white),
                       onPressed: _sending ? null : _send,
                     ),
                   ),

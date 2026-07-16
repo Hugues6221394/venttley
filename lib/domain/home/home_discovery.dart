@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../entities/entities.dart';
 
 class HomeDiscovery {
@@ -20,7 +22,9 @@ class HomeDiscovery {
   }) {
     final clock = now ?? DateTime.now();
     final livePosts = posts
-        .where((p) => !p.isWhisper || p.createdAt.add(const Duration(hours: 24)).isAfter(clock))
+        .where((p) =>
+            !p.isWhisper ||
+            p.createdAt.add(const Duration(hours: 24)).isAfter(clock))
         .toList();
     final stories = livePosts
         .where((p) => p.isWhisper)
@@ -28,27 +32,7 @@ class HomeDiscovery {
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-    final topicScores = <String, _TopicAccumulator>{};
-    for (final p in livePosts.where((p) => !p.isWhisper)) {
-      final acc = topicScores.putIfAbsent(
-        p.categoryName,
-        () => _TopicAccumulator(p.categoryName),
-      );
-      acc.count += 1;
-      acc.score += _postTrendScore(p, clock);
-      acc.reactions += p.likesCount;
-      acc.comments += p.commentsCount;
-    }
-    final topics = topicScores.values
-        .map((a) => TrendingTopic(
-              category: a.category,
-              postCount: a.count,
-              reactionCount: a.reactions,
-              commentCount: a.comments,
-              score: a.score,
-            ))
-        .toList()
-      ..sort((a, b) => b.score.compareTo(a.score));
+    final topics = topicStatsFromPosts(livePosts, now: clock);
 
     final rankedTribes = tribes.toList()
       ..sort((a, b) {
@@ -61,8 +45,12 @@ class HomeDiscovery {
     final reactions = livePosts.fold<int>(0, (sum, p) => sum + p.likesCount);
     return HomeDiscovery(
       kpis: [
-        HomeKpi(label: 'Live posts', value: _compact(livePosts.length), icon: 'bolt'),
-        HomeKpi(label: 'Stories', value: _compact(stories.length), icon: 'story'),
+        HomeKpi(
+            label: 'Live posts',
+            value: _compact(livePosts.length),
+            icon: 'bolt'),
+        HomeKpi(
+            label: 'Stories', value: _compact(stories.length), icon: 'story'),
         HomeKpi(label: 'Replies', value: _compact(comments), icon: 'chat'),
         HomeKpi(label: 'Reactions', value: _compact(reactions), icon: 'spark'),
       ],
@@ -72,14 +60,65 @@ class HomeDiscovery {
     );
   }
 
+  /// Exact local/mock equivalent of the `trending_topic_stats` RPC.
+  ///
+  /// Production totals come from the server because a paginated feed cannot
+  /// represent a category's complete post and reply counts.
+  static List<TrendingTopic> topicStatsFromPosts(
+    List<Post> posts, {
+    DateTime? now,
+    int limit = 8,
+  }) {
+    final clock = now ?? DateTime.now();
+    final activeCutoff = clock.subtract(const Duration(days: 30));
+    final topicScores = <String, _TopicAccumulator>{};
+    for (final post in posts.where((post) => !post.isWhisper)) {
+      final category = post.categoryName.trim();
+      if (category.isEmpty) continue;
+      final accumulator = topicScores.putIfAbsent(
+        category,
+        () => _TopicAccumulator(category),
+      );
+      accumulator.count += 1;
+      accumulator.reactions += post.likesCount;
+      accumulator.comments += post.commentsCount;
+      if (!post.createdAt.isBefore(activeCutoff)) {
+        accumulator.hasRecentPost = true;
+        accumulator.score += _postTrendScore(post, clock);
+      }
+    }
+    final topics = topicScores.values
+        .where((accumulator) => accumulator.hasRecentPost)
+        .map(
+          (accumulator) => TrendingTopic(
+            category: accumulator.category,
+            postCount: accumulator.count,
+            reactionCount: accumulator.reactions,
+            commentCount: accumulator.comments,
+            score: accumulator.score,
+          ),
+        )
+        .toList()
+      ..sort((a, b) {
+        final score = b.score.compareTo(a.score);
+        if (score != 0) return score;
+        final replies = b.commentCount.compareTo(a.commentCount);
+        if (replies != 0) return replies;
+        return b.postCount.compareTo(a.postCount);
+      });
+    return topics.take(limit.clamp(1, 20)).toList(growable: false);
+  }
+
   static double _postTrendScore(Post p, DateTime now) {
     final ageHours = now.difference(p.createdAt).inMinutes / 60.0;
     final engagement = 1 + p.likesCount + (p.commentsCount * 1.6);
-    return engagement / ((ageHours + 2) * 0.55);
+    return engagement / math.pow(math.max(ageHours + 2, 2), 0.55);
   }
 
   static String _compact(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(n >= 10000000 ? 0 : 1)}M';
+    if (n >= 1000000) {
+      return '${(n / 1000000).toStringAsFixed(n >= 10000000 ? 0 : 1)}M';
+    }
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}K';
     return '$n';
   }
@@ -212,4 +251,5 @@ class _TopicAccumulator {
   int reactions = 0;
   int comments = 0;
   double score = 0;
+  bool hasRecentPost = false;
 }

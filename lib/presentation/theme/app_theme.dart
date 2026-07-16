@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../animation/transitions/page_transitions.dart';
 import 'colors.dart';
@@ -10,7 +9,7 @@ class VentlyTheme {
 
   static ThemeData light() {
     final base = ThemeData.light(useMaterial3: true);
-    final textTheme = GoogleFonts.plusJakartaSansTextTheme(base.textTheme).apply(
+    final textTheme = base.textTheme.apply(
       bodyColor: VentlyColors.deepBurgundy,
       displayColor: VentlyColors.deepBurgundy,
     );
@@ -32,15 +31,15 @@ class VentlyTheme {
         onError: Colors.white,
       ),
       textTheme: textTheme,
-      appBarTheme: AppBarTheme(
+      appBarTheme: const AppBarTheme(
         // Transparent so the app-wide premium gradient shows through —
         // screens with opaque scaffolds still read as their own color.
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        iconTheme: const IconThemeData(color: VentlyColors.deepBurgundy),
-        titleTextStyle: GoogleFonts.plusJakartaSans(
+        iconTheme: IconThemeData(color: VentlyColors.deepBurgundy),
+        titleTextStyle: TextStyle(
           fontSize: 22,
           fontWeight: FontWeight.w800,
           color: VentlyColors.berryMagenta,
@@ -67,7 +66,7 @@ class VentlyTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radius),
           ),
-          textStyle: GoogleFonts.plusJakartaSans(
+          textStyle: const TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 15,
           ),
@@ -82,7 +81,7 @@ class VentlyTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radius),
           ),
-          textStyle: GoogleFonts.plusJakartaSans(
+          textStyle: const TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 14,
           ),
@@ -91,27 +90,31 @@ class VentlyTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: VentlyColors.berryMagenta,
-          textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-        hintStyle: GoogleFonts.plusJakartaSans(
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        hintStyle: TextStyle(
           color: VentlyColors.deepBurgundy.withOpacity(0.5),
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
-          borderSide: BorderSide(color: VentlyColors.softMauve.withOpacity(0.7)),
+          borderSide:
+              BorderSide(color: VentlyColors.softMauve.withOpacity(0.7)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
-          borderSide: BorderSide(color: VentlyColors.softMauve.withOpacity(0.7)),
+          borderSide:
+              BorderSide(color: VentlyColors.softMauve.withOpacity(0.7)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
-          borderSide: const BorderSide(color: VentlyColors.berryMagenta, width: 1.5),
+          borderSide:
+              const BorderSide(color: VentlyColors.berryMagenta, width: 1.5),
         ),
       ),
       chipTheme: ChipThemeData(
@@ -119,11 +122,11 @@ class VentlyTheme {
         selectedColor: VentlyColors.deepBurgundy,
         secondarySelectedColor: VentlyColors.deepBurgundy,
         checkmarkColor: Colors.white,
-        labelStyle: GoogleFonts.plusJakartaSans(
+        labelStyle: const TextStyle(
           color: VentlyColors.deepBurgundy,
           fontWeight: FontWeight.w600,
         ),
-        secondaryLabelStyle: GoogleFonts.plusJakartaSans(
+        secondaryLabelStyle: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.w700,
         ),
@@ -152,7 +155,7 @@ class VentlyTheme {
     final divider =
         pureBlack ? VentlyColors.dividerBlack : VentlyColors.dividerDark;
     final base = ThemeData.dark(useMaterial3: true);
-    final textTheme = GoogleFonts.plusJakartaSansTextTheme(base.textTheme).apply(
+    final textTheme = base.textTheme.apply(
       bodyColor: VentlyColors.softOffWhite,
       displayColor: VentlyColors.softOffWhite,
     );
@@ -171,13 +174,13 @@ class VentlyTheme {
         onError: Colors.white,
       ),
       textTheme: textTheme,
-      appBarTheme: AppBarTheme(
+      appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        iconTheme: const IconThemeData(color: VentlyColors.softOffWhite),
-        titleTextStyle: GoogleFonts.plusJakartaSans(
+        iconTheme: IconThemeData(color: VentlyColors.softOffWhite),
+        titleTextStyle: TextStyle(
           fontSize: 22,
           fontWeight: FontWeight.w800,
           color: VentlyColors.berryDesat,
@@ -204,7 +207,7 @@ class VentlyTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radius),
           ),
-          textStyle: GoogleFonts.plusJakartaSans(
+          textStyle: const TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 15,
           ),
@@ -219,20 +222,21 @@ class VentlyTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radius),
           ),
-          textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: VentlyColors.berryDesat,
-          textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: card,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-        hintStyle: GoogleFonts.plusJakartaSans(
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        hintStyle: TextStyle(
           color: VentlyColors.softOffWhite.withOpacity(0.5),
         ),
         border: OutlineInputBorder(
@@ -245,18 +249,19 @@ class VentlyTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
-          borderSide: const BorderSide(color: VentlyColors.berryDesat, width: 1.5),
+          borderSide:
+              const BorderSide(color: VentlyColors.berryDesat, width: 1.5),
         ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: card,
         selectedColor: VentlyColors.berryDesat,
         secondarySelectedColor: VentlyColors.berryDesat,
-        labelStyle: GoogleFonts.plusJakartaSans(
+        labelStyle: const TextStyle(
           color: VentlyColors.softOffWhite,
           fontWeight: FontWeight.w600,
         ),
-        secondaryLabelStyle: GoogleFonts.plusJakartaSans(
+        secondaryLabelStyle: TextStyle(
           color: canvas,
           fontWeight: FontWeight.w700,
         ),

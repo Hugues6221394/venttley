@@ -9,8 +9,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants.dart';
+import '../../../core/connection.dart';
 import '../../../core/providers.dart';
+import '../../../data/services/draft_store.dart';
 import '../../../data/services/moderation_service.dart';
+import '../../../data/services/outbox.dart';
 import '../../../data/services/whisper_recorder.dart';
 import '../../widgets/chat_audio_bubble.dart';
 import '../../../domain/entities/entities.dart';
@@ -89,23 +92,58 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       setState(() => _recordingVoice = false);
       final result = await WhisperRecorder.instance.stop();
       if (result == null || !mounted) return;
+      final durationSeconds = result.duration.inSeconds.clamp(1, 300);
+      final operationId = OutboxService.newOperationId();
+      final outbox = await ref.read(outboxProvider.future);
+      StagedOutboxMedia? stagedMedia;
+      String? mediaPath;
       try {
+        stagedMedia = await outbox.stageMedia(
+          operationId: operationId,
+          bytes: result.bytes,
+          extension: 'm4a',
+          contentType: 'audio/mp4',
+          mediaType: 'audio',
+          durationSeconds: durationSeconds,
+        );
         final up = await ref.read(repositoryProvider).uploadChatAudio(
               roomId: widget.roomId,
               bytes: result.bytes,
-              durationSeconds: result.duration.inSeconds,
+              durationSeconds: durationSeconds,
             );
+        mediaPath = up.path;
         await ref.read(repositoryProvider).sendMessage(
               roomId: widget.roomId,
               plaintext: '',
               attachedMediaPath: up.path,
               attachedMediaType: 'audio',
+              idempotencyKey: operationId,
             );
+        await outbox.discardStagedMedia(stagedMedia.path);
         ref.invalidate(messagesProvider(widget.roomId));
-      } catch (e) {
+      } catch (_) {
+        if (stagedMedia != null) {
+          await outbox.enqueue(
+            OutboxKind.dm,
+            {
+              'roomId': widget.roomId,
+              'plaintext': '',
+              'attachedMediaPath': mediaPath,
+              'attachedMediaType': mediaPath == null ? null : 'audio',
+              ...stagedMedia.toPayload(),
+            },
+            operationId: operationId,
+          );
+        }
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Voice note failed: $e')),
+          SnackBar(
+            content: Text(
+              stagedMedia == null
+                  ? 'Could not preserve voice note.'
+                  : 'Voice note queued and will send automatically.',
+            ),
+          ),
         );
       }
       return;
@@ -128,19 +166,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Mark the room as read the moment the screen opens.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ref
-            .read(repositoryProvider)
-            .markRoomRead(widget.roomId)
-            .then((_) {
-              ref.invalidate(navInboxBadgeCountProvider);
-              ref.invalidate(unreadInboxCountProvider);
-              ref.invalidate(inboxStreamProvider);
-            })
-            .catchError((_) {});
+        ref.read(repositoryProvider).markRoomRead(widget.roomId).then((_) {
+          ref.invalidate(navInboxBadgeCountProvider);
+          ref.invalidate(unreadInboxCountProvider);
+          ref.invalidate(inboxStreamProvider);
+        }).catchError((_) {});
       }
     });
     _controller.addListener(_handleTyping);
+    // Per-room draft: restore unfinished text, auto-save while typing.
+    ref.read(draftStoreProvider.future).then((store) {
+      if (!mounted) return;
+      _draftSaver = DraftSaver(
+        store: store,
+        draftKey: 'chat.${widget.roomId}',
+        controller: _controller,
+      );
+      if (_draftSaver!.restore()) setState(() {});
+    });
   }
+
+  DraftSaver? _draftSaver;
 
   void _handleTyping() {
     // Throttle: emit at most once every 1.5 seconds while typing.
@@ -155,6 +201,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void dispose() {
     _typingDebounce?.cancel();
+    _draftSaver?.dispose();
     _controller.removeListener(_handleTyping);
     _controller.dispose();
     _scrollController.dispose();
@@ -210,16 +257,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     final query = _searchController.text.trim().toLowerCase();
     if (_searching && query.isNotEmpty) {
-      visible =
-          visible.where((m) => m.plaintext.toLowerCase().contains(query)).toList();
+      visible = visible
+          .where((m) => m.plaintext.toLowerCase().contains(query))
+          .toList();
     }
     // Per-room chat theme: inject the chosen accent as colorScheme.primary for
     // this screen's subtree, so every scheme.primary (bubbles, send button,
     // header, chips, typing dots) picks it up consistently — one source of
     // truth, no per-widget threading.
-    final accent = kChatThemes[prefs.theme] ?? Theme.of(context).colorScheme.primary;
+    final accent =
+        kChatThemes[prefs.theme] ?? Theme.of(context).colorScheme.primary;
     final scheme = Theme.of(context).colorScheme.copyWith(primary: accent);
-    final peerTyping = ref.watch(typingProvider(widget.roomId)).valueOrNull ?? false;
+    final peerTyping =
+        ref.watch(typingProvider(widget.roomId)).valueOrNull ?? false;
 
     // Mark unread peer messages as read whenever the messages list ticks
     // forward (new arrivals while the screen is open).
@@ -254,71 +304,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return Theme(
       data: Theme.of(context).copyWith(colorScheme: scheme),
       child: Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: _searching
-          ? AppBar(
-              title: TextField(
-                controller: _searchController,
-                autofocus: true,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  hintText: 'Search in conversation',
-                  border: InputBorder.none,
+        backgroundColor: Colors.transparent,
+        appBar: _searching
+            ? AppBar(
+                title: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    hintText: 'Search in conversation',
+                    border: InputBorder.none,
+                  ),
                 ),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () => setState(() {
-                    _searching = false;
-                    _searchController.clear();
-                  }),
-                ),
-              ],
-            )
-          : AppBar(
-              title: InkWell(
-                onTap: () => showChatOptionsSheet(
-                  context,
-                  room: r,
-                  onSearch: () => setState(() {
-                    _searching = true;
-                    _searchController.clear();
-                  }),
-                ),
-                borderRadius: BorderRadius.circular(8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(peerName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w800)),
-                        ),
-                        if (peerVerified) ...[
-                          const SizedBox(width: 4),
-                          const VerifiedBadge(size: 14),
-                        ],
-                      ],
-                    ),
-                    _PresenceLine(
-                      peerUserId: r.peerUserId,
-                      accent: scheme.primary,
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.more_horiz_rounded),
-                  tooltip: 'Options',
-                  onPressed: () => showChatOptionsSheet(
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => setState(() {
+                      _searching = false;
+                      _searchController.clear();
+                    }),
+                  ),
+                ],
+              )
+            : AppBar(
+                title: InkWell(
+                  onTap: () => showChatOptionsSheet(
                     context,
                     room: r,
                     onSearch: () => setState(() {
@@ -326,240 +336,338 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       _searchController.clear();
                     }),
                   ),
-                ),
-              ],
-            ),
-      body: Column(
-        children: [
-          Container(
-            color: scheme.primary.withOpacity(0.06),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                Icon(Icons.shield_outlined, size: 14, color: scheme.primary),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Private chat — only you and your peer see this. Moderators can review reported chats.',
-                    style: TextStyle(
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11,
-                    ),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(peerName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800)),
+                          ),
+                          if (peerVerified) ...[
+                            const SizedBox(width: 4),
+                            const VerifiedBadge(size: 14),
+                          ],
+                        ],
+                      ),
+                      _PresenceLine(
+                        peerUserId: r.peerUserId,
+                        accent: scheme.primary,
+                      ),
+                    ],
                   ),
                 ),
-              ],
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.more_horiz_rounded),
+                    tooltip: 'Options',
+                    onPressed: () => showChatOptionsSheet(
+                      context,
+                      room: r,
+                      onSearch: () => setState(() {
+                        _searching = true;
+                        _searchController.clear();
+                      }),
+                    ),
+                  ),
+                ],
+              ),
+        body: Column(
+          children: [
+            Container(
+              color: scheme.primary.withOpacity(0.06),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(Icons.shield_outlined, size: 14, color: scheme.primary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Private chat — only you and your peer see this. Moderators can review reported chats.',
+                      style: TextStyle(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: visible.length + 1,
-              itemBuilder: (ctx, i) {
-                if (i == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: VentlyColors.softMauve.withOpacity(0.35),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'TODAY',
-                          style: TextStyle(
-                            fontSize: 10,
-                            letterSpacing: 1.2,
-                            fontWeight: FontWeight.w800,
+            Expanded(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                itemCount: visible.length + 1,
+                itemBuilder: (ctx, i) {
+                  if (i == 0) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: VentlyColors.softMauve.withOpacity(0.35),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            'TODAY',
+                            style: TextStyle(
+                              fontSize: 10,
+                              letterSpacing: 1.2,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  );
-                }
-                final m = visible[i - 1];
-                return _Bubble(
-                  message: m,
-                  showSeen: m.messageId == lastSeenOwnId,
-                  onReply: () => setState(() {
-                    _replyingTo = m;
-                    _editingMessage = null;
-                  }),
-                  onCopy: () {
-                    Clipboard.setData(ClipboardData(text: m.plaintext));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Copied.')),
                     );
-                  },
-                  onEdit: () {
-                    setState(() {
-                      _editingMessage = m;
-                      _replyingTo = null;
-                      _controller.text = m.plaintext;
-                      _controller.selection = TextSelection.collapsed(
-                        offset: _controller.text.length,
-                      );
-                    });
-                  },
-                  onDeleteForEveryone: () async {
-                    try {
-                      await ref
-                          .read(repositoryProvider)
-                          .deleteChatMessage(m.messageId);
-                      ref.invalidate(messagesProvider(widget.roomId));
-                    } catch (e) {
-                      if (!context.mounted) return;
+                  }
+                  final m = visible[i - 1];
+                  return _Bubble(
+                    message: m,
+                    showSeen: m.messageId == lastSeenOwnId,
+                    onReply: () => setState(() {
+                      _replyingTo = m;
+                      _editingMessage = null;
+                    }),
+                    onCopy: () {
+                      Clipboard.setData(ClipboardData(text: m.plaintext));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(_deleteError(e))),
+                        const SnackBar(content: Text('Copied.')),
                       );
-                    }
-                  },
-                  onDeleteForMe: () async {
-                    try {
-                      await ref
-                          .read(repositoryProvider)
-                          .hideChatMessage(m.messageId);
-                      ref.invalidate(messagesProvider(widget.roomId));
-                    } catch (e) {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Could not delete: $e')),
-                      );
-                    }
-                  },
-                  onReport: () => _reportMessage(context, m),
-                );
-              },
-            ),
-          ),
-          _TypingChip(
-            peerPseudonym: r.peerPseudonym,
-            visible: peerTyping,
-          ),
-          if (_replyingTo != null)
-            _ReplyContextChip(
-              message: _replyingTo!,
-              onCancel: () => setState(() => _replyingTo = null),
-            ),
-          if (_editingMessage != null)
-            _EditContextChip(
-              message: _editingMessage!,
-              onCancel: () {
-                setState(() {
-                  _editingMessage = null;
-                  _controller.clear();
-                });
-              },
-            ),
-          _Composer(
-            controller: _controller,
-            pendingImageBytes: _pendingImageBytes,
-            onAttachImage: _pickImage,
-            onMicTap: _toggleVoice,
-            recording: _recordingVoice,
-            onClearImage: () => setState(() => _pendingImageBytes = null),
-            onSend: () async {
-              final t = _controller.text.trim();
-              // EDIT path — bypass moderation re-check + attachments.
-              if (_editingMessage != null) {
-                if (t.isEmpty) return;
-                final original = _editingMessage!;
-                try {
-                  await ref.read(repositoryProvider).editChatMessage(
-                        messageId: original.messageId,
-                        newPlaintext: t,
-                      );
-                  if (!mounted) return;
-                  _controller.clear();
-                  setState(() => _editingMessage = null);
-                  ref.invalidate(messagesProvider(widget.roomId));
-                } catch (e) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Could not edit: $e')),
+                    },
+                    onEdit: () {
+                      setState(() {
+                        _editingMessage = m;
+                        _replyingTo = null;
+                        _controller.text = m.plaintext;
+                        _controller.selection = TextSelection.collapsed(
+                          offset: _controller.text.length,
+                        );
+                      });
+                    },
+                    onDeleteForEveryone: () async {
+                      try {
+                        await ref
+                            .read(repositoryProvider)
+                            .deleteChatMessage(m.messageId);
+                        ref.invalidate(messagesProvider(widget.roomId));
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(_deleteError(e))),
+                        );
+                      }
+                    },
+                    onDeleteForMe: () async {
+                      try {
+                        await ref
+                            .read(repositoryProvider)
+                            .hideChatMessage(m.messageId);
+                        ref.invalidate(messagesProvider(widget.roomId));
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Could not delete: $e')),
+                        );
+                      }
+                    },
+                    onReport: () => _reportMessage(context, m),
                   );
+                },
+              ),
+            ),
+            _TypingChip(
+              peerPseudonym: r.peerPseudonym,
+              visible: peerTyping,
+            ),
+            if (_replyingTo != null)
+              _ReplyContextChip(
+                message: _replyingTo!,
+                onCancel: () => setState(() => _replyingTo = null),
+              ),
+            if (_editingMessage != null)
+              _EditContextChip(
+                message: _editingMessage!,
+                onCancel: () {
+                  setState(() {
+                    _editingMessage = null;
+                    _controller.clear();
+                  });
+                },
+              ),
+            _Composer(
+              controller: _controller,
+              pendingImageBytes: _pendingImageBytes,
+              onAttachImage: _pickImage,
+              onMicTap: _toggleVoice,
+              recording: _recordingVoice,
+              onClearImage: () => setState(() => _pendingImageBytes = null),
+              onSend: () async {
+                final t = _controller.text.trim();
+                // EDIT path — bypass moderation re-check + attachments.
+                if (_editingMessage != null) {
+                  if (t.isEmpty) return;
+                  final original = _editingMessage!;
+                  try {
+                    await ref.read(repositoryProvider).editChatMessage(
+                          messageId: original.messageId,
+                          newPlaintext: t,
+                        );
+                    if (!mounted) return;
+                    _controller.clear();
+                    setState(() => _editingMessage = null);
+                    ref.invalidate(messagesProvider(widget.roomId));
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not edit: $e')),
+                    );
+                  }
+                  return;
                 }
-                return;
-              }
 
-              final pending = _pendingImageBytes;
-              if (t.isEmpty && pending == null) return;
-              ModerationResult? moderation;
-              if (t.isNotEmpty) {
-                moderation =
-                    await ref.read(moderationServiceProvider).review(t);
-                if (!context.mounted) return;
-                if (moderation.isBlocked) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(moderation.reasons.isEmpty
-                          ? 'Held back by safety AI.'
-                          : moderation.reasons.first),
-                    ),
-                  );
-                  return;
-                }
-              }
-              String? mediaPath;
-              String? mediaType;
-              if (pending != null) {
-                try {
-                  final up = await ref
-                      .read(repositoryProvider)
-                      .uploadChatImage(
-                        roomId: widget.roomId,
-                        bytes: pending,
-                        extension: _pendingImageExt,
-                        contentType: _pendingImageMime,
-                      );
-                  mediaPath = up.path;
-                  mediaType = 'image';
-                } catch (e) {
+                final pending = _pendingImageBytes;
+                if (t.isEmpty && pending == null) return;
+                ModerationResult? moderation;
+                if (t.isNotEmpty) {
+                  moderation =
+                      await ref.read(moderationServiceProvider).review(t);
                   if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Upload failed: $e')),
-                  );
+                  if (moderation.isBlocked) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(moderation.reasons.isEmpty
+                            ? 'Held back by safety AI.'
+                            : moderation.reasons.first),
+                      ),
+                    );
+                    return;
+                  }
+                }
+                final operationId = OutboxService.newOperationId();
+                final outbox = await ref.read(outboxProvider.future);
+                final parentMessageId = _replyingTo?.messageId;
+                String? mediaPath;
+                String? mediaType;
+                StagedOutboxMedia? stagedMedia;
+                final ChatMessage sent;
+                try {
+                  if (pending != null) {
+                    stagedMedia = await outbox.stageMedia(
+                      operationId: operationId,
+                      bytes: pending,
+                      extension: _pendingImageExt,
+                      contentType: _pendingImageMime,
+                      mediaType: 'image',
+                    );
+                    final up =
+                        await ref.read(repositoryProvider).uploadChatImage(
+                              roomId: widget.roomId,
+                              bytes: pending,
+                              extension: _pendingImageExt,
+                              contentType: _pendingImageMime,
+                            );
+                    mediaPath = up.path;
+                    mediaType = 'image';
+                  }
+                  sent = await ref.read(repositoryProvider).sendMessage(
+                        roomId: widget.roomId,
+                        plaintext: t,
+                        attachedMediaPath: mediaPath,
+                        attachedMediaType: mediaType,
+                        parentMessageId: parentMessageId,
+                        idempotencyKey: operationId,
+                      );
+                  await outbox.discardStagedMedia(stagedMedia?.path);
+                } catch (_) {
+                  if (pending != null && stagedMedia == null) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Could not securely preserve the photo. The message was not queued.',
+                          ),
+                        ),
+                      );
+                    }
+                    return;
+                  }
+                  try {
+                    await outbox.enqueue(
+                      OutboxKind.dm,
+                      {
+                        'roomId': widget.roomId,
+                        'plaintext': t,
+                        'attachedMediaPath': mediaPath,
+                        'attachedMediaType': mediaType,
+                        'parentMessageId': parentMessageId,
+                        if (stagedMedia != null) ...stagedMedia.toPayload(),
+                      },
+                      operationId: operationId,
+                    );
+                    await _draftSaver?.clear();
+                    _controller.clear();
+                    if (mounted) setState(() => _replyingTo = null);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            "You're offline - message queued, it will send automatically.",
+                          ),
+                        ),
+                      );
+                    }
+                  } catch (queueError) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          "Couldn't preserve message: $queueError. Your draft is still saved.",
+                        ),
+                      ),
+                    );
+                  }
                   return;
                 }
-              }
-              final sent = await ref.read(repositoryProvider).sendMessage(
-                    roomId: widget.roomId,
-                    plaintext: t,
-                    attachedMediaPath: mediaPath,
-                    attachedMediaType: mediaType,
-                    parentMessageId: _replyingTo?.messageId,
-                  );
-              _controller.clear();
-              if (mounted) {
-                setState(() {
-                  _pendingImageBytes = null;
-                  _replyingTo = null;
-                });
-              }
-              // Safety scan on the sender's own message — reuses the verdict
-              // already computed above (DM bodies are encrypted, so this is the
-              // only place with plaintext). Offers help + flags for the queue.
-              if (moderation != null &&
-                  moderation.surfaceCrisisHelpline &&
-                  context.mounted) {
-                final level = moderation.categories
-                            .contains(HazardCategory.selfHarm) &&
-                        moderation.reasons.any((r) => r.contains('care about you'))
-                    ? 'high'
-                    : 'elevated';
-                unawaited(ref
-                    .read(repositoryProvider)
-                    .setChatMessageCrisis(sent.messageId, level)
-                    .catchError((_) {}));
-                await showCrisisSupportSheet(context, ref);
-              }
-            },
-          ),
-        ],
-      ),
+                await _draftSaver?.clear();
+                _controller.clear();
+                if (mounted) {
+                  setState(() {
+                    _pendingImageBytes = null;
+                    _replyingTo = null;
+                  });
+                }
+                // Safety scan on the sender's own message — reuses the verdict
+                // already computed above (DM bodies are encrypted, so this is the
+                // only place with plaintext). Offers help + flags for the queue.
+                if (moderation != null &&
+                    moderation.surfaceCrisisHelpline &&
+                    context.mounted) {
+                  final level =
+                      moderation.categories.contains(HazardCategory.selfHarm) &&
+                              moderation.reasons
+                                  .any((r) => r.contains('care about you'))
+                          ? 'high'
+                          : 'elevated';
+                  unawaited(ref
+                      .read(repositoryProvider)
+                      .setChatMessageCrisis(sent.messageId, level)
+                      .catchError((_) {}));
+                  await showCrisisSupportSheet(context, ref);
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -591,7 +699,9 @@ String _deleteError(Object e) {
   if (s.contains('window expired')) {
     return "It's been over 24h — you can only delete this for yourself.";
   }
-  if (s.contains('not your message')) return 'You can only delete your own messages.';
+  if (s.contains('not your message')) {
+    return 'You can only delete your own messages.';
+  }
   return 'Could not delete. Please try again.';
 }
 
@@ -663,8 +773,7 @@ class _Bubble extends ConsumerWidget {
               if (onReply != null)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.reply_rounded,
-                      color: context.ink),
+                  leading: Icon(Icons.reply_rounded, color: context.ink),
                   title: const Text('Reply',
                       style: TextStyle(fontWeight: FontWeight.w800)),
                   onTap: () {
@@ -674,8 +783,7 @@ class _Bubble extends ConsumerWidget {
                 ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.add_reaction_outlined,
-                    color: context.ink),
+                leading: Icon(Icons.add_reaction_outlined, color: context.ink),
                 title: const Text('React',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -686,8 +794,7 @@ class _Bubble extends ConsumerWidget {
               if (onCopy != null && message.plaintext.isNotEmpty)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.copy_rounded,
-                      color: context.ink),
+                  leading: Icon(Icons.copy_rounded, color: context.ink),
                   title: const Text('Copy',
                       style: TextStyle(fontWeight: FontWeight.w800)),
                   onTap: () {
@@ -698,8 +805,7 @@ class _Bubble extends ConsumerWidget {
               if (canEdit)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.edit_outlined,
-                      color: context.ink),
+                  leading: Icon(Icons.edit_outlined, color: context.ink),
                   title: const Text('Edit',
                       style: TextStyle(fontWeight: FontWeight.w800)),
                   subtitle: const Text(
@@ -731,8 +837,7 @@ class _Bubble extends ConsumerWidget {
               if (!mine && onReport != null)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.flag_outlined,
-                      color: context.ink),
+                  leading: Icon(Icons.flag_outlined, color: context.ink),
                   title: const Text('Report',
                       style: TextStyle(fontWeight: FontWeight.w800)),
                   onTap: () {
@@ -777,8 +882,8 @@ class _Bubble extends ConsumerWidget {
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.public_off_rounded, color: error),
                   title: Text('Delete for everyone',
-                      style: TextStyle(
-                          color: error, fontWeight: FontWeight.w800)),
+                      style:
+                          TextStyle(color: error, fontWeight: FontWeight.w800)),
                   onTap: () {
                     Navigator.pop(sheetCtx);
                     HapticFeedback.mediumImpact();
@@ -787,8 +892,7 @@ class _Bubble extends ConsumerWidget {
                 ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.delete_outline,
-                    color: context.ink),
+                leading: Icon(Icons.delete_outline, color: context.ink),
                 title: const Text('Delete for me',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 subtitle: const Text(
@@ -828,15 +932,13 @@ class _Bubble extends ConsumerWidget {
         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 4),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           constraints: BoxConstraints(
               maxWidth: MediaQuery.of(context).size.width * 0.74),
           decoration: BoxDecoration(
             color: VentlyColors.softMauve.withOpacity(0.18),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-                color: VentlyColors.softMauve.withOpacity(0.4)),
+            border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -872,8 +974,7 @@ class _Bubble extends ConsumerWidget {
                 left: mine ? 0 : 6,
                 right: mine ? 6 : 0,
               ),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               constraints: BoxConstraints(
                   maxWidth: MediaQuery.of(context).size.width * 0.72),
               decoration: BoxDecoration(
@@ -961,12 +1062,12 @@ class _Bubble extends ConsumerWidget {
               onLongPress: () => _openActionSheet(context, ref),
               child: Container(
                 margin: const EdgeInsets.symmetric(vertical: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.78),
                 decoration: BoxDecoration(
-                  color: mine
-                      ? scheme.primary
-                      : Theme.of(context).cardColor,
+                  color: mine ? scheme.primary : Theme.of(context).cardColor,
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(18),
                     topRight: const Radius.circular(18),
@@ -1002,12 +1103,11 @@ class _Bubble extends ConsumerWidget {
                       emoji: PostReactions.emoji(entry.key),
                       count: entry.value,
                       mine: message.myReaction == entry.key,
-                      onTap: () => ref
-                          .read(repositoryProvider)
-                          .setMessageReaction(
-                            message.messageId,
-                            entry.key,
-                          ),
+                      onTap: () =>
+                          ref.read(repositoryProvider).setMessageReaction(
+                                message.messageId,
+                                entry.key,
+                              ),
                     ),
                 ],
               ),
@@ -1146,8 +1246,7 @@ class _SwipeActionState extends State<_SwipeAction> {
               padding: const EdgeInsets.only(left: 12),
               child: Opacity(
                 opacity: (_dx / _trigger).clamp(0.0, 1.0),
-                child: Icon(widget.icon,
-                    size: 20, color: context.ink),
+                child: Icon(widget.icon, size: 20, color: context.ink),
               ),
             ),
           AnimatedSlide(
@@ -1312,7 +1411,7 @@ class _PresenceLine extends ConsumerWidget {
             width: 7,
             height: 7,
             margin: const EdgeInsets.only(right: 4),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: VentlyColors.onlineGreen,
               shape: BoxShape.circle,
             ),
@@ -1357,13 +1456,12 @@ class _TypingChip extends StatelessWidget {
       child: !visible
           ? const SizedBox.shrink()
           : Padding(
-              padding:
-                  const EdgeInsets.only(left: 16, right: 16, bottom: 4),
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 4),
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: Theme.of(context).cardColor,
                       borderRadius: BorderRadius.circular(16),
@@ -1429,8 +1527,7 @@ class _TypingDotsState extends State<_TypingDots>
                 width: 5,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: widget.color
-                      .withOpacity(opacity.clamp(0.25, 1.0)),
+                  color: widget.color.withOpacity(opacity.clamp(0.25, 1.0)),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -1522,7 +1619,9 @@ class _Composer extends StatelessWidget {
                 ),
                 IconButton(
                   icon: Icon(
-                    recording ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
+                    recording
+                        ? Icons.stop_circle_rounded
+                        : Icons.mic_none_rounded,
                     color: recording ? Colors.redAccent : null,
                   ),
                   tooltip: recording ? 'Tap to send voice note' : 'Voice note',
@@ -1582,9 +1681,7 @@ class _SharedPostCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: deleted
-            ? null
-            : () => context.push('/post/${snapshot.postId}'),
+        onTap: deleted ? null : () => context.push('/post/${snapshot.postId}'),
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -1650,14 +1747,20 @@ class _SharedPostCard extends StatelessWidget {
                   Icon(
                     Icons.open_in_new,
                     size: 11,
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withOpacity(0.55),
                   ),
                   const SizedBox(width: 4),
                   Text(
                     deleted ? 'Original no longer available' : 'Open original',
                     style: TextStyle(
                       fontSize: 10.5,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.55),
                     ),
                   ),
                 ],
@@ -1733,9 +1836,8 @@ class _PaletteEmoji extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          color: selected
-              ? scheme.primary.withOpacity(0.12)
-              : Colors.transparent,
+          color:
+              selected ? scheme.primary.withOpacity(0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
@@ -1798,10 +1900,8 @@ class _ChatImageState extends ConsumerState<_ChatImage> {
                 placeholder: (_, __) => const Center(
                   child: CircularProgressIndicator(),
                 ),
-                errorWidget: (_, __, ___) => const Icon(
-                    Icons.broken_image,
-                    color: Colors.white54,
-                    size: 48),
+                errorWidget: (_, __, ___) => const Icon(Icons.broken_image,
+                    color: Colors.white54, size: 48),
               ),
             ),
           ),
@@ -1936,9 +2036,7 @@ class _ReactionChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
-          color: mine
-              ? scheme.primary.withOpacity(0.18)
-              : scheme.surface,
+          color: mine ? scheme.primary.withOpacity(0.18) : scheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: mine
@@ -1957,7 +2055,9 @@ class _ReactionChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
-                  color: mine ? scheme.primary : scheme.onSurface.withOpacity(0.75),
+                  color: mine
+                      ? scheme.primary
+                      : scheme.onSurface.withOpacity(0.75),
                 ),
               ),
             ],

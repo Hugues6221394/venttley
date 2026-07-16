@@ -1,5 +1,4 @@
-import 'dart:ui';
-
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -28,6 +27,7 @@ import '../../widgets/skeleton.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_empty_state.dart';
 import '../../widgets/vently_error_state.dart';
+import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_premium_background.dart';
 
@@ -40,6 +40,7 @@ class FeedScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final feed = ref.watch(feedPostsProvider);
     final storiesAsync = ref.watch(homeFriendStoriesProvider);
+    final topicStatsAsync = ref.watch(trendingTopicStatsProvider);
     final discoveryPosts = ref.watch(homeDiscoveryPostsProvider).valueOrNull;
     final filter = ref.watch(feedFilterProvider);
     final tribes = ref
@@ -49,6 +50,7 @@ class FeedScreen extends ConsumerWidget {
             .toList() ??
         const <Tribe>[];
     final me = ref.watch(sessionProvider);
+    final dataSaver = ref.watch(dataSaverProvider);
 
     return Scaffold(
       backgroundColor: VentlyTokens.canvas,
@@ -64,6 +66,7 @@ class FeedScreen extends ConsumerWidget {
               ref.invalidate(feedPostsProvider);
               ref.invalidate(tribesProvider);
               ref.invalidate(homeDiscoveryPostsProvider);
+              ref.invalidate(trendingTopicStatsProvider);
               ref.invalidate(friendStoryPostsProvider);
               ref.invalidate(homeFriendStoriesProvider);
               ref.invalidate(myFriendsProvider);
@@ -87,30 +90,27 @@ class FeedScreen extends ConsumerWidget {
                 return CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   // Pre-build offscreen items so fast flings never show a
-                  // blank gap on mid-tier devices.
-                  cacheExtent: 800,
+                  // blank gap on mid-tier devices. Data Saver prefetches
+                  // less to keep network + memory down.
+                  cacheExtent: dataSaver ? 300 : 800,
                   slivers: [
-                    // Content-first: stories → whispers → tribes → posts.
-                    // The greeting is one slim line; composing lives in the
-                    // nav's Post button and the menu.
                     SliverToBoxAdapter(child: _VentlyFeedTopBar(me: me)),
                     const SliverToBoxAdapter(child: _CompactGreeting()),
                     const SliverToBoxAdapter(child: EmailVerificationBanner()),
                     SliverToBoxAdapter(
                       child: storiesAsync.when(
-                        loading: () => const SizedBox(
-                          height: 100,
-                          child: Center(child: CircularProgressIndicator()),
+                        loading: () => _StoriesLoadingRail(
+                          me: me,
                         ),
-                        error: (_, __) => const VentlyEmptyState(
-                          compact: true,
-                          icon: Icons.auto_stories_outlined,
-                          title: 'Stories unavailable',
-                          subtitle: 'Pull to refresh and try again.',
+                        error: (_, __) => _StoriesUnavailableRail(
+                          me: me,
                         ),
                         data: (_) => FadeSlideIn(
                           index: 1,
-                          child: _VentlyStoriesRail(stories: stories),
+                          child: _VentlyStoriesRail(
+                            stories: stories,
+                            me: me,
+                          ),
                         ),
                       ),
                     ),
@@ -119,26 +119,27 @@ class FeedScreen extends ConsumerWidget {
                       SliverToBoxAdapter(
                         child: FadeSlideIn(
                           index: 2,
-                          child:
-                              _TribesRail(tribes: discovery.trendingTribes),
+                          child: _TribesRail(tribes: discovery.trendingTribes),
                         ),
                       ),
-                    if (discovery.trendingTopics.isNotEmpty)
-                      SliverToBoxAdapter(
-                        child: FadeSlideIn(
-                          index: 3,
-                          child: _TrendingTopicsRail(
-                            topics: discovery.trendingTopics,
-                          ),
+                    SliverToBoxAdapter(
+                      child: topicStatsAsync.when(
+                        loading: () => const _TrendingTopicsLoading(),
+                        error: (_, __) => _TrendingTopicsUnavailable(
+                          onRetry: () =>
+                              ref.invalidate(trendingTopicStatsProvider),
                         ),
+                        data: (topics) => topics.isEmpty
+                            ? const SizedBox.shrink()
+                            : FadeSlideIn(
+                                index: 3,
+                                child: _TrendingTopicsRail(topics: topics),
+                              ),
                       ),
-                    // Discovery for everyone — even with zero connections,
-                    // suggest trending people to connect with.
+                    ),
                     const SliverToBoxAdapter(child: _SuggestedPeopleRail()),
                     if (filter.scope == 'local' && me?.localBucket == null)
-                      const SliverToBoxAdapter(
-                        child: _LocationPromptBanner(),
-                      ),
+                      const SliverToBoxAdapter(child: _LocationPromptBanner()),
                     SliverPersistentHeader(
                       pinned: true,
                       delegate: _FeedFiltersHeader(filter: filter),
@@ -154,11 +155,11 @@ class FeedScreen extends ConsumerWidget {
                       )
                     else
                       SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(16, 6, 16, 22),
+                        padding: const EdgeInsets.fromLTRB(18, 8, 18, 22),
                         sliver: SliverList.separated(
                           itemCount: feedPosts.length,
                           separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 14),
                           itemBuilder: (ctx, i) {
                             final post = feedPosts[i];
                             return FeedItemEntrance(
@@ -166,30 +167,33 @@ class FeedScreen extends ConsumerWidget {
                               index: i,
                               child: _VentlyFeedPostCard(
                                 post: post,
-                                onTap: () =>
-                                    context.push('/post/${post.postId}'),
+                                dataSaver: dataSaver,
+                                onTap: () => context.push(
+                                  '/post/${post.postId}',
+                                  extra: post,
+                                ),
                                 onLike: () async {
                                   try {
                                     await ref.read(repositoryProvider).react(
-                                        post.postId,
-                                        post.myReaction ?? 'hug');
+                                        post.postId, post.myReaction ?? 'hug');
                                   } catch (e) {
                                     if (context.mounted) {
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(SnackBar(
-                                              content: Text(
-                                                  'Could not react: $e')));
+                                              content:
+                                                  Text('Could not react: $e')));
                                     }
                                     return;
                                   }
                                   ref.invalidate(feedPostsProvider);
-                                  ref.invalidate(
-                                      postByIdProvider(post.postId));
+                                  ref.invalidate(postByIdProvider(post.postId));
                                 },
-                                onComment: () =>
-                                    context.push('/post/${post.postId}'),
-                                onShare: () => context
-                                    .push('/post/${post.postId}/share'),
+                                onComment: () => context.push(
+                                  '/post/${post.postId}',
+                                  extra: post,
+                                ),
+                                onShare: () =>
+                                    context.push('/post/${post.postId}/share'),
                                 onMessage: () {
                                   if (post.authorId != null) {
                                     context.push('/user/${post.authorId}');
@@ -231,57 +235,54 @@ class _VentlyFeedTopBar extends ConsumerWidget {
             onTap: () => _showHomeMenu(context, ref),
           ),
           const SizedBox(width: 10),
-          const Text(
-            'Venttly',
-            style: TextStyle(
-              color: VentlyColors.berryMagenta,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.4,
+          const Expanded(
+            flex: 2,
+            child: Text(
+              'Venttly',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: VentlyColors.berryMagenta,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0,
+              ),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
+            flex: 3,
             child: Pressable(
               onTap: () => context.push('/discover'),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(22),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    height: 42,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: BoxDecoration(
-                      color: context.glass(0.55),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(
-                        color: context.glassBorder,
+              child: Container(
+                height: 42,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: context.glassBorder),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.search_rounded,
+                      size: 19,
+                      color: context.inkFaint,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        'Search...',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.inkFaint,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.search_rounded,
-                          size: 19,
-                          color: context.ink.withOpacity(0.48),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Search people, tribes, vents...',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color:
-                                  context.ink.withOpacity(0.48),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -327,8 +328,12 @@ class _VentlyFeedTopBar extends ConsumerWidget {
       (Icons.help_outline_rounded, 'Questions', '/questions', false),
       (Icons.people_alt_outlined, 'Friends', '/friends', false),
       (Icons.mail_outline_rounded, 'Inbox', '/inbox', true),
-      (Icons.notifications_none_rounded, 'Notifications', '/notifications',
-          false),
+      (
+        VentlyNotificationBell.iconData,
+        'Notifications',
+        '/notifications',
+        false
+      ),
       (Icons.shield_outlined, 'Security', '/profile/security', false),
       (Icons.settings_outlined, 'Settings', '/settings', false),
     ];
@@ -349,8 +354,7 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                   color: VentlyColors.berryMagenta.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
-                child:
-                    Icon(icon, size: 18, color: VentlyColors.berryMagenta),
+                child: Icon(icon, size: 18, color: VentlyColors.berryMagenta),
               ),
               title: Text(
                 label,
@@ -446,20 +450,15 @@ class _GlassCircleButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final button = Pressable(
       onTap: onTap,
-      child: ClipOval(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: context.glass(0.55),
-              shape: BoxShape.circle,
-              border: Border.all(color: context.glassBorder),
-            ),
-            child: Icon(icon, size: 20, color: VentlyColors.berryMagenta),
-          ),
+      child: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          shape: BoxShape.circle,
+          border: Border.all(color: context.glassBorder),
         ),
+        child: Icon(icon, size: 20, color: VentlyColors.berryMagenta),
       ),
     );
     if (tooltip == null) return button;
@@ -492,15 +491,17 @@ class _CompactGreeting extends StatelessWidget {
                 height: 1.2,
                 fontWeight: FontWeight.w600,
                 letterSpacing: -0.1,
-                color: (isDark
-                        ? VentlyColors.softOffWhite
-                        : context.ink)
+                color: (isDark ? VentlyColors.softOffWhite : context.ink)
                     .withOpacity(0.72),
               ),
             ),
           ),
           const SizedBox(width: 10),
-          const GlowOrb(size: 22),
+          const Icon(
+            Icons.favorite_border_rounded,
+            size: 20,
+            color: VentlyColors.berryMagenta,
+          ),
         ],
       ),
     );
@@ -508,9 +509,10 @@ class _CompactGreeting extends StatelessWidget {
 }
 
 class _VentlyStoriesRail extends ConsumerWidget {
-  const _VentlyStoriesRail({required this.stories});
+  const _VentlyStoriesRail({required this.stories, required this.me});
 
   final List<VentStory> stories;
+  final AppUser? me;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -529,6 +531,8 @@ class _VentlyStoriesRail extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               children: [
                 _AddStoryBubble(
+                  me: me,
+                  alignToCard: true,
                   onTap: () => context.push('/compose/story'),
                 ),
                 const SizedBox(width: 14),
@@ -549,6 +553,8 @@ class _VentlyStoriesRail extends ConsumerWidget {
                     children: [
                       Text(
                         'No friend stories yet',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: context.ink,
                           fontWeight: FontWeight.w900,
@@ -558,7 +564,7 @@ class _VentlyStoriesRail extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Text(
                         'When friends post, they stay here for 24 hours.',
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: context.inkMuted,
@@ -593,6 +599,7 @@ class _VentlyStoriesRail extends ConsumerWidget {
             itemBuilder: (ctx, i) {
               if (i == 0) {
                 return _AddStoryBubble(
+                  me: me,
                   onTap: () => context.push('/compose/story'),
                 );
               }
@@ -605,10 +612,135 @@ class _VentlyStoriesRail extends ConsumerWidget {
   }
 }
 
-class _AddStoryBubble extends StatelessWidget {
-  const _AddStoryBubble({required this.onTap});
+class _StoriesLoadingRail extends StatelessWidget {
+  const _StoriesLoadingRail({required this.me});
 
-  final VoidCallback onTap;
+  final AppUser? me;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(
+          title: '24h Vent Stories',
+          padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+        ),
+        SizedBox(
+          height: 78,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            children: [
+              _AddStoryBubble(
+                me: me,
+                onTap: () => context.push('/compose/story'),
+              ),
+              const SizedBox(width: 14),
+              for (var i = 0; i < 4; i++) ...[
+                const _StoryBubbleSkeleton(),
+                const SizedBox(width: 12),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StoriesUnavailableRail extends StatelessWidget {
+  const _StoriesUnavailableRail({required this.me});
+
+  final AppUser? me;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(
+          title: '24h Vent Stories',
+          padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+        ),
+        SizedBox(
+          height: 88,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            children: [
+              _AddStoryBubble(
+                me: me,
+                alignToCard: true,
+                onTap: () => context.push('/compose/story'),
+              ),
+              const SizedBox(width: 14),
+              Container(
+                width: 248,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: context.glassBorder),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: const BoxDecoration(
+                        color: VentlyColors.roseTint,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.auto_stories_outlined,
+                        size: 20,
+                        color: VentlyColors.berryMagenta,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Stories unavailable',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: context.ink,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Pull to refresh and try again.',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: context.inkMuted,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StoryBubbleSkeleton extends StatelessWidget {
+  const _StoryBubbleSkeleton();
 
   @override
   Widget build(BuildContext context) {
@@ -616,33 +748,21 @@ class _AddStoryBubble extends StatelessWidget {
       width: 58,
       child: Column(
         children: [
-          Pressable(
-            onTap: onTap,
-            child: CustomPaint(
-              painter: _DashedCirclePainter(
-                color: VentlyColors.berryMagenta.withOpacity(0.55),
-              ),
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.45),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.add,
-                    color: VentlyColors.berryMagenta, size: 22),
-              ),
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: VentlyColors.softMauve.withOpacity(0.7),
+              shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(height: 7),
-          Text(
-            'Add vent',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: context.ink,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
+          const SizedBox(height: 6),
+          Container(
+            width: 38,
+            height: 7,
+            decoration: BoxDecoration(
+              color: VentlyColors.softMauve.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(4),
             ),
           ),
         ],
@@ -651,38 +771,101 @@ class _AddStoryBubble extends StatelessWidget {
   }
 }
 
-/// Dashed circular outline for the "Add vent" bubble (mockup style).
-class _DashedCirclePainter extends CustomPainter {
-  const _DashedCirclePainter({required this.color});
+class _AddStoryBubble extends StatelessWidget {
+  const _AddStoryBubble({
+    required this.me,
+    required this.onTap,
+    this.alignToCard = false,
+  });
 
-  final Color color;
+  final AppUser? me;
+  final VoidCallback onTap;
+  final bool alignToCard;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4
-      ..strokeCap = StrokeCap.round;
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 0.7;
-    const dashes = 14;
-    const gapRatio = 0.45;
-    const sweep = (2 * 3.141592653589793) / dashes;
-    for (var i = 0; i < dashes; i++) {
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        i * sweep,
-        sweep * (1 - gapRatio),
-        false,
-        paint,
-      );
-    }
+  Widget build(BuildContext context) {
+    final label = me?.anonymousPseudonym ?? 'You';
+    return Semantics(
+      label: 'Add your 24 hour story',
+      button: true,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: alignToCard ? 2 : 0),
+        child: SizedBox(
+          key: const Key('home-add-story'),
+          width: 64,
+          child: Column(
+            mainAxisAlignment:
+                alignToCard ? MainAxisAlignment.end : MainAxisAlignment.start,
+            children: [
+              Pressable(
+                onTap: onTap,
+                child: SizedBox(
+                  width: 54,
+                  height: 54,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 52,
+                        height: 52,
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: VentlyColors.softMauve,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: ProfileAvatar(
+                          avatarSeed: me?.avatarSeed ?? 'venttly-story-owner',
+                          label: label,
+                          profilePhotoUrl: me?.profilePhotoUrl,
+                          size: 46,
+                        ),
+                      ),
+                      Positioned(
+                        right: -1,
+                        bottom: 0,
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: VentlyColors.berryMagenta,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.surface,
+                              width: 2,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.add_rounded,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'Your story',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.ink,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
-
-  @override
-  bool shouldRepaint(covariant _DashedCirclePainter old) =>
-      old.color != color;
 }
 
 class _VentlyStoryCircle extends StatelessWidget {
@@ -744,34 +927,24 @@ class _FeedFiltersHeader extends SliverPersistentHeaderDelegate {
   final FeedFilter filter;
 
   @override
-  double get minExtent => 128;
+  double get minExtent => 158;
 
   @override
-  double get maxExtent => 128;
+  double get maxExtent => 158;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    // alignment forces the Container to fill the sliver's full extent —
-    // if the content's intrinsic height ever lands under min/maxExtent
-    // (text scale, font metrics), an unfilled pinned header throws
-    // "SliverGeometry is not valid" and blanks the whole viewport.
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          color: (isDark ? Theme.of(context).scaffoldBackgroundColor : Colors.white)
-              .withOpacity(overlapsContent ? 0.72 : 0.35),
-          alignment: Alignment.topCenter,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _FeedSectionHeader(filter: filter),
-              _CategoryRail(filter: filter),
-            ],
-          ),
-        ),
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      alignment: Alignment.topCenter,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _FeedSectionHeader(filter: filter),
+          _CategoryRail(filter: filter),
+        ],
       ),
     );
   }
@@ -793,9 +966,11 @@ class _VentlyFeedPostCard extends StatelessWidget {
     required this.onComment,
     required this.onShare,
     required this.onMessage,
+    this.dataSaver = false,
   });
 
   final Post post;
+  final bool dataSaver;
   final VoidCallback onTap;
   final VoidCallback onLike;
   final VoidCallback onComment;
@@ -815,16 +990,19 @@ class _VentlyFeedPostCard extends StatelessWidget {
         onDoubleTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
           decoration: BoxDecoration(
-            color: context.glass(0.72),
+            color: context.isDark
+                ? Theme.of(context).colorScheme.surface
+                : Colors.white,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: context.glassBorder),
             boxShadow: [
               BoxShadow(
-                color: VentlyColors.berryMagenta.withOpacity(0.05),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+                color: Colors.black.withOpacity(context.isDark ? 0.22 : 0.035),
+                blurRadius: 18,
+                spreadRadius: -8,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
@@ -839,16 +1017,16 @@ class _VentlyFeedPostCard extends StatelessWidget {
                       pseudonym: post.authorPseudonym.replaceFirst('@', ''),
                       avatarSeed: post.authorAvatarSeed,
                       profilePhotoUrl: post.authorProfilePhotoUrl,
-                      size: 34,
+                      size: 44,
                     )
                   else
                     ProfileAvatar(
                       avatarSeed: post.authorAvatarSeed,
                       label: post.authorPseudonym,
                       profilePhotoUrl: post.authorProfilePhotoUrl,
-                      size: 34,
+                      size: 44,
                     ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -863,7 +1041,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
                               style: TextStyle(
                                 color: context.ink,
                                 fontWeight: FontWeight.w900,
-                                fontSize: 12,
+                                fontSize: 15,
                               ),
                             ),
                           )
@@ -875,27 +1053,57 @@ class _VentlyFeedPostCard extends StatelessWidget {
                             style: TextStyle(
                               color: context.ink,
                               fontWeight: FontWeight.w900,
-                              fontSize: 12,
+                              fontSize: 15,
                             ),
                           ),
                         const SizedBox(height: 2),
                         Text(
-                          '${_ago(post.createdAt)} · ${FeedCategories.label(post.categoryName)}',
+                          _ago(post.createdAt),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: context.ink.withOpacity(0.58),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  Container(
+                    constraints: const BoxConstraints(maxWidth: 124),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: VentlyColors.roseTint,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      '#${FeedCategories.label(post.categoryName)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: VentlyColors.roseDeep,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 18),
+              Text(
+                post.content,
+                style: TextStyle(
+                  color: context.ink,
+                  height: 1.52,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               if (hasPhoto && post.imageUrl != null) ...[
+                const SizedBox(height: 14),
                 SensitiveMediaVeil(
                   veiled: post.mediaNeedsVeil,
                   pending: post.mediaStatus == 'pending',
@@ -906,6 +1114,9 @@ class _VentlyFeedPostCard extends StatelessWidget {
                       height: 152,
                       width: double.infinity,
                       fit: BoxFit.cover,
+                      // Data Saver: decode at a smaller size — big memory
+                      // win on 2-4GB devices, no visible loss at 152px tall.
+                      cacheWidth: dataSaver ? 480 : 960,
                       errorBuilder: (_, __, ___) => Container(
                         height: 120,
                         color: const Color(0xFFFFE5ED),
@@ -916,62 +1127,65 @@ class _VentlyFeedPostCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
               ],
               if (hasAudio && post.audioUrl != null) ...[
+                const SizedBox(height: 14),
                 ChatAudioBubble(
                   messageId: post.postId,
                   audioUrl: post.audioUrl!,
                   durationSeconds: post.audioDurationSeconds ?? 0,
                   lightOnDark: false,
                 ),
-                const SizedBox(height: 10),
               ],
-              Text(
-                post.content,
-                style: TextStyle(
-                  color: context.ink,
-                  height: 1.48,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Divider(color: VentlyColors.softMauve.withOpacity(0.18)),
+              const SizedBox(height: 18),
               Row(
                 children: [
-                  AnimatedLikeButton(
-                    active: post.myReaction != null,
-                    onTap: onLike,
-                    size: 18,
-                    activeColor: VentlyColors.berryMagenta,
-                    inactiveColor: context.ink,
-                    label: Text(
-                      '${PostCard.compactNumber(post.likesCount)} Hugs',
-                      style: _metricStyle(context),
+                  Expanded(
+                    child: AnimatedLikeButton(
+                      active: post.myReaction != null,
+                      onTap: onLike,
+                      size: 18,
+                      activeColor: VentlyColors.berryMagenta,
+                      inactiveColor: context.ink,
+                      label: Text(
+                        '${PostCard.compactNumber(post.likesCount)} hugs',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _metricStyle(context),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 20),
-                  InkWell(
-                    onTap: onComment,
-                    borderRadius: BorderRadius.circular(16),
-                    child: Row(
-                      children: [
-                        Icon(Icons.chat_bubble_outline,
-                            size: 17, color: context.ink),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${PostCard.compactNumber(post.commentsCount)} Replies',
-                          style: _metricStyle(context),
-                        ),
-                      ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: InkWell(
+                      onTap: onComment,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Row(
+                        children: [
+                          Icon(CupertinoIcons.chat_bubble,
+                              size: 19, color: context.inkMuted),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '${PostCard.compactNumber(post.commentsCount)} replies',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: _metricStyle(context),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.share_rounded, size: 18),
-                    color: context.ink.withOpacity(0.62),
-                    onPressed: onShare,
+                  const SizedBox(width: 4),
+                  SizedBox.square(
+                    dimension: 40,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.ios_share_outlined, size: 20),
+                      color: context.ink.withOpacity(0.62),
+                      onPressed: onShare,
+                    ),
                   ),
                 ],
               ),
@@ -983,9 +1197,9 @@ class _VentlyFeedPostCard extends StatelessWidget {
   }
 
   static TextStyle _metricStyle(BuildContext context) => TextStyle(
-        color: context.ink,
-        fontSize: 12,
-        fontWeight: FontWeight.w800,
+        color: context.inkMuted,
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
       );
 
   static String _ago(DateTime date) {
@@ -994,6 +1208,63 @@ class _VentlyFeedPostCard extends StatelessWidget {
     if (diff.inHours < 1) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
+  }
+}
+
+class _TrendingTopicsLoading extends StatelessWidget {
+  const _TrendingTopicsLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Trending Topics',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: const LinearProgressIndicator(minHeight: 3),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrendingTopicsUnavailable extends StatelessWidget {
+  const _TrendingTopicsUnavailable({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Trending topics are refreshing.',
+              style: TextStyle(
+                color: context.inkMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Retry trending topics',
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded, size: 20),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1135,11 +1406,14 @@ class _TribesRail extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
           child: Row(
             children: [
-              const Text(
-                'Trending Tribes',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+              const Expanded(
+                child: Text(
+                  'Trending Tribes',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                ),
               ),
-              const Spacer(),
               TextButton(
                 onPressed: () => GoRouter.of(context).go('/tribes'),
                 child: const Text('See all'),
@@ -1191,15 +1465,18 @@ class _TribeChipCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  TribeAvatar(avatarUrl: tribe.avatarUrl, size: 40),
+                  TribeCoverPreview(
+                    bannerUrl: tribe.bannerUrl,
+                    avatarUrl: tribe.avatarUrl,
+                    width: 78,
+                    height: 42,
+                  ),
                   const Spacer(),
                   if (tribe.joinedByMe)
-                    Icon(Icons.check_circle,
-                        size: 16, color: scheme.primary)
+                    Icon(Icons.check_circle, size: 16, color: scheme.primary)
                   else
                     Icon(Icons.add_circle_outline,
-                        size: 16,
-                        color: scheme.onSurface.withOpacity(0.5)),
+                        size: 16, color: scheme.onSurface.withOpacity(0.5)),
                 ],
               ),
               const SizedBox(height: 10),
@@ -1217,8 +1494,7 @@ class _TribeChipCard extends StatelessWidget {
               Row(
                 children: [
                   Icon(Icons.people_alt_outlined,
-                      size: 12,
-                      color: scheme.onSurface.withOpacity(0.55)),
+                      size: 12, color: scheme.onSurface.withOpacity(0.55)),
                   const SizedBox(width: 4),
                   Text(
                     '${PostCard.compactNumber(tribe.memberCount)} members',
@@ -1252,38 +1528,37 @@ class _FeedSectionHeader extends ConsumerWidget {
     final me = ref.watch(sessionProvider);
     final hasLocation = me?.localBucket != null;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 'Explore',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                style: TextStyle(
+                  color: context.ink,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const Spacer(),
-              Pressable(
-                onTap: () => _showCustomizeSheet(context, ref),
-                child: Row(
-                  children: [
-                    Text(
-                      'Customize',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: scheme.onSurface.withOpacity(0.55),
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    Icon(Icons.tune_rounded,
-                        size: 16, color: scheme.onSurface.withOpacity(0.55)),
-                  ],
+              TextButton.icon(
+                onPressed: () => _showCustomizeSheet(context, ref),
+                icon: const Icon(Icons.tune_rounded, size: 17),
+                label: const Text('Customize'),
+                style: TextButton.styleFrom(
+                  foregroundColor: scheme.onSurface.withOpacity(0.58),
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -1291,50 +1566,47 @@ class _FeedSectionHeader extends ConsumerWidget {
                 _ScopeToggle(
                   scope: filter.scope,
                   disabledLocal: !hasLocation,
-                  onChanged: (s) => ref
+                  onChanged: (scope) => ref
                       .read(feedFilterProvider.notifier)
-                      .update((x) => x.copyWith(scope: s)),
+                      .update((value) => value.copyWith(scope: scope)),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 _SortToggle(
                   sort: filter.sort,
-                  onChanged: (s) => ref
+                  onChanged: (sort) => ref
                       .read(feedFilterProvider.notifier)
-                      .update((x) => x.copyWith(sort: s)),
+                      .update((value) => value.copyWith(sort: sort)),
                 ),
                 if (filter.mood != null) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: scheme.primary.withOpacity(0.14),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(Moods.emoji(filter.mood!),
-                            style: const TextStyle(fontSize: 11)),
-                        const SizedBox(width: 4),
-                        Text(
-                          Moods.label(filter.mood!),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: scheme.primary,
+                  const SizedBox(width: 10),
+                  Pressable(
+                    onTap: () => ref
+                        .read(feedFilterProvider.notifier)
+                        .update((value) => value.copyWith(clearMood: true)),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 11, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: VentlyColors.roseTint,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(Moods.emoji(filter.mood!)),
+                          const SizedBox(width: 5),
+                          Text(
+                            Moods.label(filter.mood!),
+                            style: const TextStyle(
+                              color: VentlyColors.roseDeep,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                        ),
-                        GestureDetector(
-                          onTap: () => ref
-                              .read(feedFilterProvider.notifier)
-                              .update((s) => s.copyWith(clearMood: true)),
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 4),
-                            child: Icon(Icons.close,
-                                size: 12, color: scheme.primary),
-                          ),
-                        ),
-                      ],
+                          const SizedBox(width: 5),
+                          const Icon(Icons.close_rounded,
+                              color: VentlyColors.roseDeep, size: 14),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -1355,45 +1627,91 @@ class _FeedSectionHeader extends ConsumerWidget {
         builder: (ctx, sheetRef, _) {
           final f = sheetRef.watch(feedFilterProvider);
           final scheme = Theme.of(ctx).colorScheme;
+          final me = sheetRef.watch(sessionProvider);
           return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SheetGrabber(),
+              const Text(
+                'Customize your feed',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Choose what feels most useful right now.',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface.withOpacity(0.55),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Audience',
+                style: TextStyle(
+                  color: ctx.ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _ScopeToggle(
+                scope: f.scope,
+                disabledLocal: me?.localBucket == null,
+                onChanged: (scope) => sheetRef
+                    .read(feedFilterProvider.notifier)
+                    .update((value) => value.copyWith(scope: scope)),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Order',
+                style: TextStyle(
+                  color: ctx.ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: _SortToggle(
+                  sort: f.sort,
+                  onChanged: (sort) => sheetRef
+                      .read(feedFilterProvider.notifier)
+                      .update((value) => value.copyWith(sort: sort)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Mood',
+                style: TextStyle(
+                  color: ctx.ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  const SheetGrabber(),
-                  const Text(
-                    'Customize your feed',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Pick a vibe — we\'ll surface vents that match it.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurface.withOpacity(0.55),
+                  for (final m in Moods.all)
+                    _VibeChip(
+                      mood: m,
+                      selected: f.mood == m,
+                      onTap: () {
+                        sheetRef.read(feedFilterProvider.notifier).update((s) =>
+                            f.mood == m
+                                ? s.copyWith(clearMood: true)
+                                : s.copyWith(mood: m));
+                      },
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final m in Moods.all)
-                        _VibeChip(
-                          mood: m,
-                          selected: f.mood == m,
-                          onTap: () {
-                            sheetRef.read(feedFilterProvider.notifier).update(
-                                (s) => f.mood == m
-                                    ? s.copyWith(clearMood: true)
-                                    : s.copyWith(mood: m));
-                          },
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
                 ],
-              );
+              ),
+              const SizedBox(height: 8),
+            ],
+          );
         },
       ),
     );
@@ -1423,9 +1741,7 @@ class _VibeChip extends StatelessWidget {
           color: selected ? scheme.primary : context.glass(0.55),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected
-                ? scheme.primary
-                : scheme.primary.withOpacity(0.25),
+            color: selected ? scheme.primary : scheme.primary.withOpacity(0.25),
           ),
         ),
         child: Row(
@@ -1469,17 +1785,15 @@ class _ScopeToggle extends StatelessWidget {
       return GestureDetector(
         onTap: disabled ? null : () => onChanged(key),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: selected
-                ? scheme.primary
-                : scheme.primary.withOpacity(0.08),
+            color: selected ? scheme.primary : scheme.primary.withOpacity(0.08),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w800,
               color: selected
                   ? Colors.white
@@ -1518,11 +1832,9 @@ class _SortToggle extends StatelessWidget {
       return GestureDetector(
         onTap: () => onChanged(key),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: selected
-                ? scheme.primary
-                : scheme.primary.withOpacity(0.08),
+            color: selected ? scheme.primary : scheme.primary.withOpacity(0.08),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Row(
@@ -1530,14 +1842,14 @@ class _SortToggle extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                size: 11,
+                size: 13,
                 color: selected ? Colors.white : scheme.primary,
               ),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: FontWeight.w800,
                   color: selected ? Colors.white : scheme.primary,
                 ),
@@ -1608,41 +1920,47 @@ class _CategoryRail extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     const items = <String?>[null, ...FeedCategories.all];
     return SizedBox(
-      height: 44,
+      height: 58,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
         itemCount: items.length,
         itemBuilder: (ctx, i) {
           final key = items[i];
           final selected = filter.category == key;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: ChoiceChip(
-              label: Text(key == null ? 'All' : FeedCategories.label(key)),
-              selected: selected,
-              onSelected: (_) {
+            child: Pressable(
+              onTap: () {
                 ref
                     .read(feedFilterProvider.notifier)
                     .update((s) => s.copyWith(category: key));
               },
-              // Monochrome chips — selected is the ink pill, so vent cards
-              // and rose actions stay the loudest things on screen.
-              selectedColor: context.ink,
-              labelStyle: TextStyle(
-                color: selected
-                    ? Theme.of(context).scaffoldBackgroundColor
-                    : scheme.onSurface,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: BorderSide(
-                  color: selected ? context.ink : VentlyColors.softMauve,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                alignment: Alignment.center,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? context.ink
+                      : Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: selected ? context.ink : VentlyColors.softMauve,
+                  ),
+                ),
+                child: Text(
+                  key == null ? 'All' : FeedCategories.label(key),
+                  style: TextStyle(
+                    color: selected
+                        ? Theme.of(context).scaffoldBackgroundColor
+                        : scheme.onSurface.withOpacity(0.7),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
                 ),
               ),
-              backgroundColor: Theme.of(context).cardColor,
             ),
           );
         },
@@ -1658,13 +1976,12 @@ class _BellAction extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final unread =
-        ref.watch(unreadNotificationsCountProvider);
+    final unread = ref.watch(unreadNotificationsCountProvider);
     return Stack(
       clipBehavior: Clip.none,
       children: [
         _GlassCircleButton(
-          icon: Icons.notifications_none_rounded,
+          icon: VentlyNotificationBell.iconData,
           tooltip: 'Notifications',
           onTap: () => context.push('/notifications'),
         ),

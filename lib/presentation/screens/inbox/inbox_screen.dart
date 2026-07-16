@@ -84,57 +84,61 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                 onMenu: _showSheetMenu,
               ),
               _SearchField(
-              controller: _query,
-              onChanged: (_) => setState(() {}),
-            ),
-            if (friends.isNotEmpty) _VibesRail(friends: friends),
-            const _TribeChatsRail(),
-            if (pending > 0)
-              _PendingRequestsCard(
-                count: pending,
-                onTap: () => setState(() => _filter = _InboxFilter.requests),
+                controller: _query,
+                onChanged: (_) => setState(() {}),
               ),
-            const SizedBox(height: 4),
-            _ConversationsHeader(
-              filter: _filter,
-              onChange: (f) => setState(() => _filter = f),
-            ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _refresh,
-                color: VentlyColors.berryMagenta,
-                child: allRoomsAsync.when(
-                  loading: () => const _LoadingSkeleton(),
-                  error: (e, _) => Center(child: Text('$e')),
-                  data: (rooms) {
-                    final filtered = _applyFilter(rooms, _filter, _query.text);
-                    if (filtered.isEmpty) {
-                      return _EmptyConversations(
-                        filter: _filter,
-                        hasQuery: _query.text.trim().isNotEmpty,
-                        onFindFriends: () => context.push('/friends'),
-                      );
-                    }
-                    return ListView.separated(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      cacheExtent: 800,
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: 10),
-                      itemBuilder: (ctx, i) {
-                        return RepaintBoundary(
-                          child: _ConversationRow(room: filtered[i]),
+              if (friends.isNotEmpty) _VibesRail(friends: friends),
+              const _TribeChatsRail(),
+              if (pending > 0)
+                _PendingRequestsCard(
+                  count: pending,
+                  onTap: () => setState(() => _filter = _InboxFilter.requests),
+                ),
+              const SizedBox(height: 4),
+              _ConversationsHeader(
+                filter: _filter,
+                onChange: (f) => setState(() => _filter = f),
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _refresh,
+                  color: VentlyColors.berryMagenta,
+                  child: allRoomsAsync.when(
+                    loading: () => const _LoadingSkeleton(),
+                    error: (e, _) => Center(child: Text('$e')),
+                    data: (rooms) {
+                      final filtered =
+                          _applyFilter(rooms, _filter, _query.text);
+                      if (filtered.isEmpty) {
+                        return _EmptyConversations(
+                          filter: _filter,
+                          hasQuery: _query.text.trim().isNotEmpty,
+                          onFindFriends: () => context.push('/friends'),
                         );
-                      },
-                    );
-                  },
+                      }
+                      return ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        cacheExtent: 800,
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 112),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const Divider(
+                          height: 1,
+                          indent: 70,
+                          color: VentlyColors.softMauve,
+                        ),
+                        itemBuilder: (ctx, i) {
+                          return RepaintBoundary(
+                            child: _ConversationRow(room: filtered[i]),
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -165,8 +169,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.diversity_3,
-                    color: context.ink),
+                leading: Icon(Icons.diversity_3, color: context.ink),
                 title: const Text('Friends',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -176,8 +179,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.explore_outlined,
-                    color: context.ink),
+                leading: Icon(Icons.explore_outlined, color: context.ink),
                 title: const Text('Discover',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -187,8 +189,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.groups_outlined,
-                    color: context.ink),
+                leading: Icon(Icons.groups_outlined, color: context.ink),
                 title: const Text('Tribes',
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 onTap: () {
@@ -238,36 +239,40 @@ class _ChatHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 12, 4),
+      padding: const EdgeInsets.fromLTRB(20, 16, 18, 14),
       child: Row(
         children: [
-          IconButton(
-            icon: Icon(Icons.menu_rounded,
-                color: context.ink),
-            onPressed: onMenu,
-            tooltip: 'More',
-          ),
-          const Text(
-            'Chat',
-            style: TextStyle(
-              color: VentlyColors.berryMagenta,
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.4,
+          Expanded(
+            child: Text(
+              'Chats',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: context.ink,
+                fontSize: 31,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'serif',
+                letterSpacing: 0,
+              ),
             ),
           ),
-          const Spacer(),
           IconButton(
-            tooltip: 'New chat',
-            icon: const Icon(Icons.add_comment_rounded,
-                color: VentlyColors.berryMagenta),
-            onPressed: onCompose,
+            tooltip: 'More',
+            icon: Icon(Icons.more_horiz_rounded, color: context.inkMuted),
+            onPressed: onMenu,
           ),
-          IconButton(
-            tooltip: 'Notifications',
-            icon: const Icon(Icons.notifications_none_rounded,
-                color: VentlyColors.berryMagenta),
-            onPressed: () => context.push('/notifications'),
+          const SizedBox(width: 4),
+          SizedBox.square(
+            dimension: 46,
+            child: IconButton(
+              tooltip: 'New chat',
+              icon: Icon(Icons.add_rounded, color: context.ink, size: 25),
+              style: IconButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                side: const BorderSide(color: VentlyColors.softMauve),
+              ),
+              onPressed: onCompose,
+            ),
           ),
         ],
       ),
@@ -287,20 +292,19 @@ class _SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 6, 20, 14),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
       child: Container(
-        height: 46,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        height: 50,
+        padding: const EdgeInsets.symmetric(horizontal: 17),
         decoration: BoxDecoration(
           color: context.isDark ? context.glass() : Colors.white,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(22),
           border: Border.all(color: context.glassBorder),
         ),
         child: Row(
           children: [
             Icon(Icons.search_rounded,
-                size: 18,
-                color: context.ink.withOpacity(0.55)),
+                size: 20, color: context.ink.withOpacity(0.55)),
             const SizedBox(width: 10),
             Expanded(
               child: TextField(
@@ -308,13 +312,14 @@ class _SearchField extends StatelessWidget {
                 onChanged: onChanged,
                 style: TextStyle(
                   color: context.ink,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Search your circle…',
                   hintStyle: TextStyle(
                     color: context.ink.withOpacity(0.42),
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                   ),
                   border: InputBorder.none,
                   filled: false,
@@ -677,8 +682,7 @@ class _VibeBubble extends ConsumerWidget {
     final router = GoRouter.of(context);
     final rooms = await ref.read(_allRoomsProvider.future);
     final existing = rooms
-        .where(
-            (r) => r.peerPseudonym.replaceAll('@', '') == friend.pseudonym)
+        .where((r) => r.peerPseudonym.replaceAll('@', '') == friend.pseudonym)
         .toList();
     if (existing.isNotEmpty) {
       router.push('/chat/${existing.first.roomId}');
@@ -695,7 +699,8 @@ class _VibeBubble extends ConsumerWidget {
     } on DmGatingException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not start chat: $e')));
+      messenger
+          .showSnackBar(SnackBar(content: Text('Could not start chat: $e')));
     }
   }
 }
@@ -721,8 +726,7 @@ class _PendingRequestsCard extends StatelessWidget {
             onTap: onTap,
             borderRadius: BorderRadius.circular(24),
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               child: Row(
                 children: [
                   Container(
@@ -804,24 +808,28 @@ class _ConversationsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
       child: Row(
         children: [
           Text(
-            'Conversations',
+            'Messages',
             style: TextStyle(
               color: context.ink,
               fontWeight: FontWeight.w900,
-              fontSize: 18,
+              fontSize: 21,
             ),
           ),
           const Spacer(),
-          IconButton(
-            tooltip: 'Filter',
+          TextButton(
             onPressed: () => _showFilterSheet(context),
-            icon: const Icon(Icons.tune_rounded,
-                color: VentlyColors.berryMagenta, size: 20),
-            visualDensity: VisualDensity.compact,
+            style: TextButton.styleFrom(
+              foregroundColor: VentlyColors.berryMagenta,
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text(
+              'Filters',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+            ),
           ),
         ],
       ),
@@ -897,7 +905,6 @@ class _ConversationRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final typing = ref.watch(typingProvider(room.roomId)).valueOrNull ?? false;
     final isRequest = room.roomStatus == 'pending_request';
-    // Treat pending requests as "unread" so they get the accent bar.
     final unread = room.unreadCount > 0 || isRequest;
     final activityAt = room.lastMessageAt ?? room.createdAt;
     return Pressable(
@@ -908,77 +915,82 @@ class _ConversationRow extends ConsumerWidget {
       onLongPress: () => _showActionsSheet(context, ref),
       child: Material(
         color: Colors.transparent,
-        child: GlassCard(
-          padding: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
           child: Row(
             children: [
-              // Magenta accent bar for unread / new rows
-              Container(
-                width: 4,
-                height: 64,
-                margin: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: unread
-                      ? VentlyColors.berryMagenta
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+              ProfileAvatar(
+                avatarSeed: room.peerAvatarSeed,
+                label: room.peerPseudonym,
+                size: 54,
               ),
-              const SizedBox(width: 6),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: ProfileAvatar(
-                  avatarSeed: room.peerAvatarSeed,
-                  label: room.peerPseudonym,
-                  size: 50,
-                ),
-              ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _displayName(room.peerPseudonym),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: context.ink,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            _smartTimestamp(activityAt).toUpperCase(),
-                            style: TextStyle(
-                              color: context.ink
-                                  .withOpacity(0.55),
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.4,
-                            ),
-                          ),
-                        ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _displayName(room.peerPseudonym),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: context.ink,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
                       ),
-                      const SizedBox(height: 4),
-                      _LastMessageLine(
-                        room: room,
-                        typing: typing,
-                        isRequest: isRequest,
-                        unread: unread,
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 5),
+                    _LastMessageLine(
+                      room: room,
+                      typing: typing,
+                      isRequest: isRequest,
+                      unread: unread,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 44,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _smartTimestamp(activityAt),
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: context.inkFaint,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (room.unreadCount > 0)
+                      Container(
+                        constraints:
+                            const BoxConstraints(minWidth: 24, minHeight: 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: VentlyColors.berryMagenta,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          room.unreadCount > 99 ? '99+' : '${room.unreadCount}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      )
+                    else
+                      const SizedBox(height: 24),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -1000,9 +1012,7 @@ class _ConversationRow extends ConsumerWidget {
     final diff = now.difference(ts);
     if (diff.inMinutes < 1) return 'Just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (now.year == ts.year &&
-        now.month == ts.month &&
-        now.day == ts.day) {
+    if (now.year == ts.year && now.month == ts.month && now.day == ts.day) {
       return '${diff.inHours}h ago';
     }
     final yesterday = DateTime(now.year, now.month, now.day - 1);
@@ -1043,12 +1053,10 @@ class _ConversationRow extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.delete_outline,
-                    color: context.ink),
+                leading: Icon(Icons.delete_outline, color: context.ink),
                 title: Text('Delete conversation',
                     style: TextStyle(
-                        color: context.ink,
-                        fontWeight: FontWeight.w800)),
+                        color: context.ink, fontWeight: FontWeight.w800)),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
                   try {
@@ -1163,8 +1171,7 @@ class _ConversationRow extends ConsumerWidget {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: const Text(
                         'Ignore',
@@ -1191,8 +1198,7 @@ class _ConversationRow extends ConsumerWidget {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: const Text(
                         'Accept',
@@ -1210,12 +1216,7 @@ class _ConversationRow extends ConsumerWidget {
   }
 }
 
-/// Per-row last-message line. Shows a "[Encrypted]" prefix on active
-/// rooms (matches the Image #14 brief — Venttly DMs travel over TLS and
-/// are server-side moderated; the prefix communicates the privacy badge
-/// without misrepresenting the architecture as full E2EE). Pending
-/// requests get an honest "New message request" label, and active typing
-/// short-circuits the line entirely.
+/// Per-row last-message line with a compact privacy glyph and read state.
 class _LastMessageLine extends StatelessWidget {
   const _LastMessageLine({
     required this.room,
@@ -1281,36 +1282,26 @@ class _LastMessageLine extends StatelessWidget {
     }
     final preview = (room.lastMessagePreview ?? room.requestPreview).trim();
     final previewStyle = TextStyle(
-      color: unread
-          ? context.ink
-          : context.ink.withOpacity(0.66),
+      color: unread ? context.ink : context.ink.withOpacity(0.66),
       fontWeight: unread ? FontWeight.w900 : FontWeight.w700,
       fontSize: 12.5,
       height: 1.3,
     );
     return Row(
       children: [
+        Icon(
+          Icons.lock_outline_rounded,
+          size: 13,
+          color: context.inkFaint,
+        ),
+        const SizedBox(width: 5),
         Expanded(
-          child: RichText(
+          child: Text(
+            preview.isEmpty ? 'Tap to open chat' : preview,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            text: TextSpan(
-              style: previewStyle,
-              children: [
-                const TextSpan(
-                  text: '[Encrypted] ',
-                  style: TextStyle(
-                    color: VentlyColors.berryMagenta,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                TextSpan(
-                  text: preview.isEmpty ? 'Tap to open chat' : preview,
-                  style: TextStyle(
-                    fontStyle: preview.isEmpty ? FontStyle.italic : null,
-                  ),
-                ),
-              ],
+            style: previewStyle.copyWith(
+              fontStyle: preview.isEmpty ? FontStyle.italic : null,
             ),
           ),
         ),
@@ -1476,8 +1467,7 @@ class _LoadingSkeleton extends StatelessWidget {
         decoration: BoxDecoration(
           color: context.glass(0.9),
           borderRadius: BorderRadius.circular(22),
-          border:
-              Border.all(color: VentlyColors.softMauve.withOpacity(0.30)),
+          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.30)),
         ),
       ),
     );

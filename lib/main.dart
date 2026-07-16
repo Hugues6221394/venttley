@@ -66,26 +66,90 @@ Future<void> main() async {
       options.attachScreenshot = false;
       // Defence in depth — strip any PII that slipped into tags or
       // contexts on top of [PiiScrubber] at the Logger boundary.
-      options.beforeSend = (event, hint) {
-        final scrubbedTags = event.tags == null
-            ? null
-            : Map<String, String>.fromEntries(
-                event.tags!.entries.where(
-                  (e) => PiiScrubber.scrub({e.key: e.value}).isNotEmpty,
-                ),
-              );
-        return event.copyWith(
-          user: null,
-          request: null,
-          tags: scrubbedTags,
-        );
-      };
+      options.beforeSend = (event, hint) => _scrubSentryEvent(event);
     },
     appRunner: () {
       TelemetryService.instance.markSentryReady();
       _wireLoggerToSentry();
       runApp(const ProviderScope(child: VentlyApp()));
     },
+  );
+}
+
+SentryEvent _scrubSentryEvent(SentryEvent event) {
+  final tags = <String, String>{};
+  for (final entry in event.tags?.entries ??
+      const Iterable<MapEntry<String, String>>.empty()) {
+    final scrubbed = PiiScrubber.scrub({entry.key: entry.value});
+    final value = scrubbed[entry.key];
+    if (value != null) tags[entry.key] = value.toString();
+  }
+  final breadcrumbs = event.breadcrumbs
+      ?.map(
+        (breadcrumb) => breadcrumb.copyWith(
+          message: breadcrumb.message == null
+              ? null
+              : PiiScrubber.scrubText(breadcrumb.message!),
+          data: breadcrumb.data == null
+              ? null
+              : PiiScrubber.scrub(
+                  Map<String, Object?>.from(breadcrumb.data!),
+                ),
+        ),
+      )
+      .toList();
+  final exceptions = event.exceptions
+      ?.map(
+        (exception) => exception.copyWith(
+          value: exception.value == null
+              ? null
+              : PiiScrubber.scrubText(exception.value!),
+          throwable: exception.throwable == null
+              ? null
+              : PiiScrubber.scrubError(exception.throwable),
+        ),
+      )
+      .toList();
+  final eventMessage = event.message;
+  final message = eventMessage?.copyWith(
+    formatted: PiiScrubber.scrubText(eventMessage.formatted),
+    template: eventMessage.template == null
+        ? null
+        : PiiScrubber.scrubText(eventMessage.template!),
+    params: eventMessage.params
+        ?.map((value) => PiiScrubber.scrubText(value.toString()))
+        .toList(),
+  );
+
+  // Build a clean event instead of copyWith: Sentry's nullable copyWith fields
+  // cannot clear an existing user or request once one has been attached.
+  return SentryEvent(
+    eventId: event.eventId,
+    timestamp: event.timestamp,
+    modules: event.modules,
+    tags: tags,
+    fingerprint: event.fingerprint,
+    breadcrumbs: breadcrumbs,
+    exceptions: exceptions,
+    threads: event.threads,
+    sdk: event.sdk,
+    platform: event.platform,
+    logger: event.logger,
+    serverName: event.serverName,
+    release: event.release,
+    dist: event.dist,
+    environment: event.environment,
+    message: message,
+    transaction: event.transaction,
+    throwable: event.throwable == null
+        ? null
+        : PiiScrubber.scrubError(event.throwable),
+    level: event.level,
+    culprit:
+        event.culprit == null ? null : PiiScrubber.scrubText(event.culprit!),
+    contexts: event.contexts,
+    debugMeta: event.debugMeta,
+    type: event.type,
   );
 }
 
@@ -99,8 +163,8 @@ void _wireLoggerToSentry() {
   Logger.instance.onRecord = (record) {
     final breadcrumbLevel = switch (record.level) {
       LogLevel.debug => SentryLevel.debug,
-      LogLevel.info  => SentryLevel.info,
-      LogLevel.warn  => SentryLevel.warning,
+      LogLevel.info => SentryLevel.info,
+      LogLevel.warn => SentryLevel.warning,
       LogLevel.error => SentryLevel.error,
     };
     Sentry.addBreadcrumb(
@@ -186,8 +250,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       await NotificationsService.instance.init(
         onTap: (payload) {
           if (payload == null || payload.isEmpty) return;
-          ref.read(pendingNotificationPayloadProvider.notifier).state =
-              payload;
+          ref.read(pendingNotificationPayloadProvider.notifier).state = payload;
           handlePendingNotificationNavigation(ref);
         },
       );
@@ -207,8 +270,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
     ref.listen(sessionProvider, (prev, next) {
       if (next != null) {
         handlePendingNotificationNavigation(ref);
-        PushRegistrationService.instance
-            .init(ref.read(repositoryProvider));
+        PushRegistrationService.instance.init(ref.read(repositoryProvider));
         ref.invalidate(tribeChatInboxProvider);
         _startPresenceHeartbeat();
       } else {

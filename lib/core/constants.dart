@@ -74,27 +74,6 @@ class VentlyConfig {
   static double get sentryTracesSampleRate =>
       double.tryParse(_sentryTracesRaw) ?? 0.1;
 
-  /// Optional Groq API key used by the Tier-2 LlamaGuard moderation call.
-  /// Pass at build time:
-  ///   flutter run --dart-define=GROQ_API_KEY=gsk_...
-  ///
-  /// When empty, the moderation pipeline runs Tier-1 keyword scan only and
-  /// the LLM step is skipped (safe-fail, not block-fail).
-  static const String groqApiKey = String.fromEnvironment(
-    'GROQ_API_KEY',
-    defaultValue: '',
-  );
-
-  /// Groq chat model used for safety triage. The model is prompted to emit
-  /// a strict JSON verdict so we can keep the moderation contract identical
-  /// across whatever model Groq surfaces on the account. Override at build
-  /// time when the plan changes:
-  ///   flutter run --dart-define=GROQ_GUARD_MODEL=llama-3.3-70b-versatile
-  static const String groqGuardModel = String.fromEnvironment(
-    'GROQ_GUARD_MODEL',
-    defaultValue: 'llama-3.3-70b-versatile',
-  );
-
   // =========================================================================
   // Phase A — service env keys
   //
@@ -192,56 +171,95 @@ class VentlyConfig {
 
   // Convenience getters — true only when the corresponding integration
   // has been provisioned in the ops dashboard.
-  static bool get isClerkEnabled         => clerkPublishableKey.isNotEmpty;
-  static bool get isPosthogEnabled       => posthogKey.isNotEmpty;
-  static bool get isUpstashEnabled       => upstashRedisRestUrl.isNotEmpty &&
-                                            upstashRedisRestToken.isNotEmpty;
-  static bool get isMeilisearchEnabled   => meilisearchHost.isNotEmpty;
-  static bool get isResendEnabled        => resendEnabled;
-  static bool get isStripeEnabled        => stripePublishableKey.isNotEmpty;
-  static bool get isFcmEnabled           => fcmEnabled;
-  static bool get isOtelEnabled          => otelEndpoint.isNotEmpty;
-  static bool get isSentryEnabled        => sentryDsn.isNotEmpty;
+  static bool get isClerkEnabled => clerkPublishableKey.isNotEmpty;
+  static bool get isPosthogEnabled => posthogKey.isNotEmpty;
+  static bool get isUpstashEnabled =>
+      upstashRedisRestUrl.isNotEmpty && upstashRedisRestToken.isNotEmpty;
+  static bool get isMeilisearchEnabled => meilisearchHost.isNotEmpty;
+  static bool get isResendEnabled => resendEnabled;
+  static bool get isStripeEnabled => stripePublishableKey.isNotEmpty;
+  static bool get isFcmEnabled => fcmEnabled;
+  static bool get isOtelEnabled => otelEndpoint.isNotEmpty;
+  static bool get isSentryEnabled => sentryDsn.isNotEmpty;
 }
 
 /// The eighteen + two emotional story channels.
 class FeedCategories {
   static const List<String> all = [
-    'confessions', 'testimonies', 'relationships', 'family_issues',
-    'mental_health', 'campus_life', 'adulting', 'regrets', 'trauma',
-    'friendship', 'faith_spirituality', 'questions', 'secrets', 'vent_zone',
-    'dark_thoughts', 'funny_confessions', 'dreams_goals', 'hot_takes',
-    'late_night', 'healing_corner',
+    'confessions',
+    'testimonies',
+    'relationships',
+    'family_issues',
+    'mental_health',
+    'campus_life',
+    'adulting',
+    'regrets',
+    'trauma',
+    'friendship',
+    'faith_spirituality',
+    'questions',
+    'secrets',
+    'vent_zone',
+    'dark_thoughts',
+    'funny_confessions',
+    'dreams_goals',
+    'hot_takes',
+    'late_night',
+    'healing_corner',
   ];
 
   /// Categories that disable DM initiation to protect vulnerable users.
   static const Set<String> dmRestricted = {'confessions', 'trauma'};
 
   /// Categories that surface crisis helplines + heightened safety scans.
-  static const Set<String> crisisAware = {'dark_thoughts', 'trauma', 'mental_health'};
+  static const Set<String> crisisAware = {
+    'dark_thoughts',
+    'trauma',
+    'mental_health'
+  };
 
   static String label(String key) {
     switch (key) {
-      case 'family_issues':     return 'Family Issues';
-      case 'mental_health':     return 'Mind & Mood';
-      case 'campus_life':       return 'Campus Life';
-      case 'faith_spirituality':return 'Faith & Beliefs';
-      case 'vent_zone':         return 'Rant Room';
-      case 'dark_thoughts':     return 'Late Thoughts';
-      case 'funny_confessions': return 'Funny Moments';
-      case 'dreams_goals':      return 'Dreams & Goals';
-      case 'hot_takes':         return 'Hot Takes';
-      case 'late_night':        return 'Late Night';
-      case 'healing_corner':    return 'Glow Up';
-      case 'testimonies':       return 'Stories';
-      case 'relationships':     return 'Dating & Love';
-      case 'trauma':            return 'Comebacks';
-      case 'questions':         return 'Ask';
-      case 'friendship':        return 'Friends';
-      case 'adulting':          return 'Adulting';
-      case 'regrets':           return 'Regrets';
-      case 'secrets':           return 'Secrets';
-      case 'confessions':       return 'Confessions';
+      case 'family_issues':
+        return 'Family Issues';
+      case 'mental_health':
+        return 'Mind & Mood';
+      case 'campus_life':
+        return 'Campus Life';
+      case 'faith_spirituality':
+        return 'Faith & Beliefs';
+      case 'vent_zone':
+        return 'Rant Room';
+      case 'dark_thoughts':
+        return 'Late Thoughts';
+      case 'funny_confessions':
+        return 'Funny Moments';
+      case 'dreams_goals':
+        return 'Dreams & Goals';
+      case 'hot_takes':
+        return 'Hot Takes';
+      case 'late_night':
+        return 'Late Night';
+      case 'healing_corner':
+        return 'Glow Up';
+      case 'testimonies':
+        return 'Stories';
+      case 'relationships':
+        return 'Dating & Love';
+      case 'trauma':
+        return 'Comebacks';
+      case 'questions':
+        return 'Ask';
+      case 'friendship':
+        return 'Friends';
+      case 'adulting':
+        return 'Adulting';
+      case 'regrets':
+        return 'Regrets';
+      case 'secrets':
+        return 'Secrets';
+      case 'confessions':
+        return 'Confessions';
       default:
         return key[0].toUpperCase() + key.substring(1);
     }
@@ -251,28 +269,50 @@ class FeedCategories {
 /// Mood badges (kept in sync with the `mood_badge_type` enum in Postgres).
 class Moods {
   static const List<String> all = [
-    'sad', 'lonely', 'angry', 'confused', 'happy', 'healing', 'broken',
-    'hopeful', 'exhausted', 'overthinking', 'anxious', 'grateful',
+    'sad',
+    'lonely',
+    'angry',
+    'confused',
+    'happy',
+    'healing',
+    'broken',
+    'hopeful',
+    'exhausted',
+    'overthinking',
+    'anxious',
+    'grateful',
   ];
 
-  static String label(String key) =>
-      key[0].toUpperCase() + key.substring(1);
+  static String label(String key) => key[0].toUpperCase() + key.substring(1);
 
   static String emoji(String key) {
     switch (key) {
-      case 'sad':           return '\u{1F622}';
-      case 'lonely':        return '\u{1F494}';
-      case 'angry':         return '\u{1F621}';
-      case 'confused':      return '\u{1F615}';
-      case 'happy':         return '\u{1F60A}';
-      case 'healing':       return '\u{1F33F}';
-      case 'broken':        return '\u{1F494}';
-      case 'hopeful':       return '\u{2728}';
-      case 'exhausted':     return '\u{1F635}';
-      case 'overthinking':  return '\u{1F32A}';
-      case 'anxious':       return '\u{1F630}';
-      case 'grateful':      return '\u{1F64F}';
-      default:              return '\u{1FAB7}';
+      case 'sad':
+        return '\u{1F622}';
+      case 'lonely':
+        return '\u{1F494}';
+      case 'angry':
+        return '\u{1F621}';
+      case 'confused':
+        return '\u{1F615}';
+      case 'happy':
+        return '\u{1F60A}';
+      case 'healing':
+        return '\u{1F33F}';
+      case 'broken':
+        return '\u{1F494}';
+      case 'hopeful':
+        return '\u{2728}';
+      case 'exhausted':
+        return '\u{1F635}';
+      case 'overthinking':
+        return '\u{1F32A}';
+      case 'anxious':
+        return '\u{1F630}';
+      case 'grateful':
+        return '\u{1F64F}';
+      default:
+        return '\u{1FAB7}';
     }
   }
 }
