@@ -82,11 +82,29 @@ class FeedScreen extends ConsumerWidget {
               data: (posts) {
                 final feedPosts =
                     posts.where((post) => !post.isWhisper).toList();
+                final recommendedPosts = (discoveryPosts ?? const <Post>[])
+                    .where((post) => !post.isWhisper)
+                    .take(12)
+                    .toList();
+                final showingRecommendations =
+                    feedPosts.isEmpty && recommendedPosts.isNotEmpty;
+                final visiblePosts =
+                    showingRecommendations ? recommendedPosts : feedPosts;
                 final discovery = HomeDiscovery.from(
                   posts: discoveryPosts ?? posts,
                   tribes: tribes,
                 );
-                final stories = storiesAsync.valueOrNull ?? const <VentStory>[];
+                final friendStories =
+                    storiesAsync.valueOrNull ?? const <VentStory>[];
+                final communityStories = (discoveryPosts ?? const <Post>[])
+                    .where((post) => post.isWhisper)
+                    .map(VentStory.fromPost)
+                    .take(12)
+                    .toList();
+                final showingCommunityStories =
+                    friendStories.isEmpty && communityStories.isNotEmpty;
+                final stories =
+                    showingCommunityStories ? communityStories : friendStories;
                 return CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   // Pre-build offscreen items so fast flings never show a
@@ -110,6 +128,7 @@ class FeedScreen extends ConsumerWidget {
                           child: _VentlyStoriesRail(
                             stories: stories,
                             me: me,
+                            showingCommunityStories: showingCommunityStories,
                           ),
                         ),
                       ),
@@ -144,24 +163,52 @@ class FeedScreen extends ConsumerWidget {
                       pinned: true,
                       delegate: _FeedFiltersHeader(filter: filter),
                     ),
-                    if (feedPosts.isEmpty)
+                    if (showingRecommendations)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Recommended from Venttly',
+                                style: TextStyle(
+                                  color: context.ink,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Fresh conversations while this feed learns what matters to you.',
+                                style: TextStyle(
+                                  color: context.inkFaint,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (visiblePosts.isEmpty)
                       const SliverToBoxAdapter(
                         child: VentlyEmptyState(
                           icon: Icons.forum_outlined,
-                          title: 'Your feed is quiet',
+                          title: 'Venttly is just getting started',
                           subtitle:
-                              'Explore tribes, connect with people, or share a vent to see activity here.',
+                              'Explore communities, connect with people, or start the first conversation.',
                         ),
                       )
                     else
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(18, 8, 18, 22),
                         sliver: SliverList.separated(
-                          itemCount: feedPosts.length,
+                          itemCount: visiblePosts.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 14),
                           itemBuilder: (ctx, i) {
-                            final post = feedPosts[i];
+                            final post = visiblePosts[i];
                             return FeedItemEntrance(
                               id: post.postId,
                               index: i,
@@ -509,10 +556,15 @@ class _CompactGreeting extends StatelessWidget {
 }
 
 class _VentlyStoriesRail extends ConsumerWidget {
-  const _VentlyStoriesRail({required this.stories, required this.me});
+  const _VentlyStoriesRail({
+    required this.stories,
+    required this.me,
+    this.showingCommunityStories = false,
+  });
 
   final List<VentStory> stories;
   final AppUser? me;
+  final bool showingCommunityStories;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -585,9 +637,11 @@ class _VentlyStoriesRail extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(
-          title: '24h Vent Stories',
-          padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+        SectionHeader(
+          title: showingCommunityStories
+              ? '24h Stories for you'
+              : '24h Vent Stories',
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
         ),
         SizedBox(
           height: 78,

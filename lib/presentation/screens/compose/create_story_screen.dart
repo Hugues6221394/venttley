@@ -89,6 +89,9 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
     return false;
   }
 
+  bool get _shouldUploadImage =>
+      _mode == _StoryMode.photo && _imageBytes != null;
+
   Future<void> _share() async {
     if (!_canShare) return;
     setState(() => _busy = true);
@@ -100,7 +103,7 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
     String? imagePath;
     try {
       final repo = ref.read(repositoryProvider);
-      if (_imageBytes != null) {
+      if (_shouldUploadImage) {
         stagedMedia = await outbox.stageMedia(
           operationId: operationId,
           bytes: _imageBytes!,
@@ -137,7 +140,7 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
         const SnackBar(content: Text('Story posted for 24 hours.')),
       );
     } catch (e) {
-      if (_imageBytes == null || stagedMedia != null) {
+      if (!_shouldUploadImage || stagedMedia != null) {
         try {
           await outbox.enqueue(
             OutboxKind.post,

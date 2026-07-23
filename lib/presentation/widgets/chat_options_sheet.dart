@@ -22,6 +22,13 @@ Future<void> showChatOptionsSheet(
   required ChatRoom room,
   required VoidCallback onSearch,
 }) async {
+  if (room.isGroup) {
+    final result = await context.push<String>(
+      '/group-chat/${room.roomId}/settings',
+    );
+    if (result == 'search' && context.mounted) onSearch();
+    return;
+  }
   final action = await showModalBottomSheet<_ChatOptionsAction>(
     context: context,
     isScrollControlled: true,
@@ -117,6 +124,7 @@ class _ChatOptionsSheet extends ConsumerWidget {
               child: ProfileAvatar(
                 avatarSeed: room.peerAvatarSeed,
                 label: displayName,
+                profilePhotoUrl: room.peerProfilePhotoUrl,
                 size: 84,
               ),
             ),

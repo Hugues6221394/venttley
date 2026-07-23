@@ -13,8 +13,10 @@ import 'package:vently_app/presentation/screens/friends/friends_screen.dart';
 import 'package:vently_app/presentation/screens/home/home_shell.dart';
 import 'package:vently_app/presentation/screens/inbox/inbox_screen.dart';
 import 'package:vently_app/presentation/screens/notifications/notifications_screen.dart';
+import 'package:vently_app/presentation/screens/whispers/whispers_screen.dart';
 import 'package:vently_app/presentation/router/app_router.dart';
 import 'package:vently_app/presentation/theme/app_theme.dart';
+import 'package:vently_app/presentation/widgets/post_card.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -52,9 +54,42 @@ void main() {
     );
   });
 
+  testWidgets('empty personal feed falls back to community conversations',
+      (tester) async {
+    await _pumpScreen(
+      tester,
+      const FeedScreen(),
+      feedPosts: const <Post>[],
+      discoveryPosts: _posts,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Recommended from Venttly'),
+      420,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Recommended from Venttly'), findsOneWidget);
+    expect(find.textContaining('accounting course'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empty Whispers keeps real community discovery visible',
+      (tester) async {
+    await _pumpScreen(tester, const WhispersScreen());
+
+    expect(find.text('Be the first voice today'), findsOneWidget);
+    expect(find.text('Conversations for you'), findsOneWidget);
+    expect(find.byType(PostCard), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('premium notifications stay scannable on a compact phone',
       (tester) async {
-    await _pumpScreen(tester, const NotificationsScreen());
+    await _pumpScreen(
+      tester,
+      NotificationsScreen(referenceTime: _notificationReferenceTime),
+    );
 
     expect(find.text('Notifications'), findsOneWidget);
     expect(find.text('All'), findsOneWidget);
@@ -130,7 +165,12 @@ void main() {
 
 const _surfaceKey = Key('premium-member-surface');
 
-Future<void> _pumpScreen(WidgetTester tester, Widget screen) async {
+Future<void> _pumpScreen(
+  WidgetTester tester,
+  Widget screen, {
+  List<Post>? feedPosts,
+  List<Post>? discoveryPosts,
+}) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -155,7 +195,13 @@ Future<void> _pumpScreen(WidgetTester tester, Widget screen) async {
     ProviderScope(
       overrides: [
         repositoryProvider.overrideWithValue(repository),
-        feedPostsProvider.overrideWith((_) => Stream.value(_posts)),
+        feedPostsProvider.overrideWith(
+          (_) => Stream.value(feedPosts ?? _posts),
+        ),
+        if (discoveryPosts != null)
+          homeDiscoveryPostsProvider.overrideWith(
+            (_) async => discoveryPosts,
+          ),
         myFriendsProvider.overrideWith((_) async => _friends),
         incomingFriendRequestsProvider.overrideWith((_) async => _requests),
         outgoingFriendRequestsProvider.overrideWith((_) async => const []),
@@ -165,6 +211,10 @@ Future<void> _pumpScreen(WidgetTester tester, Widget screen) async {
               'active': 3,
             }),
         tribeChatInboxProvider.overrideWith((_) async => const []),
+        inboxTimestampFormatterProvider.overrideWithValue((timestamp) {
+          final age = DateTime.now().difference(timestamp);
+          return age.inHours < 4 ? '2h ago' : 'Yesterday';
+        }),
         notificationsProvider.overrideWith((_) => Stream.value(_notifications)),
         myInvitesProvider.overrideWith((_) async => const []),
       ],
@@ -229,7 +279,7 @@ Future<void> _pumpMemberShell(WidgetTester tester) async {
 }
 
 List<NotificationItem> get _notifications {
-  final now = DateTime.now();
+  final now = _notificationReferenceTime;
   return [
     NotificationItem(
       id: 'notification-1',
@@ -260,6 +310,8 @@ List<NotificationItem> get _notifications {
     ),
   ];
 }
+
+final _notificationReferenceTime = DateTime(2026, 7, 16, 14);
 
 const _user = AppUser(
   userId: 'me',

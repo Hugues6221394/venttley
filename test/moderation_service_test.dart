@@ -12,6 +12,26 @@ void main() {
       expect(result.categories, contains(HazardCategory.privacy));
     });
 
+    test('blocks a plausible international phone number locally', () async {
+      final result = await ModerationService().review(
+        'Call me on +250 788 123 456',
+      );
+
+      expect(result.verdict, SafetyVerdict.block);
+      expect(result.categories, contains(HazardCategory.privacy));
+    });
+
+    test('does not mistake compact or formatted dates for phone numbers',
+        () async {
+      final service = ModerationService();
+
+      final compact = await service.review('Release check 20260718');
+      final formatted = await service.review('The appointment is 2026-07-18');
+
+      expect(compact.verdict, SafetyVerdict.safe);
+      expect(formatted.verdict, SafetyVerdict.safe);
+    });
+
     test('warns for self-harm language without blocking help', () async {
       final result = await ModerationService().review('I want to die');
 

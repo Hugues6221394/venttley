@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -24,6 +25,7 @@ import 'presentation/widgets/vently_premium_background.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  VentlyConfig.validateBackendConfiguration();
 
   // Performance — bump the Flutter image cache from its 100/100MB
   // defaults so the feed + Whispers + Discover surfaces (lots of
@@ -204,6 +206,26 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   /// Presence heartbeat — stamps users.last_seen_at every ~60s while the
   /// app is foregrounded so peers see Online / Active recently (0114).
   Timer? _presenceTimer;
+  StreamSubscription<Uri>? _appLinkSubscription;
+  String? _pendingDeepLinkPath;
+
+  void _handleAppLink(Uri uri) {
+    final path = groupInvitePathFromUri(uri);
+    if (path == null) return;
+    if (ref.read(sessionProvider) == null) {
+      _pendingDeepLinkPath = path;
+      return;
+    }
+    _pendingDeepLinkPath = null;
+    ref.read(routerProvider).go(path);
+  }
+
+  void _flushPendingDeepLink() {
+    final path = _pendingDeepLinkPath;
+    if (path == null || ref.read(sessionProvider) == null) return;
+    _pendingDeepLinkPath = null;
+    ref.read(routerProvider).go(path);
+  }
 
   void _startPresenceHeartbeat() {
     _presenceTimer?.cancel();
@@ -233,6 +255,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   @override
   void dispose() {
     _stopPresenceHeartbeat();
+    _appLinkSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -241,6 +264,14 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _appLinkSubscription = AppLinks().uriLinkStream.listen(
+          _handleAppLink,
+          onError: (Object error, StackTrace stack) => Logger.instance.warn(
+            'app_link.invalid',
+            error: error,
+            stack: stack,
+          ),
+        );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       ref.read(sessionProvider.notifier).restore();
       AnalyticsService.instance.track(Events.appOpened);
@@ -270,6 +301,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
     ref.listen(sessionProvider, (prev, next) {
       if (next != null) {
         handlePendingNotificationNavigation(ref);
+        _flushPendingDeepLink();
         PushRegistrationService.instance.init(ref.read(repositoryProvider));
         ref.invalidate(tribeChatInboxProvider);
         _startPresenceHeartbeat();
@@ -295,9 +327,33 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       // screens opt in by making their Scaffold transparent.
       builder: (context, child) => VentlyPremiumBackground(
         child: NotificationForegroundListener(
+          router: router,
           child: child ?? const SizedBox.shrink(),
         ),
       ),
     );
   }
+}
+
+/// Converts the only public custom scheme Venttly currently supports into an
+/// internal route. Keeping this parser strict prevents arbitrary deep links
+/// from bypassing the router's normal navigation and authentication rules.
+String? groupInvitePathFromUri(Uri uri) {
+  if (uri.scheme.toLowerCase() != 'venttly') return null;
+
+  String? token;
+  if (uri.host.toLowerCase() == 'group-invite' &&
+      uri.pathSegments.length == 1) {
+    token = uri.pathSegments.single;
+  } else if (uri.host.isEmpty &&
+      uri.pathSegments.length == 2 &&
+      uri.pathSegments.first.toLowerCase() == 'group-invite') {
+    token = uri.pathSegments.last;
+  }
+
+  final normalized = token?.trim();
+  if (normalized == null || normalized.isEmpty || normalized.length > 128) {
+    return null;
+  }
+  return '/group-invite/${Uri.encodeComponent(normalized)}';
 }

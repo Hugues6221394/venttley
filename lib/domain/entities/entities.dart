@@ -872,6 +872,10 @@ class ChatRoom {
   final String peerPseudonym;
   final String peerAvatarSeed;
 
+  /// Uploaded public profile photo for direct-message peers. Group rooms use
+  /// [groupAvatarPath] because their media lives in a private storage bucket.
+  final String? peerProfilePhotoUrl;
+
   /// The peer's user id (from inbox_rooms.peer_id) — for opening their profile.
   final String? peerUserId;
   final String requestPreview;
@@ -896,6 +900,11 @@ class ChatRoom {
   final bool isGroup;
   final String? groupTitle;
   final int memberCount;
+  final String? groupAvatarPath;
+  final String? groupInviteToken;
+  final bool groupInviteEnabled;
+  final bool groupAllowMemberInvites;
+  final bool isGroupOwner;
 
   const ChatRoom({
     required this.roomId,
@@ -906,6 +915,7 @@ class ChatRoom {
     required this.createdAt,
     required this.initiatedByMe,
     this.peerUserId,
+    this.peerProfilePhotoUrl,
     this.unreadCount = 0,
     this.lastMessagePreview,
     this.lastMessageAt,
@@ -913,6 +923,55 @@ class ChatRoom {
     this.isGroup = false,
     this.groupTitle,
     this.memberCount = 2,
+    this.groupAvatarPath,
+    this.groupInviteToken,
+    this.groupInviteEnabled = false,
+    this.groupAllowMemberInvites = false,
+    this.isGroupOwner = false,
+  });
+}
+
+class GroupChatMember {
+  final String userId;
+  final String pseudonym;
+  final String avatarSeed;
+  final String? profilePhotoUrl;
+  final bool isVerified;
+  final String memberRole;
+  final String? nickname;
+  final DateTime joinedAt;
+  final bool isMe;
+
+  const GroupChatMember({
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.isVerified,
+    required this.memberRole,
+    required this.joinedAt,
+    required this.isMe,
+    this.profilePhotoUrl,
+    this.nickname,
+  });
+
+  bool get isOwner => memberRole == 'owner';
+  bool get isAdmin => memberRole == 'admin';
+  String get displayName => nickname?.trim().isNotEmpty == true
+      ? nickname!.trim()
+      : '@${pseudonym.replaceFirst('@', '')}';
+}
+
+class GroupInvitePreview {
+  final String roomId;
+  final String title;
+  final String? avatarPath;
+  final int memberCount;
+
+  const GroupInvitePreview({
+    required this.roomId,
+    required this.title,
+    required this.memberCount,
+    this.avatarPath,
   });
 }
 
@@ -1027,6 +1086,7 @@ class ChatMessage {
       attachedPostId: attachedPostId,
       attachedPostSnapshot: attachedPostSnapshot,
       readAt: readAt,
+      deliveredAt: deliveredAt,
       reactionCounts: reactionCounts ?? this.reactionCounts,
       myReaction: myReaction == _unsetReaction
           ? this.myReaction
@@ -1258,6 +1318,42 @@ class NotificationItem {
     required this.isRead,
     this.payload = const {},
   });
+
+  /// Human-readable copy for legacy notification rows that predate the
+  /// current payload contract. Raw payloads stay untouched for routing.
+  String get displayBody {
+    final suppliedBody = body.trim();
+    if (suppliedBody.isNotEmpty) return suppliedBody;
+
+    final legacyMessage = (payload['message'] as String?)?.trim() ?? '';
+    if (legacyMessage.isNotEmpty) return legacyMessage;
+
+    switch (kind) {
+      case 'post_like':
+        return 'liked your vent.';
+      case 'comment_like':
+        return 'liked your reply.';
+      case 'comment_reply':
+        return 'replied to your vent.';
+      case 'mention':
+        return 'mentioned you in a conversation.';
+      case 'friend_request':
+      case 'new_follower':
+        return 'wants to connect with you.';
+      case 'friend_accepted':
+        return 'accepted your connection request.';
+      case 'tribe_prompt':
+        return 'A new conversation is ready in your tribe.';
+      case 'tribe_invite':
+        return 'invited you to join a tribe.';
+      case 'message_request':
+        return 'sent you a message request.';
+      case 'moderation_action':
+        return 'Open to review this safety update.';
+      default:
+        return 'Open to view details.';
+    }
+  }
 }
 
 /// Friend graph state between the current user and a target user. Used
@@ -1989,12 +2085,14 @@ class DmRoomPrefs {
   final String? peerNickname;
   final int disappearingSeconds; // 0 = off
   final String theme;
+  final String fontStyle;
 
   const DmRoomPrefs({
     this.muted = false,
     this.peerNickname,
     this.disappearingSeconds = 0,
     this.theme = 'default',
+    this.fontStyle = 'default',
   });
 
   static const empty = DmRoomPrefs();

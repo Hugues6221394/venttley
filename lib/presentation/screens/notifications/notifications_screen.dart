@@ -20,7 +20,9 @@ enum _ActivityFilter { all, unread }
 /// stream. Read state and routing remain server-owned; the local filter only
 /// changes presentation.
 class NotificationsScreen extends ConsumerStatefulWidget {
-  const NotificationsScreen({super.key});
+  const NotificationsScreen({super.key, this.referenceTime});
+
+  final DateTime? referenceTime;
 
   @override
   ConsumerState<NotificationsScreen> createState() =>
@@ -169,7 +171,10 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         if (visibleItems.isEmpty)
           const _UnreadEmpty()
         else
-          ..._sectioned(visibleItems),
+          ..._sectioned(
+            visibleItems,
+            referenceTime: widget.referenceTime,
+          ),
       ],
     );
   }
@@ -231,8 +236,11 @@ class _ActivityFilterBar extends StatelessWidget {
   }
 }
 
-List<Widget> _sectioned(List<NotificationItem> items) {
-  final now = DateTime.now();
+List<Widget> _sectioned(
+  List<NotificationItem> items, {
+  DateTime? referenceTime,
+}) {
+  final now = referenceTime ?? DateTime.now();
   final midnight = DateTime(now.year, now.month, now.day);
   final weekAgo = now.subtract(const Duration(days: 7));
   final today = <NotificationItem>[];
@@ -253,15 +261,18 @@ List<Widget> _sectioned(List<NotificationItem> items) {
   return [
     if (today.isNotEmpty) ...[
       const _SectionHeader(label: 'Today'),
-      for (final item in today) _NotificationTile(item: item),
+      for (final item in today)
+        _NotificationTile(item: item, referenceTime: now),
     ],
     if (week.isNotEmpty) ...[
       const _SectionHeader(label: 'This week'),
-      for (final item in week) _NotificationTile(item: item),
+      for (final item in week)
+        _NotificationTile(item: item, referenceTime: now),
     ],
     if (earlier.isNotEmpty) ...[
       const _SectionHeader(label: 'Earlier'),
-      for (final item in earlier) _NotificationTile(item: item),
+      for (final item in earlier)
+        _NotificationTile(item: item, referenceTime: now),
     ],
   ];
 }
@@ -408,9 +419,10 @@ class _InviteCardState extends ConsumerState<_InviteCard> {
 }
 
 class _NotificationTile extends ConsumerStatefulWidget {
-  const _NotificationTile({required this.item});
+  const _NotificationTile({required this.item, required this.referenceTime});
 
   final NotificationItem item;
+  final DateTime referenceTime;
 
   @override
   ConsumerState<_NotificationTile> createState() => _NotificationTileState();
@@ -515,6 +527,7 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
   Widget build(BuildContext context) {
     final unread = !item.isRead;
     final accent = _accentFor(item.kind);
+    final displayBody = item.displayBody;
     final hasRequestActions = item.kind == 'friend_request' &&
         unread &&
         item.payload['friendship_id'] != null;
@@ -524,7 +537,8 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
 
     return Semantics(
       button: true,
-      label: '${item.title}. ${item.body}. ${_relativeTime(item.createdAt)}',
+      label:
+          '${item.title}. $displayBody. ${_relativeTime(item.createdAt, now: widget.referenceTime)}',
       child: Material(
         color: unread
             ? VentlyColors.roseTint.withOpacity(context.isDark ? 0.10 : 0.58)
@@ -557,14 +571,13 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
-                            if (item.body.trim().isNotEmpty)
-                              TextSpan(
-                                text: '  ${item.body.trim()}',
-                                style: TextStyle(
-                                  color: context.inkMuted,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                            TextSpan(
+                              text: '  $displayBody',
+                              style: TextStyle(
+                                color: context.inkMuted,
+                                fontWeight: FontWeight.w500,
                               ),
+                            ),
                           ],
                         ),
                         maxLines: 3,
@@ -573,7 +586,10 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        _relativeTime(item.createdAt),
+                        _relativeTime(
+                          item.createdAt,
+                          now: widget.referenceTime,
+                        ),
                         style: TextStyle(
                           color: context.inkFaint,
                           fontSize: 11,
@@ -902,8 +918,8 @@ class _NotificationSkeleton extends StatelessWidget {
   }
 }
 
-String _relativeTime(DateTime value) {
-  final difference = DateTime.now().difference(value.toLocal());
+String _relativeTime(DateTime value, {DateTime? now}) {
+  final difference = (now ?? DateTime.now()).difference(value.toLocal());
   if (difference.inMinutes < 1) return 'Just now';
   if (difference.inMinutes < 60) return '${difference.inMinutes}m';
   if (difference.inHours < 24) return '${difference.inHours}h';

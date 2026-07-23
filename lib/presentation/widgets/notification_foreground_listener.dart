@@ -11,7 +11,13 @@ import '../../domain/tribe/tribe_chat_hub.dart';
 /// Watches inbox realtime updates and surfaces foreground local notifications
 /// with deep-link payloads when the user isn't already in that chat.
 class NotificationForegroundListener extends ConsumerStatefulWidget {
-  const NotificationForegroundListener({super.key, required this.child});
+  const NotificationForegroundListener({
+    super.key,
+    required this.router,
+    required this.child,
+  });
+
+  final GoRouter router;
   final Widget child;
 
   @override
@@ -28,11 +34,12 @@ class _NotificationForegroundListenerState
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AsyncValue<List<ChatRoom>>>(allInboxRoomsStreamProvider, (prev, next) {
+    ref.listen<AsyncValue<List<ChatRoom>>>(allInboxRoomsStreamProvider,
+        (prev, next) {
       final rooms = next.valueOrNull;
       if (rooms == null) return;
 
-      final location = GoRouterState.of(context).matchedLocation;
+      final location = widget.router.routeInformationProvider.value.uri.path;
 
       for (final room in rooms) {
         if (room.roomStatus == 'pending_request' && !room.initiatedByMe) {
@@ -65,12 +72,12 @@ class _NotificationForegroundListenerState
       }
     });
 
-    ref.listen<AsyncValue<List<TribeChatInboxSummary>>>(
-        tribeChatInboxProvider, (prev, next) {
+    ref.listen<AsyncValue<List<TribeChatInboxSummary>>>(tribeChatInboxProvider,
+        (prev, next) {
       final summaries = next.valueOrNull;
       if (summaries == null) return;
 
-      final location = GoRouterState.of(context).matchedLocation;
+      final location = widget.router.routeInformationProvider.value.uri.path;
 
       for (final s in summaries) {
         final prevUnread = _lastUnreadByTribe[s.tribeId] ?? 0;
@@ -82,9 +89,8 @@ class _NotificationForegroundListenerState
         if (location.startsWith('/tribe/${s.slug}/chat')) continue;
 
         final preview = s.lastMessagePreview?.trim();
-        final isNewMessage = preview != null &&
-            preview.isNotEmpty &&
-            preview != prevPreview;
+        final isNewMessage =
+            preview != null && preview.isNotEmpty && preview != prevPreview;
 
         if (!isNewMessage && prevUnread > 0) continue;
 

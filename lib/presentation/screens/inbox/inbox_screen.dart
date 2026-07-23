@@ -33,6 +33,14 @@ class InboxScreen extends ConsumerStatefulWidget {
 
 enum _InboxFilter { all, active, requests }
 
+typedef InboxTimestampFormatter = String Function(DateTime timestamp);
+
+/// Keeps relative-time rendering replaceable for deterministic golden tests.
+/// Production always uses the live clock via [_smartInboxTimestamp].
+final inboxTimestampFormatterProvider = Provider<InboxTimestampFormatter>(
+  (_) => _smartInboxTimestamp,
+);
+
 class _InboxScreenState extends ConsumerState<InboxScreen> {
   _InboxFilter _filter = _InboxFilter.all;
   final TextEditingController _query = TextEditingController();
@@ -904,9 +912,16 @@ class _ConversationRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final typing = ref.watch(typingProvider(room.roomId)).valueOrNull ?? false;
+    final formatTimestamp = ref.watch(inboxTimestampFormatterProvider);
     final isRequest = room.roomStatus == 'pending_request';
     final unread = room.unreadCount > 0 || isRequest;
     final activityAt = room.lastMessageAt ?? room.createdAt;
+    final avatarUrl = room.isGroup && room.groupAvatarPath != null
+        ? ref.watch(groupAvatarUrlProvider(room.groupAvatarPath!)).valueOrNull
+        : room.peerProfilePhotoUrl;
+    final displayName = room.isGroup
+        ? (room.groupTitle ?? room.peerPseudonym)
+        : room.peerPseudonym;
     return Pressable(
       pressedScale: 0.98,
       onTap: () => isRequest
@@ -920,8 +935,10 @@ class _ConversationRow extends ConsumerWidget {
           child: Row(
             children: [
               ProfileAvatar(
-                avatarSeed: room.peerAvatarSeed,
-                label: room.peerPseudonym,
+                avatarSeed:
+                    room.isGroup ? 'group-${room.roomId}' : room.peerAvatarSeed,
+                label: displayName,
+                profilePhotoUrl: avatarUrl,
                 size: 54,
               ),
               const SizedBox(width: 16),
@@ -931,7 +948,7 @@ class _ConversationRow extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _displayName(room.peerPseudonym),
+                      _displayName(displayName),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -958,7 +975,7 @@ class _ConversationRow extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _smartTimestamp(activityAt),
+                      formatTimestamp(activityAt),
                       maxLines: 1,
                       style: TextStyle(
                         color: context.inkFaint,
@@ -1005,26 +1022,6 @@ class _ConversationRow extends ConsumerWidget {
         .where((w) => w.isNotEmpty)
         .map((w) => w[0].toUpperCase() + w.substring(1))
         .join(' ');
-  }
-
-  static String _smartTimestamp(DateTime ts) {
-    final now = DateTime.now();
-    final diff = now.difference(ts);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (now.year == ts.year && now.month == ts.month && now.day == ts.day) {
-      return '${diff.inHours}h ago';
-    }
-    final yesterday = DateTime(now.year, now.month, now.day - 1);
-    if (ts.isAfter(yesterday) &&
-        ts.isBefore(DateTime(now.year, now.month, now.day))) {
-      return 'Yesterday';
-    }
-    if (diff.inDays < 7) {
-      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return days[ts.weekday - 1];
-    }
-    return '${ts.month}/${ts.day}';
   }
 
   void _showActionsSheet(BuildContext context, WidgetRef ref) {
@@ -1489,3 +1486,25 @@ final _allRoomsProvider = FutureProvider.autoDispose<List<ChatRoom>>(
     return all;
   },
 );
+
+String _smartInboxTimestamp(DateTime timestamp) {
+  final now = DateTime.now();
+  final diff = now.difference(timestamp);
+  if (diff.inMinutes < 1) return 'Just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (now.year == timestamp.year &&
+      now.month == timestamp.month &&
+      now.day == timestamp.day) {
+    return '${diff.inHours}h ago';
+  }
+  final yesterday = DateTime(now.year, now.month, now.day - 1);
+  if (timestamp.isAfter(yesterday) &&
+      timestamp.isBefore(DateTime(now.year, now.month, now.day))) {
+    return 'Yesterday';
+  }
+  if (diff.inDays < 7) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days[timestamp.weekday - 1];
+  }
+  return '${timestamp.month}/${timestamp.day}';
+}

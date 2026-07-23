@@ -24,53 +24,67 @@ Future<String?> showReportReasonSheet(
 }) {
   return showModalBottomSheet<String>(
     context: context,
+    isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder: (ctx) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(2),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(ctx).height * 0.82,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(title,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w800, fontSize: 18)),
-            ),
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                subtitle,
-                style: TextStyle(
-                  color:
-                      Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                  fontSize: 12,
-                  height: 1.4,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 18)),
+              ),
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withOpacity(0.7),
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            for (final r in kReportReasons)
-              ListTile(
-                title: Text(r.$2),
-                onTap: () => Navigator.pop(ctx, r.$1),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: kReportReasons.length,
+                  itemBuilder: (context, index) {
+                    final reason = kReportReasons[index];
+                    return ListTile(
+                      title: Text(reason.$2),
+                      onTap: () => Navigator.pop(ctx, reason.$1),
+                    );
+                  },
+                ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     ),

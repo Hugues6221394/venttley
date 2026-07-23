@@ -1,0 +1,6 @@
+# Copy this file to android/key.properties and replace every value locally.
+# The keystore path is resolved relative to android/.
+storeFile=../private/venttly-upload.jks
+storePassword=REPLACE_WITH_SECRET
+keyAlias=venttly-upload
+keyPassword=REPLACE_WITH_SECRET

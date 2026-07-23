@@ -119,9 +119,31 @@ class ModerationService {
   // TIER 1 — keyword dictionaries
   // ---------------------------------------------------------------------
 
-  // 7+ digits, allowing spaces / dashes / leading + — catches obvious phone
-  // numbers without flagging years or street addresses.
-  static final RegExp _phoneNumber = RegExp(r'(?:\+?\d[\s\-]?){7,}');
+  // Phone-like candidates. Validation below excludes calendar dates and only
+  // treats short digit runs as phones when they carry an international prefix
+  // or deliberate phone separators.
+  static final RegExp _phoneCandidate =
+      RegExp(r'(?<!\d)\+?\d(?:[\s\-]?\d){6,14}(?!\d)');
+  static final RegExp _compactYmdDate = RegExp(
+    r'^(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])$',
+  );
+
+  static bool _containsPhoneNumber(String text) {
+    for (final match in _phoneCandidate.allMatches(text)) {
+      final candidate = match.group(0)!;
+      final digits = candidate.replaceAll(RegExp(r'\D'), '');
+      final startsWithPlus = candidate.trimLeft().startsWith('+');
+      final hasSeparator = candidate.contains(RegExp(r'[\s\-]'));
+
+      // Dates and release/test identifiers such as 20260718 are not contact
+      // details. This avoids blocking ordinary time references in vents.
+      if (!startsWithPlus && _compactYmdDate.hasMatch(digits)) continue;
+
+      if (digits.length >= 9) return true;
+      if (digits.length >= 7 && (startsWithPlus || hasSeparator)) return true;
+    }
+    return false;
+  }
 
   // Bare email addresses — same rationale.
   static final RegExp _email =
@@ -177,7 +199,7 @@ class ModerationService {
     bool crisis = false;
     var verdict = SafetyVerdict.safe;
 
-    if (_phoneNumber.hasMatch(text)) {
+    if (_containsPhoneNumber(text)) {
       reasons.add('Looks like a phone number — Venttly masks contact info.');
       categories.add(HazardCategory.privacy);
       verdict = SafetyVerdict.block;

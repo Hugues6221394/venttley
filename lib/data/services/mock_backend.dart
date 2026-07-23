@@ -42,6 +42,7 @@ class MockBackend {
   final Set<String> _joinedTribes = {};
   final List<ChatRoom> _rooms = [];
   final Map<String, List<ChatMessage>> _messages = {};
+  final Map<String, List<GroupChatMember>> _groupMembers = {};
   final List<PlugPrompt> _prompts = [];
   final List<NotificationItem> _notifications = [];
   final Map<String, List<TribeRuleItem>> _managementRules = {};
@@ -2346,6 +2347,7 @@ class MockBackend {
         roomId: room.roomId,
         peerPseudonym: room.peerPseudonym,
         peerAvatarSeed: room.peerAvatarSeed,
+        peerProfilePhotoUrl: room.peerProfilePhotoUrl,
         requestPreview: room.requestPreview,
         roomStatus: room.roomStatus,
         createdAt: room.createdAt,
@@ -2358,6 +2360,11 @@ class MockBackend {
         isGroup: room.isGroup,
         groupTitle: room.groupTitle,
         memberCount: room.memberCount,
+        groupAvatarPath: room.groupAvatarPath,
+        groupInviteToken: room.groupInviteToken,
+        groupInviteEnabled: room.groupInviteEnabled,
+        groupAllowMemberInvites: room.groupAllowMemberInvites,
+        isGroupOwner: room.isGroupOwner,
       );
     }
 
@@ -2381,6 +2388,7 @@ class MockBackend {
       roomId: room.roomId,
       peerPseudonym: room.peerPseudonym,
       peerAvatarSeed: room.peerAvatarSeed,
+      peerProfilePhotoUrl: room.peerProfilePhotoUrl,
       requestPreview: room.requestPreview,
       roomStatus: 'active',
       createdAt: room.createdAt,
@@ -2411,6 +2419,7 @@ class MockBackend {
       roomId: r.roomId,
       peerPseudonym: r.peerPseudonym,
       peerAvatarSeed: r.peerAvatarSeed,
+      peerProfilePhotoUrl: r.peerProfilePhotoUrl,
       requestPreview: r.requestPreview,
       roomStatus: 'declined',
       createdAt: r.createdAt,
@@ -2419,8 +2428,12 @@ class MockBackend {
     _emitRooms();
   }
 
-  List<ChatMessage> roomMessages(String roomId) =>
-      _messages[roomId] ?? const [];
+  final Set<String> _hiddenChatMessageIds = <String>{};
+
+  List<ChatMessage> roomMessages(String roomId) => (_messages[roomId] ??
+          const <ChatMessage>[])
+      .where((message) => !_hiddenChatMessageIds.contains(message.messageId))
+      .toList(growable: false);
 
   ChatRoom sendMessageRequest({
     required String peerPseudonym,
@@ -2446,6 +2459,7 @@ class MockBackend {
     required String friendUserId,
     required String friendPseudonym,
     required String friendAvatarSeed,
+    List<String> additionalMemberUserIds = const [],
   }) {
     final cleanTitle = title.trim();
     if (cleanTitle.length < 2 || cleanTitle.length > 80) {
@@ -2462,12 +2476,241 @@ class MockBackend {
       initiatedByMe: true,
       isGroup: true,
       groupTitle: cleanTitle,
-      memberCount: 2,
+      memberCount: 2 + additionalMemberUserIds.length,
+      groupInviteToken: _uuid.v4(),
+      groupInviteEnabled: true,
+      groupAllowMemberInvites: true,
+      isGroupOwner: true,
     );
     _rooms.add(room);
     _messages[room.roomId] = const [];
+    final me = _me;
+    final friend = _users.firstWhereOrNull((u) => u.userId == friendUserId);
+    final additional = additionalMemberUserIds
+        .map((id) => _users.firstWhereOrNull((u) => u.userId == id))
+        .whereType<AppUser>();
+    _groupMembers[room.roomId] = [
+      if (me != null)
+        GroupChatMember(
+          userId: me.userId,
+          pseudonym: me.anonymousPseudonym,
+          avatarSeed: me.avatarSeed,
+          profilePhotoUrl: me.profilePhotoUrl,
+          isVerified: me.isVerified,
+          memberRole: 'owner',
+          joinedAt: DateTime.now(),
+          isMe: true,
+        ),
+      GroupChatMember(
+        userId: friendUserId,
+        pseudonym: friend?.anonymousPseudonym ?? friendPseudonym,
+        avatarSeed: friend?.avatarSeed ?? friendAvatarSeed,
+        profilePhotoUrl: friend?.profilePhotoUrl,
+        isVerified: friend?.isVerified ?? false,
+        memberRole: 'member',
+        joinedAt: DateTime.now(),
+        isMe: false,
+      ),
+      for (final user in additional)
+        GroupChatMember(
+          userId: user.userId,
+          pseudonym: user.anonymousPseudonym,
+          avatarSeed: user.avatarSeed,
+          profilePhotoUrl: user.profilePhotoUrl,
+          isVerified: user.isVerified,
+          memberRole: 'member',
+          joinedAt: DateTime.now(),
+          isMe: false,
+        ),
+    ];
     _emitRooms();
     return room;
+  }
+
+  List<GroupChatMember> groupChatMembers(String roomId) =>
+      List.unmodifiable(_groupMembers[roomId] ?? const []);
+
+  int addGroupChatMembers(String roomId, List<String> memberUserIds) {
+    final members = _groupMembers.putIfAbsent(roomId, () => []);
+    var added = 0;
+    for (final id in memberUserIds.toSet()) {
+      if (members.any((m) => m.userId == id)) continue;
+      final user = _users.firstWhereOrNull((u) => u.userId == id);
+      if (user == null) continue;
+      members.add(GroupChatMember(
+        userId: user.userId,
+        pseudonym: user.anonymousPseudonym,
+        avatarSeed: user.avatarSeed,
+        profilePhotoUrl: user.profilePhotoUrl,
+        isVerified: user.isVerified,
+        memberRole: 'member',
+        joinedAt: DateTime.now(),
+        isMe: user.userId == _me?.userId,
+      ));
+      added++;
+    }
+    _syncMockGroupCount(roomId);
+    return added;
+  }
+
+  bool removeGroupChatMember(String roomId, String userId) {
+    final members = _groupMembers[roomId];
+    if (members == null) return false;
+    final before = members.length;
+    members.removeWhere((m) => m.userId == userId && !m.isOwner);
+    _syncMockGroupCount(roomId);
+    return members.length != before;
+  }
+
+  bool leaveGroupChat(String roomId) {
+    final me = _me?.userId;
+    if (me == null) return false;
+    final members = _groupMembers[roomId];
+    if (members == null) return false;
+    final before = members.length;
+    members.removeWhere((m) => m.userId == me);
+    _rooms.removeWhere((room) => room.roomId == roomId);
+    _emitRooms();
+    return members.length != before;
+  }
+
+  ChatRoom updateGroupChatIdentity(
+    String roomId, {
+    String? title,
+    String? avatarPath,
+    bool clearAvatar = false,
+  }) {
+    final index = _rooms.indexWhere((room) => room.roomId == roomId);
+    if (index < 0) throw StateError('Group not found');
+    final room = _rooms[index];
+    final next = _copyGroupRoom(
+      room,
+      title: title,
+      avatarPath: clearAvatar ? null : (avatarPath ?? room.groupAvatarPath),
+      replaceAvatar: clearAvatar || avatarPath != null,
+    );
+    _rooms[index] = next;
+    _emitRooms();
+    return next;
+  }
+
+  bool setGroupChatNickname(String roomId, String nickname) {
+    final members = _groupMembers[roomId];
+    final me = _me?.userId;
+    if (members == null || me == null) return false;
+    final index = members.indexWhere((m) => m.userId == me);
+    if (index < 0) return false;
+    final current = members[index];
+    members[index] = GroupChatMember(
+      userId: current.userId,
+      pseudonym: current.pseudonym,
+      avatarSeed: current.avatarSeed,
+      profilePhotoUrl: current.profilePhotoUrl,
+      isVerified: current.isVerified,
+      memberRole: current.memberRole,
+      nickname: nickname.trim().isEmpty ? null : nickname.trim(),
+      joinedAt: current.joinedAt,
+      isMe: current.isMe,
+    );
+    return true;
+  }
+
+  bool setGroupChatPrivacy(
+    String roomId, {
+    bool? allowMemberInvites,
+    bool? inviteEnabled,
+  }) {
+    final index = _rooms.indexWhere((room) => room.roomId == roomId);
+    if (index < 0) return false;
+    final room = _rooms[index];
+    _rooms[index] = _copyGroupRoom(
+      room,
+      allowMemberInvites: allowMemberInvites ?? room.groupAllowMemberInvites,
+      inviteEnabled: inviteEnabled ?? room.groupInviteEnabled,
+    );
+    _emitRooms();
+    return true;
+  }
+
+  String regenerateGroupInvite(String roomId) {
+    final index = _rooms.indexWhere((room) => room.roomId == roomId);
+    if (index < 0) throw StateError('Group not found');
+    final token = _uuid.v4();
+    _rooms[index] = _copyGroupRoom(
+      _rooms[index],
+      inviteToken: token,
+      inviteEnabled: true,
+    );
+    _emitRooms();
+    return token;
+  }
+
+  GroupInvitePreview? groupInvitePreview(String token) {
+    final room = _rooms.firstWhereOrNull(
+      (r) => r.isGroup && r.groupInviteEnabled && r.groupInviteToken == token,
+    );
+    if (room == null) return null;
+    return GroupInvitePreview(
+      roomId: room.roomId,
+      title: room.groupTitle ?? room.peerPseudonym,
+      avatarPath: room.groupAvatarPath,
+      memberCount: room.memberCount,
+    );
+  }
+
+  String joinGroupChatByInvite(String token) {
+    final preview = groupInvitePreview(token);
+    if (preview == null) throw StateError('Invite not found');
+    return preview.roomId;
+  }
+
+  void _syncMockGroupCount(String roomId) {
+    final index = _rooms.indexWhere((room) => room.roomId == roomId);
+    if (index < 0) return;
+    _rooms[index] = _copyGroupRoom(
+      _rooms[index],
+      memberCount: _groupMembers[roomId]?.length ?? 0,
+    );
+    _emitRooms();
+  }
+
+  ChatRoom _copyGroupRoom(
+    ChatRoom room, {
+    String? title,
+    String? avatarPath,
+    bool replaceAvatar = false,
+    String? inviteToken,
+    bool? inviteEnabled,
+    bool? allowMemberInvites,
+    int? memberCount,
+  }) {
+    final nextTitle = title?.trim().isNotEmpty == true
+        ? title!.trim()
+        : (room.groupTitle ?? room.peerPseudonym);
+    return ChatRoom(
+      roomId: room.roomId,
+      peerPseudonym: nextTitle,
+      peerAvatarSeed: room.peerAvatarSeed,
+      peerProfilePhotoUrl: room.peerProfilePhotoUrl,
+      peerUserId: room.peerUserId,
+      requestPreview: room.requestPreview,
+      roomStatus: room.roomStatus,
+      createdAt: room.createdAt,
+      initiatedByMe: room.initiatedByMe,
+      unreadCount: room.unreadCount,
+      lastMessagePreview: room.lastMessagePreview,
+      lastMessageAt: room.lastMessageAt,
+      lastOwnMessageRead: room.lastOwnMessageRead,
+      isGroup: true,
+      groupTitle: nextTitle,
+      memberCount: memberCount ?? room.memberCount,
+      groupAvatarPath: replaceAvatar ? avatarPath : room.groupAvatarPath,
+      groupInviteToken: inviteToken ?? room.groupInviteToken,
+      groupInviteEnabled: inviteEnabled ?? room.groupInviteEnabled,
+      groupAllowMemberInvites:
+          allowMemberInvites ?? room.groupAllowMemberInvites,
+      isGroupOwner: room.isGroupOwner,
+    );
   }
 
   // No-ops for typing indicators in mock — broadcast lives on Supabase.
@@ -2502,6 +2745,52 @@ class MockBackend {
       }
     }
     return null;
+  }
+
+  bool editChatMessage({
+    required String messageId,
+    required String newPlaintext,
+  }) {
+    final next = newPlaintext.trim();
+    if (next.isEmpty || next.length > 4000) return false;
+    for (final messages in _messages.values) {
+      final index = messages.indexWhere((item) => item.messageId == messageId);
+      if (index < 0) continue;
+      final current = messages[index];
+      if (!current.canEdit) return false;
+      messages[index] = current.copyWith(
+        plaintext: next,
+        editedAt: DateTime.now(),
+      );
+      _emitRooms();
+      return true;
+    }
+    return false;
+  }
+
+  bool deleteChatMessage(String messageId) {
+    for (final messages in _messages.values) {
+      final index = messages.indexWhere((item) => item.messageId == messageId);
+      if (index < 0) continue;
+      final current = messages[index];
+      if (!current.canDeleteForEveryone) return false;
+      messages[index] = current.copyWith(
+        plaintext: '',
+        deletedAt: DateTime.now(),
+      );
+      _emitRooms();
+      return true;
+    }
+    return false;
+  }
+
+  bool hideChatMessage(String messageId) {
+    final exists = _messages.values
+        .any((messages) => messages.any((item) => item.messageId == messageId));
+    if (!exists) return false;
+    _hiddenChatMessageIds.add(messageId);
+    _emitRooms();
+    return true;
   }
 
   Future<int> markRoomRead(String roomId) async {
@@ -2926,6 +3215,7 @@ class MockBackend {
     ]);
 
     _seedCommentsForFirstConfession();
+    _synchronizeSeedCommentCounts();
 
     _prompts.addAll([
       PlugPrompt(
@@ -3096,6 +3386,23 @@ class MockBackend {
     );
 
     _commentsByPost[firstPost.postId] = [c1, c4];
+  }
+
+  void _synchronizeSeedCommentCounts() {
+    int countTree(List<ThreadedComment> comments) {
+      return comments.fold<int>(
+        0,
+        (total, comment) => total + 1 + countTree(comment.children),
+      );
+    }
+
+    for (var index = 0; index < _posts.length; index++) {
+      final post = _posts[index];
+      final actualCount = countTree(
+        _commentsByPost[post.postId] ?? const <ThreadedComment>[],
+      );
+      _posts[index] = post.copyWith(commentsCount: actualCount);
+    }
   }
 }
 

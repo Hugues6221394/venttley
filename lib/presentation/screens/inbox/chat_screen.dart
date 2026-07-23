@@ -22,6 +22,7 @@ import '../../widgets/report_reason_sheet.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/crisis_support_sheet.dart';
 import '../../widgets/chat_options_sheet.dart';
+import '../../widgets/profile_avatar.dart';
 import '../../widgets/verified_badge.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -58,6 +59,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// the composer is pre-filled with the existing plaintext and the
   /// send button calls edit_chat_message instead of send.
   ChatMessage? _editingMessage;
+
+  void _scrollToLatest() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      unawaited(
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    });
+  }
 
   Future<void> _pickImage() async {
     try {
@@ -236,6 +250,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         : (prefs.peerNickname?.trim().isNotEmpty ?? false)
             ? prefs.peerNickname!.trim()
             : r.peerPseudonym;
+    final groupAvatarUrl = r.groupAvatarPath == null
+        ? null
+        : ref.watch(groupAvatarUrlProvider(r.groupAvatarPath!)).valueOrNull;
     // DM peers are always accepted friends, so reuse the cached friends list
     // to know whether the peer is verified (no extra fetch).
     final peerVerified = () {
@@ -281,6 +298,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       (prev, next) {
         final list = next.valueOrNull;
         if (list == null) return;
+        final previousLength = prev?.valueOrNull?.length ?? 0;
+        if (list.length > previousLength) {
+          final nearLatest = !_scrollController.hasClients ||
+              _scrollController.position.maxScrollExtent -
+                      _scrollController.position.pixels <
+                  180;
+          if (nearLatest || list.last.sentByMe) _scrollToLatest();
+        }
         final hasUnreadFromPeer =
             list.any((m) => !m.sentByMe && m.readAt == null);
         if (hasUnreadFromPeer) {
@@ -340,40 +365,59 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     }),
                   ),
                   borderRadius: BorderRadius.circular(8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Text(peerName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w800)),
-                          ),
-                          if (peerVerified) ...[
-                            const SizedBox(width: 4),
-                            const VerifiedBadge(size: 14),
-                          ],
-                        ],
+                      ProfileAvatar(
+                        avatarSeed:
+                            r.isGroup ? 'group-${r.roomId}' : r.peerAvatarSeed,
+                        label: peerName,
+                        profilePhotoUrl:
+                            r.isGroup ? groupAvatarUrl : r.peerProfilePhotoUrl,
+                        size: 34,
                       ),
-                      if (r.isGroup)
-                        Text(
-                          '${r.memberCount} members',
-                          style: TextStyle(
-                            color: scheme.onSurface.withOpacity(0.58),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        )
-                      else
-                        _PresenceLine(
-                          peerUserId: r.peerUserId,
-                          accent: scheme.primary,
+                      const SizedBox(width: 9),
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    peerName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                                if (peerVerified) ...[
+                                  const SizedBox(width: 4),
+                                  const VerifiedBadge(size: 14),
+                                ],
+                              ],
+                            ),
+                            if (r.isGroup)
+                              Text(
+                                '${r.memberCount} members',
+                                style: TextStyle(
+                                  color: scheme.onSurface.withOpacity(0.58),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              )
+                            else
+                              _PresenceLine(
+                                peerUserId: r.peerUserId,
+                                accent: scheme.primary,
+                              ),
+                          ],
                         ),
+                      ),
                     ],
                   ),
                 ),
@@ -448,6 +492,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   final m = visible[i - 1];
                   return _Bubble(
                     message: m,
+                    fontStyle: prefs.fontStyle,
                     showSeen: m.messageId == lastSeenOwnId,
                     onReply: () => setState(() {
                       _replyingTo = m;
@@ -528,11 +573,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               onClearImage: () => setState(() => _pendingImageBytes = null),
               onSend: () async {
                 final t = _controller.text.trim();
-                // EDIT path — bypass moderation re-check + attachments.
+                // EDIT path. Re-run the same safety review as a fresh send so
+                // an initially-safe message cannot be replaced with abuse.
                 if (_editingMessage != null) {
                   if (t.isEmpty) return;
                   final original = _editingMessage!;
                   try {
+                    final moderation =
+                        await ref.read(moderationServiceProvider).review(t);
+                    if (!mounted) return;
+                    if (moderation.isBlocked) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(moderation.reasons.isEmpty
+                              ? 'Held back by safety AI.'
+                              : moderation.reasons.first),
+                        ),
+                      );
+                      return;
+                    }
                     await ref.read(repositoryProvider).editChatMessage(
                           messageId: original.messageId,
                           newPlaintext: t,
@@ -541,6 +600,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     _controller.clear();
                     setState(() => _editingMessage = null);
                     ref.invalidate(messagesProvider(widget.roomId));
+                    if (moderation.surfaceCrisisHelpline && mounted) {
+                      unawaited(ref
+                          .read(repositoryProvider)
+                          .setChatMessageCrisis(original.messageId, 'elevated')
+                          .catchError((_) {}));
+                      await showCrisisSupportSheet(context, ref);
+                    }
                   } catch (e) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -661,6 +727,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     _replyingTo = null;
                   });
                 }
+                ref.invalidate(messagesProvider(widget.roomId));
+                _scrollToLatest();
                 // Safety scan on the sender's own message — reuses the verdict
                 // already computed above (DM bodies are encrypted, so this is the
                 // only place with plaintext). Offers help + flags for the queue.
@@ -723,6 +791,7 @@ String _deleteError(Object e) {
 class _Bubble extends ConsumerWidget {
   const _Bubble({
     required this.message,
+    required this.fontStyle,
     this.showSeen = false,
     this.onReply,
     this.onCopy,
@@ -732,6 +801,7 @@ class _Bubble extends ConsumerWidget {
     this.onReport,
   });
   final ChatMessage message;
+  final String fontStyle;
 
   /// Render the "Seen" footer under this bubble. The chat screen only
   /// sets this on the latest own-message that the peer has read so the
@@ -976,209 +1046,219 @@ class _Bubble extends ConsumerWidget {
       );
     }
 
-    final bubble = Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Column(
-        crossAxisAlignment:
-            mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          if (message.parentMessageId != null)
-            Container(
-              margin: EdgeInsets.only(
-                top: 4,
-                left: mine ? 0 : 6,
-                right: mine ? 6 : 0,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.72),
-              decoration: BoxDecoration(
-                color: VentlyColors.softMauve.withOpacity(0.18),
-                borderRadius: BorderRadius.circular(12),
-                border: Border(
-                  left: BorderSide(color: scheme.primary, width: 3),
+    final bubble = GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onLongPress: () => _openActionSheet(context, ref),
+      child: Align(
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Column(
+          crossAxisAlignment:
+              mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (message.parentMessageId != null)
+              Container(
+                margin: EdgeInsets.only(
+                  top: 4,
+                  left: mine ? 0 : 6,
+                  right: mine ? 6 : 0,
+                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.72),
+                decoration: BoxDecoration(
+                  color: VentlyColors.softMauve.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border(
+                    left: BorderSide(color: scheme.primary, width: 3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Replying to ${message.parentSenderPseudonym ?? "them"}',
+                      style: TextStyle(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 10,
+                      ),
+                    ),
+                    Text(
+                      message.parentPreview ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: scheme.onSurface.withOpacity(0.72),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Replying to ${message.parentSenderPseudonym ?? "them"}',
-                    style: TextStyle(
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 10,
-                    ),
-                  ),
-                  Text(
-                    message.parentPreview ?? '',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: scheme.onSurface.withOpacity(0.72),
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
+            // Shared-post card — rendered as its own bubble above any
+            // accompanying text so the conversation reads "they sent me
+            // this vent" then "their thought about it" in order.
+            if (snapshot != null)
+              Container(
+                margin: EdgeInsets.only(
+                  top: 4,
+                  bottom: hasText ? 2 : 4,
+                ),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.78,
+                ),
+                child: _SharedPostCard(
+                  snapshot: snapshot,
+                  attachedPostId: message.attachedPostId,
+                  mine: mine,
+                ),
               ),
-            ),
-          // Shared-post card — rendered as its own bubble above any
-          // accompanying text so the conversation reads "they sent me
-          // this vent" then "their thought about it" in order.
-          if (snapshot != null)
-            Container(
-              margin: EdgeInsets.only(
-                top: 4,
-                bottom: hasText ? 2 : 4,
-              ),
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.78,
-              ),
-              child: _SharedPostCard(
-                snapshot: snapshot,
-                attachedPostId: message.attachedPostId,
-                mine: mine,
-              ),
-            ),
-          if (message.attachedMediaPath != null &&
-              message.attachedMediaType == 'image')
-            Container(
-              margin: EdgeInsets.only(
-                top: 4,
-                bottom: hasText ? 2 : 4,
-              ),
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.72,
-              ),
-              child: _ChatImage(
-                storagePath: message.attachedMediaPath!,
-              ),
-            ),
-          if (message.attachedMediaPath != null &&
-              message.attachedMediaType == 'audio')
-            GestureDetector(
-              onLongPress: () => _openActionSheet(context, ref),
-              child: Container(
-                margin: EdgeInsets.only(top: 4, bottom: hasText ? 2 : 4),
+            if (message.attachedMediaPath != null &&
+                message.attachedMediaType == 'image')
+              Container(
+                margin: EdgeInsets.only(
+                  top: 4,
+                  bottom: hasText ? 2 : 4,
+                ),
                 constraints: BoxConstraints(
                   maxWidth: MediaQuery.of(context).size.width * 0.72,
                 ),
-                child: _ChatVoiceNote(
-                  messageId: message.messageId,
+                child: _ChatImage(
                   storagePath: message.attachedMediaPath!,
                 ),
               ),
-            ),
+            if (message.attachedMediaPath != null &&
+                message.attachedMediaType == 'audio')
+              GestureDetector(
+                onLongPress: () => _openActionSheet(context, ref),
+                child: Container(
+                  margin: EdgeInsets.only(top: 4, bottom: hasText ? 2 : 4),
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.72,
+                  ),
+                  child: _ChatVoiceNote(
+                    messageId: message.messageId,
+                    storagePath: message.attachedMediaPath!,
+                  ),
+                ),
+              ),
 
-          if (hasText)
-            GestureDetector(
-              onLongPress: () => _openActionSheet(context, ref),
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 4),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.78),
-                decoration: BoxDecoration(
-                  color: mine ? scheme.primary : Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(18),
-                    topRight: const Radius.circular(18),
-                    bottomLeft: Radius.circular(mine ? 18 : 4),
-                    bottomRight: Radius.circular(mine ? 4 : 18),
-                  ),
-                  border: mine
-                      ? null
-                      : Border.all(
-                          color: VentlyColors.softMauve.withOpacity(0.4)),
-                ),
-                child: Text(
-                  message.plaintext,
-                  style: TextStyle(
-                    color: mine ? Colors.white : null,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-            ),
-          if (reactions.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.only(
-                top: 2,
-                left: mine ? 0 : 6,
-                right: mine ? 6 : 0,
-              ),
-              child: Wrap(
-                spacing: 4,
-                children: [
-                  for (final entry in reactions.entries)
-                    _ReactionChip(
-                      emoji: PostReactions.emoji(entry.key),
-                      count: entry.value,
-                      mine: message.myReaction == entry.key,
-                      onTap: () =>
-                          ref.read(repositoryProvider).setMessageReaction(
-                                message.messageId,
-                                entry.key,
-                              ),
+            if (hasText)
+              GestureDetector(
+                onLongPress: () => _openActionSheet(context, ref),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.78),
+                  decoration: BoxDecoration(
+                    color: mine ? scheme.primary : Theme.of(context).cardColor,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(18),
+                      topRight: const Radius.circular(18),
+                      bottomLeft: Radius.circular(mine ? 18 : 4),
+                      bottomRight: Radius.circular(mine ? 4 : 18),
                     ),
-                ],
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  DateFormat.jm().format(message.createdAt),
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: scheme.onSurface.withOpacity(0.55),
+                    border: mine
+                        ? null
+                        : Border.all(
+                            color: VentlyColors.softMauve.withOpacity(0.4)),
+                  ),
+                  child: Text(
+                    message.plaintext,
+                    style: TextStyle(
+                      color: mine ? Colors.white : null,
+                      height: 1.35,
+                      fontFamily: switch (fontStyle) {
+                        'serif' => 'serif',
+                        'mono' => 'monospace',
+                        _ => null,
+                      },
+                    ),
                   ),
                 ),
-                if (message.editedAt != null) ...[
-                  const SizedBox(width: 4),
+              ),
+            if (reactions.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(
+                  top: 2,
+                  left: mine ? 0 : 6,
+                  right: mine ? 6 : 0,
+                ),
+                child: Wrap(
+                  spacing: 4,
+                  children: [
+                    for (final entry in reactions.entries)
+                      _ReactionChip(
+                        emoji: PostReactions.emoji(entry.key),
+                        count: entry.value,
+                        mine: message.myReaction == entry.key,
+                        onTap: () =>
+                            ref.read(repositoryProvider).setMessageReaction(
+                                  message.messageId,
+                                  entry.key,
+                                ),
+                      ),
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   Text(
-                    '· edited',
+                    DateFormat.jm().format(message.createdAt),
                     style: TextStyle(
                       fontSize: 10,
-                      fontStyle: FontStyle.italic,
                       color: scheme.onSurface.withOpacity(0.55),
                     ),
                   ),
-                ],
-                if (message.sentByMe && !message.isDeleted) ...[
-                  const SizedBox(width: 6),
-                  // WhatsApp-style ticks: ✓ sent, ✓✓ delivered,
-                  // accent ✓✓ seen (delivered_at — migration 0114).
-                  Icon(
-                    message.readAt != null || message.deliveredAt != null
-                        ? Icons.done_all
-                        : Icons.done,
-                    size: 12,
-                    color: message.readAt != null
-                        ? scheme.primary.withOpacity(0.85)
-                        : scheme.onSurface.withOpacity(0.45),
-                  ),
-                ],
-                if (showSeen) ...[
-                  const SizedBox(width: 2),
-                  Text(
-                    'Seen',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.primary.withOpacity(0.85),
+                  if (message.editedAt != null) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      '· edited',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontStyle: FontStyle.italic,
+                        color: scheme.onSurface.withOpacity(0.55),
+                      ),
                     ),
-                  ),
+                  ],
+                  if (message.sentByMe && !message.isDeleted) ...[
+                    const SizedBox(width: 6),
+                    // WhatsApp-style ticks: ✓ sent, ✓✓ delivered,
+                    // accent ✓✓ seen (delivered_at — migration 0114).
+                    Icon(
+                      message.readAt != null || message.deliveredAt != null
+                          ? Icons.done_all
+                          : Icons.done,
+                      size: 12,
+                      color: message.readAt != null
+                          ? scheme.primary.withOpacity(0.85)
+                          : scheme.onSurface.withOpacity(0.45),
+                    ),
+                  ],
+                  if (showSeen) ...[
+                    const SizedBox(width: 2),
+                    Text(
+                      'Seen',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.primary.withOpacity(0.85),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
 

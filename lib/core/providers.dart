@@ -962,6 +962,22 @@ final roomByIdProvider =
   return null;
 });
 
+final groupChatMembersProvider = FutureProvider.autoDispose
+    .family<List<GroupChatMember>, String>((ref, roomId) async {
+  return ref.watch(repositoryProvider).groupChatMembers(roomId);
+});
+
+final groupAvatarUrlProvider = FutureProvider.autoDispose
+    .family<String?, String>((ref, storagePath) async {
+  if (storagePath.trim().isEmpty) return null;
+  return ref.watch(repositoryProvider).chatImageSignedUrl(storagePath);
+});
+
+final groupInvitePreviewProvider = FutureProvider.autoDispose
+    .family<GroupInvitePreview?, String>((ref, token) async {
+  return ref.watch(repositoryProvider).groupInvitePreview(token);
+});
+
 final inboxCountsProvider =
     FutureProvider.autoDispose<Map<String, int>>((ref) async {
   final repo = ref.watch(repositoryProvider);

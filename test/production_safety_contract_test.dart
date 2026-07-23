@@ -123,4 +123,30 @@ void main() {
     expect(migration, contains('media path must be in room prefix'));
     expect(migration, contains('attached post not found or not readable'));
   });
+
+  test('anonymous callers cannot execute privileged database functions', () {
+    final migration = Directory('supabase/migrations')
+        .listSync()
+        .whereType<File>()
+        .firstWhere(
+          (file) => file.path.endsWith(
+            '_revoke_anonymous_security_definer_execution.sql',
+          ),
+        )
+        .readAsStringSync();
+
+    expect(migration, contains('AND p.prosecdef'));
+    expect(
+      migration,
+      contains('FROM PUBLIC, anon'),
+    );
+    expect(
+      migration,
+      contains('TO authenticated, service_role'),
+    );
+    expect(
+      migration,
+      contains('REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC'),
+    );
+  });
 }

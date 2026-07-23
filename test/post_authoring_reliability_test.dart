@@ -79,8 +79,12 @@ void main() {
       expect(composer, contains('pollQuestion: _includePoll'));
       expect(composer, isNot(contains('Posted, but poll failed')));
       expect(composer, contains('composeTargetSpaceProvider.notifier'));
-      expect(card, contains('final next = controller.text.trim();'));
-      expect(card, contains('controller.dispose();'));
+      expect(card, contains('final next = nextContent.trim();'));
+      expect(
+        card,
+        contains(
+            'if (next.isEmpty && !post.hasImage && !post.hasAudio) return;'),
+      );
       expect(card, isNot(contains('15-minute edit window')));
     });
 

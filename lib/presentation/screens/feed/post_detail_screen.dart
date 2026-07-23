@@ -336,9 +336,53 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       appBar: AppBar(
         title: const Text('Thread'),
         actions: [
-          IconButton(
-              icon: const Icon(Icons.more_horiz),
-              onPressed: () => _openReportSheet(context)),
+          PopupMenuButton<String>(
+            tooltip: 'Post options',
+            icon: const Icon(Icons.more_horiz),
+            onSelected: (action) async {
+              switch (action) {
+                case 'edit':
+                  await openEditPostDialog(context, ref, post);
+                  break;
+                case 'delete':
+                  final deleted = await confirmDeletePost(context, ref, post);
+                  if (deleted && context.mounted) context.pop();
+                  break;
+                case 'report':
+                  _openReportSheet(context);
+                  break;
+              }
+            },
+            itemBuilder: (_) => post.authorId == me?.userId
+                ? const [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.edit_outlined),
+                        title: Text('Edit post'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Delete post'),
+                      ),
+                    ),
+                  ]
+                : const [
+                    PopupMenuItem(
+                      value: 'report',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.flag_outlined),
+                        title: Text('Report post'),
+                      ),
+                    ),
+                  ],
+          ),
         ],
       ),
       body: Column(
@@ -1701,7 +1745,7 @@ class _ReportSheet extends ConsumerWidget {
       ('other', 'Something else'),
     ];
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,

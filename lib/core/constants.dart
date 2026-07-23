@@ -1,6 +1,10 @@
 /// Global compile-time constants for Venttly.
 library;
 
+import 'package:flutter/foundation.dart';
+
+enum BackendMode { supabase, mock }
+
 class VentlyConfig {
   /// Live Supabase project. These are publishable / anon credentials and are
   /// safe to ship in the client — every table is protected by Row Level
@@ -29,8 +33,39 @@ class VentlyConfig {
     defaultValue: false,
   );
 
-  static bool get useMockBackend =>
-      _forceMock || supabaseUrl.isEmpty || supabaseAnonKey.isEmpty;
+  /// Resolves the backend deliberately. A release build must never display
+  /// the in-memory demo dataset, and a missing live configuration must fail
+  /// closed instead of silently turning a user's app into a different world.
+  static BackendMode resolveBackendMode({
+    bool? release,
+    bool? forceMock,
+    String? url,
+    String? anonKey,
+  }) {
+    final isRelease = release ?? kReleaseMode;
+    final mockRequested = forceMock ?? _forceMock;
+    final configuredUrl = url ?? supabaseUrl;
+    final configuredAnonKey = anonKey ?? supabaseAnonKey;
+
+    if (isRelease && mockRequested) {
+      throw StateError(
+        'USE_MOCK_BACKEND is forbidden in release builds.',
+      );
+    }
+    if (!mockRequested &&
+        (configuredUrl.trim().isEmpty || configuredAnonKey.trim().isEmpty)) {
+      throw StateError(
+        'Supabase URL and anon key are required when mock mode is disabled.',
+      );
+    }
+    return mockRequested ? BackendMode.mock : BackendMode.supabase;
+  }
+
+  static void validateBackendConfiguration() {
+    resolveBackendMode();
+  }
+
+  static bool get useMockBackend => resolveBackendMode() == BackendMode.mock;
 
   /// Tenor (Google) API key for the GIF picker in replies. Get a free key at
   /// https://developers.google.com/tenor/guides/quickstart and pass it at

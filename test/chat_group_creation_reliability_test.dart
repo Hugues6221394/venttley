@@ -101,6 +101,19 @@ void main() {
           repositoryProvider.overrideWithValue(
             VentlyRepository(forceMock: true),
           ),
+          myFriendsProvider.overrideWith(
+            (ref) async => [
+              FriendSummary(
+                friendshipId: 'friendship-id',
+                userId: 'friend-user',
+                pseudonym: 'HealingSlow',
+                avatarSeed: 'healing-slow',
+                karma: 0,
+                isVerified: false,
+                acceptedAt: DateTime.utc(2026, 7, 16),
+              ),
+            ],
+          ),
         ],
         child: const MaterialApp(
           home: CreateGroupChatScreen(

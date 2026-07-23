@@ -7,7 +7,12 @@ import 'package:go_router/go_router.dart';
 /// when the id is you.
 void openUserProfile(BuildContext context, String? userId) {
   if (userId == null || userId.trim().isEmpty) return;
-  context.push('/user/$userId');
+  final currentPath = GoRouterState.of(context).uri.path;
+  final fromRootConversation = currentPath.startsWith('/chat/') ||
+      currentPath.startsWith('/group-chat/');
+  context.push(
+    fromRootConversation ? '/user-preview/$userId' : '/user/$userId',
+  );
 }
 
 /// Wraps [child] so tapping it opens [userId]'s public profile.

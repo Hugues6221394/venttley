@@ -27,13 +27,16 @@ class VentlyRepository {
     MockBackend? mock,
     IdentityService? identity,
     bool forceMock = false,
-  })  : _mock = mock ?? MockBackend.instance,
+  })  : _mockOverride = mock,
         _identity = identity ?? IdentityService(),
         _live = forceMock || VentlyConfig.useMockBackend
             ? null
             : SupabaseBackend.of(Supabase.instance.client);
 
-  final MockBackend _mock;
+  // Keep the populated development backend out of live processes entirely.
+  // The getter is reached only from explicit mock-mode branches.
+  final MockBackend? _mockOverride;
+  MockBackend get _mock => _mockOverride ?? MockBackend.instance;
   final IdentityService _identity;
   final SupabaseBackend? _live;
   final CacheService _cache = CacheService();
@@ -43,7 +46,17 @@ class VentlyRepository {
   bool get isMockMode => _live == null;
 
   // ===================== Session =====================
-  AppUser? get currentUser => _live?.me ?? _mock.me;
+  AppUser? get currentUser {
+    final live = _live;
+    return live != null ? live.me : _mock.me;
+  }
+
+  /// The identity held by the auth provider, available before profile
+  /// hydration finishes during a restored session.
+  String? get authenticatedUserId {
+    final live = _live;
+    return live != null ? live.authenticatedUserId : _mock.me?.userId;
+  }
 
   /// Result of a successful sign-up. The caller surfaces [recoveryPhrase] to
   /// the user once and only once — it is never stored server-side and the
@@ -937,6 +950,7 @@ class VentlyRepository {
     bool clearNickname = false,
     int? disappearingSeconds,
     String? theme,
+    String? fontStyle,
   }) {
     final live = _live;
     if (live != null) {
@@ -947,6 +961,7 @@ class VentlyRepository {
         clearNickname: clearNickname,
         disappearingSeconds: disappearingSeconds,
         theme: theme,
+        fontStyle: fontStyle,
       );
     }
     return Future.value();
@@ -2669,12 +2684,13 @@ class VentlyRepository {
     required String friendUserId,
     required String friendPseudonym,
     required String friendAvatarSeed,
+    List<String> additionalMemberUserIds = const [],
   }) async {
     final live = _live;
     if (live != null) {
       return live.createGroupChat(
         title: title,
-        friendUserId: friendUserId,
+        memberUserIds: [friendUserId, ...additionalMemberUserIds],
       );
     }
     final status = await _mock.friendStatus(friendUserId);
@@ -2688,7 +2704,123 @@ class VentlyRepository {
       friendUserId: friendUserId,
       friendPseudonym: friendPseudonym,
       friendAvatarSeed: friendAvatarSeed,
+      additionalMemberUserIds: additionalMemberUserIds,
     );
+  }
+
+  Future<List<GroupChatMember>> groupChatMembers(String roomId) {
+    final live = _live;
+    if (live != null) return live.groupChatMembers(roomId);
+    return Future.value(_mock.groupChatMembers(roomId));
+  }
+
+  Future<int> addGroupChatMembers({
+    required String roomId,
+    required List<String> memberUserIds,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.addGroupChatMembers(
+        roomId: roomId,
+        memberUserIds: memberUserIds,
+      );
+    }
+    return Future.value(_mock.addGroupChatMembers(roomId, memberUserIds));
+  }
+
+  Future<bool> removeGroupChatMember({
+    required String roomId,
+    required String userId,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.removeGroupChatMember(roomId: roomId, userId: userId);
+    }
+    return Future.value(_mock.removeGroupChatMember(roomId, userId));
+  }
+
+  Future<bool> leaveGroupChat(String roomId) {
+    final live = _live;
+    if (live != null) return live.leaveGroupChat(roomId);
+    return Future.value(_mock.leaveGroupChat(roomId));
+  }
+
+  Future<bool> markGroupSpamAndLeave(String roomId) {
+    final live = _live;
+    if (live != null) return live.markGroupSpamAndLeave(roomId);
+    return Future.value(_mock.leaveGroupChat(roomId));
+  }
+
+  Future<ChatRoom> updateGroupChatIdentity({
+    required String roomId,
+    String? title,
+    String? avatarPath,
+    bool clearAvatar = false,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.updateGroupChatIdentity(
+        roomId: roomId,
+        title: title,
+        avatarPath: avatarPath,
+        clearAvatar: clearAvatar,
+      );
+    }
+    return Future.value(_mock.updateGroupChatIdentity(
+      roomId,
+      title: title,
+      avatarPath: avatarPath,
+      clearAvatar: clearAvatar,
+    ));
+  }
+
+  Future<bool> setGroupChatNickname({
+    required String roomId,
+    required String nickname,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.setGroupChatNickname(roomId: roomId, nickname: nickname);
+    }
+    return Future.value(_mock.setGroupChatNickname(roomId, nickname));
+  }
+
+  Future<bool> setGroupChatPrivacy({
+    required String roomId,
+    bool? allowMemberInvites,
+    bool? inviteEnabled,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.setGroupChatPrivacy(
+        roomId: roomId,
+        allowMemberInvites: allowMemberInvites,
+        inviteEnabled: inviteEnabled,
+      );
+    }
+    return Future.value(_mock.setGroupChatPrivacy(
+      roomId,
+      allowMemberInvites: allowMemberInvites,
+      inviteEnabled: inviteEnabled,
+    ));
+  }
+
+  Future<String> regenerateGroupInvite(String roomId) {
+    final live = _live;
+    if (live != null) return live.regenerateGroupInvite(roomId);
+    return Future.value(_mock.regenerateGroupInvite(roomId));
+  }
+
+  Future<GroupInvitePreview?> groupInvitePreview(String token) {
+    final live = _live;
+    if (live != null) return live.groupInvitePreview(token);
+    return Future.value(_mock.groupInvitePreview(token));
+  }
+
+  Future<String> joinGroupChatByInvite(String token) {
+    final live = _live;
+    if (live != null) return live.joinGroupChatByInvite(token);
+    return Future.value(_mock.joinGroupChatByInvite(token));
   }
 
   /// Private DM send. V1 is plaintext server-side so moderators can review
@@ -2818,19 +2950,22 @@ class VentlyRepository {
         newPlaintext: newPlaintext,
       );
     }
-    return Future.value(false);
+    return Future.value(_mock.editChatMessage(
+      messageId: messageId,
+      newPlaintext: newPlaintext,
+    ));
   }
 
   Future<bool> deleteChatMessage(String messageId) {
     final live = _live;
     if (live != null) return live.deleteChatMessage(messageId);
-    return Future.value(false);
+    return Future.value(_mock.deleteChatMessage(messageId));
   }
 
   Future<bool> hideChatMessage(String messageId) {
     final live = _live;
     if (live != null) return live.hideChatMessage(messageId);
-    return Future.value(false);
+    return Future.value(_mock.hideChatMessage(messageId));
   }
 
   // ===================== Author CRUD (migration 0047) =====================
@@ -3028,6 +3163,32 @@ class VentlyRepository {
       extension: extension,
       contentType: contentType,
     );
+  }
+
+  Future<String> uploadGroupChatAvatar({
+    required String roomId,
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.uploadGroupChatAvatar(
+        roomId: roomId,
+        bytes: bytes,
+        extension: extension,
+        contentType: contentType,
+      );
+    }
+    return Future.value(
+      '$roomId/group-avatar-mock.${extension.toLowerCase()}',
+    );
+  }
+
+  Future<void> deleteChatMedia(String path) {
+    final live = _live;
+    if (live != null) return live.deleteChatMedia(path);
+    return Future.value();
   }
 
   /// Upload a DM voice note (m4a). Duration rides in the object name so no

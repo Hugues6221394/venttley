@@ -14,6 +14,7 @@ import '../../../data/services/whisper_player.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
+import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/sensitive_media_veil.dart';
@@ -117,7 +118,8 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              UserFriendlyErrors.message(e, fallback: 'Could not play whisper.'),
+              UserFriendlyErrors.message(e,
+                  fallback: 'Could not play whisper.'),
             ),
           ),
         );
@@ -125,8 +127,11 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
     }
   }
 
-  void _precacheAround(BuildContext context, List<Whisper> whispers, int index) {
-    for (var i = index; i <= index + _preloadAhead && i < whispers.length; i++) {
+  void _precacheAround(
+      BuildContext context, List<Whisper> whispers, int index) {
+    for (var i = index;
+        i <= index + _preloadAhead && i < whispers.length;
+        i++) {
       final url = whispers[i].backgroundImageUrl;
       if (url != null && url.isNotEmpty) {
         precacheImage(CachedNetworkImageProvider(url), context);
@@ -135,8 +140,7 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
   }
 
   void _scrollToDeepLink(List<Whisper> whispers) {
-    final targetId =
-        GoRouterState.of(context).uri.queryParameters['whisper'];
+    final targetId = GoRouterState.of(context).uri.queryParameters['whisper'];
     if (targetId == null || targetId.isEmpty) return;
     if (_deepLinkHandled == targetId) return;
     final idx = whispers.indexWhere((w) => w.whisperId == targetId);
@@ -170,9 +174,9 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
                   category: cat,
                   onClearCategory: cat == null
                       ? null
-                      : () =>
-                          ref.read(whispersCategoryProvider.notifier).state =
-                              null,
+                      : () => ref
+                          .read(whispersCategoryProvider.notifier)
+                          .state = null,
                   onComposeSoon: _composeSoonState,
                 );
               }
@@ -315,8 +319,7 @@ class _WhispersTopBar extends StatelessWidget {
             onTap: onPickCategory,
             borderRadius: BorderRadius.circular(14),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.92),
                 borderRadius: BorderRadius.circular(14),
@@ -353,8 +356,8 @@ class _WhispersTopBar extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
-              child: const Icon(Icons.mic_rounded,
-                  color: Colors.white, size: 18),
+              child:
+                  const Icon(Icons.mic_rounded, color: Colors.white, size: 18),
             ),
           ),
         ],
@@ -506,8 +509,8 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
             ),
             if (_flashPaused)
               const Center(
-                child: Icon(Icons.pause_rounded,
-                    color: Colors.white70, size: 72),
+                child:
+                    Icon(Icons.pause_rounded, color: Colors.white70, size: 72),
               ),
             if (_flashRewind)
               const Align(
@@ -730,14 +733,12 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
             // metadata (audioDurationSeconds) can be shorter than the file,
             // which made the timer run past the end (e.g. 1:12 over 1:03).
             final realTotalMs = widget.controller.duration?.inMilliseconds ?? 0;
-            final totalMs =
-                (realTotalMs > 0 ? realTotalMs : totalSecs * 1000)
-                    .clamp(1, 1 << 30);
+            final totalMs = (realTotalMs > 0 ? realTotalMs : totalSecs * 1000)
+                .clamp(1, 1 << 30);
             // Clamp the displayed position so it never exceeds the total.
             final posMs = pos.inMilliseconds.clamp(0, totalMs);
-            final progress = _seeking
-                ? _seekValue
-                : (posMs / totalMs).clamp(0.0, 1.0);
+            final progress =
+                _seeking ? _seekValue : (posMs / totalMs).clamp(0.0, 1.0);
 
             return Column(
               mainAxisSize: MainAxisSize.min,
@@ -785,8 +786,7 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
                           Row(
                             children: [
                               Text(
-                                _formatDuration(
-                                    Duration(milliseconds: posMs)),
+                                _formatDuration(Duration(milliseconds: posMs)),
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w900,
@@ -843,8 +843,7 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
                     }),
                     onChangeEnd: (v) async {
                       final ms = (totalMs * v).round();
-                      await widget.controller
-                          .seek(Duration(milliseconds: ms));
+                      await widget.controller.seek(Duration(milliseconds: ms));
                       if (mounted) setState(() => _seeking = false);
                     },
                   ),
@@ -854,7 +853,8 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     _PlaybackChip(
-                      label: '${_speed == _speed.roundToDouble() ? _speed.toStringAsFixed(0) : _speed}×',
+                      label:
+                          '${_speed == _speed.roundToDouble() ? _speed.toStringAsFixed(0) : _speed}×',
                       icon: Icons.speed_rounded,
                       active: _speed != 1.0,
                       onTap: _cycleSpeed,
@@ -862,7 +862,9 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
                     const SizedBox(width: 8),
                     _PlaybackChip(
                       label: _loop ? 'Loop' : 'Once',
-                      icon: _loop ? Icons.repeat_on_rounded : Icons.repeat_rounded,
+                      icon: _loop
+                          ? Icons.repeat_on_rounded
+                          : Icons.repeat_rounded,
                       active: _loop,
                       onTap: _toggleLoop,
                     ),
@@ -975,8 +977,30 @@ class _WaveformProgress extends StatelessWidget {
   final double progress;
 
   static const _heights = <double>[
-    10, 18, 14, 24, 18, 28, 16, 20, 14, 24, 18, 12, 22, 16, 24, 18,
-    14, 22, 16, 26, 14, 18, 12, 24,
+    10,
+    18,
+    14,
+    24,
+    18,
+    28,
+    16,
+    20,
+    14,
+    24,
+    18,
+    12,
+    22,
+    16,
+    24,
+    18,
+    14,
+    22,
+    16,
+    26,
+    14,
+    18,
+    12,
+    24,
   ];
 
   @override
@@ -1268,7 +1292,8 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              UserFriendlyErrors.message(e, fallback: 'Could not save whisper.'),
+              UserFriendlyErrors.message(e,
+                  fallback: 'Could not save whisper.'),
             ),
           ),
         );
@@ -1280,8 +1305,10 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
 
   @override
   Widget build(BuildContext context) {
-    final me = ref.watch(sessionProvider);
-    final isMine = widget.whisper.ownedBy(me?.userId);
+    final repository = ref.read(repositoryProvider);
+    final me = ref.watch(sessionProvider) ?? repository.currentUser;
+    final isMine =
+        widget.whisper.ownedBy(me?.userId ?? repository.authenticatedUserId);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1289,9 +1316,7 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
           icon: _myReaction == null ? Icons.favorite_border : null,
           emoji: _myReaction != null ? PostReactions.emoji(_myReaction!) : null,
           label: _short(_totalReactions),
-          color: _myReaction != null
-              ? VentlyColors.berryMagenta
-              : Colors.white,
+          color: _myReaction != null ? VentlyColors.berryMagenta : Colors.white,
           onTap: _openReactionPicker,
         ),
         const SizedBox(height: 14),
@@ -1377,8 +1402,7 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
   }
 
   Future<void> _openEditWhisperDialog() async {
-    final titleCtl =
-        TextEditingController(text: widget.whisper.title ?? '');
+    final titleCtl = TextEditingController(text: widget.whisper.title ?? '');
     final descCtl =
         TextEditingController(text: widget.whisper.description ?? '');
     final saved = await showDialog<bool>(
@@ -1437,13 +1461,13 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
       if (!mounted) return;
       if (ok) {
         ref.invalidate(whispersFeedProvider);
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Whisper updated')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Whisper updated')));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_friendly(e))));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_friendly(e))));
     }
   }
 
@@ -1476,13 +1500,13 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
         ref.invalidate(whispersFeedProvider);
         ref.invalidate(myWhispersProvider);
         ref.invalidate(popularWhispersProvider);
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Whisper deleted')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Whisper deleted')));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_friendly(e))));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_friendly(e))));
     }
   }
 
@@ -1621,8 +1645,7 @@ class _CategoryRow extends StatelessWidget {
       ),
       title: Text(
         label,
-        style: TextStyle(
-            color: context.ink, fontWeight: FontWeight.w800),
+        style: TextStyle(color: context.ink, fontWeight: FontWeight.w800),
       ),
       onTap: onTap,
     );
@@ -1689,7 +1712,7 @@ class _WhispersError extends StatelessWidget {
 // EMPTY STATE
 // =========================================================================
 
-class _WhispersEmpty extends StatelessWidget {
+class _WhispersEmpty extends ConsumerWidget {
   const _WhispersEmpty({
     required this.category,
     required this.onClearCategory,
@@ -1698,77 +1721,197 @@ class _WhispersEmpty extends StatelessWidget {
   final String? category;
   final VoidCallback? onClearCategory;
   final VoidCallback onComposeSoon;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final posts =
+        (ref.watch(homeDiscoveryPostsProvider).valueOrNull ?? const <Post>[])
+            .where((post) => !post.isWhisper)
+            .take(3)
+            .toList();
+    final people = (ref.watch(friendSuggestionsProvider).valueOrNull ??
+            const <FriendSuggestion>[])
+        .take(8)
+        .toList();
+
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(28, 60, 28, 40),
-        child: Column(
-          children: [
-            Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.14),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withOpacity(0.22)),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(28, 60, 28, 26),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                children: [
+                  Container(
+                    width: 96,
+                    height: 96,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.14),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white.withOpacity(0.22)),
+                    ),
+                    child: const Icon(
+                      Icons.graphic_eq_rounded,
+                      color: Colors.white,
+                      size: 42,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    category == null
+                        ? 'Be the first voice today'
+                        : 'No whispers in this category yet',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    category == null
+                        ? 'Until a new voice arrives, keep exploring real conversations and people from the community.'
+                        : 'Try All, record your own, or explore the conversations below.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.72),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: onComposeSoon,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: VentlyColors.berryMagenta,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    icon: const Icon(Icons.mic_rounded, size: 18),
+                    label: const Text(
+                      'Record a Whisper',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  if (onClearCategory != null) ...[
+                    const SizedBox(height: 10),
+                    TextButton(
+                      onPressed: onClearCategory,
+                      style: TextButton.styleFrom(
+                        foregroundColor: VentlyColors.berryMagenta,
+                      ),
+                      child: const Text(
+                        'Show all categories',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              child: const Icon(Icons.graphic_eq_rounded,
-                  color: Colors.white, size: 42),
             ),
-            const SizedBox(height: 18),
-            const Text(
-              'No whispers yet',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              category == null
-                  ? 'Short voice stories from the community live here. Drop the first one.'
-                  : 'Nothing in this category yet — try All or record your own.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.72),
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: onComposeSoon,
-              style: FilledButton.styleFrom(
-                backgroundColor: VentlyColors.berryMagenta,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
+          ),
+          if (posts.isNotEmpty) ...[
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, 6, 20, 4),
+                child: Text(
+                  'Conversations for you',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
-              icon: const Icon(Icons.mic_rounded, size: 18),
-              label: const Text(
-                'Record a Whisper',
-                style: TextStyle(fontWeight: FontWeight.w900),
-              ),
             ),
-            if (onClearCategory != null) ...[
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: onClearCategory,
-                style: TextButton.styleFrom(
-                  foregroundColor: VentlyColors.berryMagenta,
-                ),
-                child: const Text(
-                  'Show all categories',
-                  style: TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-            ],
+            SliverList.builder(
+              itemCount: posts.length,
+              itemBuilder: (context, index) {
+                final post = posts[index];
+                return PostCard(
+                  post: post,
+                  onTap: () => context.push(
+                    '/post/${post.postId}',
+                    extra: post,
+                  ),
+                  onComment: () => context.push(
+                    '/post/${post.postId}',
+                    extra: post,
+                  ),
+                  onShare: () => context.push('/post/${post.postId}/share'),
+                );
+              },
+            ),
           ],
-        ),
+          if (people.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'People worth hearing',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 88,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: people.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 16),
+                        itemBuilder: (context, index) {
+                          final person = people[index];
+                          return InkWell(
+                            onTap: () => context.push('/user/${person.userId}'),
+                            borderRadius: BorderRadius.circular(12),
+                            child: SizedBox(
+                              width: 72,
+                              child: Column(
+                                children: [
+                                  ProfileAvatar(
+                                    avatarSeed: person.avatarSeed,
+                                    label: person.pseudonym,
+                                    profilePhotoUrl: person.profilePhotoUrl,
+                                    showVerifiedBadge: person.isVerified,
+                                    size: 52,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '@${person.pseudonym}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          const SliverToBoxAdapter(child: SizedBox(height: 116)),
+        ],
       ),
     );
   }

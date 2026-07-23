@@ -421,12 +421,15 @@ class PostCard extends ConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(Icons.shield_outlined, size: 14, color: muted),
                       const SizedBox(width: 6),
-                      Text(
-                        'DMs disabled for ${FeedCategories.label(post.categoryName)} to protect this space.',
-                        style: TextStyle(fontSize: 11, color: muted),
+                      Expanded(
+                        child: Text(
+                          'DMs disabled for ${FeedCategories.label(post.categoryName)} to protect this space.',
+                          style: TextStyle(fontSize: 11, color: muted),
+                        ),
                       ),
                     ],
                   ),
@@ -903,13 +906,14 @@ Future<void> openEditPostDialog(
   WidgetRef ref,
   Post post,
 ) async {
-  final controller = TextEditingController(text: post.content);
+  var nextContent = post.content;
   final saved = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Edit vent'),
-      content: TextField(
-        controller: controller,
+      content: TextFormField(
+        initialValue: post.content,
+        onChanged: (value) => nextContent = value,
         maxLength: 1000,
         maxLines: 6,
         minLines: 3,
@@ -930,8 +934,7 @@ Future<void> openEditPostDialog(
       ],
     ),
   );
-  final next = controller.text.trim();
-  controller.dispose();
+  final next = nextContent.trim();
   if (saved != true) return;
   if (next.isEmpty && !post.hasImage && !post.hasAudio) return;
   try {
@@ -955,7 +958,7 @@ Future<void> openEditPostDialog(
 
 /// Confirm + soft-delete the vent. Once removed, the feed swaps the
 /// card for a tombstone.
-Future<void> confirmDeletePost(
+Future<bool> confirmDeletePost(
   BuildContext context,
   WidgetRef ref,
   Post post,
@@ -983,20 +986,22 @@ Future<void> confirmDeletePost(
       ],
     ),
   );
-  if (ok != true) return;
+  if (ok != true) return false;
   try {
     await ref.read(repositoryProvider).deletePost(post.postId);
     ref.invalidate(postByIdProvider(post.postId));
     ref.invalidate(feedPostsProvider);
-    if (!context.mounted) return;
+    if (!context.mounted) return true;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Vent deleted.')),
     );
+    return true;
   } catch (e) {
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(_friendlyError(e))),
     );
+    return false;
   }
 }
 

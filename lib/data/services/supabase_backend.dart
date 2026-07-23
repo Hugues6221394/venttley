@@ -92,6 +92,7 @@ class SupabaseBackend {
   AppUser? _me;
   AppUser? get me => _me;
   String? get _uid => _client.auth.currentUser?.id;
+  String? get authenticatedUserId => _uid;
 
   static const _userBaseSelect =
       'user_id, anonymous_pseudonym, avatar_seed, current_mood, '
@@ -657,21 +658,43 @@ class SupabaseBackend {
     // we pass through category + mood and ignore the scope filters
     // (those would just over-constrain the candidate pool).
     if (sort == 'foryou' && tribeSlug == null) {
-      final rows = await _client.rpc(
-        'personal_feed',
-        params: {
-          'p_limit': limit,
-          'p_offset': offset,
-          'p_category': category,
-          'p_mood': mood,
-        },
-      ) as List<dynamic>;
-      final cutoff = DateTime.now().subtract(const Duration(hours: 24));
-      return rows
-          .cast<Map<String, dynamic>>()
-          .map<Post>(_postFromRow)
-          .where((p) => !p.isWhisper || p.createdAt.isAfter(cutoff))
-          .toList();
+      try {
+        final rows = await _client.rpc(
+          'personal_feed',
+          params: {
+            'p_limit': limit,
+            'p_offset': offset,
+            'p_category': category,
+            'p_mood': mood,
+          },
+        ) as List<dynamic>;
+        final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+        final personalized = rows
+            .cast<Map<String, dynamic>>()
+            .map<Post>(_postFromRow)
+            .where((p) => !p.isWhisper || p.createdAt.isAfter(cutoff))
+            .toList();
+        if (personalized.isNotEmpty ||
+            offset > 0 ||
+            category != null ||
+            mood != null) {
+          return personalized;
+        }
+      } on PostgrestException catch (error) {
+        if (!_isMissingRpc(error, 'personal_feed')) rethrow;
+      }
+
+      // Cold-start resilience: use the same RLS-protected database feed,
+      // ranked globally, when a new account has no affinity signals yet.
+      return feed(
+        category: category,
+        mood: mood,
+        tribeSlug: tribeSlug,
+        locationBucket: locationBucket,
+        sort: 'hot',
+        limit: limit,
+        offset: offset,
+      );
     }
 
     final source = sort == 'hot' ? 'feed_hot' : 'feed_posts';
@@ -1162,6 +1185,7 @@ class SupabaseBackend {
       peerNickname: row['peer_nickname'] as String?,
       disappearingSeconds: (row['disappearing_seconds'] as int?) ?? 0,
       theme: (row['theme'] as String?) ?? 'default',
+      fontStyle: (row['font_style'] as String?) ?? 'default',
     );
   }
 
@@ -1172,6 +1196,7 @@ class SupabaseBackend {
     bool clearNickname = false,
     int? disappearingSeconds,
     String? theme,
+    String? fontStyle,
   }) async {
     await _client.rpc('set_dm_room_pref', params: {
       'p_room_id': roomId,
@@ -1180,6 +1205,7 @@ class SupabaseBackend {
       'p_clear_nickname': clearNickname,
       'p_disappearing': disappearingSeconds,
       'p_theme': theme,
+      'p_font_style': fontStyle,
     });
   }
 
@@ -1214,6 +1240,7 @@ class SupabaseBackend {
               karma: (r['friend_karma'] as int?) ?? 0,
               isVerified: (r['friend_is_verified'] as bool?) ?? false,
               acceptedAt: DateTime.parse(r['accepted_at'] as String),
+              profilePhotoUrl: r['friend_profile_photo_url'] as String?,
             ))
         .toList();
     if (friends.isEmpty) return friends;
@@ -4128,6 +4155,7 @@ class SupabaseBackend {
           ? (rawName ?? 'Private group')
           : (rawName == null ? '@anonymous' : '@$rawName'),
       peerAvatarSeed: (row['peer_avatar_seed'] as String?) ?? 'default-orb',
+      peerProfilePhotoUrl: row['peer_profile_photo_url'] as String?,
       peerUserId: row['peer_id'] as String?,
       requestPreview: (row['request_preview'] as String?) ?? '',
       roomStatus: row['room_status'] as String,
@@ -4142,6 +4170,12 @@ class SupabaseBackend {
       isGroup: isGroup,
       groupTitle: row['group_title'] as String?,
       memberCount: (row['member_count'] as int?) ?? 2,
+      groupAvatarPath: row['group_avatar_path'] as String?,
+      groupInviteToken: row['group_invite_token'] as String?,
+      groupInviteEnabled: (row['group_invite_enabled'] as bool?) ?? false,
+      groupAllowMemberInvites:
+          (row['group_allow_member_invites'] as bool?) ?? false,
+      isGroupOwner: (row['is_group_owner'] as bool?) ?? false,
     );
   }
 
@@ -4194,7 +4228,7 @@ class SupabaseBackend {
     // returned ChatRoom has a pseudonym/avatar for immediate render.
     final peer = await _client
         .from('users')
-        .select('anonymous_pseudonym, avatar_seed')
+        .select('anonymous_pseudonym, avatar_seed, profile_photo_url')
         .eq('user_id', peerUserId)
         .maybeSingle();
     return ChatRoom(
@@ -4202,6 +4236,7 @@ class SupabaseBackend {
       peerPseudonym:
           peer == null ? '@anonymous' : '@${peer['anonymous_pseudonym']}',
       peerAvatarSeed: (peer?['avatar_seed'] as String?) ?? 'default-orb',
+      peerProfilePhotoUrl: peer?['profile_photo_url'] as String?,
       requestPreview: (row['request_preview'] as String?) ?? '',
       roomStatus: row['room_status'] as String,
       createdAt: DateTime.parse(row['created_at'] as String),
@@ -4211,12 +4246,12 @@ class SupabaseBackend {
 
   Future<ChatRoom> createGroupChat({
     required String title,
-    required String friendUserId,
+    required List<String> memberUserIds,
   }) async {
     if (_uid == null) throw StateError('Not signed in');
-    final roomId = await _client.rpc('create_group_chat', params: {
+    final roomId = await _client.rpc('create_group_chat_v2', params: {
       'p_title': title,
-      'p_friend_id': friendUserId,
+      'p_member_ids': memberUserIds,
     }) as String;
     final row = await _client
         .from('inbox_rooms')
@@ -4224,6 +4259,139 @@ class SupabaseBackend {
         .eq('room_id', roomId)
         .single();
     return _chatRoomFromInboxRow(row);
+  }
+
+  Future<List<GroupChatMember>> groupChatMembers(String roomId) async {
+    final rows = await _client.rpc(
+      'group_chat_members',
+      params: {'p_room_id': roomId},
+    ) as List<dynamic>;
+    return rows.map((raw) {
+      final row = raw as Map<String, dynamic>;
+      return GroupChatMember(
+        userId: row['user_id'] as String,
+        pseudonym: row['pseudonym'] as String,
+        avatarSeed: (row['avatar_seed'] as String?) ?? 'default-orb',
+        profilePhotoUrl: row['profile_photo_url'] as String?,
+        isVerified: (row['is_verified'] as bool?) ?? false,
+        memberRole: (row['member_role'] as String?) ?? 'member',
+        nickname: row['nickname'] as String?,
+        joinedAt: DateTime.parse(row['joined_at'] as String),
+        isMe: (row['is_me'] as bool?) ?? false,
+      );
+    }).toList(growable: false);
+  }
+
+  Future<int> addGroupChatMembers({
+    required String roomId,
+    required List<String> memberUserIds,
+  }) async {
+    final result = await _client.rpc('add_group_chat_members', params: {
+      'p_room_id': roomId,
+      'p_member_ids': memberUserIds,
+    });
+    return (result as int?) ?? 0;
+  }
+
+  Future<bool> removeGroupChatMember({
+    required String roomId,
+    required String userId,
+  }) async {
+    final result = await _client.rpc('remove_group_chat_member', params: {
+      'p_room_id': roomId,
+      'p_user_id': userId,
+    });
+    return result == true;
+  }
+
+  Future<bool> leaveGroupChat(String roomId) async {
+    final result = await _client.rpc(
+      'leave_group_chat',
+      params: {'p_room_id': roomId},
+    );
+    return result == true;
+  }
+
+  Future<bool> markGroupSpamAndLeave(String roomId) async {
+    final result = await _client.rpc(
+      'mark_group_spam_and_leave',
+      params: {'p_room_id': roomId},
+    );
+    return result == true;
+  }
+
+  Future<ChatRoom> updateGroupChatIdentity({
+    required String roomId,
+    String? title,
+    String? avatarPath,
+    bool clearAvatar = false,
+  }) async {
+    await _client.rpc('update_group_chat_identity', params: {
+      'p_room_id': roomId,
+      'p_title': title,
+      'p_avatar_path': avatarPath,
+      'p_clear_avatar': clearAvatar,
+    });
+    final row = await _client
+        .from('inbox_rooms')
+        .select()
+        .eq('room_id', roomId)
+        .single();
+    return _chatRoomFromInboxRow(row);
+  }
+
+  Future<bool> setGroupChatNickname({
+    required String roomId,
+    required String nickname,
+  }) async {
+    final result = await _client.rpc('set_group_chat_nickname', params: {
+      'p_room_id': roomId,
+      'p_nickname': nickname,
+    });
+    return result == true;
+  }
+
+  Future<bool> setGroupChatPrivacy({
+    required String roomId,
+    bool? allowMemberInvites,
+    bool? inviteEnabled,
+  }) async {
+    final result = await _client.rpc('set_group_chat_privacy', params: {
+      'p_room_id': roomId,
+      'p_allow_member_invites': allowMemberInvites,
+      'p_invite_enabled': inviteEnabled,
+    });
+    return result == true;
+  }
+
+  Future<String> regenerateGroupInvite(String roomId) async {
+    final result = await _client.rpc(
+      'regenerate_group_invite',
+      params: {'p_room_id': roomId},
+    );
+    return result as String;
+  }
+
+  Future<GroupInvitePreview?> groupInvitePreview(String token) async {
+    final rows = await _client.rpc(
+      'group_invite_preview',
+      params: {'p_token': token},
+    ) as List<dynamic>;
+    if (rows.isEmpty) return null;
+    final row = rows.first as Map<String, dynamic>;
+    return GroupInvitePreview(
+      roomId: row['room_id'] as String,
+      title: row['title'] as String,
+      avatarPath: row['group_avatar_path'] as String?,
+      memberCount: (row['member_count'] as int?) ?? 0,
+    );
+  }
+
+  Future<String> joinGroupChatByInvite(String token) async {
+    return await _client.rpc(
+      'join_group_chat_by_invite',
+      params: {'p_token': token},
+    ) as String;
   }
 
   Future<ChatRoom> acceptRequest(String roomId) async {
@@ -4450,8 +4618,23 @@ class SupabaseBackend {
   }
 
   Future<bool> deletePost(String postId) async {
+    final media = await _client
+        .from('posts')
+        .select('image_path')
+        .eq('post_id', postId)
+        .maybeSingle();
     final res = await _client.rpc('delete_post', params: {'p_post_id': postId});
-    return (res as bool?) ?? false;
+    final deleted = (res as bool?) ?? false;
+    final imagePath = media?['image_path'] as String?;
+    if (deleted && imagePath != null && imagePath.isNotEmpty) {
+      try {
+        await _client.storage.from('post-media').remove([imagePath]);
+      } catch (_) {
+        // The content is already hidden. A later maintenance sweep can retry
+        // physical cleanup without turning a successful delete into an error.
+      }
+    }
+    return deleted;
   }
 
   Future<bool> editComment({
@@ -4730,6 +4913,34 @@ class SupabaseBackend {
           ),
         );
     return (path: path, messageId: messageId);
+  }
+
+  Future<String> uploadGroupChatAvatar({
+    required String roomId,
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) async {
+    final safeExtension = extension.toLowerCase().replaceAll('jpeg', 'jpg');
+    const allowed = {'jpg', 'png', 'webp', 'heic', 'gif'};
+    if (!allowed.contains(safeExtension)) {
+      throw ArgumentError('Unsupported group image type.');
+    }
+    final path = '$roomId/group-avatar-${const Uuid().v4()}.$safeExtension';
+    await _client.storage.from('chat-media').uploadBinary(
+          path,
+          Uint8List.fromList(bytes),
+          fileOptions: FileOptions(
+            contentType: contentType,
+            upsert: false,
+          ),
+        );
+    return path;
+  }
+
+  Future<void> deleteChatMedia(String path) async {
+    if (path.trim().isEmpty) return;
+    await _client.storage.from('chat-media').remove([path]);
   }
 
   /// Upload a DM voice note into the private `chat-media` bucket. Mirrors
@@ -5017,7 +5228,9 @@ class SupabaseBackend {
         id: r['notification_id'] as String,
         kind: r['kind'] as String,
         title: (payload['title'] as String?) ?? _kindLabel(r['kind'] as String),
-        body: (payload['body'] as String?) ?? '',
+        body: (payload['body'] as String?) ??
+            (payload['message'] as String?) ??
+            '',
         createdAt:
             DateTime.parse((r['updated_at'] ?? r['created_at']) as String),
         isRead: r['is_read'] as bool,
@@ -5034,8 +5247,16 @@ class SupabaseBackend {
         return 'Tribe invitation';
       case 'message_request':
         return 'Message request';
+      case 'new_follower':
+        return 'New connection request';
+      case 'friend_request':
+        return 'Connection request';
+      case 'friend_accepted':
+        return 'Connection accepted';
       case 'comment_reply':
         return 'New reply';
+      case 'comment_like':
+        return 'Reaction on your reply';
       case 'post_like':
         return 'Reaction on your vent';
       case 'admin_broadcast':

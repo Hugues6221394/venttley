@@ -15,6 +15,8 @@ import '../screens/friends/friends_screen.dart';
 import '../screens/home/home_shell.dart';
 import '../screens/inbox/chat_screen.dart';
 import '../screens/inbox/create_group_chat_screen.dart';
+import '../screens/inbox/group_chat_settings_screen.dart';
+import '../screens/inbox/group_invite_screen.dart';
 import '../screens/whispers/create_whisper_screen.dart';
 import '../widgets/keep_alive.dart';
 import '../screens/onboarding/email_signup_screen.dart';
@@ -362,6 +364,36 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/chat/:roomId',
         builder: (ctx, st) => ChatScreen(roomId: st.pathParameters['roomId']!),
+      ),
+      // Public profiles opened from a root-level conversation must stay on the
+      // root navigator. Pushing the shell-owned /user route from here would
+      // instantiate the stateful tab navigators a second time and trigger
+      // Flutter's keyReservation assertion.
+      GoRoute(
+        path: '/user-preview/:userId',
+        builder: (ctx, st) =>
+            FriendProfileScreen(userId: st.pathParameters['userId']!),
+        routes: [
+          GoRoute(
+            path: 'stat/:statKind',
+            builder: (ctx, st) => ProfileStatDetailScreen(
+              userId: st.pathParameters['userId']!,
+              statKind: st.pathParameters['statKind']!,
+            ),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/group-chat/:roomId/settings',
+        builder: (ctx, st) => GroupChatSettingsScreen(
+          roomId: st.pathParameters['roomId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/group-invite/:token',
+        builder: (ctx, st) => GroupInviteScreen(
+          token: st.pathParameters['token']!,
+        ),
       ),
       // Full-screen creators + story viewer stay immersive.
       GoRoute(

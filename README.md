@@ -84,9 +84,10 @@ supabase/
     └── 0006_reports.sql
 ```
 
-`VentlyRepository` is the single data-layer facade. By default it talks to a
-deterministic in-memory `MockBackend` that boots with seed Tribes, Plugz,
-posts, and prompts; flip to live Supabase via `--dart-define`.
+`VentlyRepository` is the single data-layer facade. App runs use live Supabase
+by default. The deterministic in-memory `MockBackend` is available only when
+explicitly requested for offline development or automated tests, and release
+builds reject mock mode.
 
 ## Configuration
 
@@ -100,9 +101,10 @@ belong in Supabase Edge Function secrets and must never enter Flutter builds.
 | `USE_MOCK_BACKEND` | force the in-memory backend | `false` |
 
 ```bash
-flutter run \
-  --dart-define=SUPABASE_URL=https://YOUR-PROJECT.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=ey...
+flutter run
+
+# Explicit offline development only. This is rejected in release builds.
+flutter run --dart-define=USE_MOCK_BACKEND=true
 ```
 
 The authenticated `moderate` Edge Function reads `GROQ_API_KEY` and optional
@@ -158,7 +160,7 @@ Key schema notes:
 
 ```bash
 flutter pub get
-flutter run            # MockBackend by default — no Supabase needed
+flutter run            # Live Supabase backend
 flutter analyze        # zero errors
 ```
 
