@@ -1,5 +1,4 @@
-import 'dart:ui';
-
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers.dart';
 import '../../theme/colors.dart';
 import '../../theme/motion.dart';
+import '../../widgets/connection_banner.dart';
 import '../../widgets/keeper_content_studio_sheet.dart';
 import '../../widgets/premium_motion.dart';
 import '../../widgets/quick_create_sheet.dart';
@@ -20,16 +20,22 @@ class HomeShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
 
   static const _memberTabs = [
-    _Tab(Icons.home_outlined, Icons.home_rounded, 'Home', branchIndex: 0),
-    _Tab(Icons.graphic_eq_outlined, Icons.graphic_eq_rounded, 'Whispers',
+    _Tab(CupertinoIcons.house, CupertinoIcons.house_fill, 'Home',
+        branchIndex: 0),
+    _Tab(CupertinoIcons.waveform, CupertinoIcons.waveform, 'Whispers',
         branchIndex: 1),
     _Tab(Icons.add_rounded, Icons.add_rounded, 'Post', isPost: true),
-    _Tab(Icons.people_alt_outlined, Icons.people_alt_rounded, 'Connections',
+    _Tab(CupertinoIcons.person_2, CupertinoIcons.person_2_fill, 'Friends',
         pushRoute: '/friends'),
-    _Tab(Icons.mail_outline_rounded, Icons.mail_rounded, 'Inbox',
+    _Tab(CupertinoIcons.chat_bubble, CupertinoIcons.chat_bubble_fill, 'Inbox',
         branchIndex: 3),
-    _Tab(Icons.person_outline, Icons.person, 'Profile', branchIndex: 4),
+    _Tab(CupertinoIcons.person, CupertinoIcons.person_fill, 'Profile',
+        branchIndex: 4),
   ];
+
+  /// Public for navigation contract tests and accessibility audits.
+  static List<String> get memberDestinationLabels =>
+      List.unmodifiable(_memberTabs.map((tab) => tab.label));
 
   static const _keeperTabs = [
     _Tab(Icons.dashboard_outlined, Icons.dashboard_rounded, 'Studio',
@@ -39,8 +45,7 @@ class HomeShell extends ConsumerWidget {
     _Tab(Icons.add_rounded, Icons.add_rounded, 'Create', isPost: true),
     _Tab(Icons.groups_outlined, Icons.groups_rounded, 'Members',
         branchIndex: 3),
-    _Tab(Icons.forum_outlined, Icons.forum_rounded, 'Chat',
-        isTribeChat: true),
+    _Tab(Icons.forum_outlined, Icons.forum_rounded, 'Chat', isTribeChat: true),
     _Tab(Icons.insights_outlined, Icons.insights_rounded, 'Analytics',
         branchIndex: 4),
   ];
@@ -51,13 +56,22 @@ class HomeShell extends ConsumerWidget {
     final memberView = ref.watch(keeperMemberViewProvider);
     final studioMode = isKeeper && !memberView;
     final tabs = studioMode ? _keeperTabs : _memberTabs;
+    final currentPath = GoRouterState.of(context).uri.path;
 
     return Scaffold(
       extendBody: true,
-      body: navigationShell,
+      body: Stack(
+        children: [
+          navigationShell,
+          // Floats over content so it never shifts layout; SafeArea inside.
+          const Positioned(
+              top: 0, left: 0, right: 0, child: ConnectionBanner()),
+        ],
+      ),
       bottomNavigationBar: _GlassNavBar(
         tabs: tabs,
         currentBranch: navigationShell.currentIndex,
+        currentPath: currentPath,
         onTapTab: (tab) {
           if (tab.isPost) {
             if (studioMode) {
@@ -120,16 +134,18 @@ class _Tab {
   });
 }
 
-/// Floating frosted pill with a raised gradient Post button in the middle.
+/// Quiet floating navigation with a raised compose button in the middle.
 class _GlassNavBar extends ConsumerWidget {
   const _GlassNavBar({
     required this.tabs,
     required this.currentBranch,
+    required this.currentPath,
     required this.onTapTab,
   });
 
   final List<_Tab> tabs;
   final int currentBranch;
+  final String currentPath;
   final ValueChanged<_Tab> onTapTab;
 
   @override
@@ -148,51 +164,65 @@ class _GlassNavBar extends ConsumerWidget {
       return null;
     }
 
+    bool selectedFor(_Tab tab) {
+      final route = tab.pushRoute;
+      if (route != null) return currentPath.startsWith(route);
+      if (tab.branchIndex == 0 && currentPath.startsWith('/friends')) {
+        return false;
+      }
+      return tab.branchIndex != null && tab.branchIndex == currentBranch;
+    }
+
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(30),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            decoration: BoxDecoration(
-              color: (isDark ? VentlyColors.cardDark : Colors.white)
-                  .withOpacity(isDark ? 0.72 : 0.62),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(
-                color: (isDark ? Colors.white : Colors.white)
-                    .withOpacity(isDark ? 0.10 : 0.70),
+      child: RepaintBoundary(
+        key: const Key('member-bottom-navigation'),
+        child: Container(
+          height: 78,
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+          decoration: BoxDecoration(
+            color: isDark ? scheme.surface : const Color(0xFFFFFEFF),
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withOpacity(0.10)
+                  : VentlyColors.softMauve,
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color:
+                    VentlyColors.berryMagenta.withOpacity(isDark ? 0.10 : 0.08),
+                blurRadius: 28,
+                spreadRadius: -10,
+                offset: const Offset(0, 9),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: VentlyColors.berryMagenta
-                      .withOpacity(isDark ? 0.18 : 0.10),
-                  blurRadius: 24,
-                  offset: const Offset(0, 10),
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.24 : 0.05),
+                blurRadius: 18,
+                spreadRadius: -8,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              for (final tab in tabs)
+                Expanded(
+                  child: tab.isPost
+                      ? _PostNavButton(
+                          label: tab.label, onTap: () => onTapTab(tab))
+                      : _NavItem(
+                          tab: tab,
+                          selected: selectedFor(tab),
+                          badge: badgeFor(tab),
+                          scheme: scheme,
+                          isDark: isDark,
+                          onTap: () => onTapTab(tab),
+                        ),
                 ),
-              ],
-            ),
-            child: Row(
-              children: [
-                for (final tab in tabs)
-                  Expanded(
-                    child: tab.isPost
-                        ? _PostNavButton(
-                            label: tab.label, onTap: () => onTapTab(tab))
-                        : _NavItem(
-                            tab: tab,
-                            selected: tab.branchIndex != null &&
-                                tab.branchIndex == currentBranch,
-                            badge: badgeFor(tab),
-                            scheme: scheme,
-                            isDark: isDark,
-                            onTap: () => onTapTab(tab),
-                          ),
-                  ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
@@ -221,55 +251,73 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = selected
         ? scheme.primary
-        : scheme.onSurface.withOpacity(isDark ? 0.55 : 0.50);
+        : scheme.onSurface.withOpacity(isDark ? 0.62 : 0.55);
     return Pressable(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(
+      child: Semantics(
+        key: ValueKey('member-nav-${tab.label.toLowerCase()}'),
+        label: tab.label,
+        button: true,
+        selected: selected,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Stack(
             clipBehavior: Clip.none,
+            alignment: Alignment.center,
             children: [
-              AnimatedContainer(
-                duration: VentlyMotion.base,
-                curve: VentlyMotion.enter,
-                width: 38,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: selected
-                      ? scheme.primary.withOpacity(0.14)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  selected ? tab.activeIcon : tab.icon,
-                  color: color,
-                  size: 21,
+              SizedBox(
+                width: 50,
+                height: 50,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedScale(
+                      duration: VentlyMotion.fast,
+                      curve: VentlyMotion.enter,
+                      scale: selected ? 1.06 : 1,
+                      child: Icon(
+                        selected ? tab.activeIcon : tab.icon,
+                        color: color,
+                        size: selected ? 28 : 27,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    AnimatedContainer(
+                      duration: VentlyMotion.fast,
+                      width: selected ? 6 : 0,
+                      height: selected ? 6 : 0,
+                      decoration: BoxDecoration(
+                        color: scheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (badge != null)
                 Positioned(
-                  right: -3,
-                  top: -3,
+                  right: 8,
+                  top: 2,
                   child: Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                     constraints:
-                        const BoxConstraints(minWidth: 17, minHeight: 17),
+                        const BoxConstraints(minWidth: 19, minHeight: 19),
                     decoration: BoxDecoration(
                       gradient: VentlyGradients.brand,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isDark ? VentlyColors.cardDark : Colors.white,
-                        width: 1.6,
+                        color: isDark
+                            ? Theme.of(context).colorScheme.surface
+                            : Colors.white,
+                        width: 1.8,
                       ),
                     ),
                     alignment: Alignment.center,
                     child: Text(
                       badge! > 99 ? '99+' : '$badge',
                       style: const TextStyle(
-                        fontSize: 9,
+                        fontSize: 10,
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                       ),
@@ -278,29 +326,7 @@ class _NavItem extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 1),
-          Text(
-            tab.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
-              color: color,
-            ),
-          ),
-          AnimatedContainer(
-            duration: VentlyMotion.base,
-            curve: VentlyMotion.enter,
-            margin: const EdgeInsets.only(top: 2),
-            width: selected ? 10 : 0,
-            height: 3,
-            decoration: BoxDecoration(
-              color: scheme.primary,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -315,46 +341,48 @@ class _PostNavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Pressable(
-      onTap: onTap,
-      pressedScale: 0.90,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Transform.translate(
-            offset: const Offset(0, -12),
-            child: Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                gradient: VentlyGradients.brand,
-                shape: BoxShape.circle,
-                border:
-                    Border.all(color: Colors.white.withOpacity(0.8), width: 2),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFC01A5B).withOpacity(0.45),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
+    return Semantics(
+      key: const ValueKey('member-nav-post'),
+      label: label,
+      button: true,
+      child: Pressable(
+        onTap: onTap,
+        pressedScale: 0.90,
+        child: Transform.translate(
+          offset: const Offset(0, -11),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 54, maxHeight: 54),
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: VentlyGradients.brand,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.surface,
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: VentlyColors.berryMagenta.withOpacity(0.30),
+                        blurRadius: 24,
+                        spreadRadius: -5,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child:
-                  const Icon(Icons.add_rounded, color: Colors.white, size: 28),
-            ),
-          ),
-          Transform.translate(
-            offset: const Offset(0, -12),
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w800,
-                color: VentlyColors.berryMagenta,
+                  child: const Icon(
+                    Icons.add_rounded,
+                    color: Colors.white,
+                    size: 31,
+                  ),
+                ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

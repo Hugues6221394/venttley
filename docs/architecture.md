@@ -17,7 +17,8 @@ the env vars do.
 | Identity (today) | Supabase Auth | `supabase_flutter` | RLS |
 | Identity (future) | **Clerk** | `clerk_flutter_sdk` (TBD) | JWT verify in Supabase RLS |
 | Application data | **Supabase Postgres** | `supabase_flutter` | Postgres + RLS + RPCs |
-| Media storage | **Supabase Storage** | `supabase_flutter` | Bucket policies |
+| Durable social writes | **Supabase Postgres** | encrypted outbox | idempotent RPCs + private mutation receipts |
+| Media storage | **Supabase Storage** | encrypted pending-media store + `supabase_flutter` | Bucket policies |
 | Realtime | **Supabase Realtime** | `supabase_flutter` | Postgres-changes channels |
 | Foreground notifications | `flutter_local_notifications` | `NotificationsService` | n/a |
 | Push notifications | **Firebase Cloud Messaging** | `firebase_messaging` (TBD) | `notification-fanout` Edge Function |
@@ -31,7 +32,7 @@ the env vars do.
 | Observability | **OpenTelemetry** | `OtelExporter` (TBD) | OTLP collector |
 | Audio capture | `record` package | `WhisperRecorder` | n/a |
 | Audio playback | `just_audio` | `WhisperPlayerController` | n/a |
-| Moderation (text) | **Groq LlamaGuard** | `ModerationService` (Tier 1+2) | `whisper-moderation` Edge Function |
+| Moderation (text) | **Groq LlamaGuard** | `ModerationService` (local Tier 1) | authenticated `moderate` Edge Function (Tier 2) |
 
 ---
 
@@ -49,13 +50,24 @@ the env vars do.
    This means dev / CI / preview builds work with zero external
    accounts.
 
-3. **Writes from the client go through Supabase only.** Stripe doesn't
+3. **Writes from the client go through Supabase only.** Retryable posts,
+   comments, DMs, and tribe messages carry a UUID from the first attempt
+   through every outbox replay. Private server receipts return the original
+   resource when the HTTP response is lost after commit. Stripe doesn't
    know about Venttly users — it knows about `customer.metadata.user_id`
    set when the checkout session was created. PostHog events also write
    into `analytics_events` so SQL still answers "what did the user do"
    even if PostHog is down.
 
-4. **PII never leaves the device unless the user typed it.** Every
+4. **Sensitive drafts and retries are encrypted at rest.** Composer drafts
+   and queued message bodies use platform secure storage and are scoped to the
+   authenticated account. Expired retries are retained as failed sends for an
+   explicit user retry; they are never silently discarded. Pending image and
+   voice bytes use AES-GCM encrypted app-private files, referenced by the
+   encrypted outbox and deleted only after the idempotent row write is
+   confirmed or the user removes the failed send.
+
+5. **PII never leaves the device unless the user typed it.** Every
    payload sent to PostHog, Sentry, OTEL, or the Logger sinks runs
    through `PiiScrubber.scrub()`. Confession bodies, message
    plaintext, recovery phrases, and emails are dropped or masked.
@@ -68,6 +80,7 @@ the env vars do.
 lib/
   core/
     constants.dart         # VentlyConfig — env var surface
+    connection.dart        # network state + outbox lifecycle
     pii_scrubber.dart      # outbound payload sanitiser
     logger.dart            # log.info / warn / error w/ scrubbing
     providers.dart         # Riverpod wiring
@@ -80,6 +93,10 @@ lib/
       feature_flags_service.dart       # PostHog or local defaults
       moderation_service.dart          # text safety pipeline
       notifications_service.dart       # foreground local
+      draft_store.dart                  # encrypted composer drafts
+      outbox.dart                       # encrypted durable retries
+      pending_media_store.dart          # encrypted upload recovery files
+      sensitive_store.dart              # platform secure-storage boundary
       remote_cache_service.dart        # Upstash L2 (composes L1)
       search_service.dart              # Meilisearch or Postgres
       subscription_service.dart        # reads subscriptions table
@@ -90,13 +107,13 @@ lib/
     repositories/
       vently_repository.dart           # facade over backend + mock
 supabase/
-  migrations/                          # 0001 → 0046
+  migrations/                          # ordered schema + security changes
   functions/
     _shared/                           # CORS + admin client
     notification-fanout/               # FCM fan-out
     email-dispatcher/                  # Resend drain
     payment-webhook/                   # Stripe → subscriptions
-    whisper-moderation/                # Tier-1 + (future) STT/Tier-2
+    moderate/                          # authenticated Tier-2 text guard
     storage-cleanup/                   # orphan sweeper
 docs/
   notifications.md                     # FCM/APNs ops guide

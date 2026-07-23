@@ -5,25 +5,59 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
+import '../theme/motion.dart';
 import 'profile_avatar.dart';
 import 'report_reason_sheet.dart';
 import 'user_link.dart';
+import 'vently_notification_bell.dart';
 
 /// Instagram-style DM options sheet, opened from the chat header. Profile /
 /// Search / Mute quick actions, then Theme · Nicknames · Disappearing messages
 /// · Privacy & safety (block/report) · Create group. Prefs are per-user, per
 /// room (migration 0098).
+enum _ChatOptionsAction { profile, search, createGroup }
+
 Future<void> showChatOptionsSheet(
   BuildContext context, {
   required ChatRoom room,
   required VoidCallback onSearch,
-}) {
-  return showModalBottomSheet<void>(
+}) async {
+  if (room.isGroup) {
+    final result = await context.push<String>(
+      '/group-chat/${room.roomId}/settings',
+    );
+    if (result == 'search' && context.mounted) onSearch();
+    return;
+  }
+  final action = await showModalBottomSheet<_ChatOptionsAction>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
+    sheetAnimationStyle: VentlyMotion.sheetSpring,
     builder: (_) => _ChatOptionsSheet(room: room, onSearch: onSearch),
   );
+  if (action == null || !context.mounted) return;
+  switch (action) {
+    case _ChatOptionsAction.profile:
+      openUserProfile(context, room.peerUserId);
+      break;
+    case _ChatOptionsAction.search:
+      onSearch();
+      break;
+    case _ChatOptionsAction.createGroup:
+      final friendId = room.peerUserId;
+      if (friendId == null) return;
+      final location = Uri(
+        path: '/group-chat/new',
+        queryParameters: {
+          'friendId': friendId,
+          'friendName': room.peerPseudonym,
+          'friendAvatar': room.peerAvatarSeed,
+        },
+      ).toString();
+      await context.push(location);
+      break;
+  }
 }
 
 /// Named DM themes → accent colour. Applied to the chat header + own bubbles.
@@ -49,13 +83,14 @@ class _ChatOptionsSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final prefs =
-        ref.watch(dmRoomPrefsProvider(room.roomId)).valueOrNull ?? DmRoomPrefs.empty;
+    final prefs = ref.watch(dmRoomPrefsProvider(room.roomId)).valueOrNull ??
+        DmRoomPrefs.empty;
     final disappearing =
         ref.watch(roomDisappearingProvider(room.roomId)).valueOrNull ?? 0;
-    final blocks = ref.watch(myBlocksProvider).valueOrNull ?? const <BlockedUser>[];
-    final isBlocked =
-        room.peerUserId != null && blocks.any((b) => b.userId == room.peerUserId);
+    final blocks =
+        ref.watch(myBlocksProvider).valueOrNull ?? const <BlockedUser>[];
+    final isBlocked = room.peerUserId != null &&
+        blocks.any((b) => b.userId == room.peerUserId);
     final displayName = prefs.peerNickname?.trim().isNotEmpty == true
         ? prefs.peerNickname!.trim()
         : room.peerPseudonym;
@@ -66,9 +101,9 @@ class _ChatOptionsSheet extends ConsumerWidget {
       maxChildSize: 0.92,
       expand: false,
       builder: (context, scroll) => Container(
-        decoration: const BoxDecoration(
-          color: VentlyColors.cardBlush,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: ListView(
           controller: scroll,
@@ -89,42 +124,44 @@ class _ChatOptionsSheet extends ConsumerWidget {
               child: ProfileAvatar(
                 avatarSeed: room.peerAvatarSeed,
                 label: displayName,
+                profilePhotoUrl: room.peerProfilePhotoUrl,
                 size: 84,
               ),
             ),
             const SizedBox(height: 10),
             Center(
               child: Text(displayName,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 19,
-                      color: VentlyColors.deepBurgundy)),
+                      color: context.ink)),
             ),
             const SizedBox(height: 16),
             // Quick actions
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _Quick(
-                  icon: Icons.person_outline_rounded,
-                  label: 'Profile',
-                  onTap: () {
-                    Navigator.pop(context);
-                    openUserProfile(context, room.peerUserId);
-                  },
-                ),
+                if (!room.isGroup)
+                  _Quick(
+                    icon: Icons.person_outline_rounded,
+                    label: 'Profile',
+                    onTap: () => Navigator.pop(
+                      context,
+                      _ChatOptionsAction.profile,
+                    ),
+                  ),
                 _Quick(
                   icon: Icons.search_rounded,
                   label: 'Search',
-                  onTap: () {
-                    Navigator.pop(context);
-                    onSearch();
-                  },
+                  onTap: () => Navigator.pop(
+                    context,
+                    _ChatOptionsAction.search,
+                  ),
                 ),
                 _Quick(
                   icon: prefs.muted
-                      ? Icons.notifications_off_rounded
-                      : Icons.notifications_none_rounded,
+                      ? VentlyNotificationBell.mutedIconData
+                      : VentlyNotificationBell.iconData,
                   label: prefs.muted ? 'Muted' : 'Mute',
                   active: prefs.muted,
                   onTap: () => _set(ref, room.roomId, muted: !prefs.muted),
@@ -139,12 +176,13 @@ class _ChatOptionsSheet extends ConsumerWidget {
               accent: kChatThemes[prefs.theme] ?? VentlyColors.berryMagenta,
               onTap: () => _pickTheme(context, ref, prefs.theme),
             ),
-            _Tile(
-              icon: Icons.badge_outlined,
-              title: 'Nicknames',
-              trailing: prefs.peerNickname ?? 'Set',
-              onTap: () => _setNickname(context, ref, prefs.peerNickname),
-            ),
+            if (!room.isGroup)
+              _Tile(
+                icon: Icons.badge_outlined,
+                title: 'Nicknames',
+                trailing: prefs.peerNickname ?? 'Set',
+                onTap: () => _setNickname(context, ref, prefs.peerNickname),
+              ),
             _Tile(
               icon: Icons.timer_outlined,
               title: 'Disappearing messages',
@@ -153,26 +191,28 @@ class _ChatOptionsSheet extends ConsumerWidget {
               onTap: () => _pickDisappearing(context, ref, disappearing),
             ),
             const Divider(height: 28),
-            _Tile(
-              icon: Icons.group_add_outlined,
-              title: 'Create a group chat',
-              onTap: () {
-                Navigator.pop(context);
-                context.push('/tribes/new');
-              },
-            ),
+            if (!room.isGroup && room.peerUserId != null)
+              _Tile(
+                icon: Icons.group_add_outlined,
+                title: 'Create a group chat',
+                onTap: () => Navigator.pop(
+                  context,
+                  _ChatOptionsAction.createGroup,
+                ),
+              ),
             _Tile(
               icon: Icons.flag_outlined,
               title: 'Report',
               danger: true,
               onTap: () => _report(context, ref),
             ),
-            _Tile(
-              icon: isBlocked ? Icons.lock_open_rounded : Icons.block_rounded,
-              title: isBlocked ? 'Unblock' : 'Block',
-              danger: !isBlocked,
-              onTap: () => _toggleBlock(context, ref, isBlocked),
-            ),
+            if (!room.isGroup)
+              _Tile(
+                icon: isBlocked ? Icons.lock_open_rounded : Icons.block_rounded,
+                title: isBlocked ? 'Unblock' : 'Block',
+                danger: !isBlocked,
+                onTap: () => _toggleBlock(context, ref, isBlocked),
+              ),
           ],
         ),
       ),
@@ -240,7 +280,9 @@ class _ChatOptionsSheet extends ConsumerWidget {
     );
     if (picked != null) {
       // Conversation-level (shared) + server-side hard-delete via cron (0099).
-      await ref.read(repositoryProvider).setRoomDisappearing(room.roomId, picked);
+      await ref
+          .read(repositoryProvider)
+          .setRoomDisappearing(room.roomId, picked);
       ref.invalidate(roomDisappearingProvider(room.roomId));
     }
   }
@@ -280,7 +322,8 @@ class _ChatOptionsSheet extends ConsumerWidget {
   }
 
   Future<void> _report(BuildContext context, WidgetRef ref) async {
-    final reason = await showReportReasonSheet(context, title: 'Report this chat');
+    final reason =
+        await showReportReasonSheet(context, title: 'Report this chat');
     if (reason == null) return;
     await ref
         .read(repositoryProvider)
@@ -340,17 +383,16 @@ class _Quick extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: active
                     ? VentlyColors.berryMagenta.withOpacity(0.15)
-                    : Colors.white.withOpacity(0.7),
+                    : context.glass(0.7),
               ),
-              child: Icon(icon,
-                  color: VentlyColors.berryMagenta, size: 22),
+              child: Icon(icon, color: VentlyColors.berryMagenta, size: 22),
             ),
             const SizedBox(height: 6),
             Text(label,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: VentlyColors.deepBurgundy)),
+                    color: context.ink)),
           ],
         ),
       ),
@@ -376,7 +418,7 @@ class _Tile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? VentlyColors.dangerRed : VentlyColors.deepBurgundy;
+    final color = danger ? VentlyColors.dangerRed : context.ink;
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 4),
       leading: accent != null
@@ -392,11 +434,11 @@ class _Tile extends StatelessWidget {
               child: Text(trailing!,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                      fontSize: 12,
-                      color: VentlyColors.deepBurgundy.withOpacity(0.5))),
+                      fontSize: 12, color: context.ink.withOpacity(0.5))),
             ),
           const SizedBox(width: 4),
-          const Icon(Icons.chevron_right_rounded, color: VentlyColors.softMauve),
+          const Icon(Icons.chevron_right_rounded,
+              color: VentlyColors.softMauve),
         ],
       ),
       onTap: onTap,

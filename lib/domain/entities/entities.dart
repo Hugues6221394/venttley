@@ -114,6 +114,10 @@ class TribeMemberRow {
   final String? profilePhotoUrl;
   final String role; // member | mod | keeper
   final DateTime joinedAt;
+  final DateTime? mutedUntil;
+  final int warningCount;
+  final DateTime? lastWarnedAt;
+  final String? memberNote;
 
   const TribeMemberRow({
     required this.userId,
@@ -122,10 +126,16 @@ class TribeMemberRow {
     required this.role,
     required this.joinedAt,
     this.profilePhotoUrl,
+    this.mutedUntil,
+    this.warningCount = 0,
+    this.lastWarnedAt,
+    this.memberNote,
   });
 
   bool get isKeeper => role == 'keeper';
-  bool get isMod    => role == 'mod';
+  bool get isMod => role == 'mod';
+  bool get isMuted => mutedUntil?.isAfter(DateTime.now()) ?? false;
+  bool get hasWarnings => warningCount > 0;
 }
 
 class BadgeDefinition {
@@ -150,7 +160,7 @@ class UserBadge {
 }
 
 class UserStreak {
-  final String kind;        // posting | commenting | reactions
+  final String kind; // posting | commenting | reactions
   final int currentCount;
   final int longestCount;
   final DateTime lastEventAt;
@@ -188,7 +198,8 @@ class Tribe {
   final String name;
   final String slug;
   final String? description;
-  final String category; // campus | city | interest_group | hobby | support | venting
+  final String
+      category; // campus | city | interest_group | hobby | support | venting
   final int memberCount;
   final bool isPrivate;
   final String? avatarUrl;
@@ -196,6 +207,7 @@ class Tribe {
   final String? keeperId;
   final String? keeperPseudonym;
   final String? keeperAvatarSeed;
+  final String? keeperProfilePhotoUrl;
   final bool keeperIsVerified;
   final DateTime createdAt;
   final bool joinedByMe;
@@ -206,6 +218,7 @@ class Tribe {
   final String? spotlightUserId;
   final String? spotlightPseudonym;
   final String? spotlightAvatarSeed;
+  final String? spotlightProfilePhotoUrl;
   final String? spotlightNote;
   final DateTime? spotlightSetAt;
 
@@ -218,6 +231,17 @@ class Tribe {
 
   /// Pinned group-chat message (migration 0064).
   final String? pinnedMessageId;
+
+  /// Ownership/lifecycle controls (tribe_lifecycle_management).
+  final String lifecycleStatus;
+  final String visibility;
+  final List<String> tags;
+  final DateTime? pausedAt;
+  final DateTime? archivedAt;
+  final DateTime? deletionRequestedAt;
+  final DateTime? deletionPurgeAt;
+  final String? lifecycleReason;
+  final Map<String, dynamic> managementSettings;
 
   const Tribe({
     required this.tribeId,
@@ -233,6 +257,7 @@ class Tribe {
     this.keeperId,
     this.keeperPseudonym,
     this.keeperAvatarSeed,
+    this.keeperProfilePhotoUrl,
     this.keeperIsVerified = false,
     this.joinedByMe = false,
     this.welcomeMessage,
@@ -240,35 +265,56 @@ class Tribe {
     this.spotlightUserId,
     this.spotlightPseudonym,
     this.spotlightAvatarSeed,
+    this.spotlightProfilePhotoUrl,
     this.spotlightNote,
     this.spotlightSetAt,
     this.rules,
     this.isPremium = false,
     this.chatSettings = const TribeChatSettings(),
     this.pinnedMessageId,
+    this.lifecycleStatus = 'active',
+    this.visibility = 'public',
+    this.tags = const [],
+    this.pausedAt,
+    this.archivedAt,
+    this.deletionRequestedAt,
+    this.deletionPurgeAt,
+    this.lifecycleReason,
+    this.managementSettings = const {},
   });
 
   Tribe copyWith({
+    String? name,
+    String? description,
+    String? category,
     int? memberCount,
     bool? joinedByMe,
+    bool? isPrivate,
     String? avatarUrl,
     String? bannerUrl,
+    String? keeperId,
+    String? keeperPseudonym,
     String? welcomeMessage,
     String? themeColor,
+    String? lifecycleStatus,
+    String? visibility,
+    List<String>? tags,
+    Map<String, dynamic>? managementSettings,
   }) {
     return Tribe(
       tribeId: tribeId,
-      name: name,
+      name: name ?? this.name,
       slug: slug,
-      description: description,
-      category: category,
+      description: description ?? this.description,
+      category: category ?? this.category,
       memberCount: memberCount ?? this.memberCount,
-      isPrivate: isPrivate,
+      isPrivate: isPrivate ?? this.isPrivate,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       bannerUrl: bannerUrl ?? this.bannerUrl,
-      keeperId: keeperId,
-      keeperPseudonym: keeperPseudonym,
+      keeperId: keeperId ?? this.keeperId,
+      keeperPseudonym: keeperPseudonym ?? this.keeperPseudonym,
       keeperAvatarSeed: keeperAvatarSeed,
+      keeperProfilePhotoUrl: keeperProfilePhotoUrl,
       keeperIsVerified: keeperIsVerified,
       createdAt: createdAt,
       joinedByMe: joinedByMe ?? this.joinedByMe,
@@ -277,13 +323,29 @@ class Tribe {
       spotlightUserId: spotlightUserId,
       spotlightPseudonym: spotlightPseudonym,
       spotlightAvatarSeed: spotlightAvatarSeed,
+      spotlightProfilePhotoUrl: spotlightProfilePhotoUrl,
       spotlightNote: spotlightNote,
       spotlightSetAt: spotlightSetAt,
       rules: rules,
       isPremium: isPremium,
       chatSettings: chatSettings,
+      pinnedMessageId: pinnedMessageId,
+      lifecycleStatus: lifecycleStatus ?? this.lifecycleStatus,
+      visibility: visibility ?? this.visibility,
+      tags: tags ?? this.tags,
+      pausedAt: pausedAt,
+      archivedAt: archivedAt,
+      deletionRequestedAt: deletionRequestedAt,
+      deletionPurgeAt: deletionPurgeAt,
+      lifecycleReason: lifecycleReason,
+      managementSettings: managementSettings ?? this.managementSettings,
     );
   }
+
+  bool get isPaused => lifecycleStatus == 'paused';
+  bool get isArchived => lifecycleStatus == 'archived';
+  bool get isPendingDeletion => lifecycleStatus == 'pending_deletion';
+  bool get acceptsNewActivity => lifecycleStatus == 'active';
 }
 
 /// A Space — focused conversation room inside a Tribe.
@@ -310,6 +372,11 @@ class Space {
   final int ventCount;
   final int ventsToday;
   final DateTime? lastVentAt;
+  final String? iconName;
+  final bool isPinned;
+  final String postingPermission;
+  final DateTime? activatesAt;
+  final DateTime? deactivatesAt;
 
   const Space({
     required this.spaceId,
@@ -328,6 +395,11 @@ class Space {
     this.themeColor,
     this.archivedAt,
     this.lastVentAt,
+    this.iconName,
+    this.isPinned = false,
+    this.postingPermission = 'members',
+    this.activatesAt,
+    this.deactivatesAt,
   });
 
   bool get isArchived => archivedAt != null;
@@ -417,6 +489,7 @@ class ScheduledPrompt {
 
 class Post {
   final String postId;
+
   /// Stable author identity. Always present, but the UI should treat it
   /// as opaque — never display the raw UUID. Used by the friend-action
   /// chip and report flows to identify the author.
@@ -438,33 +511,42 @@ class Post {
   final int likesCount;
   final int commentsCount;
   final int viewCount;
+
   /// Optional attached image URL (post-media bucket, public). Drives the
   /// rounded image card on the feed.
   final String? imageUrl;
+
   /// Optional attached voice-note URL (post-media bucket, public). Drives
   /// the waveform playback card on the feed.
   final String? audioUrl;
   final int? audioDurationSeconds;
   final DateTime createdAt;
+
   /// Author-only edit timestamp (migration 0047). Drives the "(edited)"
   /// footer on the post detail screen + feed card.
   final DateTime? editedAt;
+
   /// Soft-delete marker. When set, the feed/card renders a tombstone
   /// "Vent removed by author" instead of the body.
   final DateTime? deletedAt;
+
   /// Author-only lock on new replies (migration 0051). When set the
   /// thread renders read-only with a "comments locked" footer.
   final DateTime? lockedAt;
+
   /// Keeper-only highlight (migration 0051). Drives the Keeper's Pick
   /// chip on the card and the Keeper Picks smart sort in a Space.
   final bool isKeeperPick;
   final DateTime? keeperPickAt;
-  final String? myReaction; // null | hug | love | strong | hope | pray | felt | proud
+  final String?
+      myReaction; // null | hug | love | strong | hope | pray | felt | proud
   final bool savedByMe;
+
   /// Null when the safety classifier saw nothing concerning. `'elevated'` for
   /// Tier-2 (LLM) self-harm matches, `'high'` for Tier-1 keyword hits. Drives
   /// the helpline banner on the post detail screen.
   final String? crisisLevel;
+
   /// Media safety verdict (migration 0087): 'clean' | 'pending' | 'sensitive' |
   /// 'blocked'. 'blocked' posts are soft-deleted server-side and never arrive.
   /// The feed veils the image for 'pending'/'sensitive'.
@@ -510,8 +592,8 @@ class Post {
   bool get hasImage => imageUrl != null && imageUrl!.isNotEmpty;
   bool get hasAudio => audioUrl != null && audioUrl!.isNotEmpty;
   bool get isDeleted => deletedAt != null;
-  bool get isEdited  => editedAt  != null;
-  bool get isLocked  => lockedAt  != null;
+  bool get isEdited => editedAt != null;
+  bool get isLocked => lockedAt != null;
   bool ownedBy(String? userId) => authorId != null && authorId == userId;
 
   /// True when the caller has any reaction on this post.
@@ -535,6 +617,7 @@ class Post {
     String? content,
     DateTime? editedAt,
     DateTime? deletedAt,
+    Object? spaceId = _unset,
   }) {
     return Post(
       postId: postId,
@@ -564,7 +647,7 @@ class Post {
       tribeId: tribeId,
       tribeName: tribeName,
       tribeSlug: tribeSlug,
-      spaceId: spaceId,
+      spaceId: spaceId == _unset ? this.spaceId : spaceId as String?,
       myReaction:
           myReaction == _unset ? this.myReaction : myReaction as String?,
       savedByMe: savedByMe ?? this.savedByMe,
@@ -587,32 +670,54 @@ class Post {
 /// another at a hard moment, not a Facebook button.
 class PostReactions {
   static const List<String> all = [
-    'hug', 'love', 'strong', 'hope', 'pray', 'felt', 'proud',
+    'hug',
+    'love',
+    'strong',
+    'hope',
+    'pray',
+    'felt',
+    'proud',
   ];
 
   static String emoji(String key) {
     switch (key) {
-      case 'hug':    return '\u{1FAC2}';                  // 🫂
-      case 'love':   return '\u{2764}\u{FE0F}';           // ❤️
-      case 'strong': return '\u{1F4AA}';                  // 💪
-      case 'hope':   return '\u{1F331}';                  // 🌱
-      case 'pray':   return '\u{1F64F}';                  // 🙏
-      case 'felt':   return '\u{1F97A}';                  // 🥺
-      case 'proud':  return '\u{1F44F}';                  // 👏
-      default:       return '\u{2764}\u{FE0F}';
+      case 'hug':
+        return '\u{1FAC2}'; // 🫂
+      case 'love':
+        return '\u{2764}\u{FE0F}'; // ❤️
+      case 'strong':
+        return '\u{1F4AA}'; // 💪
+      case 'hope':
+        return '\u{1F331}'; // 🌱
+      case 'pray':
+        return '\u{1F64F}'; // 🙏
+      case 'felt':
+        return '\u{1F97A}'; // 🥺
+      case 'proud':
+        return '\u{1F44F}'; // 👏
+      default:
+        return '\u{2764}\u{FE0F}';
     }
   }
 
   static String label(String key) {
     switch (key) {
-      case 'hug':    return 'I Relate';
-      case 'love':   return 'Sending Love';
-      case 'strong': return 'Stay Strong';
-      case 'hope':   return 'Hope';
-      case 'pray':   return 'Praying';
-      case 'felt':   return 'Felt This';
-      case 'proud':  return 'Proud of You';
-      default:       return key;
+      case 'hug':
+        return 'I Relate';
+      case 'love':
+        return 'Sending Love';
+      case 'strong':
+        return 'Stay Strong';
+      case 'hope':
+        return 'Hope';
+      case 'pray':
+        return 'Praying';
+      case 'felt':
+        return 'Felt This';
+      case 'proud':
+        return 'Proud of You';
+      default:
+        return key;
     }
   }
 }
@@ -646,8 +751,8 @@ class CrisisHelpline {
 class AutomodRule {
   final String pattern;
   final String matchType; // 'contains' | 'word' | 'regex'
-  final String category;  // maps to HazardCategory
-  final String action;    // 'flag' | 'block' | 'crisis'
+  final String category; // maps to HazardCategory
+  final String action; // 'flag' | 'block' | 'crisis'
 
   const AutomodRule({
     required this.pattern,
@@ -680,7 +785,12 @@ class ThreadedComment {
   final String authorPseudonym;
   final String authorAvatarSeed;
   final String? authorProfilePhotoUrl;
+
+  /// True when the comment's author is a verified member — drives the tick
+  /// next to their name in the thread.
+  final bool authorIsVerified;
   final String content;
+
   /// Migration 0102 — optional photo / GIF attached to the reply.
   final String? imageUrl;
   final String path;
@@ -688,10 +798,13 @@ class ThreadedComment {
   final int likesCount;
   final bool likedByMe;
   final DateTime createdAt;
+
   /// Migration 0047 — author-only edit timestamp.
   final DateTime? editedAt;
+
   /// Soft-delete marker. UI renders a tombstone when set.
   final DateTime? deletedAt;
+
   /// Migration 0051 — set when the vent's author pinned this comment.
   /// Pinned comments render above the chronological thread.
   final DateTime? pinnedAt;
@@ -708,6 +821,7 @@ class ThreadedComment {
     required this.createdAt,
     this.authorId,
     this.authorProfilePhotoUrl,
+    this.authorIsVerified = false,
     this.parentId,
     this.imageUrl,
     this.likedByMe = false,
@@ -718,8 +832,8 @@ class ThreadedComment {
   }) : children = children ?? <ThreadedComment>[];
 
   bool get isDeleted => deletedAt != null;
-  bool get isEdited  => editedAt  != null;
-  bool get isPinned  => pinnedAt  != null;
+  bool get isEdited => editedAt != null;
+  bool get isPinned => pinnedAt != null;
   bool ownedBy(String? uid) => authorId != null && authorId == uid;
 
   ThreadedComment copyWith({
@@ -737,6 +851,7 @@ class ThreadedComment {
       authorPseudonym: authorPseudonym,
       authorAvatarSeed: authorAvatarSeed,
       authorProfilePhotoUrl: authorProfilePhotoUrl,
+      authorIsVerified: authorIsVerified,
       content: content ?? this.content,
       imageUrl: imageUrl,
       path: path,
@@ -756,6 +871,11 @@ class ChatRoom {
   final String roomId;
   final String peerPseudonym;
   final String peerAvatarSeed;
+
+  /// Uploaded public profile photo for direct-message peers. Group rooms use
+  /// [groupAvatarPath] because their media lives in a private storage bucket.
+  final String? peerProfilePhotoUrl;
+
   /// The peer's user id (from inbox_rooms.peer_id) — for opening their profile.
   final String? peerUserId;
   final String requestPreview;
@@ -775,6 +895,17 @@ class ChatRoom {
   /// Whether the caller's most recent message has been read by the peer.
   final bool lastOwnMessageRead;
 
+  /// Named private room created from an existing friendship. Group rooms use
+  /// the same proven message transport as DMs while keeping their own title.
+  final bool isGroup;
+  final String? groupTitle;
+  final int memberCount;
+  final String? groupAvatarPath;
+  final String? groupInviteToken;
+  final bool groupInviteEnabled;
+  final bool groupAllowMemberInvites;
+  final bool isGroupOwner;
+
   const ChatRoom({
     required this.roomId,
     required this.peerPseudonym,
@@ -784,10 +915,63 @@ class ChatRoom {
     required this.createdAt,
     required this.initiatedByMe,
     this.peerUserId,
+    this.peerProfilePhotoUrl,
     this.unreadCount = 0,
     this.lastMessagePreview,
     this.lastMessageAt,
     this.lastOwnMessageRead = false,
+    this.isGroup = false,
+    this.groupTitle,
+    this.memberCount = 2,
+    this.groupAvatarPath,
+    this.groupInviteToken,
+    this.groupInviteEnabled = false,
+    this.groupAllowMemberInvites = false,
+    this.isGroupOwner = false,
+  });
+}
+
+class GroupChatMember {
+  final String userId;
+  final String pseudonym;
+  final String avatarSeed;
+  final String? profilePhotoUrl;
+  final bool isVerified;
+  final String memberRole;
+  final String? nickname;
+  final DateTime joinedAt;
+  final bool isMe;
+
+  const GroupChatMember({
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.isVerified,
+    required this.memberRole,
+    required this.joinedAt,
+    required this.isMe,
+    this.profilePhotoUrl,
+    this.nickname,
+  });
+
+  bool get isOwner => memberRole == 'owner';
+  bool get isAdmin => memberRole == 'admin';
+  String get displayName => nickname?.trim().isNotEmpty == true
+      ? nickname!.trim()
+      : '@${pseudonym.replaceFirst('@', '')}';
+}
+
+class GroupInvitePreview {
+  final String roomId;
+  final String title;
+  final String? avatarPath;
+  final int memberCount;
+
+  const GroupInvitePreview({
+    required this.roomId,
+    required this.title,
+    required this.memberCount,
+    this.avatarPath,
   });
 }
 
@@ -795,7 +979,8 @@ class ChatMessage {
   final String messageId;
   final String roomId;
   final String senderId;
-  final String plaintext; // stored server-side as plaintext for moderation review.
+  final String
+      plaintext; // stored server-side as plaintext for moderation review.
   final DateTime createdAt;
   final bool sentByMe;
 
@@ -823,6 +1008,10 @@ class ChatMessage {
   /// for messages the caller didn't send.
   final DateTime? readAt;
 
+  /// When the recipient's client received this message (mark_room_delivered
+  /// RPC, migration 0114). Drives the WhatsApp-style ✓ / ✓✓ / seen ticks.
+  final DateTime? deliveredAt;
+
   /// Per-reaction tallies from chat_message_reactions_summary. Empty
   /// map = no reactions. Keys are the same six values as PostReactions.
   final Map<String, int> reactionCounts;
@@ -848,6 +1037,7 @@ class ChatMessage {
     this.attachedPostId,
     this.attachedPostSnapshot,
     this.readAt,
+    this.deliveredAt,
     this.reactionCounts = const {},
     this.myReaction,
     this.attachedMediaPath,
@@ -860,7 +1050,7 @@ class ChatMessage {
   });
 
   bool get isDeleted => deletedAt != null;
-  bool get isEdited  => editedAt  != null;
+  bool get isEdited => editedAt != null;
 
   /// WhatsApp-style windows, mirrored by the server RPCs. Editing is
   /// allowed for 30 min after sending; "delete for everyone" for 24h.
@@ -896,6 +1086,7 @@ class ChatMessage {
       attachedPostId: attachedPostId,
       attachedPostSnapshot: attachedPostSnapshot,
       readAt: readAt,
+      deliveredAt: deliveredAt,
       reactionCounts: reactionCounts ?? this.reactionCounts,
       myReaction: myReaction == _unsetReaction
           ? this.myReaction
@@ -983,8 +1174,7 @@ class PostPoll {
     this.myVoteOptionId,
   });
 
-  int get totalVotes =>
-      optionCounts.values.fold(0, (a, b) => a + b);
+  int get totalVotes => optionCounts.values.fold(0, (a, b) => a + b);
 
   bool get isClosed => DateTime.now().isAfter(closesAt);
   bool get hasVoted => myVoteOptionId != null;
@@ -1085,14 +1275,22 @@ class TribeReport {
 
   String get reasonLabel {
     switch (reason) {
-      case 'self_harm':      return 'Self-harm concern';
-      case 'hate':           return 'Hate speech';
-      case 'harassment':     return 'Harassment';
-      case 'sexual_content': return 'Sexual content';
-      case 'violence':       return 'Violence';
-      case 'privacy':        return 'Privacy / doxxing';
-      case 'spam':           return 'Spam';
-      default:               return 'Other';
+      case 'self_harm':
+        return 'Self-harm concern';
+      case 'hate':
+        return 'Hate speech';
+      case 'harassment':
+        return 'Harassment';
+      case 'sexual_content':
+        return 'Sexual content';
+      case 'violence':
+        return 'Violence';
+      case 'privacy':
+        return 'Privacy / doxxing';
+      case 'spam':
+        return 'Spam';
+      default:
+        return 'Other';
     }
   }
 }
@@ -1120,6 +1318,42 @@ class NotificationItem {
     required this.isRead,
     this.payload = const {},
   });
+
+  /// Human-readable copy for legacy notification rows that predate the
+  /// current payload contract. Raw payloads stay untouched for routing.
+  String get displayBody {
+    final suppliedBody = body.trim();
+    if (suppliedBody.isNotEmpty) return suppliedBody;
+
+    final legacyMessage = (payload['message'] as String?)?.trim() ?? '';
+    if (legacyMessage.isNotEmpty) return legacyMessage;
+
+    switch (kind) {
+      case 'post_like':
+        return 'liked your vent.';
+      case 'comment_like':
+        return 'liked your reply.';
+      case 'comment_reply':
+        return 'replied to your vent.';
+      case 'mention':
+        return 'mentioned you in a conversation.';
+      case 'friend_request':
+      case 'new_follower':
+        return 'wants to connect with you.';
+      case 'friend_accepted':
+        return 'accepted your connection request.';
+      case 'tribe_prompt':
+        return 'A new conversation is ready in your tribe.';
+      case 'tribe_invite':
+        return 'invited you to join a tribe.';
+      case 'message_request':
+        return 'sent you a message request.';
+      case 'moderation_action':
+        return 'Open to review this safety update.';
+      default:
+        return 'Open to view details.';
+    }
+  }
 }
 
 /// Friend graph state between the current user and a target user. Used
@@ -1218,8 +1452,10 @@ class Whisper {
   final int commentsCount;
   final String? crisisLevel;
   final DateTime createdAt;
+
   /// Migration 0047 — author-only edit timestamp on title/description.
   final DateTime? editedAt;
+
   /// Soft-delete marker.
   final DateTime? deletedAt;
   final bool likedByMe;
@@ -1271,7 +1507,7 @@ class Whisper {
   });
 
   bool get isDeleted => deletedAt != null;
-  bool get isEdited  => editedAt  != null;
+  bool get isEdited => editedAt != null;
   bool ownedBy(String? uid) => authorId != null && authorId == uid;
 
   static const Object _unset = Object();
@@ -1311,9 +1547,8 @@ class Whisper {
         likedByMe: likedByMe ?? this.likedByMe,
         savedByMe: savedByMe ?? this.savedByMe,
         reactionCounts: reactionCounts ?? this.reactionCounts,
-        myReaction: myReaction == _unset
-            ? this.myReaction
-            : myReaction as String?,
+        myReaction:
+            myReaction == _unset ? this.myReaction : myReaction as String?,
         mediaStatus: mediaStatus,
       );
 }
@@ -1328,6 +1563,15 @@ class WhisperComment {
   final String content;
   final DateTime createdAt;
 
+  /// Single-level reply threading (migration 0115). Null = top-level.
+  final String? parentId;
+  final int likesCount;
+  final bool likedByMe;
+
+  /// True when the caller may delete: own comment, or caller owns the
+  /// whisper (owner moderation).
+  final bool canDelete;
+
   const WhisperComment({
     required this.commentId,
     required this.whisperId,
@@ -1336,6 +1580,59 @@ class WhisperComment {
     required this.content,
     required this.createdAt,
     this.authorId,
+    this.parentId,
+    this.likesCount = 0,
+    this.likedByMe = false,
+    this.canDelete = false,
+  });
+}
+
+/// A resolved @tag target (migration 0116) — either a user or a tribe.
+class ResolvedTag {
+  final String kind; // 'user' | 'tribe'
+  final String id;
+  final String? slug; // tribes only
+  final String display;
+
+  const ResolvedTag({
+    required this.kind,
+    required this.id,
+    required this.display,
+    this.slug,
+  });
+}
+
+/// An @-autocomplete candidate while typing (users first, then tribes).
+class TagCandidate {
+  final String kind; // 'user' | 'tribe'
+  final String id;
+  final String handle;
+  final String display;
+  final String? avatarSeed;
+  final bool isFriend;
+
+  const TagCandidate({
+    required this.kind,
+    required this.id,
+    required this.handle,
+    required this.display,
+    this.avatarSeed,
+    this.isFriend = false,
+  });
+}
+
+/// One search typeahead / trending entry (migration 0119).
+/// kind: 'user' | 'tribe' | 'category'. value is what to search or route
+/// with (pseudonym, slug, category key), display is what to render.
+class SearchSuggestion {
+  final String kind;
+  final String value;
+  final String display;
+
+  const SearchSuggestion({
+    required this.kind,
+    required this.value,
+    required this.display,
   });
 }
 
@@ -1343,20 +1640,36 @@ class WhisperComment {
 /// create-whisper screen. DSP processing ships separately.
 class WhisperVoiceFilters {
   static const List<String> all = [
-    'none', 'anonymous', 'soft', 'deep_voice', 'robot', 'echo', 'synth', 'dark',
+    'none',
+    'anonymous',
+    'soft',
+    'deep_voice',
+    'robot',
+    'echo',
+    'synth',
+    'dark',
   ];
 
   static String label(String key) {
     switch (key) {
-      case 'none':       return 'Original';
-      case 'anonymous':  return 'Anonymous';
-      case 'soft':       return 'Soft';
-      case 'deep_voice': return 'Deep';
-      case 'robot':      return 'Robot';
-      case 'echo':       return 'Echo';
-      case 'synth':      return 'Synth';
-      case 'dark':       return 'Dark';
-      default:           return key;
+      case 'none':
+        return 'Original';
+      case 'anonymous':
+        return 'Anonymous';
+      case 'soft':
+        return 'Soft';
+      case 'deep_voice':
+        return 'Deep';
+      case 'robot':
+        return 'Robot';
+      case 'echo':
+        return 'Echo';
+      case 'synth':
+        return 'Synth';
+      case 'dark':
+        return 'Dark';
+      default:
+        return key;
     }
   }
 }
@@ -1412,6 +1725,10 @@ class TribeMessage {
   final String senderPseudonym;
   final String senderAvatarSeed;
   final String? senderProfilePhotoUrl;
+
+  /// True when the sender is a verified member posting under their real
+  /// identity (never for persona-sent messages — migration 0110).
+  final bool senderIsVerified;
   final String? senderPersonaId;
   final String? content;
   final String? imageUrl;
@@ -1420,6 +1737,7 @@ class TribeMessage {
   final int hugsCount;
   final DateTime createdAt;
   final DateTime? editedAt;
+
   /// Migration 0047 — soft-delete marker. UI renders a tombstone.
   final DateTime? deletedAt;
   final bool sentByMe;
@@ -1428,6 +1746,7 @@ class TribeMessage {
   final String? replySenderPseudonym;
   final bool huggedByMe;
   final bool isPinned;
+
   /// Poll / question cards — migration 0065.
   final Map<String, dynamic>? metadata;
   final String? pollMyVoteOptionId;
@@ -1445,6 +1764,7 @@ class TribeMessage {
     required this.sentByMe,
     this.senderId,
     this.senderProfilePhotoUrl,
+    this.senderIsVerified = false,
     this.senderPersonaId,
     this.content,
     this.imageUrl,
@@ -1467,7 +1787,7 @@ class TribeMessage {
   });
 
   bool get isDeleted => deletedAt != null;
-  bool get isEdited  => editedAt  != null;
+  bool get isEdited => editedAt != null;
   bool get hasImage => imageUrl != null && imageUrl!.isNotEmpty;
   bool get hasAudio => audioUrl != null && audioUrl!.isNotEmpty;
   bool get hasText => content != null && content!.trim().isNotEmpty;
@@ -1646,6 +1966,7 @@ class UserProfileView {
   /// Total accepted friendships. Drives the "30K Connections" KPI
   /// on the public profile (migration 0054).
   final int connectionsCount;
+
   /// Banner stats (migration 0107): total posts = vents + whispers; total
   /// hugs = 🫂 'hug' reactions received on the user's posts.
   final int postsTotal;
@@ -1764,12 +2085,14 @@ class DmRoomPrefs {
   final String? peerNickname;
   final int disappearingSeconds; // 0 = off
   final String theme;
+  final String fontStyle;
 
   const DmRoomPrefs({
     this.muted = false,
     this.peerNickname,
     this.disappearingSeconds = 0,
     this.theme = 'default',
+    this.fontStyle = 'default',
   });
 
   static const empty = DmRoomPrefs();
@@ -1855,7 +2178,7 @@ class SearchHit {
   });
 
   bool get isTribe => hitKind == 'tribe';
-  bool get isPost  => hitKind == 'post';
+  bool get isPost => hitKind == 'post';
   bool get isTopic => hitKind == 'topic';
 }
 

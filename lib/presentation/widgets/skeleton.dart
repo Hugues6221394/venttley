@@ -16,10 +16,10 @@ class _Surface extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Shimmer.fromColors(
       baseColor: isDark
-          ? VentlyColors.cardDark.withOpacity(0.7)
+          ? Theme.of(context).colorScheme.surface.withOpacity(0.7)
           : VentlyColors.softMauve.withOpacity(0.3),
       highlightColor: isDark
-          ? VentlyColors.charcoal.withOpacity(0.4)
+          ? Theme.of(context).scaffoldBackgroundColor.withOpacity(0.4)
           : Colors.white.withOpacity(0.9),
       child: child,
     );
@@ -240,6 +240,46 @@ class QuestionsSkeletonList extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Alternating chat-bubble placeholders for DM / tribe chat while the
+/// thread loads — shimmer instead of a spinner, per the premium motion spec.
+class ChatSkeleton extends StatelessWidget {
+  const ChatSkeleton({super.key, this.count = 7});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget bubble(int i) {
+      final mine = i.isOdd;
+      final width = 140.0 + (i * 37) % 120;
+      return Align(
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          width: width,
+          height: 44,
+          margin: const EdgeInsets.symmetric(vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(18),
+              topRight: const Radius.circular(18),
+              bottomLeft: Radius.circular(mine ? 18 : 6),
+              bottomRight: Radius.circular(mine ? 6 : 18),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return _Surface(
+      child: ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
+        children: [for (var i = 0; i < count; i++) bubble(i)],
       ),
     );
   }

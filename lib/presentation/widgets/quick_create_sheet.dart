@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../theme/colors.dart';
+import '../theme/motion.dart';
 
 /// Unified create menu — opened from the Post tab and home CTAs.
 ///
@@ -14,6 +15,7 @@ Future<void> showQuickCreateSheet(BuildContext context, WidgetRef ref) async {
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
+    sheetAnimationStyle: VentlyMotion.sheetSpring,
     builder: (ctx) => const _QuickCreateSheet(),
   );
 }
@@ -123,7 +125,7 @@ class _QuickCreateSheet extends ConsumerWidget {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
@@ -149,7 +151,7 @@ class _QuickCreateSheet extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 18),
-              Text(
+              const Text(
                 'How are you feeling today?',
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -166,7 +168,7 @@ class _QuickCreateSheet extends ConsumerWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                  color: context.ink.withOpacity(0.62),
                 ),
               ),
               const SizedBox(height: 20),
@@ -193,7 +195,7 @@ class _QuickCreateSheet extends ConsumerWidget {
                 onPressed: () => Navigator.of(context).pop(),
                 icon: Icon(
                   Icons.close_rounded,
-                  color: VentlyColors.deepBurgundy.withOpacity(0.45),
+                  color: context.ink.withOpacity(0.45),
                 ),
               ),
             ],
@@ -265,7 +267,7 @@ class _FormatTile extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w900,
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                   ),
                 ),
               ],

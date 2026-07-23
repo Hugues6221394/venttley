@@ -17,7 +17,7 @@ class GlassTokens {
   static const double blurLight = 8;
 
   static Color tintLight(BuildContext context) =>
-      Colors.white.withOpacity(0.58);
+      Colors.white.withOpacity(0.92);
 
   static Color tintDark(BuildContext context) =>
       Theme.of(context).colorScheme.surface.withOpacity(0.52);
@@ -27,8 +27,7 @@ class GlassTokens {
     return isDark ? tintDark(context) : tintLight(context);
   }
 
-  static Color borderLight(BuildContext context) =>
-      Colors.white.withOpacity(0.62);
+  static Color borderLight(BuildContext context) => VentlyColors.softMauve;
 
   static Color borderDark(BuildContext context) =>
       Colors.white.withOpacity(0.08);
@@ -47,7 +46,7 @@ class GlassTokens {
       BoxShadow(
         color: isDark
             ? Colors.black.withOpacity(0.35)
-            : VentlyColors.berryMagenta.withOpacity(0.08),
+            : VentlyColors.berryMagenta.withOpacity(0.05),
         blurRadius: 24,
         offset: const Offset(0, 8),
       ),

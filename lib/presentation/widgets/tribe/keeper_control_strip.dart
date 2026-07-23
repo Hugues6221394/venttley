@@ -147,7 +147,7 @@ class _Chip extends StatelessWidget {
                       size: 16,
                       color: active
                           ? VentlyColors.berryMagenta
-                          : VentlyColors.deepBurgundy),
+                          : context.ink),
                   const SizedBox(width: 6),
                   Text(
                     label,
@@ -156,7 +156,7 @@ class _Chip extends StatelessWidget {
                       fontSize: 11.5,
                       color: active
                           ? VentlyColors.berryMagenta
-                          : VentlyColors.deepBurgundy,
+                          : context.ink,
                     ),
                   ),
                 ],

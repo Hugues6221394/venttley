@@ -70,12 +70,12 @@ class _DailyPromptCardState extends ConsumerState<DailyPromptCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Drop a vent today',
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 13,
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                     ),
                   ),
                   Text(
@@ -83,7 +83,7 @@ class _DailyPromptCardState extends ConsumerState<DailyPromptCard> {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: VentlyColors.deepBurgundy.withOpacity(0.58),
+                      color: context.ink.withOpacity(0.58),
                     ),
                   ),
                 ],
@@ -99,7 +99,7 @@ class _DailyPromptCardState extends ConsumerState<DailyPromptCard> {
             ),
             IconButton(
               icon: const Icon(Icons.close_rounded, size: 18),
-              color: VentlyColors.deepBurgundy.withOpacity(0.45),
+              color: context.ink.withOpacity(0.45),
               onPressed: _dismiss,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

@@ -146,7 +146,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w900,
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                     ),
               ),
               const SizedBox(height: 10),
@@ -155,7 +155,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                 'this email is yours.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.66),
+                  color: context.ink.withOpacity(0.66),
                   fontWeight: FontWeight.w600,
                   height: 1.4,
                 ),

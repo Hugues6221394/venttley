@@ -25,9 +25,11 @@ class PopularWhispersRail extends ConsumerWidget {
         padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
         child: WhisperRailSkeleton(),
       ),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, __) => const _WhispersSpotlightBanner(whispers: []),
       data: (whispers) {
-        if (whispers.isEmpty) return const SizedBox.shrink();
+        if (whispers.isEmpty) {
+          return const _WhispersSpotlightBanner(whispers: []);
+        }
         final shown = whispers.take(8).toList();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -44,7 +46,8 @@ class PopularWhispersRail extends ConsumerWidget {
                   final w = shown[i];
                   return WhisperCarouselTile(
                     whisper: w,
-                    onTap: () => context.push('/whispers?whisper=${w.whisperId}'),
+                    onTap: () =>
+                        context.push('/whispers?whisper=${w.whisperId}'),
                   );
                 },
               ),
@@ -65,8 +68,7 @@ class _WhispersSpotlightBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalPlays =
-        whispers.fold<int>(0, (sum, w) => sum + w.playsCount);
+    final totalPlays = whispers.fold<int>(0, (sum, w) => sum + w.playsCount);
     final faces = whispers.take(4).toList();
 
     return FadeSlideIn(
@@ -97,13 +99,17 @@ class _WhispersSpotlightBanner extends StatelessWidget {
                         Icon(Icons.trending_up_rounded,
                             size: 13, color: Colors.white.withOpacity(0.85)),
                         const SizedBox(width: 5),
-                        Text(
-                          'Popular right now',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.85),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.4,
+                        Expanded(
+                          child: Text(
+                            'Popular right now',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.85),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                            ),
                           ),
                         ),
                       ],
@@ -140,14 +146,17 @@ class _WhispersSpotlightBanner extends StatelessWidget {
                         ),
                       ),
                       child: const Row(
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            'Explore whispers',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
+                          Expanded(
+                            child: Text(
+                              'Explore whispers',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
                           SizedBox(width: 6),

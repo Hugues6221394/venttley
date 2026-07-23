@@ -11,6 +11,8 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/vently_notification_bell.dart';
+import '../../widgets/verified_badge.dart';
 
 /// Discover — Image #12.
 ///
@@ -59,7 +61,8 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   Future<void> _pushRecent(String q) async {
     final clean = q.trim();
     if (clean.length < 2) return;
-    final next = [clean, ..._recent.where((r) => r != clean)].take(_maxRecent).toList();
+    final next =
+        [clean, ..._recent.where((r) => r != clean)].take(_maxRecent).toList();
     setState(() => _recent = next);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_recentKey, next);
@@ -82,7 +85,9 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   }
 
   @override
-  Widget build(BuildContext context, ) {
+  Widget build(
+    BuildContext context,
+  ) {
     final me = ref.watch(sessionProvider);
     final query = ref.watch(discoverSearchQueryProvider);
     final searching = query.trim().length >= 2;
@@ -141,8 +146,7 @@ class _DiscoverTopBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final unread =
-        ref.watch(unreadNotificationsCountProvider).valueOrNull ?? 0;
+    final unread = ref.watch(unreadNotificationsCountProvider);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 16, 6),
       child: Row(
@@ -173,8 +177,8 @@ class _DiscoverTopBar extends ConsumerWidget {
             alignment: Alignment.center,
             children: [
               IconButton(
-                icon: const Icon(Icons.notifications_none_rounded, size: 22),
-                color: VentlyColors.deepBurgundy,
+                icon: const VentlyNotificationBell(size: 22),
+                color: context.ink,
                 onPressed: () => context.push('/notifications'),
               ),
               if (unread > 0)
@@ -182,10 +186,10 @@ class _DiscoverTopBar extends ConsumerWidget {
                   right: 6,
                   top: 6,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1),
-                    constraints: const BoxConstraints(
-                        minWidth: 16, minHeight: 16),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    constraints:
+                        const BoxConstraints(minWidth: 16, minHeight: 16),
                     decoration: BoxDecoration(
                       color: VentlyColors.berryMagenta,
                       borderRadius: BorderRadius.circular(10),
@@ -259,14 +263,14 @@ class _SearchField extends StatelessWidget {
                 onChanged: onChanged,
                 onSubmitted: onSubmit,
                 textInputAction: TextInputAction.search,
-                style: const TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                style: TextStyle(
+                  color: context.ink,
                   fontWeight: FontWeight.w700,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Search Vents, Tribes, or Topics',
                   hintStyle: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.42),
+                    color: context.ink.withOpacity(0.42),
                     fontWeight: FontWeight.w700,
                   ),
                   border: InputBorder.none,
@@ -276,7 +280,7 @@ class _SearchField extends StatelessWidget {
             if (controller.text.isNotEmpty)
               IconButton(
                 icon: const Icon(Icons.close_rounded, size: 18),
-                color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                color: context.ink.withOpacity(0.55),
                 onPressed: onClear,
               ),
           ],
@@ -309,7 +313,7 @@ class _SearchResultsSlivers extends ConsumerWidget {
           padding: const EdgeInsets.all(24),
           child: Text(
             'Search failed: $e',
-            style: const TextStyle(color: VentlyColors.deepBurgundy),
+            style: TextStyle(color: context.ink),
           ),
         ),
       ),
@@ -331,10 +335,10 @@ class _SearchResultsSlivers extends ConsumerWidget {
                         color: VentlyColors.berryMagenta, size: 36),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
+                  Text(
                     'Nothing matched.',
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                       fontWeight: FontWeight.w900,
                       fontSize: 16,
                     ),
@@ -344,7 +348,7 @@ class _SearchResultsSlivers extends ConsumerWidget {
                     'Try a shorter word or a different angle on "$query".',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy.withOpacity(0.65),
+                      color: context.ink.withOpacity(0.65),
                       fontWeight: FontWeight.w700,
                       fontSize: 12.5,
                     ),
@@ -355,11 +359,11 @@ class _SearchResultsSlivers extends ConsumerWidget {
           );
         }
         final tribes = hits.where((h) => h.isTribe).toList();
-        final posts  = hits.where((h) => h.isPost).toList();
+        final posts = hits.where((h) => h.isPost).toList();
         final topics = hits.where((h) => h.isTopic).toList();
 
         return SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, 6, 20, 116),
           sliver: SliverList(
             delegate: SliverChildListDelegate.fixed([
               if (topics.isNotEmpty) ...[
@@ -367,8 +371,7 @@ class _SearchResultsSlivers extends ConsumerWidget {
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children:
-                      topics.map((h) => _TopicChip(hit: h)).toList(),
+                  children: topics.map((h) => _TopicChip(hit: h)).toList(),
                 ),
                 const SizedBox(height: 18),
               ],
@@ -399,7 +402,7 @@ class _ResultsLabel extends StatelessWidget {
       child: Text(
         label.toUpperCase(),
         style: TextStyle(
-          color: VentlyColors.deepBurgundy.withOpacity(0.62),
+          color: context.ink.withOpacity(0.62),
           fontSize: 11,
           fontWeight: FontWeight.w900,
           letterSpacing: 1.1,
@@ -471,8 +474,7 @@ class _TribeResultTile extends StatelessWidget {
           onTap: () => context.push('/tribe/${hit.hitId}'),
           borderRadius: BorderRadius.circular(20),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
@@ -501,8 +503,8 @@ class _TribeResultTile extends StatelessWidget {
                         hit.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: VentlyColors.deepBurgundy,
+                        style: TextStyle(
+                          color: context.ink,
                           fontWeight: FontWeight.w900,
                           fontSize: 14,
                         ),
@@ -515,8 +517,7 @@ class _TribeResultTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color:
-                              VentlyColors.deepBurgundy.withOpacity(0.62),
+                          color: context.ink.withOpacity(0.62),
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                         ),
@@ -524,8 +525,7 @@ class _TribeResultTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded,
-                    color: VentlyColors.deepBurgundy),
+                Icon(Icons.chevron_right_rounded, color: context.ink),
               ],
             ),
           ),
@@ -549,8 +549,7 @@ class _PostResultTile extends StatelessWidget {
           onTap: () => context.push('/post/${hit.hitId}'),
           borderRadius: BorderRadius.circular(20),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
@@ -576,8 +575,8 @@ class _PostResultTile extends StatelessWidget {
                         '@${hit.subtitle}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: VentlyColors.deepBurgundy,
+                        style: TextStyle(
+                          color: context.ink,
                           fontWeight: FontWeight.w900,
                           fontSize: 13,
                         ),
@@ -588,7 +587,7 @@ class _PostResultTile extends StatelessWidget {
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: VentlyColors.deepBurgundy.withOpacity(0.85),
+                          color: context.ink.withOpacity(0.85),
                           fontWeight: FontWeight.w700,
                           fontSize: 12.5,
                           height: 1.35,
@@ -598,32 +597,26 @@ class _PostResultTile extends StatelessWidget {
                       Row(
                         children: [
                           Icon(Icons.favorite_border,
-                              size: 12,
-                              color: VentlyColors.deepBurgundy
-                                  .withOpacity(0.6)),
+                              size: 12, color: context.ink.withOpacity(0.6)),
                           const SizedBox(width: 4),
                           Text(
                             PostCard.compactNumber(hit.likesCount ?? 0),
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
-                              color: VentlyColors.deepBurgundy
-                                  .withOpacity(0.65),
+                              color: context.ink.withOpacity(0.65),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Icon(Icons.chat_bubble_outline,
-                              size: 12,
-                              color: VentlyColors.deepBurgundy
-                                  .withOpacity(0.6)),
+                              size: 12, color: context.ink.withOpacity(0.6)),
                           const SizedBox(width: 4),
                           Text(
                             PostCard.compactNumber(hit.commentsCount ?? 0),
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
-                              color: VentlyColors.deepBurgundy
-                                  .withOpacity(0.65),
+                              color: context.ink.withOpacity(0.65),
                             ),
                           ),
                         ],
@@ -654,12 +647,27 @@ class _DefaultDiscoverSlivers {
   }) {
     final tribes =
         ref.watch(tribesProvider(const TribeQuery())).valueOrNull ?? const [];
-    final voices =
-        ref.watch(trendingVoicesProvider).valueOrNull ?? const [];
-    final posts =
-        ref.watch(homeDiscoveryPostsProvider).valueOrNull ?? const [];
+    final voices = ref.watch(trendingVoicesProvider).valueOrNull ?? const [];
+    final posts = ref.watch(homeDiscoveryPostsProvider).valueOrNull ?? const [];
+    final trending =
+        ref.watch(trendingSearchesProvider).valueOrNull ?? const [];
 
     return [
+      if (trending.isNotEmpty)
+        SliverToBoxAdapter(
+          child: _TrendingSearchesRow(
+            trending: trending,
+            onTap: (s) {
+              // Tribes route straight to their page; categories/users run
+              // through search so results stay in context.
+              if (s.kind == 'tribe') {
+                context.push('/tribe/${s.value}');
+              } else {
+                onRecentTap(s.display);
+              }
+            },
+          ),
+        ),
       if (recent.isNotEmpty)
         SliverToBoxAdapter(
           child: _RecentRow(
@@ -708,6 +716,75 @@ class _DefaultDiscoverSlivers {
   }
 }
 
+class _TrendingSearchesRow extends StatelessWidget {
+  const _TrendingSearchesRow({required this.trending, required this.onTap});
+  final List<SearchSuggestion> trending;
+  final ValueChanged<SearchSuggestion> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'TRENDING NOW',
+            style: TextStyle(
+              color: context.ink.withOpacity(0.55),
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: trending.map((s) {
+              return InkWell(
+                onTap: () => onTap(s),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: VentlyColors.softMauve.withOpacity(0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        s.kind == 'tribe'
+                            ? Icons.groups_rounded
+                            : Icons.trending_up_rounded,
+                        size: 13,
+                        color: VentlyColors.berryMagenta.withOpacity(0.8),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        s.display,
+                        style: TextStyle(
+                          color: context.ink,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RecentRow extends StatelessWidget {
   const _RecentRow({
     required this.recent,
@@ -730,7 +807,7 @@ class _RecentRow extends StatelessWidget {
               Text(
                 'RECENT SEARCHES',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                  color: context.ink.withOpacity(0.55),
                   fontSize: 11,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 1.0,
@@ -742,8 +819,8 @@ class _RecentRow extends StatelessWidget {
                   onTap: onClear,
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     child: Text(
                       'Clear',
                       style: TextStyle(
@@ -765,8 +842,8 @@ class _RecentRow extends StatelessWidget {
                 onTap: () => onTap(q),
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 7),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
@@ -777,14 +854,12 @@ class _RecentRow extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.history_rounded,
-                          size: 13,
-                          color:
-                              VentlyColors.deepBurgundy.withOpacity(0.6)),
+                          size: 13, color: context.ink.withOpacity(0.6)),
                       const SizedBox(width: 6),
                       Text(
                         q,
-                        style: const TextStyle(
-                          color: VentlyColors.deepBurgundy,
+                        style: TextStyle(
+                          color: context.ink,
                           fontWeight: FontWeight.w800,
                           fontSize: 12,
                         ),
@@ -828,8 +903,8 @@ class _SectionHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
@@ -838,7 +913,7 @@ class _SectionHeader extends StatelessWidget {
                 Text(
                   subtitle,
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                    color: context.ink.withOpacity(0.6),
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -859,8 +934,7 @@ class _SectionHeader extends StatelessWidget {
           else if (trailingIcon != null)
             IconButton(
               onPressed: onAction,
-              icon: Icon(trailingIcon,
-                  size: 18, color: VentlyColors.deepBurgundy),
+              icon: Icon(trailingIcon, size: 18, color: context.ink),
             ),
         ],
       ),
@@ -942,8 +1016,7 @@ class _NoteworthyTribeCard extends StatelessWidget {
               padding: const EdgeInsets.all(8),
               alignment: Alignment.topRight,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.32),
                   borderRadius: BorderRadius.circular(12),
@@ -964,8 +1037,8 @@ class _NoteworthyTribeCard extends StatelessWidget {
             tribe.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: VentlyColors.deepBurgundy,
+            style: TextStyle(
+              color: context.ink,
               fontWeight: FontWeight.w900,
               fontSize: 14,
             ),
@@ -979,7 +1052,7 @@ class _NoteworthyTribeCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                color: context.ink.withOpacity(0.62),
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
               ),
@@ -1080,15 +1153,25 @@ class _FeaturedVoiceCard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '@${voice.pseudonym}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: VentlyColors.deepBurgundy,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '@${voice.pseudonym}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: context.ink,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                        if (voice.isVerified) ...[
+                          const SizedBox(width: 4),
+                          const VerifiedBadge(size: 14),
+                        ],
+                      ],
                     ),
                     const Text(
                       'Trending creator',
@@ -1108,19 +1191,21 @@ class _FeaturedVoiceCard extends ConsumerWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: VentlyColors.cardBlush,
+              color: context.isDark ? context.glass() : VentlyColors.cardBlush,
               borderRadius: BorderRadius.circular(18),
-              border:
-                  Border.all(color: VentlyColors.softMauve.withOpacity(0.5)),
+              border: Border.all(
+                  color: context.isDark
+                      ? context.glassBorder
+                      : VentlyColors.softMauve.withOpacity(0.5)),
             ),
             child: Text(
               '"${voice.topQuote.trim()}"',
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontStyle: FontStyle.italic,
                 height: 1.45,
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1156,14 +1241,27 @@ class _MiniVoiceCard extends ConsumerWidget {
       crossAxisAlignment:
           horizontal ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
-        Text(
-          '@${voice.pseudonym}',
-          textAlign: horizontal ? TextAlign.start : TextAlign.center,
-          style: const TextStyle(
-            color: VentlyColors.deepBurgundy,
-            fontWeight: FontWeight.w900,
-            fontSize: 12.5,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment:
+              horizontal ? MainAxisAlignment.start : MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                '@${voice.pseudonym}',
+                textAlign: horizontal ? TextAlign.start : TextAlign.center,
+                style: TextStyle(
+                  color: context.ink,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12.5,
+                ),
+              ),
+            ),
+            if (voice.isVerified) ...[
+              const SizedBox(width: 3),
+              const VerifiedBadge(size: 12.5),
+            ],
+          ],
         ),
         const SizedBox(height: 3),
         Text(
@@ -1174,7 +1272,7 @@ class _MiniVoiceCard extends ConsumerWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: VentlyColors.deepBurgundy.withOpacity(0.62),
+            color: context.ink.withOpacity(0.62),
             fontSize: 11,
             fontWeight: FontWeight.w700,
           ),
@@ -1240,16 +1338,13 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
     if (_busy || _sent) return;
     setState(() => _busy = true);
     try {
-      await ref
-          .read(repositoryProvider)
-          .sendFriendRequest(widget.voice.userId);
+      await ref.read(repositoryProvider).sendFriendRequest(widget.voice.userId);
       ref.invalidate(outgoingFriendRequestsProvider);
       if (!mounted) return;
       setState(() => _sent = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text('Connection request sent to @${widget.voice.pseudonym}.'),
+          content: Text('Friend request sent to @${widget.voice.pseudonym}.'),
         ),
       );
     } catch (e) {
@@ -1378,8 +1473,8 @@ class _RecommendedTile extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 9, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                     decoration: BoxDecoration(
                       color: (accent ?? VentlyColors.berryMagenta)
                           .withOpacity(0.16),
@@ -1399,7 +1494,7 @@ class _RecommendedTile extends StatelessWidget {
                   Text(
                     _ago(post.createdAt),
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                      color: context.ink.withOpacity(0.55),
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
                     ),
@@ -1411,8 +1506,8 @@ class _RecommendedTile extends StatelessWidget {
                 '"${post.content}"',
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                style: TextStyle(
+                  color: context.ink,
                   height: 1.35,
                   fontWeight: FontWeight.w800,
                 ),
@@ -1420,20 +1515,17 @@ class _RecommendedTile extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  const Icon(Icons.favorite_border,
-                      size: 14, color: VentlyColors.deepBurgundy),
+                  Icon(Icons.favorite_border, size: 14, color: context.ink),
                   const SizedBox(width: 5),
                   Text(PostCard.compactNumber(post.likesCount),
-                      style: _metricStyle),
+                      style: _metricStyle(context)),
                   const SizedBox(width: 14),
-                  const Icon(Icons.chat_bubble_outline,
-                      size: 13, color: VentlyColors.deepBurgundy),
+                  Icon(Icons.chat_bubble_outline, size: 13, color: context.ink),
                   const SizedBox(width: 5),
                   Text(PostCard.compactNumber(post.commentsCount),
-                      style: _metricStyle),
+                      style: _metricStyle(context)),
                   const Spacer(),
-                  const Icon(Icons.bookmark_border,
-                      size: 17, color: VentlyColors.deepBurgundy),
+                  Icon(Icons.bookmark_border, size: 17, color: context.ink),
                 ],
               ),
             ],
@@ -1443,17 +1535,17 @@ class _RecommendedTile extends StatelessWidget {
     );
   }
 
-  static const _metricStyle = TextStyle(
-    color: VentlyColors.deepBurgundy,
-    fontSize: 12,
-    fontWeight: FontWeight.w800,
-  );
+  static TextStyle _metricStyle(BuildContext context) => TextStyle(
+        color: context.ink,
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+      );
 
   static String _ago(DateTime date) {
     final diff = DateTime.now().difference(date);
     if (diff.inMinutes < 1) return 'just now';
-    if (diff.inHours < 1)   return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24)  return '${diff.inHours}h ago';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
   }
 }
@@ -1503,7 +1595,7 @@ class _EmptyHint extends StatelessWidget {
             child: Text(
               message,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.72),
+                color: context.ink.withOpacity(0.72),
                 fontWeight: FontWeight.w700,
                 fontSize: 12.5,
               ),

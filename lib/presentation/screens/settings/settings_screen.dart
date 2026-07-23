@@ -14,6 +14,7 @@ import '../../../data/services/moderation_service.dart';
 import '../../theme/colors.dart';
 import '../../widgets/blocked_accounts_sheet.dart';
 import '../../widgets/recovery_phrase_dialog.dart';
+import '../../widgets/vently_notification_bell.dart';
 
 /// Account, appearance, privacy, and safety settings.
 class SettingsScreen extends ConsumerWidget {
@@ -33,12 +34,15 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         children: [
           if (me != null) ...[
-            _SectionHeader('Signed in as'),
+            const _SectionHeader('Signed in as'),
             ListTile(
               leading: CircleAvatar(
                 backgroundColor: scheme.primary.withOpacity(0.14),
                 child: Text(
-                  me.anonymousPseudonym.replaceAll('@', '').characters.first
+                  me.anonymousPseudonym
+                      .replaceAll('@', '')
+                      .characters
+                      .first
                       .toUpperCase(),
                   style: TextStyle(
                     color: scheme.primary,
@@ -51,37 +55,56 @@ class SettingsScreen extends ConsumerWidget {
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
               subtitle: ref.watch(keeperModeProvider).when(
-                data: (mode) => Text(
-                  mode.label,
-                  style: TextStyle(color: scheme.onSurface.withOpacity(0.6)),
-                ),
-                loading: () => Text(
-                  me.userRole == 'plug' ? 'Verified Plug' : 'Member',
-                  style: TextStyle(color: scheme.onSurface.withOpacity(0.6)),
-                ),
-                error: (_, __) => Text(
-                  me.userRole == 'plug' ? 'Verified Plug' : 'Member',
-                  style: TextStyle(color: scheme.onSurface.withOpacity(0.6)),
-                ),
-              ),
+                    data: (mode) => Text(
+                      mode.label,
+                      style:
+                          TextStyle(color: scheme.onSurface.withOpacity(0.6)),
+                    ),
+                    loading: () => Text(
+                      me.userRole == 'plug' ? 'Verified Plug' : 'Member',
+                      style:
+                          TextStyle(color: scheme.onSurface.withOpacity(0.6)),
+                    ),
+                    error: (_, __) => Text(
+                      me.userRole == 'plug' ? 'Verified Plug' : 'Member',
+                      style:
+                          TextStyle(color: scheme.onSurface.withOpacity(0.6)),
+                    ),
+                  ),
             ),
           ],
           const _SectionHeader('Appearance'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+            child: Row(
+              children: [
+                for (final option in VentlyThemeMode.values) ...[
+                  Expanded(
+                    child: _AppearanceOption(
+                      mode: option,
+                      selected: themeMode == option,
+                      onTap: () =>
+                          ref.read(themeModeProvider.notifier).setMode(option),
+                    ),
+                  ),
+                  if (option != VentlyThemeMode.values.last)
+                    const SizedBox(width: 10),
+                ],
+              ],
+            ),
+          ),
+          const _SectionHeader('Data & network'),
           SwitchListTile(
-            secondary: Icon(
-              themeMode == ThemeMode.dark
-                  ? Icons.dark_mode_rounded
-                  : Icons.light_mode_rounded,
-              color: VentlyColors.berryMagenta,
-            ),
-            title: const Text('Dark mode',
+            secondary: const Icon(Icons.data_saver_on_rounded,
+                color: VentlyColors.berryMagenta),
+            title: const Text('Data Saver',
                 style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text(
-              themeMode == ThemeMode.dark ? 'On' : 'Off',
-              style: TextStyle(color: scheme.onSurface.withOpacity(0.6)),
-            ),
-            value: themeMode == ThemeMode.dark,
-            onChanged: (_) => ref.read(themeModeProvider.notifier).toggle(),
+            subtitle: const Text(
+                'Lighter images, no whisper autoplay, less prefetch'),
+            activeColor: VentlyColors.berryMagenta,
+            value: ref.watch(dataSaverProvider),
+            onChanged: (v) =>
+                ref.read(dataSaverProvider.notifier).setEnabled(v),
           ),
           const _SectionHeader('Account'),
           ListTile(
@@ -98,8 +121,8 @@ class SettingsScreen extends ConsumerWidget {
                 color: VentlyColors.berryMagenta),
             title: const Text('Password & security',
                 style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: const Text(
-                'Password, recovery email, 2FA, active sessions'),
+            subtitle:
+                const Text('Password, recovery email, 2FA, active sessions'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => context.push('/profile/password-security'),
           ),
@@ -123,7 +146,11 @@ class SettingsScreen extends ConsumerWidget {
               // Use go(), not push(): the keeper studio lives in the bottom-nav
               // shell branch. push() would stack a second copy of the branch
               // and duplicate its GlobalKeys (keyReservation assertion crash).
-              onTap: () => context.go('/feed'),
+              // Also exit "member view" or /feed just shows the member feed.
+              onTap: () {
+                ref.read(keeperMemberViewProvider.notifier).state = false;
+                context.go('/feed');
+              },
             ),
           const _SectionHeader('Privacy'),
           ListTile(
@@ -132,16 +159,15 @@ class SettingsScreen extends ConsumerWidget {
             title: const Text('Blocked accounts',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             subtitle: Text(
-              blocks.isEmpty
-                  ? 'No one blocked'
-                  : '${blocks.length} blocked',
+              blocks.isEmpty ? 'No one blocked' : '${blocks.length} blocked',
             ),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => showBlockedAccountsSheet(context),
           ),
           ListTile(
-            leading: const Icon(Icons.notifications_outlined,
-                color: VentlyColors.berryMagenta),
+            leading: const VentlyNotificationBell(
+              color: VentlyColors.berryMagenta,
+            ),
             title: const Text('Notification alerts',
                 style: TextStyle(fontWeight: FontWeight.w800)),
             subtitle: const Text(
@@ -149,8 +175,9 @@ class SettingsScreen extends ConsumerWidget {
             ),
             trailing: Switch.adaptive(
               value: notificationsOn,
-              onChanged: (v) =>
-                  ref.read(pushNotificationsEnabledProvider.notifier).setEnabled(v),
+              onChanged: (v) => ref
+                  .read(pushNotificationsEnabledProvider.notifier)
+                  .setEnabled(v),
             ),
           ),
           ListTile(
@@ -257,7 +284,7 @@ class SettingsScreen extends ConsumerWidget {
               final version = snap.data?.version ?? '—';
               final build = snap.data?.buildNumber ?? '';
               return Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 116),
                 child: Text(
                   'Venttly v$version${build.isEmpty ? '' : ' ($build)'}',
                   textAlign: TextAlign.center,
@@ -396,12 +423,12 @@ class SettingsScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
+              Text(
                 'You are not alone',
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 18,
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                 ),
               ),
               const SizedBox(height: 8),
@@ -419,10 +446,12 @@ class SettingsScreen extends ConsumerWidget {
                   child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: VentlyColors.cardBlush,
+                      color: ctx.isDark ? ctx.glass() : VentlyColors.cardBlush,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: VentlyColors.softMauve.withOpacity(0.4),
+                        color: ctx.isDark
+                            ? ctx.glassBorder
+                            : VentlyColors.softMauve.withOpacity(0.4),
                       ),
                     ),
                     child: Column(
@@ -448,6 +477,71 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One tile of the Light / Dark / Black appearance selector.
+class _AppearanceOption extends StatelessWidget {
+  const _AppearanceOption({
+    required this.mode,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final VentlyThemeMode mode;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (icon, label) = switch (mode) {
+      VentlyThemeMode.light => (Icons.light_mode_rounded, 'Light'),
+      VentlyThemeMode.dark => (Icons.dark_mode_rounded, 'Dark'),
+      VentlyThemeMode.black => (Icons.contrast_rounded, 'Black'),
+    };
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        color:
+            selected ? scheme.primary.withOpacity(0.14) : context.glass(0.55),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: selected ? scheme.primary : context.glassBorder,
+          width: selected ? 1.4 : 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 22,
+                  color: selected ? scheme.primary : context.inkMuted,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: selected ? scheme.primary : context.inkMuted,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

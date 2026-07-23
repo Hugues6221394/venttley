@@ -76,10 +76,10 @@ class _WhisperPreviewSheet extends StatelessWidget {
                 ),
               ),
             ),
-            const Text(
+            Text(
               'Preview your Whisper',
               style: TextStyle(
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 18,
               ),
@@ -88,7 +88,7 @@ class _WhisperPreviewSheet extends StatelessWidget {
             Text(
               'Listen before you publish — nothing uploads until you confirm.',
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                color: context.ink.withOpacity(0.62),
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
               ),
@@ -123,8 +123,8 @@ class _WhisperPreviewSheet extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 title!,
-                style: const TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                style: TextStyle(
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 15,
                 ),
@@ -135,7 +135,7 @@ class _WhisperPreviewSheet extends StatelessWidget {
               Text(
                 description!,
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.72),
+                  color: context.ink.withOpacity(0.72),
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -148,7 +148,7 @@ class _WhisperPreviewSheet extends StatelessWidget {
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context, false),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: VentlyColors.deepBurgundy,
+                      foregroundColor: context.ink,
                       side: BorderSide(
                         color: VentlyColors.softMauve.withOpacity(0.6),
                       ),

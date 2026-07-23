@@ -25,12 +25,12 @@ class VentlyTokens {
   static const Color successGreen = VentlyColors.successGreen;
   static const Color dangerRed = VentlyColors.dangerRed;
 
-  static const TextStyle sectionTitle = TextStyle(
-    color: VentlyColors.deepBurgundy,
-    fontSize: 15,
-    fontWeight: FontWeight.w900,
-    letterSpacing: 0,
-  );
+  static TextStyle sectionTitle(BuildContext context) => TextStyle(
+        color: context.ink,
+        fontSize: 15,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 0,
+      );
 
   static const TextStyle meta = TextStyle(
     fontSize: 11,

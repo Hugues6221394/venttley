@@ -5,10 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
-import '../../widgets/anonymous_avatar.dart';
+import '../../widgets/premium_motion.dart';
 import '../../widgets/post_card.dart';
+import '../../widgets/profile_avatar.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/tribe_avatar.dart';
+import '../../widgets/user_link.dart';
 import '../../widgets/vently_logo.dart';
 
 /// Hybrid Tribes browse + search + create entry point.
@@ -20,19 +22,18 @@ class TribesDirectoryScreen extends ConsumerStatefulWidget {
       _TribesDirectoryScreenState();
 }
 
-class _TribesDirectoryScreenState
-    extends ConsumerState<TribesDirectoryScreen> {
+class _TribesDirectoryScreenState extends ConsumerState<TribesDirectoryScreen> {
   String? _category;
   String _search = '';
 
   static const _categories = <(String? key, String label, IconData icon)>[
-    (null,              'All',           Icons.public),
-    ('campus',          'Campus',        Icons.school_outlined),
-    ('city',            'City',          Icons.location_city_outlined),
-    ('interest_group',  'Interest',      Icons.interests_outlined),
-    ('hobby',           'Hobby',         Icons.palette_outlined),
-    ('support',         'Support',       Icons.favorite_outline),
-    ('venting',         'Venting',       Icons.bedtime_outlined),
+    (null, 'All', Icons.public),
+    ('campus', 'Campus', Icons.school_outlined),
+    ('city', 'City', Icons.location_city_outlined),
+    ('interest_group', 'Interest', Icons.interests_outlined),
+    ('hobby', 'Hobby', Icons.palette_outlined),
+    ('support', 'Support', Icons.favorite_outline),
+    ('venting', 'Venting', Icons.bedtime_outlined),
   ];
 
   @override
@@ -134,7 +135,12 @@ class _TribesDirectoryScreenState
                         ),
                         child: ListView.builder(
                           itemCount: tribes.length,
-                          itemBuilder: (_, i) => _TribeCard(tribe: tribes[i]),
+                          cacheExtent: 800,
+                          padding: const EdgeInsets.only(bottom: 116),
+                          itemBuilder: (_, i) => FadeSlideIn(
+                            index: i.clamp(0, 5),
+                            child: _TribeCard(tribe: tribes[i]),
+                          ),
                         ),
                       ),
           ),
@@ -170,7 +176,12 @@ class _TribeCard extends ConsumerWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TribeAvatar(avatarUrl: tribe.avatarUrl, size: 52),
+              TribeCoverPreview(
+                bannerUrl: tribe.bannerUrl,
+                avatarUrl: tribe.avatarUrl,
+                width: 72,
+                height: 62,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -226,24 +237,36 @@ class _TribeCard extends ConsumerWidget {
                     ],
                     if (tribe.keeperPseudonym != null) ...[
                       const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          AnonymousAvatar(
-                            seed: tribe.keeperAvatarSeed ?? 'default-orb',
-                            label: tribe.keeperPseudonym!,
-                            size: 18,
-                            showVerifiedBadge: tribe.keeperIsVerified,
+                      UserProfileTap(
+                        userId: tribe.keeperId,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              ProfileAvatar(
+                                avatarSeed:
+                                    tribe.keeperAvatarSeed ?? 'default-orb',
+                                label: tribe.keeperPseudonym!,
+                                profilePhotoUrl: tribe.keeperProfilePhotoUrl,
+                                size: 20,
+                                showVerifiedBadge: tribe.keeperIsVerified,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'Kept by @${tribe.keeperPseudonym}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: scheme.onSurface.withOpacity(0.7),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Kept by @${tribe.keeperPseudonym}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: scheme.onSurface.withOpacity(0.7),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ],
                   ],
@@ -270,7 +293,7 @@ class _JoinPill extends ConsumerWidget {
       return OutlinedButton(
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          foregroundColor: VentlyColors.deepBurgundy,
+          foregroundColor: context.ink,
         ),
         onPressed: () async {
           await repo.leaveTribe(tribe.tribeId);

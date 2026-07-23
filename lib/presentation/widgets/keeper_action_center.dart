@@ -61,7 +61,7 @@ class KeeperActionCenter extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.check_circle_outline,
+            const Icon(Icons.check_circle_outline,
                 color: VentlyColors.successGreen, size: 22),
             const SizedBox(width: 10),
             Expanded(

@@ -3,8 +3,8 @@
 /// Implements the tiered cascade from the PRD:
 ///   1. Fast local keyword dictionary (self-harm, doxxing PII, hate, harassment,
 ///      sexual content). Runs in-process — single-digit ms latency.
-///   2. Groq-hosted Llama Guard 3 — escalates ambiguous content. Skipped when
-///      [VentlyConfig.groqApiKey] is empty (safe-fail).
+///   2. Server-side Llama Guard — escalates ambiguous content through the
+///      authenticated `moderate` Edge Function. No provider key ships in app.
 ///
 /// Public surface: [ModerationService.review] returns a [ModerationResult]
 /// with a [SafetyVerdict], human-readable reasons, and a [surfaceCrisisHelpline]
@@ -12,12 +12,8 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math';
 
-import 'package:http/http.dart' as http;
-
-import '../../core/constants.dart';
 import '../../domain/entities/entities.dart';
 
 enum SafetyVerdict { safe, warn, block }
@@ -47,14 +43,11 @@ class ModerationResult {
   });
 
   bool get isBlocked => verdict == SafetyVerdict.block;
-  bool get isWarn    => verdict == SafetyVerdict.warn;
+  bool get isWarn => verdict == SafetyVerdict.warn;
 }
 
 class ModerationService {
-  ModerationService({http.Client? httpClient, this.remoteGuard})
-      : _http = httpClient;
-
-  final http.Client? _http;
+  ModerationService({this.remoteGuard});
 
   /// When set, Tier-2 classification is delegated to this callback — the
   /// server-side `moderate` edge function — instead of calling Groq directly.
@@ -97,10 +90,10 @@ class ModerationService {
   /// Decides whether to spend a Tier-2 LLM call. Escalates on any Tier-1
   /// signal or risk hint; otherwise samples a small fraction.
   bool _shouldRunLlmGuard(String lower, Set<HazardCategory> categories) {
-    if (categories.isNotEmpty) return true;      // confirm/expand a Tier-1 hit
+    if (categories.isNotEmpty) return true; // confirm/expand a Tier-1 hit
     if (lower.length < _llmMinLength) return false;
     if (_riskHints.hasMatch(lower)) return true; // nuance worth the call
-    return _rng.nextDouble() < _llmSampleRate;    // sampled coverage
+    return _rng.nextDouble() < _llmSampleRate; // sampled coverage
   }
 
   bool _ruleMatches(AutomodRule rule, String original, String lower) {
@@ -126,9 +119,31 @@ class ModerationService {
   // TIER 1 — keyword dictionaries
   // ---------------------------------------------------------------------
 
-  // 7+ digits, allowing spaces / dashes / leading + — catches obvious phone
-  // numbers without flagging years or street addresses.
-  static final RegExp _phoneNumber = RegExp(r'(?:\+?\d[\s\-]?){7,}');
+  // Phone-like candidates. Validation below excludes calendar dates and only
+  // treats short digit runs as phones when they carry an international prefix
+  // or deliberate phone separators.
+  static final RegExp _phoneCandidate =
+      RegExp(r'(?<!\d)\+?\d(?:[\s\-]?\d){6,14}(?!\d)');
+  static final RegExp _compactYmdDate = RegExp(
+    r'^(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])$',
+  );
+
+  static bool _containsPhoneNumber(String text) {
+    for (final match in _phoneCandidate.allMatches(text)) {
+      final candidate = match.group(0)!;
+      final digits = candidate.replaceAll(RegExp(r'\D'), '');
+      final startsWithPlus = candidate.trimLeft().startsWith('+');
+      final hasSeparator = candidate.contains(RegExp(r'[\s\-]'));
+
+      // Dates and release/test identifiers such as 20260718 are not contact
+      // details. This avoids blocking ordinary time references in vents.
+      if (!startsWithPlus && _compactYmdDate.hasMatch(digits)) continue;
+
+      if (digits.length >= 9) return true;
+      if (digits.length >= 7 && (startsWithPlus || hasSeparator)) return true;
+    }
+    return false;
+  }
 
   // Bare email addresses — same rationale.
   static final RegExp _email =
@@ -138,24 +153,39 @@ class ModerationService {
   // surface crisis resources — never block, so people in crisis can still
   // reach for help in the app.
   static const List<String> _selfHarmKeywords = [
-    'kill myself', 'end it all', 'suicide', "i want to die",
-    'self harm', 'cutting myself', 'kms', "won't be here",
-    'overdose', 'jump off', 'no reason to live',
+    'kill myself',
+    'end it all',
+    'suicide',
+    "i want to die",
+    'self harm',
+    'cutting myself',
+    'kms',
+    "won't be here",
+    'overdose',
+    'jump off',
+    'no reason to live',
   ];
 
   // Hate speech — small starter set; production loads from a private dict.
   static const List<String> _hateSlurs = [
-    'retard', 'faggot', 'n word',
+    'retard',
+    'faggot',
+    'n word',
   ];
 
   // Targeted harassment of others.
   static const List<String> _harassment = [
-    'kill yourself', 'kys', 'go die', "nobody loves you", 'you should die',
+    'kill yourself',
+    'kys',
+    'go die',
+    "nobody loves you",
+    'you should die',
   ];
 
   // Sexual / explicit content — kept short here; LlamaGuard catches nuance.
   static const List<String> _sexualKeywords = [
-    'nude pic', 'send nudes',
+    'nude pic',
+    'send nudes',
   ];
 
   // ---------------------------------------------------------------------
@@ -169,7 +199,7 @@ class ModerationService {
     bool crisis = false;
     var verdict = SafetyVerdict.safe;
 
-    if (_phoneNumber.hasMatch(text)) {
+    if (_containsPhoneNumber(text)) {
       reasons.add('Looks like a phone number — Venttly masks contact info.');
       categories.add(HazardCategory.privacy);
       verdict = SafetyVerdict.block;
@@ -244,11 +274,11 @@ class ModerationService {
     // risk signal at all (cost gate, see _shouldRunLlmGuard). This keeps LLM
     // spend/latency proportional to actual risk instead of paying per message.
     if (verdict != SafetyVerdict.block &&
-        (remoteGuard != null || VentlyConfig.groqApiKey.isNotEmpty) &&
+        remoteGuard != null &&
         _shouldRunLlmGuard(t, categories)) {
       try {
-        final guard = await _llamaGuardReview(text)
-            .timeout(const Duration(seconds: 3));
+        final guard =
+            await _llamaGuardReview(text).timeout(const Duration(seconds: 3));
         if (guard.verdict == SafetyVerdict.block) {
           verdict = SafetyVerdict.block;
           reasons.addAll(guard.reasons);
@@ -277,72 +307,13 @@ class ModerationService {
   }
 
   // ---------------------------------------------------------------------
-  // TIER 2 — Groq chat completion in JSON mode.
-  //
-  // We prompt whichever model the founder has on their Groq plan (llama-3.3,
-  // gpt-oss, etc.) to emit a strict JSON safety verdict. This keeps the
-  // moderation contract model-agnostic.
+  // TIER 2 — authenticated server-side classification.
   // ---------------------------------------------------------------------
-  static const String _guardSystemPrompt =
-      'You are Venttly\'s safety reviewer for an anonymous emotional-support '
-      'app. Read the user message and return ONLY a compact JSON object with '
-      'keys: verdict ("safe"|"warn"|"block"), categories (array of any of '
-      '"self_harm","hate","harassment","sexual_content","violence","privacy","other"), '
-      'reason (one short sentence the user will read). '
-      'Guidance: '
-      '  - block hate speech, harassment of others, sexual solicitation, '
-      'doxxing, credible threats, sexual content involving minors. '
-      '  - warn (do NOT block) when the writer expresses self-harm or '
-      'suicidal feelings — the user must still be able to reach out for help. '
-      '  - safe for emotional venting, sadness, anger, swearing, '
-      'or descriptions of past trauma told in the first person.';
-
   Future<ModerationResult> _llamaGuardReview(String text) async {
-    Map<String, dynamic> parsed;
     final remote = remoteGuard;
-    if (remote != null) {
-      // Server-side path: the `moderate` edge function returns the raw verdict
-      // shape {verdict, categories, reason} and caches it. The Groq key stays
-      // off-device.
-      final r = await remote(text);
-      if (r == null) return _safeGuardResult;
-      parsed = r;
-    } else {
-      // Direct Groq path (fallback / tests) — needs groqApiKey on-device.
-      final client = _http ?? http.Client();
-      final res = await client.post(
-        Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
-        headers: {
-          'Authorization': 'Bearer ${VentlyConfig.groqApiKey}',
-          'Content-Type':  'application/json',
-        },
-        body: jsonEncode({
-          'model':           VentlyConfig.groqGuardModel,
-          'temperature':     0,
-          'max_tokens':      200,
-          'response_format': {'type': 'json_object'},
-          'messages': [
-            {'role': 'system', 'content': _guardSystemPrompt},
-            {'role': 'user',   'content': text},
-          ],
-        }),
-      );
-      if (res.statusCode >= 400) {
-        throw StateError('Groq guard HTTP ${res.statusCode}: ${res.body}');
-      }
-      final body = jsonDecode(res.body) as Map<String, dynamic>;
-      final choices = body['choices'] as List?;
-      final firstChoice = (choices == null || choices.isEmpty)
-          ? null
-          : choices.first as Map<String, dynamic>?;
-      final message = firstChoice?['message'] as Map<String, dynamic>?;
-      final content = (message?['content'] as String?) ?? '{}';
-      try {
-        parsed = jsonDecode(content) as Map<String, dynamic>;
-      } catch (_) {
-        return _safeGuardResult; // non-JSON despite the hint — fail safe.
-      }
-    }
+    if (remote == null) return _safeGuardResult;
+    final parsed = await remote(text);
+    if (parsed == null) return _safeGuardResult;
     return _mapGuardParsed(parsed);
   }
 
@@ -368,18 +339,20 @@ class ModerationService {
     final crisis = cats.contains(HazardCategory.selfHarm);
     final verdict = switch (verdictStr) {
       'block' => SafetyVerdict.block,
-      'warn'  => SafetyVerdict.warn,
-      _       => SafetyVerdict.safe,
+      'warn' => SafetyVerdict.warn,
+      _ => SafetyVerdict.safe,
     };
     // Self-harm never escalates to block — keep crisis support reachable.
-    final effective = (verdict == SafetyVerdict.block && crisis && cats.length == 1)
-        ? SafetyVerdict.warn
-        : verdict;
+    final effective =
+        (verdict == SafetyVerdict.block && crisis && cats.length == 1)
+            ? SafetyVerdict.warn
+            : verdict;
 
     return ModerationResult(
       verdict: effective,
       reasons: [
-        if (reason != null && reason.isNotEmpty) reason
+        if (reason != null && reason.isNotEmpty)
+          reason
         else if (effective == SafetyVerdict.block)
           'Flagged by Venttly safety AI.',
         if (crisis) 'We care about you. Would you like crisis resources?',
@@ -391,13 +364,20 @@ class ModerationService {
 
   static HazardCategory _categoryFromString(String s) {
     switch (s.trim().toLowerCase()) {
-      case 'self_harm':       return HazardCategory.selfHarm;
-      case 'hate':            return HazardCategory.hate;
-      case 'harassment':      return HazardCategory.harassment;
-      case 'sexual_content':  return HazardCategory.sexualContent;
-      case 'violence':        return HazardCategory.violence;
-      case 'privacy':         return HazardCategory.privacy;
-      default:                return HazardCategory.other;
+      case 'self_harm':
+        return HazardCategory.selfHarm;
+      case 'hate':
+        return HazardCategory.hate;
+      case 'harassment':
+        return HazardCategory.harassment;
+      case 'sexual_content':
+        return HazardCategory.sexualContent;
+      case 'violence':
+        return HazardCategory.violence;
+      case 'privacy':
+        return HazardCategory.privacy;
+      default:
+        return HazardCategory.other;
     }
   }
 
@@ -418,7 +398,7 @@ class CrisisResource {
 }
 
 const List<CrisisResource> kCrisisResources = [
-  CrisisResource('Venttly Care Line',           'Text CARE to 741741 (free, 24/7)'),
+  CrisisResource('Venttly Care Line', 'Text CARE to 741741 (free, 24/7)'),
   CrisisResource('IsangeOne Stop Centre, Rwanda', 'Call 3029 from any phone'),
-  CrisisResource('International Befrienders',  'https://befrienders.org'),
+  CrisisResource('International Befrienders', 'https://befrienders.org'),
 ];

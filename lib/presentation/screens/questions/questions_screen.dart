@@ -57,7 +57,7 @@ class QuestionsScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Be the first — ask your connections anything.',
+                          'Be the first — ask your friends anything.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: scheme.onSurface.withOpacity(0.6),
@@ -188,7 +188,7 @@ class QuestionsScreen extends ConsumerWidget {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(audience == 'friends'
-                      ? 'Question sent to your connections.'
+                      ? 'Question sent to your friends.'
                       : 'Question posted for everyone.'),
                 ),
               );
@@ -283,7 +283,7 @@ class QuestionsScreen extends ConsumerWidget {
                     audiencePill('everyone', Icons.public_rounded, 'Everyone'),
                     const SizedBox(width: 8),
                     audiencePill(
-                        'friends', Icons.people_alt_outlined, 'Connections'),
+                        'friends', Icons.people_alt_outlined, 'Friends'),
                   ],
                 ),
                 const SizedBox(height: 14),

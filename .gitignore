@@ -42,5 +42,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Android production signing material must never enter source control.
+/android/key.properties
+*.jks
+*.keystore
+
 # Claude Code local state (transient locks, session data)
 .claude/

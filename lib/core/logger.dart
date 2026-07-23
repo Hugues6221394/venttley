@@ -68,11 +68,12 @@ class Logger {
     if (_muted.contains(category)) return;
 
     final scrubbed = PiiScrubber.scrub(props);
+    final scrubbedError = error == null ? null : PiiScrubber.scrubError(error);
     final record = LogRecord(
       level: level,
       event: event,
       props: scrubbed,
-      error: error,
+      error: scrubbedError,
       stack: stack,
       at: DateTime.now(),
     );
@@ -86,7 +87,7 @@ class Logger {
       print(
         '[${level.name.toUpperCase()}] $event ${scrubbed.isEmpty ? '' : scrubbed}',
       );
-      if (error != null) print('   error: $error');
+      if (scrubbedError != null) print('   error: $scrubbedError');
       if (stack != null) print('   stack: $stack');
     }
   }

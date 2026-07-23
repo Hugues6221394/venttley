@@ -22,7 +22,7 @@ class SectionHeader extends StatelessWidget {
       padding: padding,
       child: Row(
         children: [
-          Expanded(child: Text(title, style: VentlyTokens.sectionTitle)),
+          Expanded(child: Text(title, style: VentlyTokens.sectionTitle(context))),
           if (trailingLabel != null && onTrailing != null)
             TextButton(
               onPressed: onTrailing,

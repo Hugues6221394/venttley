@@ -74,11 +74,11 @@ class GlassBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.only(
-        topLeft: const Radius.circular(GlassTokens.radiusBubble),
-        topRight: const Radius.circular(GlassTokens.radiusBubble),
-        bottomLeft: const Radius.circular(6),
-        bottomRight: const Radius.circular(GlassTokens.radiusBubble),
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(GlassTokens.radiusBubble),
+        topRight: Radius.circular(GlassTokens.radiusBubble),
+        bottomLeft: Radius.circular(6),
+        bottomRight: Radius.circular(GlassTokens.radiusBubble),
       ),
       child: BackdropFilter(
         filter: ImageFilter.blur(
@@ -92,11 +92,11 @@ class GlassBubble extends StatelessWidget {
             border: Border.all(
               color: VentlyColors.softMauve.withOpacity(0.38),
             ),
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(GlassTokens.radiusBubble),
-              topRight: const Radius.circular(GlassTokens.radiusBubble),
-              bottomLeft: const Radius.circular(6),
-              bottomRight: const Radius.circular(GlassTokens.radiusBubble),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(GlassTokens.radiusBubble),
+              topRight: Radius.circular(GlassTokens.radiusBubble),
+              bottomLeft: Radius.circular(6),
+              bottomRight: Radius.circular(GlassTokens.radiusBubble),
             ),
           ),
           child: child,

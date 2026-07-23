@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -22,6 +25,7 @@ import 'presentation/widgets/vently_premium_background.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  VentlyConfig.validateBackendConfiguration();
 
   // Performance — bump the Flutter image cache from its 100/100MB
   // defaults so the feed + Whispers + Discover surfaces (lots of
@@ -64,26 +68,90 @@ Future<void> main() async {
       options.attachScreenshot = false;
       // Defence in depth — strip any PII that slipped into tags or
       // contexts on top of [PiiScrubber] at the Logger boundary.
-      options.beforeSend = (event, hint) {
-        final scrubbedTags = event.tags == null
-            ? null
-            : Map<String, String>.fromEntries(
-                event.tags!.entries.where(
-                  (e) => PiiScrubber.scrub({e.key: e.value}).isNotEmpty,
-                ),
-              );
-        return event.copyWith(
-          user: null,
-          request: null,
-          tags: scrubbedTags,
-        );
-      };
+      options.beforeSend = (event, hint) => _scrubSentryEvent(event);
     },
     appRunner: () {
       TelemetryService.instance.markSentryReady();
       _wireLoggerToSentry();
       runApp(const ProviderScope(child: VentlyApp()));
     },
+  );
+}
+
+SentryEvent _scrubSentryEvent(SentryEvent event) {
+  final tags = <String, String>{};
+  for (final entry in event.tags?.entries ??
+      const Iterable<MapEntry<String, String>>.empty()) {
+    final scrubbed = PiiScrubber.scrub({entry.key: entry.value});
+    final value = scrubbed[entry.key];
+    if (value != null) tags[entry.key] = value.toString();
+  }
+  final breadcrumbs = event.breadcrumbs
+      ?.map(
+        (breadcrumb) => breadcrumb.copyWith(
+          message: breadcrumb.message == null
+              ? null
+              : PiiScrubber.scrubText(breadcrumb.message!),
+          data: breadcrumb.data == null
+              ? null
+              : PiiScrubber.scrub(
+                  Map<String, Object?>.from(breadcrumb.data!),
+                ),
+        ),
+      )
+      .toList();
+  final exceptions = event.exceptions
+      ?.map(
+        (exception) => exception.copyWith(
+          value: exception.value == null
+              ? null
+              : PiiScrubber.scrubText(exception.value!),
+          throwable: exception.throwable == null
+              ? null
+              : PiiScrubber.scrubError(exception.throwable),
+        ),
+      )
+      .toList();
+  final eventMessage = event.message;
+  final message = eventMessage?.copyWith(
+    formatted: PiiScrubber.scrubText(eventMessage.formatted),
+    template: eventMessage.template == null
+        ? null
+        : PiiScrubber.scrubText(eventMessage.template!),
+    params: eventMessage.params
+        ?.map((value) => PiiScrubber.scrubText(value.toString()))
+        .toList(),
+  );
+
+  // Build a clean event instead of copyWith: Sentry's nullable copyWith fields
+  // cannot clear an existing user or request once one has been attached.
+  return SentryEvent(
+    eventId: event.eventId,
+    timestamp: event.timestamp,
+    modules: event.modules,
+    tags: tags,
+    fingerprint: event.fingerprint,
+    breadcrumbs: breadcrumbs,
+    exceptions: exceptions,
+    threads: event.threads,
+    sdk: event.sdk,
+    platform: event.platform,
+    logger: event.logger,
+    serverName: event.serverName,
+    release: event.release,
+    dist: event.dist,
+    environment: event.environment,
+    message: message,
+    transaction: event.transaction,
+    throwable: event.throwable == null
+        ? null
+        : PiiScrubber.scrubError(event.throwable),
+    level: event.level,
+    culprit:
+        event.culprit == null ? null : PiiScrubber.scrubText(event.culprit!),
+    contexts: event.contexts,
+    debugMeta: event.debugMeta,
+    type: event.type,
   );
 }
 
@@ -97,8 +165,8 @@ void _wireLoggerToSentry() {
   Logger.instance.onRecord = (record) {
     final breadcrumbLevel = switch (record.level) {
       LogLevel.debug => SentryLevel.debug,
-      LogLevel.info  => SentryLevel.info,
-      LogLevel.warn  => SentryLevel.warning,
+      LogLevel.info => SentryLevel.info,
+      LogLevel.warn => SentryLevel.warning,
       LogLevel.error => SentryLevel.error,
     };
     Sentry.addBreadcrumb(
@@ -133,10 +201,77 @@ class VentlyApp extends ConsumerStatefulWidget {
   ConsumerState<VentlyApp> createState() => _VentlyAppState();
 }
 
-class _VentlyAppState extends ConsumerState<VentlyApp> {
+class _VentlyAppState extends ConsumerState<VentlyApp>
+    with WidgetsBindingObserver {
+  /// Presence heartbeat — stamps users.last_seen_at every ~60s while the
+  /// app is foregrounded so peers see Online / Active recently (0114).
+  Timer? _presenceTimer;
+  StreamSubscription<Uri>? _appLinkSubscription;
+  String? _pendingDeepLinkPath;
+
+  void _handleAppLink(Uri uri) {
+    final path = groupInvitePathFromUri(uri);
+    if (path == null) return;
+    if (ref.read(sessionProvider) == null) {
+      _pendingDeepLinkPath = path;
+      return;
+    }
+    _pendingDeepLinkPath = null;
+    ref.read(routerProvider).go(path);
+  }
+
+  void _flushPendingDeepLink() {
+    final path = _pendingDeepLinkPath;
+    if (path == null || ref.read(sessionProvider) == null) return;
+    _pendingDeepLinkPath = null;
+    ref.read(routerProvider).go(path);
+  }
+
+  void _startPresenceHeartbeat() {
+    _presenceTimer?.cancel();
+    if (ref.read(sessionProvider) == null) return;
+    ref.read(repositoryProvider).touchLastSeen();
+    _presenceTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => ref.read(repositoryProvider).touchLastSeen(),
+    );
+  }
+
+  void _stopPresenceHeartbeat() {
+    _presenceTimer?.cancel();
+    _presenceTimer = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startPresenceHeartbeat();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _stopPresenceHeartbeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopPresenceHeartbeat();
+    _appLinkSubscription?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _appLinkSubscription = AppLinks().uriLinkStream.listen(
+          _handleAppLink,
+          onError: (Object error, StackTrace stack) => Logger.instance.warn(
+            'app_link.invalid',
+            error: error,
+            stack: stack,
+          ),
+        );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       ref.read(sessionProvider.notifier).restore();
       AnalyticsService.instance.track(Events.appOpened);
@@ -146,8 +281,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp> {
       await NotificationsService.instance.init(
         onTap: (payload) {
           if (payload == null || payload.isEmpty) return;
-          ref.read(pendingNotificationPayloadProvider.notifier).state =
-              payload;
+          ref.read(pendingNotificationPayloadProvider.notifier).state = payload;
           handlePendingNotificationNavigation(ref);
         },
       );
@@ -167,9 +301,12 @@ class _VentlyAppState extends ConsumerState<VentlyApp> {
     ref.listen(sessionProvider, (prev, next) {
       if (next != null) {
         handlePendingNotificationNavigation(ref);
-        PushRegistrationService.instance
-            .init(ref.read(repositoryProvider));
+        _flushPendingDeepLink();
+        PushRegistrationService.instance.init(ref.read(repositoryProvider));
         ref.invalidate(tribeChatInboxProvider);
+        _startPresenceHeartbeat();
+      } else {
+        _stopPresenceHeartbeat();
       }
     });
     ref.listen(pendingNotificationPayloadProvider, (prev, next) {
@@ -180,16 +317,43 @@ class _VentlyAppState extends ConsumerState<VentlyApp> {
       title: 'Venttly',
       debugShowCheckedModeBanner: false,
       theme: VentlyTheme.light(),
-      darkTheme: VentlyTheme.dark(),
-      themeMode: mode,
+      // "Black" is our own third appearance: same dark theme, true-black
+      // canvas — so it rides ThemeMode.dark with a pureBlack theme variant.
+      darkTheme: VentlyTheme.dark(pureBlack: mode == VentlyThemeMode.black),
+      themeMode:
+          mode == VentlyThemeMode.light ? ThemeMode.light : ThemeMode.dark,
       routerConfig: router,
       // Premium blush gradient painted once behind the whole navigator —
       // screens opt in by making their Scaffold transparent.
       builder: (context, child) => VentlyPremiumBackground(
         child: NotificationForegroundListener(
+          router: router,
           child: child ?? const SizedBox.shrink(),
         ),
       ),
     );
   }
+}
+
+/// Converts the only public custom scheme Venttly currently supports into an
+/// internal route. Keeping this parser strict prevents arbitrary deep links
+/// from bypassing the router's normal navigation and authentication rules.
+String? groupInvitePathFromUri(Uri uri) {
+  if (uri.scheme.toLowerCase() != 'venttly') return null;
+
+  String? token;
+  if (uri.host.toLowerCase() == 'group-invite' &&
+      uri.pathSegments.length == 1) {
+    token = uri.pathSegments.single;
+  } else if (uri.host.isEmpty &&
+      uri.pathSegments.length == 2 &&
+      uri.pathSegments.first.toLowerCase() == 'group-invite') {
+    token = uri.pathSegments.last;
+  }
+
+  final normalized = token?.trim();
+  if (normalized == null || normalized.isEmpty || normalized.length > 128) {
+    return null;
+  }
+  return '/group-invite/${Uri.encodeComponent(normalized)}';
 }

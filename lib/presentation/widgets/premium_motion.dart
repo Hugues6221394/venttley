@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../theme/colors.dart';
 import '../theme/motion.dart';
 
 /// Tactile press feedback — scales down slightly while pressed, springs back
-/// on release. Wrap any tappable card/button for a premium feel.
+/// on release, with a light haptic tick. Wrap any tappable card/button for a
+/// premium feel.
 class Pressable extends StatefulWidget {
   const Pressable({
     super.key,
@@ -13,12 +15,17 @@ class Pressable extends StatefulWidget {
     this.onTap,
     this.onLongPress,
     this.pressedScale = 0.96,
+    this.haptics = true,
   });
 
   final Widget child;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final double pressedScale;
+
+  /// Light impact on touch-down. Cheap and feels premium; disable for
+  /// high-frequency surfaces (e.g. keyboard-like grids).
+  final bool haptics;
 
   @override
   State<Pressable> createState() => _PressableState();
@@ -35,7 +42,13 @@ class _PressableState extends State<Pressable> {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => _set(true),
+      onTapDown: (_) {
+        _set(true);
+        if (widget.haptics &&
+            (widget.onTap != null || widget.onLongPress != null)) {
+          HapticFeedback.lightImpact();
+        }
+      },
       onTapCancel: () => _set(false),
       onTapUp: (_) => _set(false),
       onTap: widget.onTap,

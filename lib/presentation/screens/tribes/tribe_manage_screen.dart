@@ -200,7 +200,7 @@ class _HeaderCard extends StatelessWidget {
           colors: isDark
               ? [
                   scheme.primary.withOpacity(0.22),
-                  VentlyColors.cardDark,
+                  Theme.of(context).colorScheme.surface,
                 ]
               : [
                   scheme.primary.withOpacity(0.12),
@@ -245,7 +245,7 @@ class _HeaderCard extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                         color: isDark
                             ? VentlyColors.softOffWhite
-                            : VentlyColors.deepBurgundy,
+                            : context.ink,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -524,7 +524,7 @@ class _StatTile extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color:
-            isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+            isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
@@ -669,7 +669,7 @@ class _SentimentCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         color:
-            isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+            isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
@@ -815,7 +815,7 @@ class _ActivityCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         color:
-            isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+            isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
@@ -999,7 +999,7 @@ class _ActionTile extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           color:
-              isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+              isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
           border: Border.all(
             color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
           ),
@@ -1328,7 +1328,7 @@ class _MembersCard extends ConsumerWidget {
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+        color: isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
@@ -2747,7 +2747,7 @@ class _TopPostsCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
       decoration: BoxDecoration(
         color:
-            isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+            isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
@@ -2925,7 +2925,7 @@ class _TopContributorsCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         color:
-            isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+            isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),

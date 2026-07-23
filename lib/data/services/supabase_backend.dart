@@ -8,9 +8,11 @@ import 'package:uuid/uuid.dart';
 import '../../core/constants.dart';
 import '../../core/logger.dart';
 import '../../domain/entities/entities.dart';
+import '../../domain/home/home_discovery.dart';
 import '../../domain/keeper/keeper_mode.dart';
 import '../../domain/keeper/keeper_studio_v2.dart';
 import '../../domain/tribe/tribe_chat_hub.dart';
+import '../../domain/tribe/tribe_management.dart';
 import 'identity_service.dart';
 
 /// Coerces JSONB `{text: "…"}` or plain strings into a nullable String.
@@ -39,6 +41,12 @@ int? _coerceInt(dynamic raw) {
   if (raw is int) return raw;
   if (raw is num) return raw.toInt();
   return int.tryParse(raw.toString());
+}
+
+DateTime? _coerceDate(dynamic raw) {
+  if (raw is DateTime) return raw;
+  if (raw is String && raw.isNotEmpty) return DateTime.tryParse(raw);
+  return null;
 }
 
 /// Live Supabase backend.
@@ -84,6 +92,7 @@ class SupabaseBackend {
   AppUser? _me;
   AppUser? get me => _me;
   String? get _uid => _client.auth.currentUser?.id;
+  String? get authenticatedUserId => _uid;
 
   static const _userBaseSelect =
       'user_id, anonymous_pseudonym, avatar_seed, current_mood, '
@@ -126,9 +135,9 @@ class SupabaseBackend {
         email: email,
         password: password,
         data: {
-          'pseudonym':   username,
+          'pseudonym': username,
           'avatar_seed': avatarSeed,
-          'birth_year':  birthYear,
+          'birth_year': birthYear,
           'safety_tier': safetyTier,
         },
       );
@@ -195,9 +204,9 @@ class SupabaseBackend {
         email: email,
         password: password,
         data: {
-          'pseudonym':   username,
+          'pseudonym': username,
           'avatar_seed': avatarSeed,
-          'birth_year':  birthYear,
+          'birth_year': birthYear,
           'safety_tier': safetyTier,
         },
       );
@@ -248,8 +257,7 @@ class SupabaseBackend {
     required String password,
   }) async {
     try {
-      await _client.auth
-          .signInWithPassword(email: email, password: password);
+      await _client.auth.signInWithPassword(email: email, password: password);
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
       if (msg.contains('invalid') || msg.contains('credentials')) {
@@ -270,12 +278,10 @@ class SupabaseBackend {
   Future<void> _maybeRequireMfa() async {
     try {
       final factors = await _client.auth.mfa.listFactors();
-      final verified = factors.totp
-          .where((f) => f.status == FactorStatus.verified)
-          .toList();
+      final verified =
+          factors.totp.where((f) => f.status == FactorStatus.verified).toList();
       if (verified.isEmpty) return;
-      final aal =
-          _client.auth.mfa.getAuthenticatorAssuranceLevel();
+      final aal = _client.auth.mfa.getAuthenticatorAssuranceLevel();
       if (aal.nextLevel == AuthenticatorAssuranceLevels.aal2 &&
           aal.currentLevel != AuthenticatorAssuranceLevels.aal2) {
         throw MfaChallengeRequiredException(verified.first.id);
@@ -292,8 +298,7 @@ class SupabaseBackend {
     required String factorId,
     required String code,
   }) async {
-    final challenge =
-        await _client.auth.mfa.challenge(factorId: factorId);
+    final challenge = await _client.auth.mfa.challenge(factorId: factorId);
     await _client.auth.mfa.verify(
       factorId: factorId,
       challengeId: challenge.id,
@@ -519,6 +524,13 @@ class SupabaseBackend {
     await _client.auth.updateUser(UserAttributes(password: newPassword));
   }
 
+  /// Re-authenticate a destructive owner action without changing credentials.
+  Future<void> reauthenticate(String password) async {
+    final email = _client.auth.currentUser?.email;
+    if (email == null) throw StateError('You are not signed in.');
+    await _client.auth.signInWithPassword(email: email, password: password);
+  }
+
   /// Attach (or change) a real recovery email on an account. Supabase emails
   /// a confirmation to the new address; the change finalises when the link is
   /// confirmed. Login-by-username keeps working either way.
@@ -564,10 +576,8 @@ class SupabaseBackend {
             r['post_id'] as String,
             r['reaction_type'] as String,
           )));
-    final saves = await _client
-        .from('post_saves')
-        .select('post_id')
-        .eq('user_id', uid);
+    final saves =
+        await _client.from('post_saves').select('post_id').eq('user_id', uid);
     _savedPosts
       ..clear()
       ..addAll(saves.map((r) => r['post_id'] as String));
@@ -616,7 +626,17 @@ class SupabaseBackend {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'chat_messages',
-          callback: (_) => _emitRooms(),
+          callback: (payload) {
+            _emitRooms();
+            // The client has now received this message — stamp the
+            // "delivered" tick for the sender (migration 0114). RLS
+            // already scopes events to rooms we belong to.
+            final roomId = payload.newRecord['room_id'] as String?;
+            final senderId = payload.newRecord['sender_id'] as String?;
+            if (roomId != null && senderId != null && senderId != _uid) {
+              unawaited(markRoomDelivered(roomId));
+            }
+          },
         )
         .subscribe();
   }
@@ -638,27 +658,49 @@ class SupabaseBackend {
     // we pass through category + mood and ignore the scope filters
     // (those would just over-constrain the candidate pool).
     if (sort == 'foryou' && tribeSlug == null) {
-      final rows = await _client.rpc(
-        'personal_feed',
-        params: {
-          'p_limit': limit,
-          'p_offset': offset,
-          'p_category': category,
-          'p_mood': mood,
-        },
-      ) as List<dynamic>;
-      final cutoff = DateTime.now().subtract(const Duration(hours: 24));
-      return rows
-          .cast<Map<String, dynamic>>()
-          .map<Post>(_postFromRow)
-          .where((p) => !p.isWhisper || p.createdAt.isAfter(cutoff))
-          .toList();
+      try {
+        final rows = await _client.rpc(
+          'personal_feed',
+          params: {
+            'p_limit': limit,
+            'p_offset': offset,
+            'p_category': category,
+            'p_mood': mood,
+          },
+        ) as List<dynamic>;
+        final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+        final personalized = rows
+            .cast<Map<String, dynamic>>()
+            .map<Post>(_postFromRow)
+            .where((p) => !p.isWhisper || p.createdAt.isAfter(cutoff))
+            .toList();
+        if (personalized.isNotEmpty ||
+            offset > 0 ||
+            category != null ||
+            mood != null) {
+          return personalized;
+        }
+      } on PostgrestException catch (error) {
+        if (!_isMissingRpc(error, 'personal_feed')) rethrow;
+      }
+
+      // Cold-start resilience: use the same RLS-protected database feed,
+      // ranked globally, when a new account has no affinity signals yet.
+      return feed(
+        category: category,
+        mood: mood,
+        tribeSlug: tribeSlug,
+        locationBucket: locationBucket,
+        sort: 'hot',
+        limit: limit,
+        offset: offset,
+      );
     }
 
     final source = sort == 'hot' ? 'feed_hot' : 'feed_posts';
     var query = _client.from(source).select();
-    if (category != null)  query = query.eq('category_name', category);
-    if (mood != null)      query = query.eq('post_mood', mood);
+    if (category != null) query = query.eq('category_name', category);
+    if (mood != null) query = query.eq('post_mood', mood);
     if (tribeSlug != null) query = query.eq('tribe_slug', tribeSlug);
     if (locationBucket != null) {
       query = query.eq('location_bucket', locationBucket);
@@ -737,31 +779,33 @@ class SupabaseBackend {
     String? audioPath,
     String? audioUrl,
     int? audioDurationSeconds,
+    String? pollQuestion,
+    List<String>? pollOptions,
+    String? idempotencyKey,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
     final hasImage = imageUrl != null && imageUrl.isNotEmpty;
-    final inserted = await _client.from('posts').insert({
-      'author_id':              uid,
-      'tribe_id':               tribeId,
-      if (spaceId != null) 'space_id': spaceId,
-      'persona_id':             personaId,
-      'category_name':          category,
-      'post_type':              'user_post',
-      'content':                content,
-      'post_mood':              mood,
-      'is_whisper':             isWhisper,
-      if (imagePath != null) 'image_path':             imagePath,
-      if (imageUrl  != null) 'image_url':              imageUrl,
-      if (audioPath != null) 'audio_path':             audioPath,
-      if (audioUrl  != null) 'audio_url':              audioUrl,
-      if (audioDurationSeconds != null)
-        'audio_duration_seconds': audioDurationSeconds,
-      // Safe-by-default: an image starts 'pending' (veiled) until media-scan
-      // clears it; text-only posts are 'clean'. (migration 0087)
-      'media_status': hasImage ? 'pending' : 'clean',
-    }).select('post_id').single();
-    final postId = inserted['post_id'] as String;
+    final postId = await _client.rpc(
+      'create_post_idempotent',
+      params: {
+        'p_mutation_id': idempotencyKey ?? const Uuid().v4(),
+        'p_content': content,
+        'p_category_name': category,
+        'p_post_mood': mood,
+        'p_tribe_id': tribeId,
+        'p_space_id': spaceId,
+        'p_persona_id': personaId,
+        'p_is_whisper': isWhisper,
+        'p_image_path': imagePath,
+        'p_image_url': imageUrl,
+        'p_audio_path': audioPath,
+        'p_audio_url': audioUrl,
+        'p_audio_duration_seconds': audioDurationSeconds,
+        'p_poll_question': pollQuestion,
+        'p_poll_options': pollOptions,
+      },
+    ) as String;
     if (hasImage) {
       unawaited(_scanMedia(kind: 'post', id: postId, imageUrl: imageUrl));
     }
@@ -799,7 +843,8 @@ class SupabaseBackend {
         .replaceAll('.', '')
         .toLowerCase()
         .replaceAll(RegExp('[^a-z0-9]'), '');
-    final path = '$uid/${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
+    final path =
+        '$uid/${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
     await _client.storage.from('post-media').uploadBinary(
           path,
           Uint8List.fromList(bytes),
@@ -819,10 +864,10 @@ class SupabaseBackend {
     if (rows.isEmpty) return HomeStats.empty;
     final r = (rows.first as Map).cast<String, dynamic>();
     return HomeStats(
-      ventsToday:  (r['vents_today']  as int?) ?? 0,
-      supporters:  (r['supporters']   as int?) ?? 0,
-      dailyHugs:   (r['daily_hugs']   as int?) ?? 0,
-      streakDays:  (r['streak_days']  as int?) ?? 0,
+      ventsToday: (r['vents_today'] as int?) ?? 0,
+      supporters: (r['supporters'] as int?) ?? 0,
+      dailyHugs: (r['daily_hugs'] as int?) ?? 0,
+      streakDays: (r['streak_days'] as int?) ?? 0,
     );
   }
 
@@ -836,10 +881,29 @@ class SupabaseBackend {
       final m = (r as Map).cast<String, dynamic>();
       return TrendingCategory(
         categoryName: m['category_name'] as String,
-        postCount:    (m['post_count']   as int?) ?? 0,
-        reactionSum:  (m['reaction_sum'] as int?) ?? 0,
+        postCount: (m['post_count'] as int?) ?? 0,
+        reactionSum: (m['reaction_sum'] as int?) ?? 0,
       );
     }).toList();
+  }
+
+  /// RLS-aware category totals. Unlike a feed page, this RPC aggregates every
+  /// post visible to the caller so Home counts match category results.
+  Future<List<TrendingTopic>> trendingTopicStats({int limit = 8}) async {
+    final rows = await _client.rpc(
+      'trending_topic_stats',
+      params: {'p_limit': limit},
+    ) as List<dynamic>;
+    return rows.map((row) {
+      final data = (row as Map).cast<String, dynamic>();
+      return TrendingTopic(
+        category: data['category_name'] as String,
+        postCount: _coerceInt(data['post_count']) ?? 0,
+        commentCount: _coerceInt(data['comment_count']) ?? 0,
+        reactionCount: _coerceInt(data['reaction_count']) ?? 0,
+        score: (data['trend_score'] as num?)?.toDouble() ?? 0,
+      );
+    }).toList(growable: false);
   }
 
   /// Rising Voices for the Discover screen — top 7d engagement.
@@ -851,15 +915,15 @@ class SupabaseBackend {
     return rows.map((r) {
       final m = (r as Map).cast<String, dynamic>();
       return TrendingVoice(
-        userId:           m['user_id']           as String,
-        pseudonym:        m['pseudonym']         as String,
-        avatarSeed:       (m['avatar_seed']      as String?) ?? 'default-orb',
-        profilePhotoUrl:  m['profile_photo_url'] as String?,
-        isVerified:       (m['is_verified']      as bool?)   ?? false,
-        topQuote:         (m['top_quote']        as String?) ?? '',
-        topCategory:      (m['top_category']     as String?) ?? 'confessions',
-        topMood:          (m['top_mood']         as String?) ?? 'healing',
-        engagementScore:  (m['engagement_score'] as int?)    ?? 0,
+        userId: m['user_id'] as String,
+        pseudonym: m['pseudonym'] as String,
+        avatarSeed: (m['avatar_seed'] as String?) ?? 'default-orb',
+        profilePhotoUrl: m['profile_photo_url'] as String?,
+        isVerified: (m['is_verified'] as bool?) ?? false,
+        topQuote: (m['top_quote'] as String?) ?? '',
+        topCategory: (m['top_category'] as String?) ?? 'confessions',
+        topMood: (m['top_mood'] as String?) ?? 'healing',
+        engagementScore: (m['engagement_score'] as int?) ?? 0,
       );
     }).toList();
   }
@@ -877,18 +941,18 @@ class SupabaseBackend {
       final m = (r as Map).cast<String, dynamic>();
       final createdAtRaw = m['created_at'] as String?;
       return SearchHit(
-        hitKind:         m['hit_kind']          as String,
-        hitId:           m['hit_id']            as String,
-        title:           (m['title']            as String?) ?? '',
-        subtitle:        (m['subtitle']         as String?) ?? '',
-        avatarSeed:      m['avatar_seed']       as String?,
+        hitKind: m['hit_kind'] as String,
+        hitId: m['hit_id'] as String,
+        title: (m['title'] as String?) ?? '',
+        subtitle: (m['subtitle'] as String?) ?? '',
+        avatarSeed: m['avatar_seed'] as String?,
         profilePhotoUrl: m['profile_photo_url'] as String?,
-        memberCount:     m['member_count']      as int?,
-        postCount:       m['post_count']        as int?,
-        likesCount:      m['likes_count']       as int?,
-        commentsCount:   m['comments_count']    as int?,
-        createdAt:       createdAtRaw == null ? null : DateTime.parse(createdAtRaw),
-        rankScore:       (m['rank_score'] as num?)?.toDouble() ?? 0,
+        memberCount: m['member_count'] as int?,
+        postCount: m['post_count'] as int?,
+        likesCount: m['likes_count'] as int?,
+        commentsCount: m['comments_count'] as int?,
+        createdAt: createdAtRaw == null ? null : DateTime.parse(createdAtRaw),
+        rankScore: (m['rank_score'] as num?)?.toDouble() ?? 0,
       );
     }).toList();
   }
@@ -924,9 +988,9 @@ class SupabaseBackend {
     String? bio,
   }) async {
     final row = await _client.rpc('create_persona', params: {
-      'p_pseudonym':   pseudonym,
+      'p_pseudonym': pseudonym,
       'p_avatar_seed': avatarSeed,
-      'p_bio':         bio,
+      'p_bio': bio,
     });
     return _personaFromRow(row as Map<String, dynamic>);
   }
@@ -938,10 +1002,10 @@ class SupabaseBackend {
     String? bio,
   }) async {
     final row = await _client.rpc('update_persona', params: {
-      'p_persona_id':  personaId,
-      'p_pseudonym':   pseudonym,
+      'p_persona_id': personaId,
+      'p_pseudonym': pseudonym,
       'p_avatar_seed': avatarSeed,
-      'p_bio':         bio,
+      'p_bio': bio,
     });
     return _personaFromRow(row as Map<String, dynamic>);
   }
@@ -996,14 +1060,18 @@ class SupabaseBackend {
         .from('automod_rules')
         .select('pattern, match_type, category, action')
         .eq('is_active', true);
-    return (rows as List).cast<Map<String, dynamic>>().map((r) {
-      return AutomodRule(
-        pattern: (r['pattern'] as String?) ?? '',
-        matchType: (r['match_type'] as String?) ?? 'contains',
-        category: (r['category'] as String?) ?? 'other',
-        action: (r['action'] as String?) ?? 'block',
-      );
-    }).where((r) => r.pattern.isNotEmpty).toList();
+    return (rows as List)
+        .cast<Map<String, dynamic>>()
+        .map((r) {
+          return AutomodRule(
+            pattern: (r['pattern'] as String?) ?? '',
+            matchType: (r['match_type'] as String?) ?? 'contains',
+            category: (r['category'] as String?) ?? 'other',
+            action: (r['action'] as String?) ?? 'block',
+          );
+        })
+        .where((r) => r.pattern.isNotEmpty)
+        .toList();
   }
 
   /// GDPR/CCPA export — returns the caller's full data bundle (migration 0092).
@@ -1047,6 +1115,7 @@ class SupabaseBackend {
         if (c.region == 'global') return 1;
         return 2;
       }
+
       final r = rank(a).compareTo(rank(b));
       return r != 0 ? r : a.sortOrder.compareTo(b.sortOrder);
     });
@@ -1116,6 +1185,7 @@ class SupabaseBackend {
       peerNickname: row['peer_nickname'] as String?,
       disappearingSeconds: (row['disappearing_seconds'] as int?) ?? 0,
       theme: (row['theme'] as String?) ?? 'default',
+      fontStyle: (row['font_style'] as String?) ?? 'default',
     );
   }
 
@@ -1126,6 +1196,7 @@ class SupabaseBackend {
     bool clearNickname = false,
     int? disappearingSeconds,
     String? theme,
+    String? fontStyle,
   }) async {
     await _client.rpc('set_dm_room_pref', params: {
       'p_room_id': roomId,
@@ -1134,6 +1205,7 @@ class SupabaseBackend {
       'p_clear_nickname': clearNickname,
       'p_disappearing': disappearingSeconds,
       'p_theme': theme,
+      'p_font_style': fontStyle,
     });
   }
 
@@ -1164,11 +1236,11 @@ class SupabaseBackend {
               friendshipId: r['friendship_id'] as String,
               userId: r['friend_user_id'] as String,
               pseudonym: r['friend_pseudonym'] as String,
-              avatarSeed:
-                  (r['friend_avatar_seed'] as String?) ?? 'default-orb',
+              avatarSeed: (r['friend_avatar_seed'] as String?) ?? 'default-orb',
               karma: (r['friend_karma'] as int?) ?? 0,
               isVerified: (r['friend_is_verified'] as bool?) ?? false,
               acceptedAt: DateTime.parse(r['accepted_at'] as String),
+              profilePhotoUrl: r['friend_profile_photo_url'] as String?,
             ))
         .toList();
     if (friends.isEmpty) return friends;
@@ -1176,9 +1248,8 @@ class SupabaseBackend {
     // Fold in the caller's favorites (toggleable heart on the alphabetical
     // list). Defaults to none if the favourites table isn't reachable.
     try {
-      final favRows = await _client
-          .from('friendship_favorites')
-          .select('friendship_id');
+      final favRows =
+          await _client.from('friendship_favorites').select('friendship_id');
       final favored = <String>{
         for (final r in favRows as List)
           (r as Map<String, dynamic>)['friendship_id'] as String,
@@ -1186,9 +1257,7 @@ class SupabaseBackend {
       if (favored.isEmpty) return friends;
       return [
         for (final f in friends)
-          favored.contains(f.friendshipId)
-              ? f.copyWith(isFavorite: true)
-              : f,
+          favored.contains(f.friendshipId) ? f.copyWith(isFavorite: true) : f,
       ];
     } catch (_) {
       return friends;
@@ -1239,35 +1308,36 @@ class SupabaseBackend {
   }
 
   TribeMessage _tribeMessageFromRow(Map<String, dynamic> r) {
-    final editedRaw  = r['edited_at']  as String?;
+    final editedRaw = r['edited_at'] as String?;
     final deletedRaw = r['deleted_at'] as String?;
     return TribeMessage(
-      messageId:          r['message_id']     as String,
-      tribeId:            r['tribe_id']       as String,
-      senderId:           r['sender_id']      as String?,
-      senderPseudonym:    (r['sender_pseudonym'] as String?) ?? 'anonymous',
-      senderAvatarSeed:   (r['sender_avatar_seed'] as String?) ?? 'default-orb',
+      messageId: r['message_id'] as String,
+      tribeId: r['tribe_id'] as String,
+      senderId: r['sender_id'] as String?,
+      senderPseudonym: (r['sender_pseudonym'] as String?) ?? 'anonymous',
+      senderAvatarSeed: (r['sender_avatar_seed'] as String?) ?? 'default-orb',
       senderProfilePhotoUrl: r['sender_profile_photo_url'] as String?,
-      senderPersonaId:    r['sender_persona_id'] as String?,
-      content:            r['content']        as String?,
-      imageUrl:           r['image_url']      as String?,
-      audioUrl:           r['audio_url']      as String?,
+      senderIsVerified: (r['sender_is_verified'] as bool?) ?? false,
+      senderPersonaId: r['sender_persona_id'] as String?,
+      content: r['content'] as String?,
+      imageUrl: r['image_url'] as String?,
+      audioUrl: r['audio_url'] as String?,
       audioDurationSeconds: r['audio_duration_seconds'] as int?,
-      hugsCount:          (r['hugs_count']    as int?) ?? 0,
-      createdAt:          DateTime.parse(r['created_at'] as String),
-      editedAt:           editedRaw  == null ? null : DateTime.parse(editedRaw),
-      deletedAt:          deletedRaw == null ? null : DateTime.parse(deletedRaw),
-      sentByMe:           r['sender_id'] == _uid,
-      replyToMessageId:   r['reply_to_message_id'] as String?,
-      replyContent:       r['reply_content'] as String?,
+      hugsCount: (r['hugs_count'] as int?) ?? 0,
+      createdAt: DateTime.parse(r['created_at'] as String),
+      editedAt: editedRaw == null ? null : DateTime.parse(editedRaw),
+      deletedAt: deletedRaw == null ? null : DateTime.parse(deletedRaw),
+      sentByMe: r['sender_id'] == _uid,
+      replyToMessageId: r['reply_to_message_id'] as String?,
+      replyContent: r['reply_content'] as String?,
       replySenderPseudonym: r['reply_sender_pseudonym'] as String?,
-      huggedByMe:         r['hugged_by_me'] == true,
-      isPinned:           r['is_pinned'] == true,
-      metadata:           _jsonMap(r['metadata']),
+      huggedByMe: r['hugged_by_me'] == true,
+      isPinned: r['is_pinned'] == true,
+      metadata: _jsonMap(r['metadata']),
       pollMyVoteOptionId: r['poll_my_vote_option_id'] as String?,
-      pollOptionCounts:   _pollCountsFromRow(r['poll_option_counts']),
-      myReaction:         r['my_reaction'] as String?,
-      reactionCounts:     _pollCountsFromRow(r['reaction_counts']),
+      pollOptionCounts: _pollCountsFromRow(r['poll_option_counts']),
+      myReaction: r['my_reaction'] as String?,
+      reactionCounts: _pollCountsFromRow(r['reaction_counts']),
       questionReplyCount: (r['question_reply_count'] as num?)?.toInt() ?? 0,
     );
   }
@@ -1282,7 +1352,7 @@ class SupabaseBackend {
   Map<String, int>? _pollCountsFromRow(dynamic raw) {
     final map = _jsonMap(raw);
     if (map == null || map.isEmpty) return null;
-    return map.map((k, v) => MapEntry('$k', (v as num?)?.toInt() ?? 0));
+    return map.map((k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0));
   }
 
   /// Realtime fan-out of new tribe messages. Subscribes to postgres
@@ -1329,18 +1399,20 @@ class SupabaseBackend {
     int? audioDurationSeconds,
     String? replyToMessageId,
     Map<String, dynamic>? metadata,
+    String? idempotencyKey,
   }) async {
-    final res = await _client.rpc('send_tribe_message', params: {
-      'p_tribe_id':              tribeId,
-      'p_content':               content,
-      'p_persona_id':            personaId,
-      'p_image_url':             imageUrl,
-      'p_image_path':            imagePath,
-      'p_audio_url':             audioUrl,
-      'p_audio_path':            audioPath,
+    final res = await _client.rpc('send_tribe_message_idempotent', params: {
+      'p_mutation_id': idempotencyKey ?? const Uuid().v4(),
+      'p_tribe_id': tribeId,
+      'p_content': content,
+      'p_persona_id': personaId,
+      'p_image_url': imageUrl,
+      'p_image_path': imagePath,
+      'p_audio_url': audioUrl,
+      'p_audio_path': audioPath,
       'p_audio_duration_seconds': audioDurationSeconds,
-      'p_reply_to_message_id':   replyToMessageId,
-      'p_metadata':              metadata,
+      'p_reply_to_message_id': replyToMessageId,
+      'p_metadata': metadata,
     });
     return res as String;
   }
@@ -1382,7 +1454,8 @@ class SupabaseBackend {
         .replaceAll('.', '')
         .toLowerCase()
         .replaceAll(RegExp('[^a-z0-9]'), '');
-    final path = '$uid/${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
+    final path =
+        '$uid/${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
     await _client.storage.from('tribe-chat-media').uploadBinary(
           path,
           Uint8List.fromList(bytes),
@@ -1419,10 +1492,8 @@ class SupabaseBackend {
     int offset = 0,
     String? category,
   }) async {
-    var q = _client
-        .from('whispers_feed')
-        .select()
-        .filter('deleted_at', 'is', null);
+    var q =
+        _client.from('whispers_feed').select().filter('deleted_at', 'is', null);
     if (category != null) q = q.eq('category_name', category);
     final rows = await q
         .order('created_at', ascending: false)
@@ -1467,8 +1538,7 @@ class SupabaseBackend {
                   (row['reaction_counts'] as Map?)?.cast<String, dynamic>() ??
                       {};
               counts = {
-                for (final e in raw.entries)
-                  e.key: (e.value as num).toInt(),
+                for (final e in raw.entries) e.key: (e.value as num).toInt(),
               };
               myReaction = row['my_reaction'] as String?;
             }
@@ -1513,8 +1583,7 @@ class SupabaseBackend {
         .filter('deleted_at', 'is', null);
     final byId = {
       for (final r in feed as List)
-        (r as Map<String, dynamic>)['whisper_id'] as String:
-            _whisperFromRow(r),
+        (r as Map<String, dynamic>)['whisper_id'] as String: _whisperFromRow(r),
     };
     final ordered = [
       for (final id in ids)
@@ -1524,30 +1593,30 @@ class SupabaseBackend {
   }
 
   Whisper _whisperFromRow(Map<String, dynamic> r) {
-    final rawEdited  = r['edited_at']  as String?;
+    final rawEdited = r['edited_at'] as String?;
     final rawDeleted = r['deleted_at'] as String?;
     return Whisper(
-      whisperId:              r['whisper_id']            as String,
-      authorId:               r['author_id']             as String?,
-      authorPseudonym:        (r['author_pseudonym']     as String?) ?? 'anonymous',
-      authorAvatarSeed:       (r['author_avatar_seed']   as String?) ?? 'default-orb',
-      authorProfilePhotoUrl:  r['author_profile_photo_url'] as String?,
-      authorIsVerified:       (r['author_is_verified']   as bool?)   ?? false,
-      audioUrl:               r['audio_url']             as String,
-      audioDurationSeconds:   (r['audio_duration_seconds'] as int?) ?? 0,
-      backgroundImageUrl:     r['background_image_url']  as String?,
-      voiceFilter:            (r['voice_filter']         as String?) ?? 'none',
-      category:               r['category_name']         as String,
-      title:                  r['title']                 as String?,
-      description:            r['description']           as String?,
-      playsCount:             (r['plays_count']          as int?)    ?? 0,
-      likesCount:             (r['likes_count']          as int?)    ?? 0,
-      commentsCount:          (r['comments_count']       as int?)    ?? 0,
-      crisisLevel:            r['crisis_level']          as String?,
-      mediaStatus:            (r['media_status'] as String?) ?? 'clean',
-      createdAt:              DateTime.parse(r['created_at'] as String),
-      editedAt:               rawEdited  == null ? null : DateTime.parse(rawEdited),
-      deletedAt:              rawDeleted == null ? null : DateTime.parse(rawDeleted),
+      whisperId: r['whisper_id'] as String,
+      authorId: r['author_id'] as String?,
+      authorPseudonym: (r['author_pseudonym'] as String?) ?? 'anonymous',
+      authorAvatarSeed: (r['author_avatar_seed'] as String?) ?? 'default-orb',
+      authorProfilePhotoUrl: r['author_profile_photo_url'] as String?,
+      authorIsVerified: (r['author_is_verified'] as bool?) ?? false,
+      audioUrl: r['audio_url'] as String,
+      audioDurationSeconds: (r['audio_duration_seconds'] as int?) ?? 0,
+      backgroundImageUrl: r['background_image_url'] as String?,
+      voiceFilter: (r['voice_filter'] as String?) ?? 'none',
+      category: r['category_name'] as String,
+      title: r['title'] as String?,
+      description: r['description'] as String?,
+      playsCount: (r['plays_count'] as int?) ?? 0,
+      likesCount: (r['likes_count'] as int?) ?? 0,
+      commentsCount: (r['comments_count'] as int?) ?? 0,
+      crisisLevel: r['crisis_level'] as String?,
+      mediaStatus: (r['media_status'] as String?) ?? 'clean',
+      createdAt: DateTime.parse(r['created_at'] as String),
+      editedAt: rawEdited == null ? null : DateTime.parse(rawEdited),
+      deletedAt: rawDeleted == null ? null : DateTime.parse(rawDeleted),
     );
   }
 
@@ -1563,15 +1632,15 @@ class SupabaseBackend {
     String? personaId,
   }) async {
     final res = await _client.rpc('create_whisper', params: {
-      'p_audio_path':             audioPath,
-      'p_audio_url':              audioUrl,
+      'p_audio_path': audioPath,
+      'p_audio_url': audioUrl,
       'p_audio_duration_seconds': audioDurationSeconds,
-      'p_category_name':          category,
-      'p_background_image_url':   backgroundImageUrl,
-      'p_voice_filter':           voiceFilter,
-      'p_title':                  title,
-      'p_description':            description,
-      'p_persona_id':             personaId,
+      'p_category_name': category,
+      'p_background_image_url': backgroundImageUrl,
+      'p_voice_filter': voiceFilter,
+      'p_title': title,
+      'p_description': description,
+      'p_persona_id': personaId,
     });
     final whisperId = res as String;
     // Background image starts 'pending' (veiled) via create_whisper; kick off
@@ -1630,31 +1699,188 @@ class SupabaseBackend {
             commentId: r['comment_id'] as String,
             whisperId: r['whisper_id'] as String,
             authorId: r['author_id'] as String?,
-            authorPseudonym:
-                (r['author_pseudonym'] as String?) ?? 'anonymous',
+            authorPseudonym: (r['author_pseudonym'] as String?) ?? 'anonymous',
             authorAvatarSeed:
                 (r['author_avatar_seed'] as String?) ?? 'default-orb',
             content: r['content'] as String,
             createdAt: DateTime.parse(r['created_at'] as String),
+            parentId: r['parent_id'] as String?,
+            likesCount: (r['likes_count'] as int?) ?? 0,
+            likedByMe: (r['liked_by_me'] as bool?) ?? false,
+            canDelete: (r['can_delete'] as bool?) ?? false,
           ),
         )
         .toList();
+  }
+
+  /// Realtime stream of comments on a whisper — re-fetches through the
+  /// list RPC on every Postgres change so joins (pseudonym/avatar) stay
+  /// correct. Mirrors [watchMessages].
+  Stream<List<WhisperComment>> watchWhisperComments(String whisperId) {
+    final controller = StreamController<List<WhisperComment>>();
+    Future<void> emit() async {
+      try {
+        controller.add(await listWhisperComments(whisperId));
+      } catch (_) {/* listener retries on next event */}
+    }
+
+    final channel = _client
+        .channel('whisper_comments:$whisperId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'whisper_comments',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'whisper_id',
+            value: whisperId,
+          ),
+          callback: (_) => emit(),
+        )
+        .subscribe();
+
+    controller.onListen = emit;
+    controller.onCancel = () => channel.unsubscribe();
+    return controller.stream;
   }
 
   Future<String> addWhisperComment(
     String whisperId,
     String content, {
     String? personaId,
+    String? parentId,
+    String? idempotencyKey,
   }) async {
     final res = await _client.rpc(
-      'add_whisper_comment',
+      'add_whisper_comment_idempotent',
       params: {
+        'p_mutation_id': idempotencyKey ?? const Uuid().v4(),
         'p_whisper_id': whisperId,
         'p_content': content,
         'p_persona_id': personaId,
+        'p_parent_id': parentId,
       },
     );
     return res as String;
+  }
+
+  /// Resolve an @handle to a user or tribe (users win — migration 0116).
+  Future<ResolvedTag?> resolveTag(String handle) async {
+    final rows = await _client.rpc(
+      'resolve_tag',
+      params: {'p_handle': handle},
+    ) as List<dynamic>;
+    if (rows.isEmpty) return null;
+    final r = rows.first as Map<String, dynamic>;
+    return ResolvedTag(
+      kind: r['kind'] as String,
+      id: r['id'] as String,
+      slug: r['slug'] as String?,
+      display: (r['display'] as String?) ?? '',
+    );
+  }
+
+  /// @-autocomplete candidates: friends first, then users, then tribes.
+  Future<List<TagCandidate>> searchTagCandidates(String prefix) async {
+    final rows = await _client.rpc(
+      'search_tag_candidates',
+      params: {'p_prefix': prefix, 'p_limit': 8},
+    ) as List<dynamic>;
+    return rows
+        .cast<Map<String, dynamic>>()
+        .map((r) => TagCandidate(
+              kind: r['kind'] as String,
+              id: r['id'] as String,
+              handle: r['handle'] as String,
+              display: (r['display'] as String?) ?? (r['handle'] as String),
+              avatarSeed: r['avatar_seed'] as String?,
+              isFriend: (r['is_friend'] as bool?) ?? false,
+            ))
+        .toList();
+  }
+
+  /// Server-evaluated feature flags for this user (migration 0118).
+  /// Deterministic percentage rollouts happen in SQL; the map is
+  /// flag_key -> enabled.
+  Future<Map<String, bool>> myFeatureFlags() async {
+    final rows = await _client.rpc('my_feature_flags') as List<dynamic>;
+    return {
+      for (final r in rows.cast<Map<String, dynamic>>())
+        r['flag_key'] as String: (r['enabled'] as bool?) ?? false,
+    };
+  }
+
+  /// Live flag map: initial fetch + refetch on any feature_flags change
+  /// (the table is in the realtime publication).
+  Stream<Map<String, bool>> watchFeatureFlags() {
+    final controller = StreamController<Map<String, bool>>();
+    Future<void> emit() async {
+      try {
+        controller.add(await myFeatureFlags());
+      } catch (_) {}
+    }
+
+    final channel = _client
+        .channel('public:feature_flags')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'feature_flags',
+          callback: (_) => emit(),
+        )
+        .subscribe();
+    controller.onListen = emit;
+    controller.onCancel = () => channel.unsubscribe();
+    return controller.stream;
+  }
+
+  /// Typo-tolerant search typeahead (migration 0119).
+  Future<List<SearchSuggestion>> searchSuggestions(String prefix) async {
+    final rows = await _client.rpc(
+      'search_suggestions',
+      params: {'p_prefix': prefix, 'p_limit': 8},
+    ) as List<dynamic>;
+    return rows
+        .cast<Map<String, dynamic>>()
+        .map((r) => SearchSuggestion(
+              kind: r['kind'] as String,
+              value: r['value'] as String,
+              display: r['display'] as String,
+            ))
+        .toList();
+  }
+
+  /// Busiest categories/tribes of the last 24h for the idle search state.
+  Future<List<SearchSuggestion>> trendingSearches() async {
+    final rows = await _client.rpc('trending_searches', params: {'p_limit': 8})
+        as List<dynamic>;
+    return rows
+        .cast<Map<String, dynamic>>()
+        .map((r) => SearchSuggestion(
+              kind: r['kind'] as String,
+              value: r['value'] as String,
+              display: r['display'] as String,
+            ))
+        .toList();
+  }
+
+  /// Soft-delete a whisper comment — permitted for the comment author or
+  /// the whisper owner (migration 0115). Returns true when deleted.
+  Future<bool> deleteWhisperComment(String commentId) async {
+    final res = await _client.rpc(
+      'delete_whisper_comment',
+      params: {'p_comment_id': commentId},
+    );
+    return (res as bool?) ?? false;
+  }
+
+  /// Toggle a like on a whisper comment; returns the resulting state.
+  Future<bool> toggleWhisperCommentLike(String commentId) async {
+    final res = await _client.rpc(
+      'toggle_whisper_comment_like',
+      params: {'p_comment_id': commentId},
+    );
+    return (res as bool?) ?? false;
   }
 
   Future<({String path, String url})> uploadWhisperAudio({
@@ -1668,7 +1894,8 @@ class SupabaseBackend {
         .replaceAll('.', '')
         .toLowerCase()
         .replaceAll(RegExp('[^a-z0-9]'), '');
-    final path = '$uid/${const Uuid().v4()}.${safeExt.isEmpty ? 'm4a' : safeExt}';
+    final path =
+        '$uid/${const Uuid().v4()}.${safeExt.isEmpty ? 'm4a' : safeExt}';
     await _client.storage.from('whispers-media').uploadBinary(
           path,
           Uint8List.fromList(bytes),
@@ -1691,8 +1918,8 @@ class SupabaseBackend {
     return (rows as List).cast<Map<String, dynamic>>().map((r) {
       return TribeKeywordFilter(
         filterId: r['filter_id'] as String,
-        tribeId:  r['tribe_id']  as String,
-        keyword:  r['keyword']   as String,
+        tribeId: r['tribe_id'] as String,
+        keyword: r['keyword'] as String,
         severity: (r['severity'] as String?) ?? 'soft',
         createdAt: DateTime.parse(r['created_at'] as String),
       );
@@ -1706,7 +1933,7 @@ class SupabaseBackend {
   }) async {
     final res = await _client.rpc('add_keyword_filter', params: {
       'p_tribe_id': tribeId,
-      'p_keyword':  keyword,
+      'p_keyword': keyword,
       'p_severity': severity,
     });
     return res as String;
@@ -1732,14 +1959,12 @@ class SupabaseBackend {
       final ack = r['acknowledged_at'] as String?;
       return TribeMemberWarning(
         warningId: r['warning_id'] as String,
-        tribeId:   r['tribe_id']   as String,
-        memberId:  r['member_id']  as String,
-        memberPseudonym:
-            (u?['anonymous_pseudonym'] as String?) ?? 'anonymous',
-        memberAvatarSeed:
-            (u?['avatar_seed']        as String?) ?? 'default-orb',
-        reason:    r['reason']     as String,
-        severity:  (r['severity']  as String?) ?? 'warning',
+        tribeId: r['tribe_id'] as String,
+        memberId: r['member_id'] as String,
+        memberPseudonym: (u?['anonymous_pseudonym'] as String?) ?? 'anonymous',
+        memberAvatarSeed: (u?['avatar_seed'] as String?) ?? 'default-orb',
+        reason: r['reason'] as String,
+        severity: (r['severity'] as String?) ?? 'warning',
         createdAt: DateTime.parse(r['created_at'] as String),
         acknowledgedAt: ack == null ? null : DateTime.parse(ack),
       );
@@ -1753,10 +1978,10 @@ class SupabaseBackend {
     String severity = 'warning',
   }) async {
     final res = await _client.rpc('warn_member', params: {
-      'p_tribe_id':  tribeId,
+      'p_tribe_id': tribeId,
       'p_member_id': memberId,
-      'p_reason':    reason,
-      'p_severity':  severity,
+      'p_reason': reason,
+      'p_severity': severity,
     });
     return res as String;
   }
@@ -1767,7 +1992,7 @@ class SupabaseBackend {
   }) async {
     await _client.rpc('set_tribe_rules', params: {
       'p_tribe_id': tribeId,
-      'p_rules':    rules,
+      'p_rules': rules,
     });
   }
 
@@ -1869,8 +2094,8 @@ class SupabaseBackend {
             ? res['data'] as List
             : const [];
     return list
-        .map((e) => TribeChatInboxSummary.fromJson(
-            Map<String, dynamic>.from(e as Map)))
+        .map((e) =>
+            TribeChatInboxSummary.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
   }
 
@@ -1968,8 +2193,7 @@ class SupabaseBackend {
           callback: (payload) {
             final from = payload['user_id'] as String?;
             if (from == null || from == _uid) return;
-            final pseudonym =
-                (payload['pseudonym'] as String?) ?? 'someone';
+            final pseudonym = (payload['pseudonym'] as String?) ?? 'someone';
             active[from]?.timer.cancel();
             active[from] = (
               pseudonym: pseudonym,
@@ -2002,13 +2226,13 @@ class SupabaseBackend {
     return rows.map((r) {
       final m = (r as Map).cast<String, dynamic>();
       return FriendSuggestion(
-        userId:           m['user_id']           as String,
-        pseudonym:        m['pseudonym']         as String,
-        avatarSeed:       (m['avatar_seed']      as String?) ?? 'default-orb',
-        profilePhotoUrl:  m['profile_photo_url'] as String?,
-        isVerified:       (m['is_verified']      as bool?)   ?? false,
-        sharedTribes:     (m['shared_tribes']    as int?)    ?? 0,
-        rationale:        (m['rationale']        as String?) ?? '',
+        userId: m['user_id'] as String,
+        pseudonym: m['pseudonym'] as String,
+        avatarSeed: (m['avatar_seed'] as String?) ?? 'default-orb',
+        profilePhotoUrl: m['profile_photo_url'] as String?,
+        isVerified: (m['is_verified'] as bool?) ?? false,
+        sharedTribes: (m['shared_tribes'] as int?) ?? 0,
+        rationale: (m['rationale'] as String?) ?? '',
       );
     }).toList();
   }
@@ -2058,7 +2282,8 @@ class SupabaseBackend {
   /// Apply for the verified check (migration 0109). Throws if already verified
   /// or a request is already pending.
   Future<String> requestVerification({String? note}) async {
-    final res = await _client.rpc('request_verification', params: {'p_note': note});
+    final res =
+        await _client.rpc('request_verification', params: {'p_note': note});
     return res as String;
   }
 
@@ -2216,8 +2441,7 @@ class SupabaseBackend {
           .map((m) => MutualFriend(
                 userId: m['user_id'] as String,
                 pseudonym: m['pseudonym'] as String,
-                avatarSeed:
-                    (m['avatar_seed'] as String?) ?? 'default-orb',
+                avatarSeed: (m['avatar_seed'] as String?) ?? 'default-orb',
               ))
           .toList();
     }
@@ -2331,7 +2555,7 @@ class SupabaseBackend {
         .toList();
   }
 
-  Future<void> toggleLike(String postId) async => react(postId, 'like');
+  Future<void> toggleLike(String postId) async => react(postId, 'hug');
 
   /// Returns the resulting reaction (`null` when the user toggled it off).
   Future<String?> react(String postId, String reaction) async {
@@ -2379,10 +2603,10 @@ class SupabaseBackend {
     if (uid == null) throw StateError('Not signed in');
     try {
       await _client.from('reports').insert({
-        'post_id':     postId,
+        'post_id': postId,
         'reporter_id': uid,
-        'reason':      reason,
-        'note':        note,
+        'reason': reason,
+        'note': note,
       });
     } on PostgrestException catch (e) {
       // 23505 = unique_violation — user already reported this target. Silent
@@ -2401,9 +2625,9 @@ class SupabaseBackend {
     try {
       await _client.from('reports').insert({
         'target_room_id': roomId,
-        'reporter_id':    uid,
-        'reason':         reason,
-        'note':           note,
+        'reporter_id': uid,
+        'reason': reason,
+        'note': note,
       });
     } on PostgrestException catch (e) {
       if (e.code != '23505') rethrow;
@@ -2421,9 +2645,9 @@ class SupabaseBackend {
     try {
       await _client.from('reports').insert({
         'target_tribe_message_id': messageId,
-        'reporter_id':             uid,
-        'reason':                  reason,
-        'note':                    note,
+        'reporter_id': uid,
+        'reason': reason,
+        'note': note,
       });
     } on PostgrestException catch (e) {
       // 23505 = already reported this message — silent no-op.
@@ -2442,9 +2666,9 @@ class SupabaseBackend {
     try {
       await _client.from('reports').insert({
         'target_chat_message_id': messageId,
-        'reporter_id':            uid,
-        'reason':                 reason,
-        'note':                   note,
+        'reporter_id': uid,
+        'reason': reason,
+        'note': note,
       });
     } on PostgrestException catch (e) {
       if (e.code != '23505') rethrow;
@@ -2461,9 +2685,11 @@ class SupabaseBackend {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
     await _client.from('users').update({
-      'home_city':    homeCity?.trim().isEmpty == true ? null : homeCity?.trim(),
-      'home_country': homeCountry?.trim().isEmpty == true ? null : homeCountry?.trim(),
-      'home_campus':  homeCampus?.trim().isEmpty == true ? null : homeCampus?.trim(),
+      'home_city': homeCity?.trim().isEmpty == true ? null : homeCity?.trim(),
+      'home_country':
+          homeCountry?.trim().isEmpty == true ? null : homeCountry?.trim(),
+      'home_campus':
+          homeCampus?.trim().isEmpty == true ? null : homeCampus?.trim(),
     }).eq('user_id', uid);
     final refreshed = await restore();
     return refreshed!;
@@ -2489,7 +2715,8 @@ class SupabaseBackend {
         .replaceAll('.', '')
         .toLowerCase()
         .replaceAll(RegExp('[^a-z0-9]'), '');
-    final path = '$uid/profile-${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
+    final path =
+        '$uid/profile-${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
     await _client.storage.from('profile-photos').uploadBinary(
           path,
           Uint8List.fromList(bytes),
@@ -2532,7 +2759,7 @@ class SupabaseBackend {
     final rows = await _client
         .from('tribe_members')
         .select(
-          'role, joined_at, '
+          'role, joined_at, muted_until, warning_count, last_warned_at, member_note, '
           'users!inner(user_id, anonymous_pseudonym, avatar_seed, profile_photo_url)',
         )
         .eq('tribe_id', tribeId)
@@ -2546,6 +2773,10 @@ class SupabaseBackend {
         profilePhotoUrl: u['profile_photo_url'] as String?,
         role: r['role'] as String,
         joinedAt: DateTime.parse(r['joined_at'] as String),
+        mutedUntil: _coerceDate(r['muted_until']),
+        warningCount: (r['warning_count'] as num?)?.toInt() ?? 0,
+        lastWarnedAt: _coerceDate(r['last_warned_at']),
+        memberNote: r['member_note'] as String?,
       );
     }).toList();
   }
@@ -2602,7 +2833,8 @@ class SupabaseBackend {
   Future<List<Map<String, dynamic>>> tribeBans(String tribeId) async {
     final rows = await _client
         .from('tribe_bans')
-        .select('user_id, reason, created_at, users:user_id(anonymous_pseudonym, avatar_seed)')
+        .select(
+            'user_id, reason, created_at, users:user_id(anonymous_pseudonym, avatar_seed)')
         .eq('tribe_id', tribeId)
         .order('created_at', ascending: false);
     return rows
@@ -2610,9 +2842,9 @@ class SupabaseBackend {
               'userId': r['user_id'],
               'reason': r['reason'],
               'createdAt': r['created_at'],
-              'pseudonym':
-                  (r['users'] as Map<String, dynamic>?)?['anonymous_pseudonym'] ??
-                      'member',
+              'pseudonym': (r['users']
+                      as Map<String, dynamic>?)?['anonymous_pseudonym'] ??
+                  'member',
               'avatarSeed':
                   (r['users'] as Map<String, dynamic>?)?['avatar_seed'] ??
                       'default-orb',
@@ -2691,10 +2923,10 @@ class SupabaseBackend {
     if (uid == null) throw StateError('Not signed in');
     try {
       await _client.from('tribe_invites').insert({
-        'tribe_id':         tribeId,
-        'invited_user_id':  invitedUserId,
-        'invited_by':       uid,
-        'message':          message,
+        'tribe_id': tribeId,
+        'invited_user_id': invitedUserId,
+        'invited_by': uid,
+        'message': message,
       });
     } on PostgrestException catch (e) {
       // Already invited — silent no-op.
@@ -2716,24 +2948,22 @@ class SupabaseBackend {
         .eq('invited_user_id', uid)
         .eq('status', 'pending')
         .order('created_at', ascending: false);
-    return rows
-        .map<TribeInvite>((r) {
-          final t = r['tribes'] as Map<String, dynamic>?;
-          final inv = r['inviter'] as Map<String, dynamic>?;
-          return TribeInvite(
-            inviteId: r['invite_id'] as String,
-            tribeId: r['tribe_id'] as String,
-            tribeName: (t?['name'] as String?) ?? 'a Tribe',
-            tribeSlug: t?['slug'] as String?,
-            tribeAvatarUrl: t?['avatar_url'] as String?,
-            invitedUserId: r['invited_user_id'] as String,
-            invitedByPseudonym: inv?['anonymous_pseudonym'] as String?,
-            message: r['message'] as String?,
-            status: r['status'] as String,
-            createdAt: DateTime.parse(r['created_at'] as String),
-          );
-        })
-        .toList();
+    return rows.map<TribeInvite>((r) {
+      final t = r['tribes'] as Map<String, dynamic>?;
+      final inv = r['inviter'] as Map<String, dynamic>?;
+      return TribeInvite(
+        inviteId: r['invite_id'] as String,
+        tribeId: r['tribe_id'] as String,
+        tribeName: (t?['name'] as String?) ?? 'a Tribe',
+        tribeSlug: t?['slug'] as String?,
+        tribeAvatarUrl: t?['avatar_url'] as String?,
+        invitedUserId: r['invited_user_id'] as String,
+        invitedByPseudonym: inv?['anonymous_pseudonym'] as String?,
+        message: r['message'] as String?,
+        status: r['status'] as String,
+        createdAt: DateTime.parse(r['created_at'] as String),
+      );
+    }).toList();
   }
 
   Future<void> respondToInvite({
@@ -2746,8 +2976,8 @@ class SupabaseBackend {
     final row = await _client
         .from('tribe_invites')
         .update({
-          'status':      accept ? 'accepted' : 'declined',
-          'decided_at':  DateTime.now().toUtc().toIso8601String(),
+          'status': accept ? 'accepted' : 'declined',
+          'decided_at': DateTime.now().toUtc().toIso8601String(),
         })
         .eq('invite_id', inviteId)
         .select('tribe_id, invited_user_id')
@@ -2759,7 +2989,7 @@ class SupabaseBackend {
       try {
         await _client.from('tribe_members').insert({
           'tribe_id': row['tribe_id'],
-          'user_id':  uid,
+          'user_id': uid,
         });
         _joinedTribes.add(row['tribe_id'] as String);
       } on PostgrestException catch (e) {
@@ -2781,9 +3011,9 @@ class SupabaseBackend {
     final row = await _client
         .from('plug_prompts')
         .insert({
-          'tribe_id':    tribeId,
+          'tribe_id': tribeId,
           'prompt_text': text,
-          'is_active':   true,
+          'is_active': true,
         })
         .select('prompt_id, prompt_text, answers_count')
         .single();
@@ -2841,8 +3071,7 @@ class SupabaseBackend {
         .filter('deleted_at', 'is', null);
     final byId = <String, Post>{
       for (final r in rows as List)
-        ((r as Map<String, dynamic>)['post_id'] as String):
-            _postFromRow(r)
+        ((r as Map<String, dynamic>)['post_id'] as String): _postFromRow(r)
     };
     // Preserve pinned order
     return [
@@ -2869,7 +3098,7 @@ class SupabaseBackend {
     final rows = await _client
         .from('plug_prompts')
         .select(
-          'prompt_id, tribe_id, prompt_text, scheduled_for, published_at, is_active, answers_count')
+            'prompt_id, tribe_id, prompt_text, scheduled_for, published_at, is_active, answers_count')
         .eq('tribe_id', tribeId)
         .order('scheduled_for', ascending: true, nullsFirst: false);
     return (rows as List)
@@ -2943,22 +3172,20 @@ class SupabaseBackend {
         )
         .eq('posts.tribe_id', tribeId)
         .order('created_at', ascending: false);
-    return rows
-        .map<TribeReport>((r) {
-          final p = r['posts'] as Map<String, dynamic>?;
-          return TribeReport(
-            reportId: r['report_id'] as String,
-            reason: r['reason'] as String,
-            note: r['note'] as String?,
-            isResolved: (r['is_resolved'] as bool?) ?? false,
-            createdAt: DateTime.parse(r['created_at'] as String),
-            postId: r['post_id'] as String,
-            postPreview:
-                ((p?['content'] as String?) ?? '').substring(0, _previewLen(p)),
-            postDeleted: p?['deleted_at'] != null,
-          );
-        })
-        .toList();
+    return rows.map<TribeReport>((r) {
+      final p = r['posts'] as Map<String, dynamic>?;
+      return TribeReport(
+        reportId: r['report_id'] as String,
+        reason: r['reason'] as String,
+        note: r['note'] as String?,
+        isResolved: (r['is_resolved'] as bool?) ?? false,
+        createdAt: DateTime.parse(r['created_at'] as String),
+        postId: r['post_id'] as String,
+        postPreview:
+            ((p?['content'] as String?) ?? '').substring(0, _previewLen(p)),
+        postDeleted: p?['deleted_at'] != null,
+      );
+    }).toList();
   }
 
   static int _previewLen(Map<String, dynamic>? p) {
@@ -2969,14 +3196,11 @@ class SupabaseBackend {
   Future<void> resolveReport(String reportId) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
-    await _client
-        .from('reports')
-        .update({
-          'is_resolved': true,
-          'resolved_by': uid,
-          'resolved_at': DateTime.now().toUtc().toIso8601String(),
-        })
-        .eq('report_id', reportId);
+    await _client.from('reports').update({
+      'is_resolved': true,
+      'resolved_by': uid,
+      'resolved_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('report_id', reportId);
   }
 
   /// Keeper-only — RLS enforces keeper_id = auth.uid().
@@ -2989,11 +3213,11 @@ class SupabaseBackend {
     String? bannerUrl,
   }) async {
     final payload = <String, dynamic>{};
-    if (name != null)         payload['name']        = name;
-    if (description != null)  payload['description'] = description;
-    if (isPrivate != null)    payload['is_private']  = isPrivate;
-    if (avatarUrl != null)    payload['avatar_url']  = avatarUrl;
-    if (bannerUrl != null)    payload['banner_url']  = bannerUrl;
+    if (name != null) payload['name'] = name;
+    if (description != null) payload['description'] = description;
+    if (isPrivate != null) payload['is_private'] = isPrivate;
+    if (avatarUrl != null) payload['avatar_url'] = avatarUrl;
+    if (bannerUrl != null) payload['banner_url'] = bannerUrl;
     if (payload.isEmpty) {
       final t = await _client
           .from('tribe_directory')
@@ -3009,6 +3233,245 @@ class SupabaseBackend {
         .eq('tribe_id', tribeId)
         .single();
     return _tribeFromRow(row);
+  }
+
+  // ===================== Tribe ownership & lifecycle =====================
+
+  Future<TribeManagementOverview> tribeManagementOverview(
+      String tribeId) async {
+    final raw = await _client.rpc(
+      'tribe_management_overview',
+      params: {'p_tribe_id': tribeId},
+    );
+    return TribeManagementOverview.fromJson(
+      Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<TribeManagementOverview> updateTribeConfiguration({
+    required String tribeId,
+    String? name,
+    String? description,
+    String? category,
+    List<String>? tags,
+    String? visibility,
+    String? avatarUrl,
+    String? bannerUrl,
+    String? welcomeMessage,
+    TribeGovernanceSettings? settings,
+  }) async {
+    final raw = await _client.rpc('update_tribe_configuration', params: {
+      'p_tribe_id': tribeId,
+      if (name != null) 'p_name': name,
+      if (description != null) 'p_description': description,
+      if (category != null) 'p_category': category,
+      if (tags != null) 'p_tags': tags,
+      if (visibility != null) 'p_visibility': visibility,
+      if (avatarUrl != null) 'p_avatar_url': avatarUrl,
+      if (bannerUrl != null) 'p_banner_url': bannerUrl,
+      if (welcomeMessage != null) 'p_welcome_message': welcomeMessage,
+      if (settings != null) 'p_settings': settings.toJson(),
+    });
+    return TribeManagementOverview.fromJson(
+      Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<TribeManagementOverview> replaceTribeRules(
+    String tribeId,
+    List<TribeRuleItem> rules,
+  ) async {
+    final raw = await _client.rpc('replace_tribe_rules', params: {
+      'p_tribe_id': tribeId,
+      'p_rules': [for (final rule in rules) rule.toJson()],
+    });
+    return TribeManagementOverview.fromJson(
+      Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<List<TribeJoinRequest>> tribeJoinRequests(String tribeId) async {
+    final rows = await _client
+        .from('tribe_join_requests')
+        .select(
+          'request_id, user_id, note, created_at, '
+          'users!inner(anonymous_pseudonym, avatar_seed, profile_photo_url)',
+        )
+        .eq('tribe_id', tribeId)
+        .eq('status', 'pending')
+        .order('created_at');
+    return rows.map<TribeJoinRequest>((row) {
+      final user = Map<String, dynamic>.from(row['users'] as Map);
+      return TribeJoinRequest.fromJson({
+        ...Map<String, dynamic>.from(row),
+        ...user,
+      });
+    }).toList(growable: false);
+  }
+
+  Future<void> respondTribeJoinRequest({
+    required String requestId,
+    required bool approve,
+    String? reason,
+  }) async {
+    await _client.rpc('respond_tribe_join_request', params: {
+      'p_request_id': requestId,
+      'p_approve': approve,
+      if (reason != null) 'p_reason': reason,
+    });
+  }
+
+  Future<String> requestTribeMembership(
+    String tribeId, {
+    String? note,
+  }) async {
+    final status = await _client.rpc('request_tribe_membership', params: {
+      'p_tribe_id': tribeId,
+      if (note != null) 'p_note': note,
+    });
+    if (status == 'joined') _joinedTribes.add(tribeId);
+    return status as String;
+  }
+
+  Future<void> manageTribeMember({
+    required String tribeId,
+    required String userId,
+    required String action,
+    String? reason,
+    DateTime? muteUntil,
+  }) async {
+    await _client.rpc('manage_tribe_member', params: {
+      'p_tribe_id': tribeId,
+      'p_user_id': userId,
+      'p_action': action,
+      if (reason != null) 'p_reason': reason,
+      if (muteUntil != null)
+        'p_mute_until': muteUntil.toUtc().toIso8601String(),
+    });
+  }
+
+  Future<String> initiateTribeTransfer({
+    required String tribeId,
+    required String toUserId,
+    bool keepPreviousOwnerAsMod = true,
+  }) async {
+    final id = await _client.rpc('initiate_tribe_transfer', params: {
+      'p_tribe_id': tribeId,
+      'p_to_user_id': toUserId,
+      'p_keep_previous_owner_as_mod': keepPreviousOwnerAsMod,
+    });
+    return id as String;
+  }
+
+  Future<void> respondTribeTransfer({
+    required String transferId,
+    required bool accept,
+  }) async {
+    await _client.rpc('respond_tribe_transfer', params: {
+      'p_transfer_id': transferId,
+      'p_accept': accept,
+    });
+  }
+
+  Future<TribeManagementOverview> setTribeLifecycle({
+    required String tribeId,
+    required String action,
+    String? reason,
+    String? confirmedName,
+  }) async {
+    final raw = await _client.rpc('set_tribe_lifecycle', params: {
+      'p_tribe_id': tribeId,
+      'p_action': action,
+      if (reason != null) 'p_reason': reason,
+      if (confirmedName != null) 'p_confirmed_name': confirmedName,
+    });
+    return TribeManagementOverview.fromJson(
+      Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<List<TribeAuditEvent>> tribeAuditLog(
+    String tribeId, {
+    int limit = 100,
+  }) async {
+    final rows = await _client
+        .from('tribe_audit_log')
+        .select(
+          'audit_id, action, target_type, target_id, reason, created_at, '
+          'actor:actor_id(anonymous_pseudonym)',
+        )
+        .eq('tribe_id', tribeId)
+        .order('created_at', ascending: false)
+        .limit(limit.clamp(1, 250));
+    return rows
+        .map<TribeAuditEvent>(
+            (row) => TribeAuditEvent.fromJson(Map<String, dynamic>.from(row)))
+        .toList(growable: false);
+  }
+
+  Future<List<TribeManagedPost>> managedTribePosts(
+    String tribeId, {
+    int limit = 100,
+  }) async {
+    final rows = await _client.rpc('managed_tribe_posts', params: {
+      'p_tribe_id': tribeId,
+      'p_limit': limit.clamp(1, 250),
+    }) as List<dynamic>;
+    return rows
+        .whereType<Map>()
+        .map((row) => TribeManagedPost.fromJson(
+              Map<String, dynamic>.from(row),
+            ))
+        .toList(growable: false);
+  }
+
+  Future<String> manageTribeSpace({
+    required String tribeId,
+    required String action,
+    String? spaceId,
+    String? name,
+    String? description,
+    String? iconName,
+    String? weeklyTheme,
+    String? postingPermission,
+    bool? isPinned,
+    DateTime? activatesAt,
+    DateTime? deactivatesAt,
+    String? reason,
+  }) async {
+    final id = await _client.rpc('manage_tribe_space', params: {
+      'p_tribe_id': tribeId,
+      'p_action': action,
+      if (spaceId != null) 'p_space_id': spaceId,
+      if (name != null) 'p_name': name,
+      if (description != null) 'p_description': description,
+      if (iconName != null) 'p_icon_name': iconName,
+      if (weeklyTheme != null) 'p_weekly_theme': weeklyTheme,
+      if (postingPermission != null) 'p_posting_permission': postingPermission,
+      if (isPinned != null) 'p_is_pinned': isPinned,
+      if (activatesAt != null)
+        'p_activates_at': activatesAt.toUtc().toIso8601String(),
+      if (deactivatesAt != null)
+        'p_deactivates_at': deactivatesAt.toUtc().toIso8601String(),
+      if (reason != null) 'p_reason': reason,
+    });
+    return id as String;
+  }
+
+  Future<void> manageTribePost({
+    required String tribeId,
+    required String postId,
+    required String action,
+    String? targetSpaceId,
+    String? reason,
+  }) async {
+    await _client.rpc('manage_tribe_post', params: {
+      'p_tribe_id': tribeId,
+      'p_post_id': postId,
+      'p_action': action,
+      if (targetSpaceId != null) 'p_target_space_id': targetSpaceId,
+      if (reason != null) 'p_reason': reason,
+    });
   }
 
   // ===================================================================
@@ -3029,9 +3492,9 @@ class SupabaseBackend {
     final pollRow = await _client
         .from('post_polls')
         .insert({
-          'post_id':    postId,
-          'question':   question,
-          'closes_at':  DateTime.now().add(closesIn).toIso8601String(),
+          'post_id': postId,
+          'question': question,
+          'closes_at': DateTime.now().add(closesIn).toIso8601String(),
         })
         .select('poll_id, post_id, question, closes_at')
         .single();
@@ -3109,9 +3572,9 @@ class SupabaseBackend {
     // UNIQUE(poll_id, user_id) — duplicate votes silently no-op.
     try {
       await _client.from('poll_votes').insert({
-        'poll_id':   pollId,
+        'poll_id': pollId,
         'option_id': optionId,
-        'user_id':   uid,
+        'user_id': uid,
       });
     } on PostgrestException catch (e) {
       if (e.code != '23505') rethrow;
@@ -3177,7 +3640,8 @@ class SupabaseBackend {
     if (authorIds.isNotEmpty) {
       final list = await _client
           .from('users')
-          .select('user_id, anonymous_pseudonym, avatar_seed, profile_photo_url')
+          .select(
+              'user_id, anonymous_pseudonym, avatar_seed, profile_photo_url, is_verified')
           .inFilter('user_id', authorIds);
       for (final r in list) {
         authors[r['user_id'] as String] = r;
@@ -3187,19 +3651,19 @@ class SupabaseBackend {
     // Build flat list, then assemble into a nested tree.
     final flat = rows.map((r) {
       final author = authors[r['author_id']];
-      final rawEdited  = r['edited_at']  as String?;
+      final rawEdited = r['edited_at'] as String?;
       final rawDeleted = r['deleted_at'] as String?;
-      final rawPinned  = r['pinned_at']  as String?;
+      final rawPinned = r['pinned_at'] as String?;
       return ThreadedComment(
         commentId: r['comment_id'] as String,
         parentId: r['parent_id'] as String?,
         authorId: r['author_id'] as String?,
-        authorPseudonym: author == null
-            ? '@anonymous'
-            : '@${author['anonymous_pseudonym']}',
+        authorPseudonym:
+            author == null ? '@anonymous' : '@${author['anonymous_pseudonym']}',
         authorAvatarSeed:
             author == null ? 'default-orb' : author['avatar_seed'] as String,
         authorProfilePhotoUrl: author?['profile_photo_url'] as String?,
+        authorIsVerified: (author?['is_verified'] as bool?) ?? false,
         content: r['content'] as String,
         imageUrl: r['image_url'] as String?,
         path: r['path'] as String,
@@ -3207,9 +3671,9 @@ class SupabaseBackend {
         likesCount: r['likes_count'] as int,
         likedByMe: (r['liked_by_me'] as bool?) ?? false,
         createdAt: DateTime.parse(r['created_at'] as String),
-        editedAt:  rawEdited  == null ? null : DateTime.parse(rawEdited),
+        editedAt: rawEdited == null ? null : DateTime.parse(rawEdited),
         deletedAt: rawDeleted == null ? null : DateTime.parse(rawDeleted),
-        pinnedAt:  rawPinned  == null ? null : DateTime.parse(rawPinned),
+        pinnedAt: rawPinned == null ? null : DateTime.parse(rawPinned),
       );
     }).toList();
     final byId = {for (final c in flat) c.commentId: c};
@@ -3231,16 +3695,17 @@ class SupabaseBackend {
     String? personaId,
     String? imageUrl,
     String? imagePath,
+    String? idempotencyKey,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
-    final id = await _client.rpc('create_threaded_comment', params: {
-      'p_post_id':    postId,
-      'p_parent_id':  parentId,
-      'p_author_id':  uid,
-      'p_content':    content,
+    final id = await _client.rpc('create_threaded_comment_idempotent', params: {
+      'p_mutation_id': idempotencyKey ?? const Uuid().v4(),
+      'p_post_id': postId,
+      'p_parent_id': parentId,
+      'p_content': content,
       'p_persona_id': personaId,
-      'p_image_url':  imageUrl,
+      'p_image_url': imageUrl,
       'p_image_path': imagePath,
     }) as String;
     final me = _me;
@@ -3253,6 +3718,7 @@ class SupabaseBackend {
           parentId: parentId,
           authorPseudonym: '@${me?.anonymousPseudonym ?? 'anonymous'}',
           authorAvatarSeed: me?.avatarSeed ?? 'default-orb',
+          authorIsVerified: me?.isVerified ?? false,
           content: content,
           imageUrl: imageUrl,
           path: id.replaceAll('-', ''),
@@ -3333,9 +3799,8 @@ class SupabaseBackend {
         .from('tribes')
         .select('tribe_id')
         .eq('keeper_id', keeperId);
-    final tribeIds = tribeRows
-        .map<String>((r) => r['tribe_id'] as String)
-        .toList();
+    final tribeIds =
+        tribeRows.map<String>((r) => r['tribe_id'] as String).toList();
     if (tribeIds.isEmpty) return const [];
     final rows = await _client
         .from('feed_posts')
@@ -3356,26 +3821,29 @@ class SupabaseBackend {
 
   Space _spaceFromRow(Map<String, dynamic> r) {
     final archivedAtRaw = r['archived_at'] as String?;
-    final lastVentRaw   = r['last_vent_at'] as String?;
+    final lastVentRaw = r['last_vent_at'] as String?;
     return Space(
-      spaceId:     r['space_id']    as String,
-      tribeId:     r['tribe_id']    as String,
-      tribeSlug:   r['tribe_slug']  as String,
-      tribeName:   r['tribe_name']  as String,
-      slug:        r['slug']        as String,
-      name:        r['name']        as String,
+      spaceId: r['space_id'] as String,
+      tribeId: r['tribe_id'] as String,
+      tribeSlug: r['tribe_slug'] as String,
+      tribeName: r['tribe_name'] as String,
+      slug: r['slug'] as String,
+      name: r['name'] as String,
       description: r['description'] as String?,
       weeklyTheme: r['weekly_theme'] as String?,
-      themeColor:  r['theme_color'] as String?,
-      isDefault:   (r['is_default'] as bool?) ?? false,
-      archivedAt:
-          archivedAtRaw == null ? null : DateTime.parse(archivedAtRaw),
+      themeColor: r['theme_color'] as String?,
+      isDefault: (r['is_default'] as bool?) ?? false,
+      archivedAt: archivedAtRaw == null ? null : DateTime.parse(archivedAtRaw),
       createdAt: DateTime.parse(r['created_at'] as String),
       updatedAt: DateTime.parse(r['updated_at'] as String),
-      ventCount:  (r['vent_count']  as int?) ?? 0,
+      ventCount: (r['vent_count'] as int?) ?? 0,
       ventsToday: (r['vents_today'] as int?) ?? 0,
-      lastVentAt:
-          lastVentRaw == null ? null : DateTime.parse(lastVentRaw),
+      lastVentAt: lastVentRaw == null ? null : DateTime.parse(lastVentRaw),
+      iconName: r['icon_name'] as String?,
+      isPinned: (r['is_pinned'] as bool?) ?? false,
+      postingPermission: (r['posting_permission'] as String?) ?? 'members',
+      activatesAt: _coerceDate(r['activates_at']),
+      deactivatesAt: _coerceDate(r['deactivates_at']),
     );
   }
 
@@ -3408,10 +3876,7 @@ class SupabaseBackend {
   }) async {
     // Keep the filter chain narrow so it stays a FilterBuilder; only
     // transition to a transform via `.order(...)` at the very end.
-    var filter = _client
-        .from('feed_posts')
-        .select()
-        .eq('space_id', spaceId);
+    var filter = _client.from('feed_posts').select().eq('space_id', spaceId);
     if (sort == 'unanswered') {
       filter = filter.eq('comments_count', 0);
     } else if (sort == 'keeper') {
@@ -3563,8 +4028,7 @@ class SupabaseBackend {
 
   Future<KeeperEngagementCalendar> keeperEngagementCalendar(
       String tribeId) async {
-    final res =
-        await _client.rpc('keeper_engagement_calendar', params: {
+    final res = await _client.rpc('keeper_engagement_calendar', params: {
       'p_tribe_id': tribeId,
     });
     final map = res is Map<String, dynamic>
@@ -3621,42 +4085,35 @@ class SupabaseBackend {
     required String category,
     String? description,
     bool isPrivate = false,
+    List<String> tags = const [],
+    String? visibility,
+    String? welcomeMessage,
+    TribeGovernanceSettings settings = const TribeGovernanceSettings(),
+    List<TribeRuleItem> rules = const [],
   }) async {
-    final uid = _uid;
-    if (uid == null) throw StateError('Not signed in');
-    final slug = _slugify(name);
-    final row = await _client
-        .from('tribes')
-        .insert({
-          'name':        name,
-          'slug':        slug,
-          'category':    category,
-          'description': description,
-          'is_private':  isPrivate,
-          'keeper_id':   uid,
-        })
-        .select('tribe_id')
-        .single();
-    final tribeId = row['tribe_id'] as String;
-    // Keeper auto-joins their own tribe.
-    await _client.from('tribe_members').insert({
-      'tribe_id': tribeId,
-      'user_id':  uid,
+    if (_uid == null) throw StateError('Not signed in');
+    final tribeId = await _client.rpc('create_managed_tribe', params: {
+      'p_name': name,
+      'p_category': category,
+      if (description != null) 'p_description': description,
+      'p_visibility': visibility ?? (isPrivate ? 'private' : 'public'),
+      'p_tags': tags,
+      if (welcomeMessage != null) 'p_welcome_message': welcomeMessage,
+      'p_settings': settings.toJson(),
+      'p_rules': [for (final rule in rules) rule.toJson()],
     });
+    final row = await _client
+        .from('tribe_directory')
+        .select()
+        .eq('tribe_id', tribeId as String)
+        .single();
     _joinedTribes.add(tribeId);
-    final created = await tribeBySlug(slug);
-    return created!;
+    return _tribeFromRow(row);
   }
 
   Future<void> joinTribe(String tribeId) async {
-    final uid = _uid;
-    if (uid == null) return;
-    if (_joinedTribes.contains(tribeId)) return;
-    await _client.from('tribe_members').insert({
-      'tribe_id': tribeId,
-      'user_id':  uid,
-    });
-    _joinedTribes.add(tribeId);
+    if (_uid == null || _joinedTribes.contains(tribeId)) return;
+    await requestTribeMembership(tribeId);
   }
 
   Future<void> leaveTribe(String tribeId) async {
@@ -3670,11 +4127,6 @@ class SupabaseBackend {
     _joinedTribes.remove(tribeId);
   }
 
-  String _slugify(String s) => s
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-      .replaceAll(RegExp(r'^-+|-+$'), '');
-
   // ===================================================================
   // CHAT  (plaintext stored server-side; column names are historical —
   //        v1 does NOT advertise end-to-end encryption)
@@ -3687,30 +4139,44 @@ class SupabaseBackend {
     return rows
         .where((r) {
           if (tab == 'requests') return r['room_status'] == 'pending_request';
-          if (tab == 'active')   return r['room_status'] == 'active';
+          if (tab == 'active') return r['room_status'] == 'active';
           return true;
         })
-        .map<ChatRoom>((r) => ChatRoom(
-              roomId: r['room_id'] as String,
-              peerPseudonym: r['peer_pseudonym'] == null
-                  ? '@anonymous'
-                  : '@${r['peer_pseudonym']}',
-              peerAvatarSeed:
-                  (r['peer_avatar_seed'] as String?) ?? 'default-orb',
-              peerUserId: r['peer_id'] as String?,
-              requestPreview: (r['request_preview'] as String?) ?? '',
-              roomStatus: r['room_status'] as String,
-              createdAt: DateTime.parse(r['created_at'] as String),
-              initiatedByMe: r['initiated_by_me'] as bool,
-              unreadCount: (r['unread_count'] as int?) ?? 0,
-              lastMessagePreview: r['last_message_preview'] as String?,
-              lastMessageAt: r['last_message_at'] == null
-                  ? null
-                  : DateTime.parse(r['last_message_at'] as String),
-              lastOwnMessageRead:
-                  (r['last_own_message_read'] as bool?) ?? false,
-            ))
+        .map<ChatRoom>(_chatRoomFromInboxRow)
         .toList();
+  }
+
+  ChatRoom _chatRoomFromInboxRow(Map<String, dynamic> row) {
+    final isGroup = row['is_group'] == true;
+    final rawName = row['peer_pseudonym'] as String?;
+    return ChatRoom(
+      roomId: row['room_id'] as String,
+      peerPseudonym: isGroup
+          ? (rawName ?? 'Private group')
+          : (rawName == null ? '@anonymous' : '@$rawName'),
+      peerAvatarSeed: (row['peer_avatar_seed'] as String?) ?? 'default-orb',
+      peerProfilePhotoUrl: row['peer_profile_photo_url'] as String?,
+      peerUserId: row['peer_id'] as String?,
+      requestPreview: (row['request_preview'] as String?) ?? '',
+      roomStatus: row['room_status'] as String,
+      createdAt: DateTime.parse(row['created_at'] as String),
+      initiatedByMe: row['initiated_by_me'] as bool,
+      unreadCount: (row['unread_count'] as int?) ?? 0,
+      lastMessagePreview: row['last_message_preview'] as String?,
+      lastMessageAt: row['last_message_at'] == null
+          ? null
+          : DateTime.parse(row['last_message_at'] as String),
+      lastOwnMessageRead: (row['last_own_message_read'] as bool?) ?? false,
+      isGroup: isGroup,
+      groupTitle: row['group_title'] as String?,
+      memberCount: (row['member_count'] as int?) ?? 2,
+      groupAvatarPath: row['group_avatar_path'] as String?,
+      groupInviteToken: row['group_invite_token'] as String?,
+      groupInviteEnabled: (row['group_invite_enabled'] as bool?) ?? false,
+      groupAllowMemberInvites:
+          (row['group_allow_member_invites'] as bool?) ?? false,
+      isGroupOwner: (row['is_group_owner'] as bool?) ?? false,
+    );
   }
 
   Future<bool> canDm(String peerUserId) async {
@@ -3762,7 +4228,7 @@ class SupabaseBackend {
     // returned ChatRoom has a pseudonym/avatar for immediate render.
     final peer = await _client
         .from('users')
-        .select('anonymous_pseudonym, avatar_seed')
+        .select('anonymous_pseudonym, avatar_seed, profile_photo_url')
         .eq('user_id', peerUserId)
         .maybeSingle();
     return ChatRoom(
@@ -3770,11 +4236,162 @@ class SupabaseBackend {
       peerPseudonym:
           peer == null ? '@anonymous' : '@${peer['anonymous_pseudonym']}',
       peerAvatarSeed: (peer?['avatar_seed'] as String?) ?? 'default-orb',
+      peerProfilePhotoUrl: peer?['profile_photo_url'] as String?,
       requestPreview: (row['request_preview'] as String?) ?? '',
       roomStatus: row['room_status'] as String,
       createdAt: DateTime.parse(row['created_at'] as String),
       initiatedByMe: (row['initiated_by_me'] as bool?) ?? true,
     );
+  }
+
+  Future<ChatRoom> createGroupChat({
+    required String title,
+    required List<String> memberUserIds,
+  }) async {
+    if (_uid == null) throw StateError('Not signed in');
+    final roomId = await _client.rpc('create_group_chat_v2', params: {
+      'p_title': title,
+      'p_member_ids': memberUserIds,
+    }) as String;
+    final row = await _client
+        .from('inbox_rooms')
+        .select()
+        .eq('room_id', roomId)
+        .single();
+    return _chatRoomFromInboxRow(row);
+  }
+
+  Future<List<GroupChatMember>> groupChatMembers(String roomId) async {
+    final rows = await _client.rpc(
+      'group_chat_members',
+      params: {'p_room_id': roomId},
+    ) as List<dynamic>;
+    return rows.map((raw) {
+      final row = raw as Map<String, dynamic>;
+      return GroupChatMember(
+        userId: row['user_id'] as String,
+        pseudonym: row['pseudonym'] as String,
+        avatarSeed: (row['avatar_seed'] as String?) ?? 'default-orb',
+        profilePhotoUrl: row['profile_photo_url'] as String?,
+        isVerified: (row['is_verified'] as bool?) ?? false,
+        memberRole: (row['member_role'] as String?) ?? 'member',
+        nickname: row['nickname'] as String?,
+        joinedAt: DateTime.parse(row['joined_at'] as String),
+        isMe: (row['is_me'] as bool?) ?? false,
+      );
+    }).toList(growable: false);
+  }
+
+  Future<int> addGroupChatMembers({
+    required String roomId,
+    required List<String> memberUserIds,
+  }) async {
+    final result = await _client.rpc('add_group_chat_members', params: {
+      'p_room_id': roomId,
+      'p_member_ids': memberUserIds,
+    });
+    return (result as int?) ?? 0;
+  }
+
+  Future<bool> removeGroupChatMember({
+    required String roomId,
+    required String userId,
+  }) async {
+    final result = await _client.rpc('remove_group_chat_member', params: {
+      'p_room_id': roomId,
+      'p_user_id': userId,
+    });
+    return result == true;
+  }
+
+  Future<bool> leaveGroupChat(String roomId) async {
+    final result = await _client.rpc(
+      'leave_group_chat',
+      params: {'p_room_id': roomId},
+    );
+    return result == true;
+  }
+
+  Future<bool> markGroupSpamAndLeave(String roomId) async {
+    final result = await _client.rpc(
+      'mark_group_spam_and_leave',
+      params: {'p_room_id': roomId},
+    );
+    return result == true;
+  }
+
+  Future<ChatRoom> updateGroupChatIdentity({
+    required String roomId,
+    String? title,
+    String? avatarPath,
+    bool clearAvatar = false,
+  }) async {
+    await _client.rpc('update_group_chat_identity', params: {
+      'p_room_id': roomId,
+      'p_title': title,
+      'p_avatar_path': avatarPath,
+      'p_clear_avatar': clearAvatar,
+    });
+    final row = await _client
+        .from('inbox_rooms')
+        .select()
+        .eq('room_id', roomId)
+        .single();
+    return _chatRoomFromInboxRow(row);
+  }
+
+  Future<bool> setGroupChatNickname({
+    required String roomId,
+    required String nickname,
+  }) async {
+    final result = await _client.rpc('set_group_chat_nickname', params: {
+      'p_room_id': roomId,
+      'p_nickname': nickname,
+    });
+    return result == true;
+  }
+
+  Future<bool> setGroupChatPrivacy({
+    required String roomId,
+    bool? allowMemberInvites,
+    bool? inviteEnabled,
+  }) async {
+    final result = await _client.rpc('set_group_chat_privacy', params: {
+      'p_room_id': roomId,
+      'p_allow_member_invites': allowMemberInvites,
+      'p_invite_enabled': inviteEnabled,
+    });
+    return result == true;
+  }
+
+  Future<String> regenerateGroupInvite(String roomId) async {
+    final result = await _client.rpc(
+      'regenerate_group_invite',
+      params: {'p_room_id': roomId},
+    );
+    return result as String;
+  }
+
+  Future<GroupInvitePreview?> groupInvitePreview(String token) async {
+    final rows = await _client.rpc(
+      'group_invite_preview',
+      params: {'p_token': token},
+    ) as List<dynamic>;
+    if (rows.isEmpty) return null;
+    final row = rows.first as Map<String, dynamic>;
+    return GroupInvitePreview(
+      roomId: row['room_id'] as String,
+      title: row['title'] as String,
+      avatarPath: row['group_avatar_path'] as String?,
+      memberCount: (row['member_count'] as int?) ?? 0,
+    );
+  }
+
+  Future<String> joinGroupChatByInvite(String token) async {
+    return await _client.rpc(
+      'join_group_chat_by_invite',
+      params: {'p_token': token},
+    ) as String;
   }
 
   Future<ChatRoom> acceptRequest(String roomId) async {
@@ -3798,8 +4415,7 @@ class SupabaseBackend {
   Future<void> declineRequest(String roomId) async {
     await _client
         .from('chat_rooms')
-        .update({'room_status': 'declined'})
-        .eq('room_id', roomId);
+        .update({'room_status': 'declined'}).eq('room_id', roomId);
   }
 
   Future<List<ChatMessage>> messages(String roomId) async {
@@ -3868,8 +4484,7 @@ class SupabaseBackend {
                 (row['reaction_counts'] as Map?)?.cast<String, dynamic>() ?? {};
             out = out.copyWith(
               reactionCounts: {
-                for (final e in counts.entries)
-                  e.key: (e.value as num).toInt(),
+                for (final e in counts.entries) e.key: (e.value as num).toInt(),
               },
               myReaction: row['my_reaction'] as String?,
             );
@@ -3909,6 +4524,7 @@ class SupabaseBackend {
   ChatMessage _messageFromRow(Map<String, dynamic> r) {
     final uid = _uid;
     final rawRead = r['read_at'] as String?;
+    final rawDelivered = r['delivered_at'] as String?;
     final rawEdited = r['edited_at'] as String?;
     final rawDeleted = r['deleted_at'] as String?;
     return ChatMessage(
@@ -3922,6 +4538,7 @@ class SupabaseBackend {
       attachedPostSnapshot:
           SharedPostSnapshot.fromJson(r['attached_post_snapshot']),
       readAt: rawRead == null ? null : DateTime.parse(rawRead),
+      deliveredAt: rawDelivered == null ? null : DateTime.parse(rawDelivered),
       attachedMediaPath: r['attached_media_path'] as String?,
       attachedMediaType: r['attached_media_type'] as String?,
       parentMessageId: r['parent_message_id'] as String?,
@@ -3940,9 +4557,9 @@ class SupabaseBackend {
     String? appVersion,
   }) async {
     await _client.rpc('register_push_token', params: {
-      'p_token':       token,
-      'p_platform':    platform,
-      'p_locale':      locale,
+      'p_token': token,
+      'p_platform': platform,
+      'p_locale': locale,
       'p_app_version': appVersion,
     });
   }
@@ -3961,7 +4578,7 @@ class SupabaseBackend {
   }) async {
     final res = await _client.rpc('edit_chat_message', params: {
       'p_message_id': messageId,
-      'p_plaintext':  newPlaintext,
+      'p_plaintext': newPlaintext,
     });
     return (res as bool?) ?? false;
   }
@@ -4001,8 +4618,23 @@ class SupabaseBackend {
   }
 
   Future<bool> deletePost(String postId) async {
+    final media = await _client
+        .from('posts')
+        .select('image_path')
+        .eq('post_id', postId)
+        .maybeSingle();
     final res = await _client.rpc('delete_post', params: {'p_post_id': postId});
-    return (res as bool?) ?? false;
+    final deleted = (res as bool?) ?? false;
+    final imagePath = media?['image_path'] as String?;
+    if (deleted && imagePath != null && imagePath.isNotEmpty) {
+      try {
+        await _client.storage.from('post-media').remove([imagePath]);
+      } catch (_) {
+        // The content is already hidden. A later maintenance sweep can retry
+        // physical cleanup without turning a successful delete into an error.
+      }
+    }
+    return deleted;
   }
 
   Future<bool> editComment({
@@ -4011,27 +4643,27 @@ class SupabaseBackend {
   }) async {
     final res = await _client.rpc('edit_comment', params: {
       'p_comment_id': commentId,
-      'p_content':    newContent,
+      'p_content': newContent,
     });
     return (res as bool?) ?? false;
   }
 
   Future<bool> deleteComment(String commentId) async {
-    final res = await _client.rpc('delete_comment',
-        params: {'p_comment_id': commentId});
+    final res = await _client
+        .rpc('delete_comment', params: {'p_comment_id': commentId});
     return (res as bool?) ?? false;
   }
 
   // Phase 2 — comment moderation (migration 0051).
   Future<bool> pinComment(String commentId) async {
-    final res = await _client
-        .rpc('pin_comment', params: {'p_comment_id': commentId});
+    final res =
+        await _client.rpc('pin_comment', params: {'p_comment_id': commentId});
     return (res as bool?) ?? false;
   }
 
   Future<bool> unpinComment(String commentId) async {
-    final res = await _client
-        .rpc('unpin_comment', params: {'p_comment_id': commentId});
+    final res =
+        await _client.rpc('unpin_comment', params: {'p_comment_id': commentId});
     return (res as bool?) ?? false;
   }
 
@@ -4047,8 +4679,8 @@ class SupabaseBackend {
   }
 
   Future<bool> toggleKeeperPick(String postId) async {
-    final res = await _client
-        .rpc('toggle_keeper_pick', params: {'p_post_id': postId});
+    final res =
+        await _client.rpc('toggle_keeper_pick', params: {'p_post_id': postId});
     return (res as bool?) ?? false;
   }
 
@@ -4058,16 +4690,16 @@ class SupabaseBackend {
     String? description,
   }) async {
     final res = await _client.rpc('edit_whisper', params: {
-      'p_whisper_id':  whisperId,
-      'p_title':       title,
+      'p_whisper_id': whisperId,
+      'p_title': title,
       'p_description': description,
     });
     return (res as bool?) ?? false;
   }
 
   Future<bool> deleteWhisper(String whisperId) async {
-    final res = await _client.rpc('delete_whisper',
-        params: {'p_whisper_id': whisperId});
+    final res = await _client
+        .rpc('delete_whisper', params: {'p_whisper_id': whisperId});
     return (res as bool?) ?? false;
   }
 
@@ -4077,21 +4709,21 @@ class SupabaseBackend {
   }) async {
     final res = await _client.rpc('edit_tribe_message', params: {
       'p_message_id': messageId,
-      'p_content':    newContent,
+      'p_content': newContent,
     });
     return (res as bool?) ?? false;
   }
 
   Future<bool> deleteTribeMessage(String messageId) async {
-    final res = await _client.rpc('delete_tribe_message',
-        params: {'p_message_id': messageId});
+    final res = await _client
+        .rpc('delete_tribe_message', params: {'p_message_id': messageId});
     return (res as bool?) ?? false;
   }
 
   /// Delete for me — hide a tribe message from the caller's own view only.
   Future<bool> hideTribeMessage(String messageId) async {
-    final res = await _client.rpc('hide_tribe_message',
-        params: {'p_message_id': messageId});
+    final res = await _client
+        .rpc('hide_tribe_message', params: {'p_message_id': messageId});
     return (res as bool?) ?? false;
   }
 
@@ -4102,6 +4734,53 @@ class SupabaseBackend {
     final res =
         await _client.rpc('mark_chat_room_read', params: {'p_room_id': roomId});
     return (res as int?) ?? 0;
+  }
+
+  /// Tick stream that fires on any friendships change visible to the
+  /// caller (RLS scopes events to rows where auth.uid() participates).
+  /// Drives live friend-request badges + accept flows.
+  Stream<int> watchFriendshipEvents() {
+    final controller = StreamController<int>();
+    var tick = 0;
+    final channel = _client
+        .channel('friendships:events')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'friendships',
+          callback: (_) => controller.add(++tick),
+        )
+        .subscribe();
+    controller.onListen = () => controller.add(0);
+    controller.onCancel = () => channel.unsubscribe();
+    return controller.stream;
+  }
+
+  /// Stamp delivered_at on peer messages in [roomId] — called when the
+  /// client actually receives them (chat open / realtime arrival).
+  Future<int> markRoomDelivered(String roomId) async {
+    final res =
+        await _client.rpc('mark_room_delivered', params: {'p_room_id': roomId});
+    return (res as int?) ?? 0;
+  }
+
+  /// Presence heartbeat — call on resume + every ~60s while foregrounded.
+  Future<void> touchLastSeen() async {
+    await _client.rpc('touch_last_seen');
+  }
+
+  /// Peer presence tier: online | recent | offline | hidden (+ last_seen).
+  Future<({String state, DateTime? lastSeen})> peerPresence(
+      String userId) async {
+    final rows = await _client
+        .rpc('peer_presence', params: {'p_user_id': userId}) as List<dynamic>;
+    if (rows.isEmpty) return (state: 'hidden', lastSeen: null);
+    final r = rows.first as Map<String, dynamic>;
+    final raw = r['last_seen'] as String?;
+    return (
+      state: (r['state'] as String?) ?? 'hidden',
+      lastSeen: raw == null ? null : DateTime.parse(raw),
+    );
   }
 
   /// Unread peer messages across all active DM rooms — powers the Inbox badge.
@@ -4236,6 +4915,34 @@ class SupabaseBackend {
     return (path: path, messageId: messageId);
   }
 
+  Future<String> uploadGroupChatAvatar({
+    required String roomId,
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) async {
+    final safeExtension = extension.toLowerCase().replaceAll('jpeg', 'jpg');
+    const allowed = {'jpg', 'png', 'webp', 'heic', 'gif'};
+    if (!allowed.contains(safeExtension)) {
+      throw ArgumentError('Unsupported group image type.');
+    }
+    final path = '$roomId/group-avatar-${const Uuid().v4()}.$safeExtension';
+    await _client.storage.from('chat-media').uploadBinary(
+          path,
+          Uint8List.fromList(bytes),
+          fileOptions: FileOptions(
+            contentType: contentType,
+            upsert: false,
+          ),
+        );
+    return path;
+  }
+
+  Future<void> deleteChatMedia(String path) async {
+    if (path.trim().isEmpty) return;
+    await _client.storage.from('chat-media').remove([path]);
+  }
+
   /// Upload a DM voice note into the private `chat-media` bucket. Mirrors
   /// [uploadChatImage]; the duration is encoded into the object name
   /// (`voice-<id>-d<seconds>s.m4a`) so playback UIs can show it without a
@@ -4280,65 +4987,38 @@ class SupabaseBackend {
     String? attachedMediaPath,
     String? attachedMediaType,
     String? parentMessageId,
+    String? idempotencyKey,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
 
-    if (parentMessageId != null) {
-      // V2 path — RPC returns just the new message_id, so we re-read
-      // the messages() list to surface the persisted row with snapshot
-      // joins. Lightweight: one extra round-trip on reply-send only.
-      await _client.rpc('send_chat_message_v2', params: {
-        'p_room_id':           roomId,
-        'p_plaintext':         payload,
-        'p_attached_post_id':  attachedPostId,
-        'p_media_path':        attachedMediaPath,
-        'p_media_type':        attachedMediaType,
-        'p_parent_message_id': parentMessageId,
-      });
-      final list = await messages(roomId);
-      // Find the freshest message from me referencing the same parent.
-      for (var i = list.length - 1; i >= 0; i--) {
-        final m = list[i];
-        if (m.sentByMe && m.parentMessageId == parentMessageId) return m;
-      }
-      return list.isNotEmpty ? list.last : ChatMessage(
-        messageId: 'unknown',
-        roomId: roomId,
-        senderId: uid,
-        plaintext: payload,
-        createdAt: DateTime.now(),
-        sentByMe: true,
-      );
-    }
-
-    final res = await _client.rpc(
-      'send_chat_message',
+    final messageId = await _client.rpc(
+      'send_chat_message_idempotent',
       params: {
+        'p_mutation_id': idempotencyKey ?? const Uuid().v4(),
         'p_room_id': roomId,
-        'p_payload': payload,
+        'p_plaintext': payload,
         'p_attached_post_id': attachedPostId,
         'p_media_path': attachedMediaPath,
         'p_media_type': attachedMediaType,
+        'p_parent_message_id': parentMessageId,
       },
-    );
-    final rows = res as List;
-    if (rows.isEmpty) {
-      throw StateError('send_chat_message returned no row');
+    ) as String;
+    final list = await messages(roomId);
+    for (final message in list) {
+      if (message.messageId == messageId) return message;
     }
-    final r = (rows.first as Map).cast<String, dynamic>();
     return ChatMessage(
-      messageId: r['message_id'] as String,
-      roomId: r['room_id'] as String,
+      messageId: messageId,
+      roomId: roomId,
       senderId: uid,
-      plaintext: (r['payload'] as String?) ?? payload,
-      createdAt: DateTime.parse(r['created_at'] as String),
+      plaintext: payload,
+      createdAt: DateTime.now(),
       sentByMe: true,
-      attachedPostId: r['attached_post_id'] as String?,
-      attachedPostSnapshot:
-          SharedPostSnapshot.fromJson(r['attached_post_snapshot']),
-      attachedMediaPath: r['attached_media_path'] as String?,
-      attachedMediaType: r['attached_media_type'] as String?,
+      attachedPostId: attachedPostId,
+      attachedMediaPath: attachedMediaPath,
+      attachedMediaType: attachedMediaType,
+      parentMessageId: parentMessageId,
     );
   }
 
@@ -4352,8 +5032,7 @@ class SupabaseBackend {
     // 0069) join users via author_id instead of plug_profiles.
     final rows = await _client
         .from('plug_prompts')
-        .select(
-            'prompt_id, prompt_text, answers_count, '
+        .select('prompt_id, prompt_text, answers_count, '
             'plug_profiles(display_name, users(avatar_seed)), '
             'author:users!plug_prompts_author_id_fkey(anonymous_pseudonym, avatar_seed)')
         .eq('is_active', true)
@@ -4446,8 +5125,8 @@ class SupabaseBackend {
     final row = await _client
         .from('prompt_answers')
         .insert({
-          'prompt_id':   promptId,
-          'author_id':   uid,
+          'prompt_id': promptId,
+          'author_id': uid,
           'answer_text': text,
         })
         .select('answer_id, prompt_id, answer_text, created_at')
@@ -4466,8 +5145,7 @@ class SupabaseBackend {
       final cur = (p['answers_count'] as int?) ?? 0;
       await _client
           .from('plug_prompts')
-          .update({'answers_count': cur + 1})
-          .eq('prompt_id', promptId);
+          .update({'answers_count': cur + 1}).eq('prompt_id', promptId);
     });
     final me = _me;
     return PromptAnswer(
@@ -4486,8 +5164,7 @@ class SupabaseBackend {
   Future<void> markNotificationRead(String notificationId) async {
     await _client
         .from('notifications')
-        .update({'is_read': true})
-        .eq('notification_id', notificationId);
+        .update({'is_read': true}).eq('notification_id', notificationId);
   }
 
   Future<void> markAllNotificationsRead() async {
@@ -4499,6 +5176,41 @@ class SupabaseBackend {
         .eq('user_id', uid)
         .eq('is_read', false);
   }
+
+  /// Realtime stream of the caller's notifications — the bell list + badge
+  /// update the instant a row lands (publication: migration 0113).
+  Stream<List<NotificationItem>> watchNotifications() {
+    final controller = StreamController<List<NotificationItem>>();
+    Future<void> emit() async {
+      try {
+        controller.add(await notifications());
+      } catch (_) {/* listener retries on next event */}
+    }
+
+    final uid = _uid;
+    RealtimeChannel? channel;
+    if (uid != null) {
+      channel = _client
+          .channel('notifications:$uid')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'notifications',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: uid,
+            ),
+            callback: (_) => emit(),
+          )
+          .subscribe();
+    }
+
+    controller.onListen = emit;
+    controller.onCancel = () => channel?.unsubscribe();
+    return controller.stream;
+  }
+
   Future<List<NotificationItem>> notifications() async {
     final uid = _uid;
     if (uid == null) return const [];
@@ -4506,7 +5218,8 @@ class SupabaseBackend {
         .from('notifications')
         .select()
         .eq('user_id', uid)
-        .order('created_at', ascending: false)
+        // Grouped rows bump updated_at on every collapse — float them.
+        .order('updated_at', ascending: false)
         .limit(50);
     return rows.map<NotificationItem>((r) {
       final payload =
@@ -4515,8 +5228,11 @@ class SupabaseBackend {
         id: r['notification_id'] as String,
         kind: r['kind'] as String,
         title: (payload['title'] as String?) ?? _kindLabel(r['kind'] as String),
-        body: (payload['body'] as String?) ?? '',
-        createdAt: DateTime.parse(r['created_at'] as String),
+        body: (payload['body'] as String?) ??
+            (payload['message'] as String?) ??
+            '',
+        createdAt:
+            DateTime.parse((r['updated_at'] ?? r['created_at']) as String),
         isRead: r['is_read'] as bool,
         payload: payload,
       );
@@ -4525,13 +5241,28 @@ class SupabaseBackend {
 
   String _kindLabel(String kind) {
     switch (kind) {
-      case 'tribe_prompt':    return 'New tribe prompt';
-      case 'tribe_invite':    return 'Tribe invitation';
-      case 'message_request': return 'Message request';
-      case 'comment_reply':   return 'New reply';
-      case 'post_like':       return 'Reaction on your vent';
-      case 'admin_broadcast': return 'Announcement';
-      default:                return kind;
+      case 'tribe_prompt':
+        return 'New tribe prompt';
+      case 'tribe_invite':
+        return 'Tribe invitation';
+      case 'message_request':
+        return 'Message request';
+      case 'new_follower':
+        return 'New connection request';
+      case 'friend_request':
+        return 'Connection request';
+      case 'friend_accepted':
+        return 'Connection accepted';
+      case 'comment_reply':
+        return 'New reply';
+      case 'comment_like':
+        return 'Reaction on your reply';
+      case 'post_like':
+        return 'Reaction on your vent';
+      case 'admin_broadcast':
+        return 'Announcement';
+      default:
+        return kind;
     }
   }
 
@@ -4555,7 +5286,7 @@ class SupabaseBackend {
   }
 
   Post _postFromRow(Map<String, dynamic> r) {
-    final rawEdited  = r['edited_at']  as String?;
+    final rawEdited = r['edited_at'] as String?;
     final rawDeleted = r['deleted_at'] as String?;
     return Post(
       postId: r['post_id'] as String,
@@ -4575,7 +5306,7 @@ class SupabaseBackend {
       audioUrl: r['audio_url'] as String?,
       audioDurationSeconds: r['audio_duration_seconds'] as int?,
       createdAt: DateTime.parse(r['created_at'] as String),
-      editedAt:  rawEdited  == null ? null : DateTime.parse(rawEdited),
+      editedAt: rawEdited == null ? null : DateTime.parse(rawEdited),
       deletedAt: rawDeleted == null ? null : DateTime.parse(rawDeleted),
       lockedAt: r['locked_at'] == null
           ? null
@@ -4627,6 +5358,7 @@ class SupabaseBackend {
       keeperId: r['keeper_id'] as String?,
       keeperPseudonym: r['keeper_pseudonym'] as String?,
       keeperAvatarSeed: r['keeper_avatar_seed'] as String?,
+      keeperProfilePhotoUrl: r['keeper_profile_photo_url'] as String?,
       keeperIsVerified: (r['keeper_is_verified'] as bool?) ?? false,
       createdAt: DateTime.parse(r['created_at'] as String),
       joinedByMe: _joinedTribes.contains(r['tribe_id']),
@@ -4635,6 +5367,7 @@ class SupabaseBackend {
       spotlightUserId: r['spotlight_user_id'] as String?,
       spotlightPseudonym: r['spotlight_pseudonym'] as String?,
       spotlightAvatarSeed: r['spotlight_avatar_seed'] as String?,
+      spotlightProfilePhotoUrl: r['spotlight_profile_photo_url'] as String?,
       spotlightNote: r['spotlight_note'] as String?,
       spotlightSetAt:
           spotlightSetAtRaw == null ? null : DateTime.parse(spotlightSetAtRaw),
@@ -4646,6 +5379,20 @@ class SupabaseBackend {
             : null,
       ),
       pinnedMessageId: r['pinned_message_id'] as String?,
+      lifecycleStatus: (r['lifecycle_status'] as String?) ?? 'active',
+      visibility: (r['visibility'] as String?) ??
+          ((r['is_private'] as bool?) == true ? 'private' : 'public'),
+      tags: ((r['tags'] as List<dynamic>?) ?? const [])
+          .map((e) => e.toString())
+          .toList(growable: false),
+      pausedAt: _coerceDate(r['paused_at']),
+      archivedAt: _coerceDate(r['archived_at']),
+      deletionRequestedAt: _coerceDate(r['deletion_requested_at']),
+      deletionPurgeAt: _coerceDate(r['deletion_purge_at']),
+      lifecycleReason: r['lifecycle_reason'] as String?,
+      managementSettings: r['settings'] is Map
+          ? Map<String, dynamic>.from(r['settings'] as Map)
+          : const {},
     );
   }
 
@@ -4740,8 +5487,8 @@ class SupabaseBackend {
   /// Capture that the current user listened to a whisper (dedup per user;
   /// first listen bumps the public plays_count).
   Future<void> recordWhisperListen(String whisperId) async {
-    await _client.rpc('record_whisper_listen',
-        params: {'p_whisper_id': whisperId});
+    await _client
+        .rpc('record_whisper_listen', params: {'p_whisper_id': whisperId});
   }
 
   /// Friendly, UI-facing auth failure types — see [signUp] / [signIn].
@@ -4776,7 +5523,8 @@ class SupabaseBackend {
 
 class UsernameTakenException implements Exception {
   @override
-  String toString() => 'That name is already in someone\'s sanctuary — try another.';
+  String toString() =>
+      'That name is already in someone\'s sanctuary — try another.';
 }
 
 class InvalidCredentialsException implements Exception {

@@ -106,7 +106,7 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
                 'Use email if you want password reset to come to your inbox. '
                 'Your handle on Venttly stays anonymous either way.',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.7),
+                  color: context.ink.withOpacity(0.7),
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                   height: 1.4,
@@ -241,10 +241,10 @@ class _CheckInboxState extends StatelessWidget {
                     color: VentlyColors.berryMagenta, size: 42),
               ),
               const SizedBox(height: 18),
-              const Text(
+              Text(
                 'Check your inbox',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 22,
                 ),
@@ -254,7 +254,7 @@ class _CheckInboxState extends StatelessWidget {
                 'We sent a confirmation link to:\n$email',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.72),
+                  color: context.ink.withOpacity(0.72),
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                   height: 1.5,

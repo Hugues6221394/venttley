@@ -160,7 +160,7 @@ class _WhisperAudioPreviewState extends State<WhisperAudioPreview> {
                   Text(
                     '${_fmt(pos)} / ${_fmt(total)}',
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy.withOpacity(0.65),
+                      color: context.ink.withOpacity(0.65),
                       fontWeight: FontWeight.w800,
                       fontSize: 12,
                     ),

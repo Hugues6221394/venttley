@@ -21,7 +21,7 @@ class WelcomeScreen extends StatelessWidget {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: isDark
-                ? [VentlyColors.charcoal, VentlyColors.cardDark]
+                ? [Theme.of(context).scaffoldBackgroundColor, Theme.of(context).colorScheme.surface]
                 : [
                     const Color(0xFFFFEEF3),
                     const Color(0xFFFFF8F8),
@@ -53,7 +53,7 @@ class WelcomeScreen extends StatelessWidget {
                                   fontWeight: FontWeight.w900,
                                   color: isDark
                                       ? VentlyColors.softOffWhite
-                                      : VentlyColors.deepBurgundy,
+                                      : context.ink,
                                 ),
                       ),
                       const SizedBox(height: 12),
@@ -166,7 +166,7 @@ class _OrDivider extends StatelessWidget {
           child: Text(
             'or continue with',
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.5),
+              color: context.ink.withOpacity(0.5),
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -246,7 +246,7 @@ class _SocialButton extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         minimumSize: const Size.fromHeight(50),
         side: BorderSide(color: VentlyColors.softMauve.withOpacity(0.6)),
-        foregroundColor: VentlyColors.deepBurgundy,
+        foregroundColor: context.ink,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
       ),
@@ -355,7 +355,7 @@ class _Bullet extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 15,
                   ),
@@ -364,7 +364,7 @@ class _Bullet extends StatelessWidget {
                 Text(
                   text,
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                    color: context.ink.withOpacity(0.62),
                     fontWeight: FontWeight.w600,
                     height: 1.25,
                   ),
@@ -417,11 +417,11 @@ void _legacyShowEmailSoonSheet(BuildContext context) {
                     color: scheme.primary, size: 38),
               ),
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 'Email signup shipping this week',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 16,
                 ),
@@ -433,7 +433,7 @@ void _legacyShowEmailSoonSheet(BuildContext context) {
                 'For today, the anonymous flow is the path forward.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.65),
+                  color: context.ink.withOpacity(0.65),
                   fontWeight: FontWeight.w700,
                   fontSize: 12.5,
                   height: 1.45,

@@ -65,10 +65,10 @@ class _MembersBodyState extends ConsumerState<_MembersBody> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Members',
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                       fontWeight: FontWeight.w900,
                       fontSize: 24,
                     ),
@@ -144,9 +144,7 @@ class _MembersBodyState extends ConsumerState<_MembersBody> {
             data: (members) {
               var list = members.toList();
               if (_filter == 'mods') {
-                list = list
-                    .where((m) => m.isMod || m.isKeeper)
-                    .toList();
+                list = list.where((m) => m.isMod || m.isKeeper).toList();
               } else if (_filter == 'newest') {
                 list.sort((a, b) => b.joinedAt.compareTo(a.joinedAt));
               }
@@ -168,8 +166,9 @@ class _MembersBodyState extends ConsumerState<_MembersBody> {
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: FilledButton.icon(
-                onPressed: () =>
-                    context.push('/tribe/${widget.tribe.slug}/manage?tab=members'),
+                onPressed: () => context.push(
+                  '/tribe/${widget.tribe.slug}/manage/settings/members',
+                ),
                 icon: const Icon(Icons.admin_panel_settings_outlined),
                 label: const Text('Full member management'),
               ),
@@ -218,7 +217,7 @@ class _MemberTile extends StatelessWidget {
                       Text(
                         '${member.role.toUpperCase()} · joined ${_ago(member.joinedAt)}',
                         style: TextStyle(
-                          color: VentlyColors.deepBurgundy.withOpacity(0.58),
+                          color: context.ink.withOpacity(0.58),
                           fontWeight: FontWeight.w700,
                           fontSize: 11,
                         ),
@@ -229,14 +228,17 @@ class _MemberTile extends StatelessWidget {
                 PopupMenuButton<String>(
                   onSelected: (v) {
                     if (v == 'manage') {
-                      context.push('/tribe/$tribeSlug/manage?tab=members');
+                      context.push(
+                        '/tribe/$tribeSlug/manage/settings/members',
+                      );
                     } else if (v == 'profile') {
                       context.push('/user/${member.userId}');
                     }
                   },
                   itemBuilder: (_) => const [
                     PopupMenuItem(value: 'manage', child: Text('Manage')),
-                    PopupMenuItem(value: 'profile', child: Text('View profile')),
+                    PopupMenuItem(
+                        value: 'profile', child: Text('View profile')),
                   ],
                 ),
               ],
@@ -275,10 +277,10 @@ class _KpiChip extends StatelessWidget {
           children: [
             Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 18,
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
               ),
             ),
             Text(
@@ -286,7 +288,7 @@ class _KpiChip extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 10,
-                color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                color: context.ink.withOpacity(0.55),
               ),
             ),
           ],

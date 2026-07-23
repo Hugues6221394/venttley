@@ -86,14 +86,14 @@ Future<void> showTribeMessageActions(
               ref.invalidate(tribeMessagesProvider(tribeId));
             },
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(0, 4, 0, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
             child: Text(
               'React',
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 12,
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
               ),
             ),
           ),
@@ -179,13 +179,13 @@ Future<void> _confirmTribeDelete(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(bottom: 6, left: 4),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6, left: 4),
             child: Text('Delete message?',
                 style: TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: 16,
-                    color: VentlyColors.deepBurgundy)),
+                    color: context.ink)),
           ),
           if (canEveryone && onEveryone != null)
             _ActionTile(
@@ -231,7 +231,7 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = accent ?? VentlyColors.deepBurgundy;
+    final color = accent ?? context.ink;
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: Icon(icon, color: color),
@@ -272,7 +272,9 @@ class MessageHugRow extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFE3EC),
+                color: context.isDark
+                    ? VentlyColors.berryMagenta.withOpacity(0.16)
+                    : const Color(0xFFFFE3EC),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -320,7 +322,7 @@ class ReplyQuote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final preview = content?.trim().isNotEmpty == true ? content! : 'Attachment';
-    final fg = lightOnDark ? Colors.white : VentlyColors.deepBurgundy;
+    final fg = lightOnDark ? Colors.white : context.ink;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -390,7 +392,7 @@ class PinnedMessageBanner extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
       child: Material(
-        color: Colors.white.withOpacity(0.72),
+        color: context.glass(0.72),
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),

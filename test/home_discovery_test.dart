@@ -70,7 +70,8 @@ void main() {
     );
 
     expect(model.activeStories.map((s) => s.postId), ['active-story']);
-    expect(model.activeStories.single.expiresAt, now.add(const Duration(hours: 21)));
+    expect(model.activeStories.single.expiresAt,
+        now.add(const Duration(hours: 21)));
   });
 
   test('premium home model ranks trending topics and tribes', () {
@@ -109,7 +110,8 @@ void main() {
     expect(model.kpis.first.label, 'Live posts');
     expect(model.kpis.first.value, '3');
     expect(model.trendingTopics.first.category, 'campus');
-    expect(model.trendingTopics.first.score, greaterThan(model.trendingTopics.last.score));
+    expect(model.trendingTopics.first.score,
+        greaterThan(model.trendingTopics.last.score));
     // Joined tribes get pushed to the top of the rail so people see the
     // communities they already belong to first; remaining order falls
     // back to member count.
@@ -117,6 +119,71 @@ void main() {
       model.trendingTribes.map((t) => t.tribeId),
       ['quiet', 'campus', 'music'],
     );
+  });
+
+  test('topic stats count every post and reply in an active category', () {
+    final topics = HomeDiscovery.topicStatsFromPosts(
+      [
+        post(
+          id: 'recent-1',
+          category: 'adulting',
+          createdAt: now.subtract(const Duration(hours: 2)),
+          likes: 3,
+          comments: 5,
+        ),
+        post(
+          id: 'recent-2',
+          category: 'adulting',
+          createdAt: now.subtract(const Duration(days: 4)),
+          likes: 7,
+          comments: 2,
+        ),
+        // Older posts still belong in the exact category totals once that
+        // category has current activity.
+        post(
+          id: 'older',
+          category: 'adulting',
+          createdAt: now.subtract(const Duration(days: 90)),
+          likes: 11,
+          comments: 9,
+        ),
+        post(
+          id: 'story',
+          category: 'adulting',
+          createdAt: now.subtract(const Duration(hours: 1)),
+          comments: 50,
+          story: true,
+        ),
+      ],
+      now: now,
+    );
+
+    expect(topics, hasLength(1));
+    expect(topics.single.category, 'adulting');
+    expect(topics.single.postCount, 3);
+    expect(topics.single.commentCount, 16);
+    expect(topics.single.reactionCount, 21);
+  });
+
+  test('topic stats omit categories without activity in the trend window', () {
+    final topics = HomeDiscovery.topicStatsFromPosts(
+      [
+        post(
+          id: 'stale',
+          category: 'stale-topic',
+          createdAt: now.subtract(const Duration(days: 31)),
+          comments: 20,
+        ),
+        post(
+          id: 'active',
+          category: 'fresh-topic',
+          createdAt: now.subtract(const Duration(days: 2)),
+        ),
+      ],
+      now: now,
+    );
+
+    expect(topics.map((topic) => topic.category), ['fresh-topic']);
   });
 
   test('friend stories include only self and accepted friends', () {

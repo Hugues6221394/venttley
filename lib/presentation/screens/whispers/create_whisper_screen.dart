@@ -141,8 +141,7 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
       voiceFilter: _voiceFilter,
       backgroundBytes: _backgroundBytes,
       title: _titleCtl.text.trim().isEmpty ? null : _titleCtl.text.trim(),
-      description:
-          _descCtl.text.trim().isEmpty ? null : _descCtl.text.trim(),
+      description: _descCtl.text.trim().isEmpty ? null : _descCtl.text.trim(),
     );
     if (confirmed && mounted) {
       await _publish();
@@ -172,32 +171,31 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
         _backgroundUploadedUrl = bgUrl;
       }
       // 3. Publish
-      await repo.createWhisper(
+      final whisperId = await repo.createWhisper(
         audioPath: upload.path,
         audioUrl: upload.url,
         audioDurationSeconds: _recordedSeconds,
         category: _category,
         backgroundImageUrl: bgUrl,
         voiceFilter: _voiceFilter,
-        title:
-            _titleCtl.text.trim().isEmpty ? null : _titleCtl.text.trim(),
-        description:
-            _descCtl.text.trim().isEmpty ? null : _descCtl.text.trim(),
+        title: _titleCtl.text.trim().isEmpty ? null : _titleCtl.text.trim(),
+        description: _descCtl.text.trim().isEmpty ? null : _descCtl.text.trim(),
       );
       ref.invalidate(whispersFeedProvider);
       ref.invalidate(myWhispersProvider);
       ref.invalidate(popularWhispersProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Whisper published — swipe the feed to hear it.')),
+        const SnackBar(content: Text('Whisper published.')),
       );
-      context.go('/whispers');
+      context.go('/whispers?whisper=$whisperId');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            UserFriendlyErrors.message(e, fallback: 'Could not publish whisper.'),
+            UserFriendlyErrors.message(e,
+                fallback: 'Could not publish whisper.'),
           ),
         ),
       );
@@ -215,7 +213,7 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
         title: const Text('Record a Whisper',
             style: TextStyle(fontWeight: FontWeight.w900)),
         backgroundColor: Colors.transparent,
-        foregroundColor: VentlyColors.deepBurgundy,
+        foregroundColor: context.ink,
         elevation: 0,
         actions: [
           TextButton(
@@ -272,75 +270,76 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
                     durationSeconds: _recordedSeconds,
                   ),
                 ],
-              const SizedBox(height: 18),
-              const _SectionLabel(label: 'Category'),
-              const SizedBox(height: 8),
-              _CategoryPicker(
-                active: _category,
-                onPick: (c) => setState(() => _category = c),
-              ),
-              const SizedBox(height: 18),
-              const _SectionLabel(label: 'Voice filter'),
-              const SizedBox(height: 8),
-              _VoiceFilterPicker(
-                active: _voiceFilter,
-                onPick: (v) => setState(() => _voiceFilter = v),
-              ),
-              const SizedBox(height: 18),
-              const _SectionLabel(label: 'Title (optional)'),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _titleCtl,
-                maxLength: 80,
-                style: const TextStyle(
-                  color: VentlyColors.deepBurgundy,
-                  fontWeight: FontWeight.w700,
+                const SizedBox(height: 18),
+                const _SectionLabel(label: 'Category'),
+                const SizedBox(height: 8),
+                _CategoryPicker(
+                  active: _category,
+                  onPick: (c) => setState(() => _category = c),
                 ),
-                decoration: InputDecoration(
-                  hintText: 'A tiny headline for your story…',
-                  hintStyle: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.42),
+                const SizedBox(height: 18),
+                const _SectionLabel(label: 'Voice filter'),
+                const SizedBox(height: 8),
+                _VoiceFilterPicker(
+                  active: _voiceFilter,
+                  onPick: (v) => setState(() => _voiceFilter = v),
+                ),
+                const SizedBox(height: 18),
+                const _SectionLabel(label: 'Title (optional)'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _titleCtl,
+                  maxLength: 80,
+                  style: TextStyle(
+                    color: context.ink,
+                    fontWeight: FontWeight.w700,
                   ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: VentlyColors.softMauve.withOpacity(0.5),
+                  decoration: InputDecoration(
+                    hintText: 'A tiny headline for your story…',
+                    hintStyle: TextStyle(
+                      color: context.ink.withOpacity(0.42),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(
+                        color: VentlyColors.softMauve.withOpacity(0.5),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              const _SectionLabel(label: 'Description (optional)'),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _descCtl,
-                maxLength: 280,
-                maxLines: 3,
-                style: const TextStyle(
-                  color: VentlyColors.deepBurgundy,
-                  fontWeight: FontWeight.w700,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Add context, advice, or a question for listeners…',
-                  hintStyle: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.42),
+                const SizedBox(height: 8),
+                const _SectionLabel(label: 'Description (optional)'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _descCtl,
+                  maxLength: 280,
+                  maxLines: 3,
+                  style: TextStyle(
+                    color: context.ink,
+                    fontWeight: FontWeight.w700,
                   ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: VentlyColors.softMauve.withOpacity(0.5),
+                  decoration: InputDecoration(
+                    hintText:
+                        'Add context, advice, or a question for listeners…',
+                    hintStyle: TextStyle(
+                      color: context.ink.withOpacity(0.42),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(
+                        color: VentlyColors.softMauve.withOpacity(0.5),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -354,7 +353,7 @@ class _SectionLabel extends StatelessWidget {
     return Text(
       label.toUpperCase(),
       style: TextStyle(
-        color: VentlyColors.deepBurgundy.withOpacity(0.6),
+        color: context.ink.withOpacity(0.6),
         fontWeight: FontWeight.w900,
         fontSize: 11,
         letterSpacing: 1.0,
@@ -391,7 +390,7 @@ class _BackgroundPreview extends StatelessWidget {
                     end: Alignment.bottomRight,
                     colors: [
                       VentlyColors.berryMagenta.withOpacity(0.9),
-                      VentlyColors.deepBurgundy,
+                      context.ink,
                     ],
                   ),
                 ),
@@ -458,10 +457,8 @@ class _RecordButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final mm = elapsed.inMinutes.toString().padLeft(1, '0');
     final ss = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
-    final recordedMm =
-        (recordedSeconds ~/ 60).toString().padLeft(1, '0');
-    final recordedSs =
-        (recordedSeconds % 60).toString().padLeft(2, '0');
+    final recordedMm = (recordedSeconds ~/ 60).toString().padLeft(1, '0');
+    final recordedSs = (recordedSeconds % 60).toString().padLeft(2, '0');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
       decoration: BoxDecoration(
@@ -510,8 +507,8 @@ class _RecordButton extends StatelessWidget {
                       : hasRecording
                           ? 'Captured  $recordedMm:$recordedSs'
                           : 'Tap to record',
-                  style: const TextStyle(
-                    color: VentlyColors.deepBurgundy,
+                  style: TextStyle(
+                    color: context.ink,
                     fontWeight: FontWeight.w900,
                     fontSize: 15,
                   ),
@@ -524,7 +521,7 @@ class _RecordButton extends StatelessWidget {
                           ? 'Preview below, then tap Publish to review.'
                           : 'Share a thought in your own voice.',
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                    color: context.ink.withOpacity(0.62),
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -561,12 +558,9 @@ class _CategoryPicker extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: c == active
-                    ? VentlyColors.berryMagenta
-                    : Colors.white,
+                color: c == active ? VentlyColors.berryMagenta : Colors.white,
                 borderRadius: BorderRadius.circular(18),
                 border: c == active
                     ? null
@@ -578,7 +572,7 @@ class _CategoryPicker extends StatelessWidget {
                 style: TextStyle(
                   color: c == active
                       ? Colors.white
-                      : VentlyColors.deepBurgundy.withOpacity(0.78),
+                      : context.ink.withOpacity(0.78),
                   fontWeight: FontWeight.w900,
                   fontSize: 11.5,
                 ),
@@ -606,8 +600,7 @@ class _VoiceFilterPicker extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: f == active
                     ? VentlyColors.berryMagenta

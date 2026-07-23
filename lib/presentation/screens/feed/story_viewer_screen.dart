@@ -10,6 +10,7 @@ import '../../../domain/home/home_discovery.dart';
 import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/tagged_text.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_empty_state.dart';
 import '../../widgets/vently_error_state.dart';
@@ -53,9 +54,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
   void _ensureLoaded(List<Post> posts) {
     if (_stories.isNotEmpty) return;
     final now = DateTime.now();
-    final mapped = posts
-        .map((p) => VentStory.fromPost(p, now: now))
-        .toList()
+    final mapped = posts.map((p) => VentStory.fromPost(p, now: now)).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final idx = mapped.indexWhere((s) => s.postId == widget.initialPostId);
     setState(() {
@@ -122,9 +121,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
 
   String _reactionLabel(String reaction) => switch (reaction) {
         'hug' => 'Hug sent',
-        'relate' => 'Relate sent',
-        'been_there' => 'Been there sent',
-        'crazy' => 'Spark sent',
+        'felt' => 'Relate sent',
+        'strong' => 'Been there sent',
+        'proud' => 'Spark sent',
         _ => '${PostReactions.label(reaction)} sent',
       };
 
@@ -199,6 +198,107 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
     }
   }
 
+  Future<void> _showOwnerActions() async {
+    _pause();
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF21161B),
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListTile(
+          leading:
+              const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+          title: const Text(
+            'Delete story',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+          ),
+          subtitle: const Text(
+            'Remove it now instead of waiting 24 hours.',
+            style: TextStyle(color: Colors.white70),
+          ),
+          onTap: () => Navigator.of(context).pop('delete'),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'delete') {
+      await _deleteCurrentStory();
+    } else {
+      _resume();
+    }
+  }
+
+  Future<void> _deleteCurrentStory() async {
+    final story = _stories[_index];
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete this story?'),
+            content: const Text(
+              'It will disappear for everyone and cannot be restored.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style:
+                    FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) {
+      _resume();
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      final deleted =
+          await ref.read(repositoryProvider).deletePost(story.postId);
+      if (!deleted) throw StateError('Story was not deleted');
+      ref.invalidate(feedPostsProvider);
+      ref.invalidate(homeFriendStoriesProvider);
+      ref.invalidate(friendStoryPostsProvider);
+      ref.invalidate(liveStoriesProvider);
+      if (!mounted) return;
+      setState(() {
+        _stories = [..._stories]..removeAt(_index);
+        if (_stories.isNotEmpty && _index >= _stories.length) {
+          _index = _stories.length - 1;
+        }
+        _busy = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Story deleted.')),
+      );
+      if (_stories.isEmpty) {
+        context.go('/feed');
+      } else {
+        _start();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not delete this story.',
+            ),
+          ),
+        ),
+      );
+      _resume();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final live = ref.watch(liveStoriesProvider);
@@ -219,7 +319,8 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
             return VentlyEmptyState(
               icon: Icons.auto_stories_outlined,
               title: 'No friend stories right now',
-              subtitle: 'When friends post, their stories stay here for 24 hours.',
+              subtitle:
+                  'When friends post, their stories stay here for 24 hours.',
               actionLabel: 'Back to Home',
               onAction: () => context.go('/feed'),
             );
@@ -229,12 +330,17 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
           });
           if (_stories.isEmpty) {
             return const Center(
-              child: CircularProgressIndicator(color: VentlyColors.berryMagenta),
+              child:
+                  CircularProgressIndicator(color: VentlyColors.berryMagenta),
             );
           }
           final story = _stories[_index];
-          final canReply =
-              story.authorId != null && story.authorId != me?.userId;
+          final authenticatedUserId =
+              ref.read(repositoryProvider).authenticatedUserId;
+          final isOwner = story.authorId != null &&
+              (story.authorId == me?.userId ||
+                  story.authorId == authenticatedUserId);
+          final canReply = story.authorId != null && !isOwner;
           return _ViewerBody(
             stories: _stories,
             index: _index,
@@ -242,7 +348,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
             busy: _busy,
             reply: _reply,
             canReply: canReply,
+            isOwner: isOwner,
             onClose: () => Navigator.of(context).maybePop(),
+            onOwnerActions: _showOwnerActions,
             onTapLeft: _back,
             onTapRight: _advance,
             onLongPressStart: (_) => _pause(),
@@ -264,7 +372,9 @@ class _ViewerBody extends StatelessWidget {
     required this.busy,
     required this.reply,
     required this.canReply,
+    required this.isOwner,
     required this.onClose,
+    required this.onOwnerActions,
     required this.onTapLeft,
     required this.onTapRight,
     required this.onLongPressStart,
@@ -279,7 +389,9 @@ class _ViewerBody extends StatelessWidget {
   final bool busy;
   final TextEditingController reply;
   final bool canReply;
+  final bool isOwner;
   final VoidCallback onClose;
+  final VoidCallback onOwnerActions;
   final VoidCallback onTapLeft;
   final VoidCallback onTapRight;
   final GestureLongPressStartCallback onLongPressStart;
@@ -344,7 +456,12 @@ class _ViewerBody extends StatelessWidget {
                         controller: progress,
                       ),
                       const SizedBox(height: 12),
-                      _AuthorHeader(story: story, onClose: onClose),
+                      _AuthorHeader(
+                        story: story,
+                        isOwner: isOwner,
+                        onOwnerActions: onOwnerActions,
+                        onClose: onClose,
+                      ),
                     ],
                   ),
                 ),
@@ -446,8 +563,15 @@ class _ProgressSegments extends StatelessWidget {
 }
 
 class _AuthorHeader extends StatelessWidget {
-  const _AuthorHeader({required this.story, required this.onClose});
+  const _AuthorHeader({
+    required this.story,
+    required this.isOwner,
+    required this.onOwnerActions,
+    required this.onClose,
+  });
   final VentStory story;
+  final bool isOwner;
+  final VoidCallback onOwnerActions;
   final VoidCallback onClose;
 
   @override
@@ -497,6 +621,12 @@ class _AuthorHeader extends StatelessWidget {
             ],
           ),
         ),
+        if (isOwner)
+          IconButton(
+            tooltip: 'Story options',
+            onPressed: onOwnerActions,
+            icon: const Icon(Icons.more_horiz_rounded, color: Colors.white),
+          ),
         IconButton(
           onPressed: onClose,
           icon: const Icon(Icons.close_rounded, color: Colors.white),
@@ -533,7 +663,7 @@ class _StoryCanvas extends StatelessWidget {
       color: const Color(0xFF1A1014),
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Text(
+      child: TaggedText(
         '"${story.content}"',
         textAlign: TextAlign.center,
         style: const TextStyle(
@@ -551,11 +681,13 @@ class _ReactionTray extends StatelessWidget {
   const _ReactionTray({required this.onReact});
   final ValueChanged<String> onReact;
 
+  // Values must be valid reaction_type enum members ('relate' /
+  // 'been_there' / 'crazy' threw 22P02 server-side and never landed).
   static const _items = [
     (Icons.favorite_border, 'Hug', 'hug'),
-    (Icons.mood_outlined, 'Relate', 'relate'),
-    (Icons.group_outlined, 'Been there', 'been_there'),
-    (Icons.auto_awesome_rounded, 'Spark', 'crazy'),
+    (Icons.mood_outlined, 'Relate', 'felt'),
+    (Icons.group_outlined, 'Been there', 'strong'),
+    (Icons.auto_awesome_rounded, 'Spark', 'proud'),
   ];
 
   @override

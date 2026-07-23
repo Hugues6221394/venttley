@@ -4,6 +4,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants.dart';
+import '../../core/pii_scrubber.dart';
 
 /// Lightweight observability layer.
 ///
@@ -25,7 +26,8 @@ class TelemetryService {
     Map<String, Object?> props = const {},
     String severity = 'info',
   }) async {
-    _breadcrumb(name, props, severity);
+    final scrubbed = PiiScrubber.scrub(props);
+    _breadcrumb(name, scrubbed, severity);
     if (VentlyConfig.useMockBackend) return;
     try {
       await Supabase.instance.client.rpc(
@@ -33,7 +35,7 @@ class TelemetryService {
         params: {
           'p_name': name,
           'p_severity': severity,
-          'p_props': props,
+          'p_props': scrubbed,
         },
       );
     } catch (_) {
@@ -49,13 +51,14 @@ class TelemetryService {
     String? name,
     Map<String, Object?> context = const {},
   }) async {
+    final scrubbedError = PiiScrubber.scrubError(error);
     if (_sentryReady) {
-      unawaited(Sentry.captureException(error, stackTrace: stack));
+      unawaited(Sentry.captureException(scrubbedError, stackTrace: stack));
     }
     await event(
       name ?? 'unhandled_error',
       props: {
-        'error': error.toString(),
+        'error': scrubbedError.toString(),
         ...context,
       },
       severity: 'error',

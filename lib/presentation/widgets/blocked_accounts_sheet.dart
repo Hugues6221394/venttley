@@ -35,10 +35,10 @@ class BlockedAccountsSheet extends ConsumerWidget {
           child: Column(
             children: [
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 'Blocked accounts',
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                   fontWeight: FontWeight.w900,
                   fontSize: 16,
                 ),
@@ -48,7 +48,7 @@ class BlockedAccountsSheet extends ConsumerWidget {
                 'Blocked users cannot message you or send friend requests.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                  color: context.ink.withOpacity(0.62),
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   height: 1.35,
@@ -57,11 +57,11 @@ class BlockedAccountsSheet extends ConsumerWidget {
               const SizedBox(height: 12),
               Expanded(
                 child: blocks.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           "You haven't blocked anyone.",
                           style: TextStyle(
-                            color: VentlyColors.deepBurgundy,
+                            color: context.ink,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -76,11 +76,12 @@ class BlockedAccountsSheet extends ConsumerWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 8),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: ctx.glass(1),
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
-                                color:
-                                    VentlyColors.softMauve.withOpacity(0.3),
+                                color: ctx.isDark
+                                    ? ctx.glassBorder
+                                    : VentlyColors.softMauve.withOpacity(0.3),
                               ),
                             ),
                             child: Row(
@@ -94,8 +95,8 @@ class BlockedAccountsSheet extends ConsumerWidget {
                                 Expanded(
                                   child: Text(
                                     b.pseudonym,
-                                    style: const TextStyle(
-                                      color: VentlyColors.deepBurgundy,
+                                    style: TextStyle(
+                                      color: context.ink,
                                       fontWeight: FontWeight.w900,
                                     ),
                                   ),

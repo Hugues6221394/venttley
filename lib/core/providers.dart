@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/repositories/vently_repository.dart';
 import '../data/services/analytics_service.dart';
@@ -12,6 +13,8 @@ import '../data/services/whisper_player.dart';
 import '../domain/entities/entities.dart';
 import '../domain/home/home_discovery.dart';
 import '../domain/tribe/tribe_chat_hub.dart';
+import '../domain/tribe/tribe_management.dart';
+import '../domain/tribe/tribe_recommendations.dart';
 import '../domain/keeper/keeper_overview.dart';
 import '../domain/keeper/keeper_mode.dart';
 import '../domain/keeper/keeper_studio_v2.dart';
@@ -49,7 +52,8 @@ final moderationServiceProvider = Provider<ModerationService>((ref) {
 });
 
 /// Reactive session — null when logged out.
-final sessionProvider = StateNotifierProvider<SessionController, AppUser?>((ref) {
+final sessionProvider =
+    StateNotifierProvider<SessionController, AppUser?>((ref) {
   final repo = ref.watch(repositoryProvider);
   return SessionController(repo);
 });
@@ -68,7 +72,7 @@ class SessionController extends StateNotifier<AppUser?> {
   void _identifyDownstream(AppUser user) {
     final traits = <String, Object?>{
       'safety_tier': user.safetyTier,
-      'user_role':   user.userRole,
+      'user_role': user.userRole,
       'is_verified': user.isVerified,
       // Pseudonym + birth year are PII-adjacent — leave them out so we
       // never end up grouping people by anonymous handle in PostHog.
@@ -141,7 +145,8 @@ class SessionController extends StateNotifier<AppUser?> {
     required String password,
   }) async {
     final user = await _repo.signInWithEmail(email: email, password: password);
-    await _repo.reactivateMyAccount(); // restore if deactivated / cancel deletion
+    await _repo
+        .reactivateMyAccount(); // restore if deactivated / cancel deletion
     state = user;
     _identifyDownstream(user);
     AnalyticsService.instance.track(Events.signinEmail);
@@ -184,8 +189,7 @@ class SessionController extends StateNotifier<AppUser?> {
 
   /// Attach / change a real recovery email; Supabase emails a confirm link.
   /// The auth-email change only finalises once the user confirms.
-  Future<void> setRecoveryEmail(String email) =>
-      _repo.setRecoveryEmail(email);
+  Future<void> setRecoveryEmail(String email) => _repo.setRecoveryEmail(email);
 
   /// Sign out of every device (revokes all refresh tokens), then clear state.
   Future<void> signOutEverywhere() async {
@@ -231,7 +235,8 @@ class SessionController extends StateNotifier<AppUser?> {
     required String token,
   }) async {
     final user = await _repo.verifyPhoneOtp(phone: phone, token: token);
-    await _repo.reactivateMyAccount(); // restore if deactivated / cancel deletion
+    await _repo
+        .reactivateMyAccount(); // restore if deactivated / cancel deletion
     state = user;
     _identifyDownstream(user);
     return user;
@@ -243,7 +248,8 @@ class SessionController extends StateNotifier<AppUser?> {
     required String password,
   }) async {
     final user = await _repo.signIn(username: username, password: password);
-    await _repo.reactivateMyAccount(); // restore if deactivated / cancel deletion
+    await _repo
+        .reactivateMyAccount(); // restore if deactivated / cancel deletion
     state = user;
     _identifyDownstream(user);
     AnalyticsService.instance.track(Events.signinAnonymous);
@@ -290,18 +296,100 @@ class SessionController extends StateNotifier<AppUser?> {
   }
 }
 
-/// Brightness mode controller — defaults to system.
+/// Venttly appearance — light, warm charcoal dark, or pure black (AMOLED).
+/// Flutter's [ThemeMode] only knows light/dark, so black is our own third
+/// option that maps to [ThemeMode.dark] with a true-black theme variant.
+enum VentlyThemeMode { light, dark, black }
+
 final themeModeProvider =
-    StateNotifierProvider<ThemeModeController, ThemeMode>(
+    StateNotifierProvider<ThemeModeController, VentlyThemeMode>(
         (ref) => ThemeModeController());
 
-class ThemeModeController extends StateNotifier<ThemeMode> {
-  ThemeModeController() : super(ThemeMode.light);
-  void toggle() {
-    state = state == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+class ThemeModeController extends StateNotifier<VentlyThemeMode> {
+  ThemeModeController() : super(VentlyThemeMode.light) {
+    _restore();
   }
-  void setMode(ThemeMode mode) => state = mode;
+
+  static const _prefsKey = 'vently.themeMode';
+
+  Future<void> _restore() async {
+    final prefs = await SharedPreferences.getInstance();
+    switch (prefs.getString(_prefsKey)) {
+      case 'dark':
+        state = VentlyThemeMode.dark;
+      case 'black':
+        state = VentlyThemeMode.black;
+      case 'light':
+        state = VentlyThemeMode.light;
+    }
+  }
+
+  Future<void> _persist() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKey, state.name);
+  }
+
+  void setMode(VentlyThemeMode mode) {
+    state = mode;
+    _persist();
+  }
 }
+
+/// Data Saver — for 2G/3G networks and expensive data plans. When on:
+/// smaller image decodes, no whisper autoplay, reduced list prefetch.
+final dataSaverProvider = StateNotifierProvider<DataSaverController, bool>(
+    (ref) => DataSaverController());
+
+class DataSaverController extends StateNotifier<bool> {
+  DataSaverController() : super(false) {
+    _restore();
+  }
+
+  static const _prefsKey = 'vently.dataSaver';
+
+  Future<void> _restore() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getBool(_prefsKey) ?? false;
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    state = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsKey, enabled);
+  }
+}
+
+/// Remote feature flags, server-evaluated with deterministic percentage
+/// rollouts (migration 0118). Updates live when an admin flips a flag.
+final featureFlagsProvider = StreamProvider<Map<String, bool>>((ref) {
+  final me = ref.watch(sessionProvider);
+  if (me == null) return Stream.value(const <String, bool>{});
+  return ref.watch(repositoryProvider).watchFeatureFlags();
+});
+
+/// One flag, with a fallback for when the row doesn't exist yet — default
+/// to enabled for shipped features so a missing row can't dark-launch an
+/// outage.
+bool flagEnabled(WidgetRef ref, String key, {bool fallback = true}) {
+  final flags = ref.watch(featureFlagsProvider).valueOrNull;
+  if (flags == null) return fallback;
+  return flags[key] ?? fallback;
+}
+
+/// Idle-state trending searches (24h hot categories + tribes).
+final trendingSearchesProvider =
+    FutureProvider.autoDispose<List<SearchSuggestion>>((ref) {
+  return ref.watch(repositoryProvider).trendingSearches();
+});
+
+/// Debounced typo-tolerant search typeahead.
+final searchSuggestionsProvider = FutureProvider.autoDispose
+    .family<List<SearchSuggestion>, String>((ref, prefix) async {
+  if (prefix.trim().length < 2) return const <SearchSuggestion>[];
+  // Debounce keystrokes — cancelled instances never hit the network.
+  await Future<void>.delayed(const Duration(milliseconds: 220));
+  return ref.watch(repositoryProvider).searchSuggestions(prefix.trim());
+});
 
 /// Feed filter state.
 ///
@@ -312,7 +400,7 @@ class FeedFilter {
   final String? mood;
   final String? tribeSlug;
   final String scope; // 'global' | 'local'
-  final String sort;  // 'foryou' | 'hot' | 'fresh'
+  final String sort; // 'foryou' | 'hot' | 'fresh'
   const FeedFilter({
     this.category,
     this.mood,
@@ -338,6 +426,7 @@ class FeedFilter {
       sort: sort ?? this.sort,
     );
   }
+
   static const Object _unset = Object();
 }
 
@@ -365,6 +454,15 @@ final homeDiscoveryPostsProvider =
     FutureProvider.autoDispose<List<Post>>((ref) async {
   ref.watch(feedPostsProvider);
   return ref.watch(repositoryProvider).feed(sort: 'hot');
+});
+
+/// Authoritative topic totals from an RLS-aware server aggregate. A feed page
+/// is deliberately not used here because pagination would under-count posts
+/// and replies for every category beyond the first page.
+final trendingTopicStatsProvider =
+    FutureProvider.autoDispose<List<TrendingTopic>>((ref) async {
+  ref.watch(feedPostsProvider);
+  return ref.watch(repositoryProvider).trendingTopicStats();
 });
 
 /// Friend-scoped 24h story posts for Home + the full story viewer.
@@ -419,25 +517,21 @@ final allInboxRoomsStreamProvider = StreamProvider<List<ChatRoom>>((ref) {
 final plugzListProvider = FutureProvider.autoDispose<List<PlugProfile>>(
     (ref) async => ref.watch(repositoryProvider).allPlugz());
 
-final plugByNameProvider =
-    FutureProvider.autoDispose.family<PlugProfile?, String>(
+final plugByNameProvider = FutureProvider.autoDispose
+    .family<PlugProfile?, String>(
         (ref, name) async => ref.watch(repositoryProvider).plug(name));
 
-final plugTribesProvider =
-    FutureProvider.autoDispose.family<List<Tribe>, String>(
-        (ref, plugId) async =>
-            ref.watch(repositoryProvider).tribesByKeeper(plugId));
+final plugTribesProvider = FutureProvider.autoDispose
+    .family<List<Tribe>, String>((ref, plugId) async =>
+        ref.watch(repositoryProvider).tribesByKeeper(plugId));
 
-final plugPostsProvider =
-    FutureProvider.autoDispose.family<List<Post>, String>(
-        (ref, plugId) async => ref
-            .watch(repositoryProvider)
-            .postsByKeeper(plugId, limit: 12));
+final plugPostsProvider = FutureProvider.autoDispose.family<List<Post>, String>(
+    (ref, plugId) async =>
+        ref.watch(repositoryProvider).postsByKeeper(plugId, limit: 12));
 
-final userPostsProvider =
-    FutureProvider.autoDispose.family<List<Post>, String>(
-        (ref, userId) async =>
-            ref.watch(repositoryProvider).postsByAuthor(userId, limit: 12));
+final userPostsProvider = FutureProvider.autoDispose.family<List<Post>, String>(
+    (ref, userId) async =>
+        ref.watch(repositoryProvider).postsByAuthor(userId, limit: 12));
 
 /// Directory of Tribes — filtered by [TribeQuery.category] / .search.
 class TribeQuery {
@@ -447,24 +541,53 @@ class TribeQuery {
 
   @override
   bool operator ==(Object other) =>
-      other is TribeQuery && other.category == category && other.search == search;
+      other is TribeQuery &&
+      other.category == category &&
+      other.search == search;
   @override
   int get hashCode => Object.hash(category, search);
 }
 
-final tribesProvider =
-    FutureProvider.autoDispose.family<List<Tribe>, TribeQuery>(
-        (ref, q) async => ref
-            .watch(repositoryProvider)
-            .tribes(category: q.category, search: q.search));
+final tribesProvider = FutureProvider.autoDispose
+    .family<List<Tribe>, TribeQuery>((ref, q) async => ref
+        .watch(repositoryProvider)
+        .tribes(category: q.category, search: q.search));
 
-final tribeBySlugProvider =
-    FutureProvider.autoDispose.family<Tribe?, String>(
-        (ref, slug) async => ref.watch(repositoryProvider).tribeBySlug(slug));
+/// Ranked Tribe discovery for the Circle screen. This intentionally reuses
+/// the loaded feed instead of issuing another ranking request, keeping the tab
+/// responsive on slow networks while still adapting to each user's activity.
+final recommendedTribesProvider = FutureProvider.autoDispose
+    .family<List<TribeRecommendation>, TribeQuery>((ref, query) async {
+  final posts = ref.watch(feedPostsProvider).valueOrNull ?? const <Post>[];
+  final tribes = await ref.watch(tribesProvider(query).future);
+  return TribeRecommendations.rank(
+    tribes: tribes,
+    personalizedPosts: posts,
+  );
+});
+
+final tribeBySlugProvider = FutureProvider.autoDispose.family<Tribe?, String>(
+    (ref, slug) async => ref.watch(repositoryProvider).tribeBySlug(slug));
 
 /// Tribes the current user keeps (manages). Plug Dashboard data source.
 final tribesIKeepProvider = FutureProvider.autoDispose<List<Tribe>>(
     (ref) async => ref.watch(repositoryProvider).tribesIKeep());
+
+final tribeManagementProvider = FutureProvider.autoDispose
+    .family<TribeManagementOverview, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).tribeManagementOverview(tribeId));
+
+final tribeJoinRequestsProvider = FutureProvider.autoDispose
+    .family<List<TribeJoinRequest>, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).tribeJoinRequests(tribeId));
+
+final tribeAuditLogProvider = FutureProvider.autoDispose
+    .family<List<TribeAuditEvent>, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).tribeAuditLog(tribeId));
+
+final managedTribePostsProvider = FutureProvider.autoDispose
+    .family<List<TribeManagedPost>, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).managedTribePosts(tribeId));
 
 /// Authoritative keeper mode from `is_keeper_mode` RPC (0062).
 final keeperModeProvider = FutureProvider.autoDispose<KeeperMode>((ref) async {
@@ -490,8 +613,7 @@ final isKeeperProvider = FutureProvider.autoDispose<bool>((ref) async {
 });
 
 /// Primary tribe for studio dashboards (highest member count among kept).
-final primaryKeeperTribeProvider =
-    Provider.autoDispose<Tribe?>((ref) {
+final primaryKeeperTribeProvider = Provider.autoDispose<Tribe?>((ref) {
   final tribes = ref.watch(tribesIKeepProvider).valueOrNull;
   if (tribes == null || tribes.isEmpty) return null;
   return tribes.first;
@@ -534,15 +656,12 @@ final keeperComodMatrixProvider = FutureProvider.autoDispose
 
 // ─── Spaces (Tribe → Space → Vent, migration 0050) ───────────────────
 
-final spacesByTribeProvider =
-    FutureProvider.autoDispose.family<List<Space>, String>(
-        (ref, tribeId) async =>
-            ref.watch(repositoryProvider).spacesByTribe(tribeId));
+final spacesByTribeProvider = FutureProvider.autoDispose
+    .family<List<Space>, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).spacesByTribe(tribeId));
 
-final spaceByIdProvider =
-    FutureProvider.autoDispose.family<Space?, String>(
-        (ref, spaceId) async =>
-            ref.watch(repositoryProvider).spaceById(spaceId));
+final spaceByIdProvider = FutureProvider.autoDispose.family<Space?, String>(
+    (ref, spaceId) async => ref.watch(repositoryProvider).spaceById(spaceId));
 
 class SpaceFeedQuery {
   final String spaceId;
@@ -550,23 +669,19 @@ class SpaceFeedQuery {
   const SpaceFeedQuery({required this.spaceId, this.sort = 'fresh'});
   @override
   bool operator ==(Object other) =>
-      other is SpaceFeedQuery &&
-      other.spaceId == spaceId &&
-      other.sort == sort;
+      other is SpaceFeedQuery && other.spaceId == spaceId && other.sort == sort;
   @override
   int get hashCode => Object.hash(spaceId, sort);
 }
 
-final spacePostsProvider =
-    FutureProvider.autoDispose.family<List<Post>, SpaceFeedQuery>(
-        (ref, q) async => ref
-            .watch(repositoryProvider)
-            .postsInSpace(spaceId: q.spaceId, sort: q.sort));
+final spacePostsProvider = FutureProvider.autoDispose
+    .family<List<Post>, SpaceFeedQuery>((ref, q) async => ref
+        .watch(repositoryProvider)
+        .postsInSpace(spaceId: q.spaceId, sort: q.sort));
 
-final spaceSummaryProvider =
-    FutureProvider.autoDispose.family<SpaceSummary?, String>(
-        (ref, spaceId) async =>
-            ref.watch(repositoryProvider).latestSpaceSummary(spaceId));
+final spaceSummaryProvider = FutureProvider.autoDispose
+    .family<SpaceSummary?, String>((ref, spaceId) async =>
+        ref.watch(repositoryProvider).latestSpaceSummary(spaceId));
 
 /// Transient: when set, the next compose-screen open pre-fills this Tribe.
 /// Cleared by the compose screen after it picks it up.
@@ -618,13 +733,23 @@ final crisisResourcesProvider =
 // ----------------------------------------------------------------------
 
 /// All accepted friendships of the current user.
-final myFriendsProvider = FutureProvider.autoDispose<List<FriendSummary>>(
-    (ref) async => ref.watch(repositoryProvider).myFriends());
+final myFriendsProvider =
+    FutureProvider.autoDispose<List<FriendSummary>>((ref) async {
+  ref.watch(friendshipEventsProvider); // live: re-fetch on realtime change
+  return ref.watch(repositoryProvider).myFriends();
+});
 
 /// Incoming pending requests addressed to the current user.
+/// Ticks on every friendships change involving me — makes friend-request
+/// lists + badges live (friendships joined the publication in 0112).
+final friendshipEventsProvider = StreamProvider.autoDispose<int>(
+    (ref) => ref.watch(repositoryProvider).watchFriendshipEvents());
+
 final incomingFriendRequestsProvider =
-    FutureProvider.autoDispose<List<FriendRequest>>(
-        (ref) async => ref.watch(repositoryProvider).incomingFriendRequests());
+    FutureProvider.autoDispose<List<FriendRequest>>((ref) async {
+  ref.watch(friendshipEventsProvider); // re-fetch on realtime change
+  return ref.watch(repositoryProvider).incomingFriendRequests();
+});
 
 /// Outgoing pending requests the current user sent.
 final outgoingFriendRequestsProvider =
@@ -638,17 +763,15 @@ final myBlocksProvider = FutureProvider.autoDispose<List<BlockedUser>>(
 /// Friend status between the current user and a target. Used by every
 /// friend-action button across the app so the chip rewrites itself
 /// after each tap without screen-level state-management plumbing.
-final friendStatusProvider =
-    FutureProvider.autoDispose.family<FriendStatus, String>(
-        (ref, otherUserId) async =>
-            ref.watch(repositoryProvider).friendStatus(otherUserId));
+final friendStatusProvider = FutureProvider.autoDispose
+    .family<FriendStatus, String>((ref, otherUserId) async =>
+        ref.watch(repositoryProvider).friendStatus(otherUserId));
 
 /// Single-roundtrip Friend Profile read. Null = blocked-by-them or
 /// user doesn't exist; the screen renders a 404 in that case.
-final userProfileProvider =
-    FutureProvider.autoDispose.family<UserProfileView?, String>(
-        (ref, userId) async =>
-            ref.watch(repositoryProvider).userProfile(userId));
+final userProfileProvider = FutureProvider.autoDispose
+    .family<UserProfileView?, String>((ref, userId) async =>
+        ref.watch(repositoryProvider).userProfile(userId));
 
 /// 🫂 total hugs received for a user (own-profile banner). Migration 0107.
 final hugsReceivedProvider = FutureProvider.autoDispose.family<int, String>(
@@ -666,70 +789,66 @@ final myVerificationStatusProvider = FutureProvider.autoDispose<String>((ref) {
 // Plugz Creator Studio (migration 0028)
 // ----------------------------------------------------------------------
 
-final tribeStudioStatsProvider =
-    FutureProvider.autoDispose.family<TribeStudioStats?, String>(
-        (ref, tribeId) async =>
-            ref.watch(repositoryProvider).tribeStudioStats(tribeId));
+final tribeStudioStatsProvider = FutureProvider.autoDispose
+    .family<TribeStudioStats?, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).tribeStudioStats(tribeId));
 
-final tribePinnedPostsProvider =
-    FutureProvider.autoDispose.family<List<Post>, String>(
-        (ref, tribeId) async =>
-            ref.watch(repositoryProvider).pinnedPosts(tribeId));
+final tribePinnedPostsProvider = FutureProvider.autoDispose
+    .family<List<Post>, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).pinnedPosts(tribeId));
 
-final tribePromptsProvider =
-    FutureProvider.autoDispose.family<List<ScheduledPrompt>, String>(
-        (ref, tribeId) async =>
-            ref.watch(repositoryProvider).tribePrompts(tribeId));
+final tribePromptsProvider = FutureProvider.autoDispose
+    .family<List<ScheduledPrompt>, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).tribePrompts(tribeId));
 
 /// Reports filed against posts in a specific Tribe — Keeper-only.
-final tribeReportsProvider =
-    FutureProvider.autoDispose.family<List<TribeReport>, String>(
-        (ref, tribeId) async =>
-            ref.watch(repositoryProvider).tribeReports(tribeId));
+final tribeReportsProvider = FutureProvider.autoDispose
+    .family<List<TribeReport>, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).tribeReports(tribeId));
 
 /// Anonymous answers to a Question of the Day.
-final promptAnswersProvider =
-    FutureProvider.autoDispose.family<List<PromptAnswer>, String>(
-        (ref, promptId) async =>
-            ref.watch(repositoryProvider).promptAnswers(promptId));
+final promptAnswersProvider = FutureProvider.autoDispose
+    .family<List<PromptAnswer>, String>((ref, promptId) async =>
+        ref.watch(repositoryProvider).promptAnswers(promptId));
 
 final promptsProvider = FutureProvider.autoDispose<List<PlugPrompt>>(
     (ref) async => ref.watch(repositoryProvider).prompts());
 
-final notificationsProvider = FutureProvider.autoDispose<List<NotificationItem>>(
-    (ref) async => ref.watch(repositoryProvider).notifications());
+/// Live notification feed — realtime via the notifications publication
+/// (migration 0113), so the bell list + badge update the instant a like,
+/// reply, or friend request lands.
+final notificationsProvider =
+    StreamProvider.autoDispose<List<NotificationItem>>(
+        (ref) => ref.watch(repositoryProvider).watchNotifications());
 
 /// Unread notification count — derived from notificationsProvider so it
 /// updates whenever the list does. Used by the bell-icon badge.
-final unreadNotificationsCountProvider =
-    FutureProvider.autoDispose<int>((ref) async {
-  final items = await ref.watch(notificationsProvider.future);
+final unreadNotificationsCountProvider = Provider.autoDispose<int>((ref) {
+  final items = ref.watch(notificationsProvider).valueOrNull ??
+      const <NotificationItem>[];
   return items.where((n) => !n.isRead).length;
 });
 
 /// A poll attached to a single Post, if any.
-final pollForPostProvider =
-    FutureProvider.autoDispose.family<PostPoll?, String>(
-        (ref, postId) async =>
-            ref.watch(repositoryProvider).pollForPost(postId));
+final pollForPostProvider = FutureProvider.autoDispose
+    .family<PostPoll?, String>((ref, postId) async =>
+        ref.watch(repositoryProvider).pollForPost(postId));
 
 /// Pending tribe invitations waiting on the current user.
 final myInvitesProvider = FutureProvider.autoDispose<List<TribeInvite>>(
     (ref) async => ref.watch(repositoryProvider).myPendingInvites());
 
-final tribeMembersProvider =
-    FutureProvider.autoDispose.family<List<TribeMemberRow>, String>(
-        (ref, tribeId) async =>
-            ref.watch(repositoryProvider).tribeMembers(tribeId));
+final tribeMembersProvider = FutureProvider.autoDispose
+    .family<List<TribeMemberRow>, String>((ref, tribeId) async =>
+        ref.watch(repositoryProvider).tribeMembers(tribeId));
 
 final badgeCatalogueProvider =
     FutureProvider.autoDispose<List<BadgeDefinition>>(
         (ref) async => ref.watch(repositoryProvider).badgeCatalogue());
 
-final badgesForUserProvider =
-    FutureProvider.autoDispose.family<List<UserBadge>, String>(
-        (ref, userId) async =>
-            ref.watch(repositoryProvider).badgesFor(userId));
+final badgesForUserProvider = FutureProvider.autoDispose
+    .family<List<UserBadge>, String>(
+        (ref, userId) async => ref.watch(repositoryProvider).badgesFor(userId));
 
 final myStreaksProvider = FutureProvider.autoDispose<List<UserStreak>>(
     (ref) async => ref.watch(repositoryProvider).myStreaks());
@@ -751,7 +870,8 @@ final mySavedWhispersProvider =
 });
 
 /// Current user's published whispers — drives the Profile Whispers tab.
-final myWhispersProvider = FutureProvider.autoDispose<List<Whisper>>((ref) async {
+final myWhispersProvider =
+    FutureProvider.autoDispose<List<Whisper>>((ref) async {
   final me = ref.watch(sessionProvider);
   if (me == null) return const [];
   ref.watch(whispersFeedProvider);
@@ -772,39 +892,62 @@ final popularWhispersProvider =
   return ranked.take(10).toList();
 });
 
-final postByIdProvider =
-    FutureProvider.autoDispose.family<Post?, String>((ref, postId) async {
-  ref.watch(feedPostsProvider);
-  return ref.watch(repositoryProvider).postById(postId);
+/// A post the user has already been allowed to see in the active feed.
+///
+/// Keeping this lookup separate gives post routes an immediate, reliable
+/// fallback while the authoritative detail request refreshes in the
+/// background. It also prevents a brief network/RLS mismatch from turning a
+/// post that is visibly on screen into a blank thread.
+final knownFeedPostProvider = Provider.family<Post?, String>((ref, postId) {
+  return ref
+      .watch(feedPostsProvider)
+      .valueOrNull
+      ?.firstWhereOrNull((post) => post.postId == postId);
 });
 
-final commentsProvider =
-    FutureProvider.autoDispose.family<List<ThreadedComment>, String>(
-        (ref, postId) async =>
-            ref.watch(repositoryProvider).comments(postId));
+final postByIdProvider =
+    FutureProvider.autoDispose.family<Post?, String>((ref, postId) async {
+  final knownPost = ref.watch(knownFeedPostProvider(postId));
+  try {
+    return await ref.watch(repositoryProvider).postById(postId) ?? knownPost;
+  } catch (error, stackTrace) {
+    if (knownPost != null) return knownPost;
+    Error.throwWithStackTrace(error, stackTrace);
+  }
+});
 
-final messagesProvider =
-    StreamProvider.autoDispose.family<List<ChatMessage>, String>(
-        (ref, roomId) =>
-            ref.watch(repositoryProvider).watchMessages(roomId));
+final commentsProvider = FutureProvider.autoDispose
+    .family<List<ThreadedComment>, String>(
+        (ref, postId) async => ref.watch(repositoryProvider).comments(postId));
+
+final messagesProvider = StreamProvider.autoDispose
+    .family<List<ChatMessage>, String>(
+        (ref, roomId) => ref.watch(repositoryProvider).watchMessages(roomId));
 
 /// Per-user DM room preferences (mute, nickname, theme).
-final dmRoomPrefsProvider =
-    FutureProvider.autoDispose.family<DmRoomPrefs, String>(
+final dmRoomPrefsProvider = FutureProvider.autoDispose
+    .family<DmRoomPrefs, String>(
         (ref, roomId) => ref.watch(repositoryProvider).dmRoomPrefs(roomId));
 
 /// Conversation-level disappearing-message TTL in seconds (0 = off, shared by
 /// both participants — migration 0099).
-final roomDisappearingProvider =
-    FutureProvider.autoDispose.family<int, String>((ref, roomId) =>
+final roomDisappearingProvider = FutureProvider.autoDispose.family<int, String>(
+    (ref, roomId) =>
         ref.watch(repositoryProvider).roomDisappearingSeconds(roomId));
 
 /// True while the peer in [roomId] is actively typing. Flips false ~3s
 /// after the last broadcast. Pure ephemeral signal — no DB read.
-final typingProvider =
-    StreamProvider.autoDispose.family<bool, String>(
-        (ref, roomId) =>
-            ref.watch(repositoryProvider).watchTyping(roomId));
+final typingProvider = StreamProvider.autoDispose.family<bool, String>(
+    (ref, roomId) => ref.watch(repositoryProvider).watchTyping(roomId));
+
+/// Peer presence tier (online / recent / offline / hidden) — re-polled
+/// every 30s while watched so the chat header stays honest.
+final peerPresenceProvider = FutureProvider.autoDispose
+    .family<({String state, DateTime? lastSeen}), String>((ref, userId) {
+  final timer = Timer(const Duration(seconds: 30), () => ref.invalidateSelf());
+  ref.onDispose(timer.cancel);
+  return ref.watch(repositoryProvider).peerPresence(userId);
+});
 
 final roomByIdProvider =
     FutureProvider.autoDispose.family<ChatRoom?, String>((ref, roomId) async {
@@ -817,6 +960,22 @@ final roomByIdProvider =
     if (r.roomId == roomId) return r;
   }
   return null;
+});
+
+final groupChatMembersProvider = FutureProvider.autoDispose
+    .family<List<GroupChatMember>, String>((ref, roomId) async {
+  return ref.watch(repositoryProvider).groupChatMembers(roomId);
+});
+
+final groupAvatarUrlProvider = FutureProvider.autoDispose
+    .family<String?, String>((ref, storagePath) async {
+  if (storagePath.trim().isEmpty) return null;
+  return ref.watch(repositoryProvider).chatImageSignedUrl(storagePath);
+});
+
+final groupInvitePreviewProvider = FutureProvider.autoDispose
+    .family<GroupInvitePreview?, String>((ref, token) async {
+  return ref.watch(repositoryProvider).groupInvitePreview(token);
 });
 
 final inboxCountsProvider =
@@ -833,8 +992,7 @@ final inboxCountsProvider =
 /// Aggregated inbox badge count — pending requests + unread peer messages.
 /// Prefer [navInboxBadgeCountProvider] for the tab badge (also folds in
 /// incoming friend requests).
-final unreadInboxCountProvider =
-    FutureProvider.autoDispose<int>((ref) async {
+final unreadInboxCountProvider = FutureProvider.autoDispose<int>((ref) async {
   ref.watch(inboxStreamProvider);
   final repo = ref.watch(repositoryProvider);
   final unreadChats = await repo.unreadChatMessageCount();
@@ -844,8 +1002,7 @@ final unreadInboxCountProvider =
 
 /// Inbox tab badge: pending chat requests + unread peer messages +
 /// incoming friend requests.
-final navInboxBadgeCountProvider =
-    FutureProvider.autoDispose<int>((ref) async {
+final navInboxBadgeCountProvider = FutureProvider.autoDispose<int>((ref) async {
   ref.watch(inboxStreamProvider);
   ref.watch(incomingFriendRequestsProvider);
   final repo = ref.watch(repositoryProvider);
@@ -887,8 +1044,7 @@ final friendSuggestionsProvider =
 /// Realtime stream of group-chat messages in a single tribe (migration 0041).
 final tribeMessagesProvider =
     StreamProvider.autoDispose.family<List<TribeMessage>, String>(
-  (ref, tribeId) =>
-      ref.watch(repositoryProvider).watchTribeMessages(tribeId),
+  (ref, tribeId) => ref.watch(repositoryProvider).watchTribeMessages(tribeId),
 );
 
 /// Snapshot of how many tribe members are present (proxy: total members
@@ -913,7 +1069,8 @@ final tribeTypingProvider =
 );
 
 /// Inbox summaries for joined tribe group chats (unread + preview).
-final tribeChatInboxProvider = FutureProvider.autoDispose<List<TribeChatInboxSummary>>(
+final tribeChatInboxProvider =
+    FutureProvider.autoDispose<List<TribeChatInboxSummary>>(
   (ref) => ref.watch(repositoryProvider).tribeChatInbox(),
 );
 
@@ -1033,15 +1190,26 @@ final userPublicTribesProvider =
   (ref, userId) => ref.watch(repositoryProvider).userPublicTribes(userId),
 );
 
-/// Flat comments on a Whisper (migration 0059).
+/// Debounced @-autocomplete candidates while typing a tag (0116).
+final tagCandidatesProvider = FutureProvider.autoDispose
+    .family<List<TagCandidate>, String>((ref, prefix) async {
+  if (prefix.trim().isEmpty) return const <TagCandidate>[];
+  // Debounce keystrokes — cancelled instances never hit the network.
+  await Future<void>.delayed(const Duration(milliseconds: 220));
+  return ref.watch(repositoryProvider).searchTagCandidates(prefix);
+});
+
+/// Live comments on a Whisper (migration 0059, realtime via 0111) —
+/// re-emits on every insert/soft-delete so open sheets stay current.
 final whisperCommentsProvider =
-    FutureProvider.autoDispose.family<List<WhisperComment>, String>(
+    StreamProvider.autoDispose.family<List<WhisperComment>, String>(
   (ref, whisperId) =>
-      ref.watch(repositoryProvider).listWhisperComments(whisperId),
+      ref.watch(repositoryProvider).watchWhisperComments(whisperId),
 );
 
 /// Shared audio player for the Whispers feed — kept alive for fast return.
-final whisperPlayerProvider = FutureProvider<WhisperPlayerController>((ref) async {
+final whisperPlayerProvider =
+    FutureProvider<WhisperPlayerController>((ref) async {
   final controller = await WhisperPlayerController.create();
   ref.onDispose(() {
     unawaited(controller.dispose());
@@ -1068,7 +1236,6 @@ final discoverSearchResultsProvider =
 });
 
 /// Friend-scoped live 24h story posts for the story viewer.
-final liveStoriesProvider =
-    FutureProvider.autoDispose<List<Post>>((ref) async {
+final liveStoriesProvider = FutureProvider.autoDispose<List<Post>>((ref) async {
   return ref.watch(friendStoryPostsProvider.future);
 });

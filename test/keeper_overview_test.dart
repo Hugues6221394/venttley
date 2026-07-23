@@ -21,7 +21,7 @@ void main() {
       members30d: 20,
       posts24h: 3,
       posts7d: 12,
-      comments7d: 40,
+      comments7d: 8,
       activePosters7d: 8,
       pinnedCount: 1,
       scheduledPrompts: 2,

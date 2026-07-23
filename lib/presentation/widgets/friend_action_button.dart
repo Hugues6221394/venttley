@@ -112,11 +112,11 @@ class _ChipForStatus extends ConsumerWidget {
         return _Pill(
           dense: dense,
           icon: Icons.person_add_alt_1,
-          label: 'Add connection',
+          label: 'Add Friend',
           filled: true,
           onTap: () => wrap(
             () => repo.sendFriendRequest(otherUserId).then((_) {}),
-            'Connection request sent.',
+            'Friend request sent.',
           ),
         );
 
@@ -131,7 +131,7 @@ class _ChipForStatus extends ConsumerWidget {
             if (friendshipId == null) return;
             await wrap(
               () => repo.declineFriendRequest(friendshipId),
-              'Connection request cancelled.',
+              'Friend request cancelled.',
             );
           },
         );
@@ -175,7 +175,7 @@ class _ChipForStatus extends ConsumerWidget {
         return _Pill(
           dense: dense,
           icon: Icons.favorite,
-          label: 'Connections',
+          label: 'Friends',
           filled: false,
           color: scheme.primary,
           onTap: () => _showFriendMenu(context, ref, otherUserId, otherPseudonym),
@@ -244,7 +244,7 @@ class _ChipForStatus extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.person_remove_alt_1),
-                title: const Text('Disconnect'),
+                title: const Text('Remove friend'),
                 onTap: () async {
                   Navigator.pop(ctx);
                   await repo.unfriend(otherUserId);
@@ -252,7 +252,7 @@ class _ChipForStatus extends ConsumerWidget {
                   ref.invalidate(myFriendsProvider);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Disconnected.')),
+                      const SnackBar(content: Text('Friend removed.')),
                     );
                   }
                 },
@@ -273,7 +273,7 @@ class _ChipForStatus extends ConsumerWidget {
                     builder: (d) => AlertDialog(
                       title: const Text('Block this user?'),
                       content: const Text(
-                        'They won\'t be able to send you requests, and your connection will end.',
+                        'They won\'t be able to send you requests, and your friendship will end.',
                       ),
                       actions: [
                         TextButton(

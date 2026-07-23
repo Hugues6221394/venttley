@@ -38,26 +38,26 @@ class KeeperSpacesScreen extends ConsumerWidget {
                 child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
-                    const SliverToBoxAdapter(
+                    SliverToBoxAdapter(
                       child: Padding(
-                        padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                         child: Text(
                           'Spaces',
                           style: TextStyle(
-                            color: VentlyColors.deepBurgundy,
+                            color: context.ink,
                             fontWeight: FontWeight.w900,
                             fontSize: 24,
                           ),
                         ),
                       ),
                     ),
-                    const SliverToBoxAdapter(
+                    SliverToBoxAdapter(
                       child: Padding(
-                        padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                         child: Text(
                           'Live community rooms across your tribes.',
                           style: TextStyle(
-                            color: VentlyColors.deepBurgundy,
+                            color: context.ink,
                             fontWeight: FontWeight.w700,
                             fontSize: 13,
                           ),
@@ -110,8 +110,8 @@ class _TribeSpacesCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     tribe.name,
-                    style: const TextStyle(
-                      color: VentlyColors.deepBurgundy,
+                    style: TextStyle(
+                      color: context.ink,
                       fontWeight: FontWeight.w900,
                       fontSize: 17,
                     ),
@@ -128,7 +128,7 @@ class _TribeSpacesCard extends ConsumerWidget {
               '${PostCard.compactNumber(tribe.memberCount)} members · '
               '$posts24h vents today · $comments7d replies · 7d',
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.6),
+                color: context.ink.withOpacity(0.6),
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
               ),
@@ -142,7 +142,7 @@ class _TribeSpacesCard extends ConsumerWidget {
                   return Text(
                     'No spaces yet — add one from tribe manage.',
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                      color: context.ink.withOpacity(0.55),
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
                     ),
@@ -223,7 +223,7 @@ class _SpaceRow extends StatelessWidget {
                     '${PostCard.compactNumber(space.ventsToday)} vents today · '
                     '${PostCard.compactNumber(space.ventCount)} total',
                     style: TextStyle(
-                      color: VentlyColors.deepBurgundy.withOpacity(0.55),
+                      color: context.ink.withOpacity(0.55),
                       fontWeight: FontWeight.w700,
                       fontSize: 11,
                     ),

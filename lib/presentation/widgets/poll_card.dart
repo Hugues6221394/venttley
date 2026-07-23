@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
-import '../theme/colors.dart';
 
 /// Interactive two-or-more-option poll attached to a Post.
 ///
@@ -30,7 +29,7 @@ class PollCard extends ConsumerWidget {
       ),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+        color: isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.30 : 0.18),

@@ -1,80 +1,169 @@
-/// Strips personally-identifiable + sensitive content from anything we
-/// ship off-device — Sentry breadcrumbs, PostHog event properties,
-/// OpenTelemetry spans, logging sinks.
-///
-/// Venttly is anonymous-first. Confession bodies, message text,
-/// pseudonyms, emails and recovery phrases must never leave the device
-/// inside observability payloads.
-///
-/// Rules:
-///   * `email` / `phone` keys are dropped entirely.
-///   * String values that look like an email / token / phrase are
-///     masked to a length hash so we can still group by uniqueness
-///     without exposing the value.
-///   * Known sensitive keys (see [_sensitiveKeys]) are dropped.
-///   * Long free-form text fields (>120 chars) are truncated to
-///     `<scrubbed:length=N>` so we never ship confessions.
-///   * Nested Maps + Lists are recursed; everything else passes through.
+/// Removes personally identifiable, secret, and user-authored content before
+/// data reaches logging, analytics, or crash-reporting transports.
 class PiiScrubber {
   PiiScrubber._();
 
   static const _sensitiveKeys = {
-    // Identity
-    'email', 'phone', 'mobile', 'real_name', 'full_name', 'first_name',
-    'last_name', 'address', 'ip', 'ip_address',
-    // Secrets
-    'password', 'token', 'access_token', 'refresh_token', 'recovery_phrase',
-    'recovery_blob', 'recovery_salt', 'jwt', 'api_key', 'private_key',
-    'auth', 'authorization', 'cookie', 'session', 'bearer',
-    // User-generated content we never want to log
-    'content', 'plaintext', 'body', 'message', 'note', 'comment',
-    'description', 'caption', 'reason', 'reply',
+    'email',
+    'phone',
+    'mobile',
+    'real_name',
+    'full_name',
+    'first_name',
+    'last_name',
+    'display_name',
+    'username',
+    'handle',
+    'pseudonym',
+    'anonymous_pseudonym',
+    'address',
+    'location',
+    'city',
+    'campus',
+    'latitude',
+    'longitude',
+    'ip',
+    'ip_address',
+    'password',
+    'token',
+    'access_token',
+    'refresh_token',
+    'recovery_phrase',
+    'recovery_blob',
+    'recovery_salt',
+    'jwt',
+    'api_key',
+    'private_key',
+    'auth',
+    'authorization',
+    'cookie',
+    'session',
+    'bearer',
+    'content',
+    'plaintext',
+    'body',
+    'message',
+    'note',
+    'comment',
+    'description',
+    'caption',
+    'reason',
+    'reply',
   };
 
-  static final _emailRe =
-      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', caseSensitive: false);
-  static final _jwtRe =
-      RegExp(r'^[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}$');
-  static final _phraseRe = RegExp(r'^(\w+\s+){10,}\w+$');
+  static const _secretKeyTokens = {
+    'email',
+    'phone',
+    'mobile',
+    'password',
+    'token',
+    'jwt',
+    'secret',
+    'cookie',
+    'authorization',
+  };
 
-  /// Returns a sanitised deep-copy of [data]. Original is never mutated.
+  static const _contentKeySuffixes = {
+    'content',
+    'plaintext',
+    'body',
+    'message',
+    'note',
+    'comment',
+    'description',
+    'caption',
+    'reason',
+    'reply',
+  };
+
+  static final _emailPattern = RegExp(
+    r'\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b',
+    caseSensitive: false,
+  );
+  static final _jwtPattern = RegExp(
+    r'\b[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{16,}\b',
+  );
+  static final _bearerPattern = RegExp(
+    r'\bbearer\s+[A-Za-z0-9._~+\-/=]{12,}',
+    caseSensitive: false,
+  );
+  static final _providerSecretPattern = RegExp(
+    r'\b(?:gsk|sk_live|sk_test|phc)_[A-Za-z0-9_\-]{12,}\b',
+    caseSensitive: false,
+  );
+  static final _phonePattern = RegExp(r'(?:\+?\d[\s\-]?){7,}');
+  static final _phrasePattern = RegExp(r'^(?:[A-Za-z]+\s+){10,}[A-Za-z]+$');
+
   static Map<String, Object?> scrub(Map<String, Object?> data) {
-    final out = <String, Object?>{};
-    data.forEach((key, value) {
-      final lower = key.toLowerCase();
-      if (_sensitiveKeys.contains(lower)) return; // drop entirely
-      out[key] = _scrubValue(value);
-    });
-    return out;
+    final output = <String, Object?>{};
+    for (final entry in data.entries) {
+      if (_isSensitiveKey(entry.key)) continue;
+      output[entry.key] = _scrubValue(entry.value);
+    }
+    return output;
+  }
+
+  /// Scrubs an unstructured error, breadcrumb, or transport message.
+  static String scrubText(String value) {
+    if (value.length > 120) return '<scrubbed:length=${value.length}>';
+    if (_phrasePattern.hasMatch(value.trim())) return '<scrubbed:phrase>';
+
+    return value
+        .replaceAll(_bearerPattern, '<scrubbed:bearer>')
+        .replaceAll(_jwtPattern, '<scrubbed:jwt>')
+        .replaceAll(_providerSecretPattern, '<scrubbed:secret>')
+        .replaceAll(_emailPattern, '<scrubbed:email>')
+        .replaceAll(_phonePattern, '<scrubbed:phone>');
+  }
+
+  static ScrubbedException scrubError(Object error) {
+    return ScrubbedException(
+      error.runtimeType.toString(),
+      scrubText(error.toString()),
+    );
   }
 
   static Object? _scrubValue(Object? value) {
-    if (value == null) return null;
-    if (value is String) return _scrubString(value);
-    if (value is num || value is bool) return value;
+    if (value == null || value is num || value is bool) return value;
+    if (value is String) return scrubText(value);
     if (value is Map) {
-      return scrub(value.cast<String, Object?>());
+      final map = <String, Object?>{};
+      for (final entry in value.entries) {
+        if (entry.key is String) {
+          map[entry.key as String] = entry.value;
+        }
+      }
+      return scrub(map);
     }
-    if (value is List) {
-      return [for (final v in value) _scrubValue(v)];
+    if (value is Iterable) {
+      return [for (final item in value) _scrubValue(item)];
     }
-    // Unknown type — stringify + scrub.
-    return _scrubString(value.toString());
+    return scrubText(value.toString());
   }
 
-  static String _scrubString(String value) {
-    if (value.length > 120) {
-      return '<scrubbed:length=${value.length}>';
-    }
-    if (_emailRe.hasMatch(value)) {
-      return '<scrubbed:email>';
-    }
-    if (_jwtRe.hasMatch(value)) {
-      return '<scrubbed:jwt>';
-    }
-    if (_phraseRe.hasMatch(value)) {
-      return '<scrubbed:phrase>';
-    }
-    return value;
+  static bool _isSensitiveKey(String key) {
+    final normalized = key
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    if (_sensitiveKeys.contains(normalized)) return true;
+
+    final tokens = normalized.split('_');
+    if (tokens.any(_secretKeyTokens.contains)) return true;
+    return _contentKeySuffixes.any(
+      (suffix) => normalized.endsWith('_$suffix'),
+    );
   }
+}
+
+/// Exception wrapper safe to hand to an off-device crash reporter.
+class ScrubbedException implements Exception {
+  const ScrubbedException(this.type, this.message);
+
+  final String type;
+  final String message;
+
+  @override
+  String toString() => '$type: $message';
 }

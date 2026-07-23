@@ -121,7 +121,7 @@ class _TribeModerationScreenState
             title: Text(tribe.name,
                 style: const TextStyle(fontWeight: FontWeight.w900)),
             backgroundColor: Colors.transparent,
-            foregroundColor: VentlyColors.deepBurgundy,
+            foregroundColor: context.ink,
             elevation: 0,
           ),
           body: ListView(
@@ -351,8 +351,8 @@ class _SectionCard extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: VentlyColors.deepBurgundy,
+            style: TextStyle(
+              color: context.ink,
               fontWeight: FontWeight.w900,
               fontSize: 15,
             ),
@@ -361,7 +361,7 @@ class _SectionCard extends StatelessWidget {
           Text(
             subtitle,
             style: TextStyle(
-              color: VentlyColors.deepBurgundy.withOpacity(0.6),
+              color: context.ink.withOpacity(0.6),
               fontWeight: FontWeight.w700,
               fontSize: 11.5,
             ),
@@ -404,14 +404,14 @@ class _ReportsQuickLink extends StatelessWidget {
                     color: VentlyColors.berryMagenta, size: 22),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Reports queue',
                       style: TextStyle(
-                        color: VentlyColors.deepBurgundy,
+                        color: context.ink,
                         fontWeight: FontWeight.w900,
                         fontSize: 15,
                       ),
@@ -419,7 +419,7 @@ class _ReportsQuickLink extends StatelessWidget {
                     Text(
                       'Open posts / comments flagged by members.',
                       style: TextStyle(
-                        color: VentlyColors.deepBurgundy,
+                        color: context.ink,
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                       ),
@@ -427,8 +427,8 @@ class _ReportsQuickLink extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded,
-                  color: VentlyColors.deepBurgundy),
+              Icon(Icons.chevron_right_rounded,
+                  color: context.ink),
             ],
           ),
         ),
@@ -465,13 +465,13 @@ class _KeywordChip extends StatelessWidget {
             size: 12,
             color: hard
                 ? VentlyColors.berryMagenta
-                : VentlyColors.deepBurgundy,
+                : context.ink,
           ),
           const SizedBox(width: 6),
           Text(
             filter.keyword,
-            style: const TextStyle(
-              color: VentlyColors.deepBurgundy,
+            style: TextStyle(
+              color: context.ink,
               fontWeight: FontWeight.w800,
               fontSize: 12,
             ),
@@ -497,7 +497,7 @@ class _WarningRow extends StatelessWidget {
     final color = switch (warning.severity) {
       'final' => const Color(0xFFD93D5C),
       'warning' => VentlyColors.berryMagenta,
-      _ => VentlyColors.deepBurgundy.withOpacity(0.6),
+      _ => context.ink.withOpacity(0.6),
     };
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -518,8 +518,8 @@ class _WarningRow extends StatelessWidget {
                   children: [
                     Text(
                       '@${warning.memberPseudonym}',
-                      style: const TextStyle(
-                        color: VentlyColors.deepBurgundy,
+                      style: TextStyle(
+                        color: context.ink,
                         fontWeight: FontWeight.w900,
                         fontSize: 13,
                       ),
@@ -548,7 +548,7 @@ class _WarningRow extends StatelessWidget {
                 Text(
                   warning.reason,
                   style: TextStyle(
-                    color: VentlyColors.deepBurgundy.withOpacity(0.75),
+                    color: context.ink.withOpacity(0.75),
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
@@ -577,7 +577,7 @@ class _Hint extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          color: VentlyColors.deepBurgundy.withOpacity(0.72),
+          color: context.ink.withOpacity(0.72),
           fontWeight: FontWeight.w700,
           fontSize: 12,
         ),

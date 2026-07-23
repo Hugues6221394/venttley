@@ -151,7 +151,9 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      VentlyColors.cardBlush,
+                      context.isDark
+                          ? scheme.surface
+                          : VentlyColors.cardBlush,
                       scheme.surface,
                     ],
                   ),
@@ -192,7 +194,7 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.w900,
-                            color: VentlyColors.deepBurgundy,
+                            color: context.ink,
                           ),
                     ),
                     if (plug.bio != null && plug.bio!.trim().isNotEmpty)
@@ -280,7 +282,7 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                     'Tribes they keep',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w900,
-                          color: VentlyColors.deepBurgundy,
+                          color: context.ink,
                         ),
                   ),
                 ),
@@ -311,7 +313,7 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                   'Recent tribe activity',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w900,
-                        color: VentlyColors.deepBurgundy,
+                        color: context.ink,
                       ),
                 ),
               ),
@@ -369,10 +371,10 @@ class _StatTile extends StatelessWidget {
         children: [
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w900,
               fontSize: 18,
-              color: VentlyColors.deepBurgundy,
+              color: context.ink,
             ),
           ),
           const SizedBox(height: 2),
@@ -418,9 +420,9 @@ class _TribeChipCard extends StatelessWidget {
                 tribe.name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w900,
-                  color: VentlyColors.deepBurgundy,
+                  color: context.ink,
                   fontSize: 14,
                   height: 1.2,
                 ),

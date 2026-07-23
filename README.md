@@ -84,43 +84,48 @@ supabase/
     └── 0006_reports.sql
 ```
 
-`VentlyRepository` is the single data-layer facade. By default it talks to a
-deterministic in-memory `MockBackend` that boots with seed Tribes, Plugz,
-posts, and prompts; flip to live Supabase via `--dart-define`.
+`VentlyRepository` is the single data-layer facade. App runs use live Supabase
+by default. The deterministic in-memory `MockBackend` is available only when
+explicitly requested for offline development or automated tests, and release
+builds reject mock mode.
 
 ## Configuration
 
-All credentials are passed at build time. None of them are baked into source.
+Only publishable client configuration is passed at build time. Service secrets
+belong in Supabase Edge Function secrets and must never enter Flutter builds.
 
 | Variable | Required for | Default |
 | --- | --- | --- |
 | `SUPABASE_URL` | live backend | repo's project URL |
 | `SUPABASE_ANON_KEY` | live backend | repo's publishable key |
 | `USE_MOCK_BACKEND` | force the in-memory backend | `false` |
-| `GROQ_API_KEY` | Tier-2 LLM moderation | empty → Tier-2 skipped |
-| `GROQ_GUARD_MODEL` | override moderation model | `llama-3.3-70b-versatile` |
 
 ```bash
-flutter run \
-  --dart-define=SUPABASE_URL=https://YOUR-PROJECT.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=ey... \
-  --dart-define=GROQ_API_KEY=gsk_...
+flutter run
+
+# Explicit offline development only. This is rejected in release builds.
+flutter run --dart-define=USE_MOCK_BACKEND=true
 ```
 
-The Tier-2 moderation call uses Groq's OpenAI-compatible chat-completion
-endpoint with `response_format: json_object`, so any chat model on the
-account works — swap the model name with `--dart-define=GROQ_GUARD_MODEL=...`.
+The authenticated `moderate` Edge Function reads `GROQ_API_KEY` and optional
+`GROQ_GUARD_MODEL` from server-only Supabase secrets. Provider failures never
+enter the trusted moderation cache.
 
 ## Database
 
-Migrations live in `supabase/migrations/`. To deploy a remote Supabase
-project, run them in order with `psql`:
+Migrations live in `supabase/migrations/`. Validate the full chain and pgTAP
+contracts against an empty local database:
 
 ```bash
-for f in supabase/migrations/*.sql; do
-  PGPASSWORD=… psql "host=db.YOUR-REF.supabase.co port=5432 dbname=postgres user=postgres sslmode=require" -f "$f"
-done
+supabase db start
+supabase db reset --local --no-seed
+supabase test db supabase/tests/database --local
 ```
+
+Remote changes use the protected `Validate or apply Supabase staging` GitHub
+workflow. It refuses an ambiguous target or any staging project ref that
+matches the recorded production ref. Production changes require a separate,
+explicit approval after staging evidence is reviewed.
 
 Key schema notes:
 
@@ -155,7 +160,7 @@ Key schema notes:
 
 ```bash
 flutter pub get
-flutter run            # MockBackend by default — no Supabase needed
+flutter run            # Live Supabase backend
 flutter analyze        # zero errors
 ```
 

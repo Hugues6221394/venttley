@@ -78,7 +78,7 @@ class _CrisisSupportSheet extends ConsumerWidget {
         margin: const EdgeInsets.all(12),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(24),
         ),
         child: Column(
@@ -96,18 +96,18 @@ class _CrisisSupportSheet extends ConsumerWidget {
                 ),
               ),
             ),
-            const Row(
+            Row(
               children: [
-                Icon(Icons.favorite_rounded,
+                const Icon(Icons.favorite_rounded,
                     color: VentlyColors.berryMagenta, size: 22),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     "You matter. You're not alone.",
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 17,
-                      color: VentlyColors.deepBurgundy,
+                      color: context.ink,
                     ),
                   ),
                 ),
@@ -121,7 +121,7 @@ class _CrisisSupportSheet extends ConsumerWidget {
               style: TextStyle(
                 fontSize: 13,
                 height: 1.45,
-                color: VentlyColors.deepBurgundy.withOpacity(0.75),
+                color: context.ink.withOpacity(0.75),
               ),
             ),
             const SizedBox(height: 14),
@@ -181,7 +181,7 @@ class _HelplineTile extends StatelessWidget {
                       Text(resource.reach,
                           style: TextStyle(
                               fontSize: 12,
-                              color: VentlyColors.deepBurgundy
+                              color: context.ink
                                   .withOpacity(0.7))),
                     ],
                   ),

@@ -152,7 +152,7 @@ class _ReportCard extends ConsumerWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? VentlyColors.cardDark : Theme.of(context).cardColor,
+        color: isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: report.isResolved

@@ -1,0 +1,91 @@
+name: Validate or apply Supabase staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply_changes:
+        description: Apply migrations and deploy the moderation function
+        required: true
+        default: false
+        type: boolean
+      confirmation:
+        description: Type APPLY TO STAGING when apply_changes is enabled
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate from an empty local database
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: supabase/setup-cli@v2.1.1
+        with:
+          version: 2.107.0
+      - uses: denoland/setup-deno@v2.0.5
+        with:
+          deno-version: lts
+          cache: true
+      - run: supabase db start
+      - run: supabase db reset --local --no-seed
+      - run: supabase test db supabase/tests/database --local
+      - run: >-
+          supabase db lint --local --schema public,private
+          --level warning --fail-on error
+      - run: >-
+          deno fmt --check
+          supabase/functions/moderate
+          supabase/functions/_shared
+      - run: deno check supabase/functions/moderate/index.ts
+      - run: deno test supabase/functions/moderate/handler_test.ts
+
+  apply-staging:
+    name: Apply only to the protected staging project
+    needs: validate
+    if: ${{ inputs.apply_changes }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_STAGING_ACCESS_TOKEN }}
+      STAGING_PROJECT_REF: ${{ secrets.SUPABASE_STAGING_PROJECT_ID }}
+      PRODUCTION_PROJECT_REF: ${{ secrets.SUPABASE_PRODUCTION_PROJECT_ID }}
+      STAGING_DB_PASSWORD: ${{ secrets.SUPABASE_STAGING_DB_PASSWORD }}
+      SUPABASE_ENVIRONMENT: ${{ vars.SUPABASE_ENVIRONMENT }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: supabase/setup-cli@v2.1.1
+        with:
+          version: 2.107.0
+      - name: Refuse ambiguous or production targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "APPLY TO STAGING"
+          test "$SUPABASE_ENVIRONMENT" = "staging"
+          test -n "$STAGING_PROJECT_REF"
+          test -n "$PRODUCTION_PROJECT_REF"
+          test "$STAGING_PROJECT_REF" != "$PRODUCTION_PROJECT_REF"
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$STAGING_DB_PASSWORD"
+      - name: Link the protected staging project
+        run: >-
+          supabase link --project-ref "$STAGING_PROJECT_REF"
+          --password "$STAGING_DB_PASSWORD"
+      - name: Preview staging migrations
+        run: >-
+          supabase db push --linked --include-all --dry-run
+          --password "$STAGING_DB_PASSWORD"
+      - name: Apply staging migrations
+        run: >-
+          supabase db push --linked --include-all
+          --password "$STAGING_DB_PASSWORD"
+      - name: Deploy tested moderation function to staging
+        run: >-
+          supabase functions deploy moderate --use-api
+          --project-ref "$STAGING_PROJECT_REF"

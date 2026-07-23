@@ -45,7 +45,7 @@ class VentlyEmptyState extends StatelessWidget {
               title,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy,
+                color: context.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: compact ? 14 : 16,
               ),
@@ -55,7 +55,7 @@ class VentlyEmptyState extends StatelessWidget {
               subtitle,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: VentlyColors.deepBurgundy.withOpacity(0.62),
+                color: context.ink.withOpacity(0.62),
                 fontWeight: FontWeight.w600,
                 fontSize: compact ? 12 : 13,
                 height: 1.35,

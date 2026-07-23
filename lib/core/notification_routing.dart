@@ -7,7 +7,8 @@ import '../data/services/analytics_service.dart';
 import '../presentation/router/app_router.dart';
 
 /// Payload queued when a notification is tapped before the router is ready.
-final pendingNotificationPayloadProvider = StateProvider<String?>((ref) => null);
+final pendingNotificationPayloadProvider =
+    StateProvider<String?>((ref) => null);
 
 /// Canonical local-notification payload format: `<kind>:<id>` or bare `<kind>`.
 ///
@@ -36,6 +37,8 @@ class NotificationPayload {
       case 'tribe_invite':
         final slug = payload['tribe_slug'] as String?;
         return slug == null ? null : tribe(slug);
+      case 'tribe_ownership_transfer':
+        return notifications();
       case 'tribe_chat_message':
       case 'tribe_message':
         final slug = payload['tribe_slug'] as String?;
@@ -44,8 +47,22 @@ class NotificationPayload {
         return tribeChat(slug, messageId: messageId);
       case 'comment_reply':
       case 'post_like':
+      case 'comment_like':
+      case 'mention':
         final postId = payload['post_id'] as String?;
-        return postId == null ? null : post(postId);
+        if (postId != null) return post(postId);
+        // Whisper-comment likes/replies carry whisper_id instead.
+        final commentWhisperId = payload['whisper_id'] as String?;
+        return commentWhisperId == null ? null : 'whisper:$commentWhisperId';
+      case 'whisper_reply':
+      case 'whisper_reaction':
+        final whisperId = payload['whisper_id'] as String?;
+        return whisperId == null ? null : 'whisper:$whisperId';
+      case 'friend_request':
+        return friends();
+      case 'friend_accepted':
+        final friendId = payload['friend_id'] as String?;
+        return friendId == null ? friends() : user(friendId);
       case 'message_request':
         final roomId = payload['room_id'] as String?;
         return roomId == null ? null : chat(roomId);
@@ -101,6 +118,8 @@ String? routeForNotificationPayload(String? payload) {
       final slug = id.substring(0, slash);
       final messageId = Uri.encodeComponent(id.substring(slash + 1));
       return '/tribe/$slug/chat?message=$messageId';
+    case 'whisper':
+      return id == null || id.isEmpty ? null : '/whisper/$id';
     case 'user':
       return id == null || id.isEmpty ? null : '/user/$id';
     case 'friends':
@@ -116,7 +135,11 @@ String? routeForNotificationPayload(String? payload) {
 }
 
 /// Navigate from a notification payload. Shell tabs use [GoRouter.go]; others push.
-void navigateFromNotificationPayload(GoRouter router, String payload) {
+void navigateFromNotificationPayload(
+  GoRouter router,
+  String payload, {
+  Object? extra,
+}) {
   final route = routeForNotificationPayload(payload);
   if (route == null) return;
 
@@ -128,9 +151,9 @@ void navigateFromNotificationPayload(GoRouter router, String payload) {
       path.startsWith('/profile');
 
   if (isShell) {
-    router.go(route);
+    router.go(route, extra: extra);
   } else {
-    router.push(route);
+    router.push(route, extra: extra);
   }
 
   AnalyticsService.instance.track(

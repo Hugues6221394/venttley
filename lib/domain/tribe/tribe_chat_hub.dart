@@ -1,4 +1,4 @@
-/// Tribe chat hub — presence roster + group settings.
+// Tribe chat hub - presence roster + group settings.
 
 class TribeOnlineMember {
   final String userId;
@@ -78,8 +78,8 @@ class TribeChatSettings {
       disappearingMessages: json['disappearing_messages'] == true,
       dailyCheckinEnabled: json['daily_checkin_enabled'] == true,
       dailyCheckinHour: (json['daily_checkin_hour'] as num?)?.toInt() ?? 13,
-      dailyCheckinPrompt:
-          (json['daily_checkin_prompt'] as String?) ?? 'How is everyone feeling today?',
+      dailyCheckinPrompt: (json['daily_checkin_prompt'] as String?) ??
+          'How is everyone feeling today?',
     );
   }
 
@@ -101,11 +101,15 @@ class TribeChatSettings {
       if (announceJoins != null) 'announce_joins': announceJoins,
       if (wallpaperUrl != null) 'wallpaper_url': wallpaperUrl,
       if (wallpaperStyle != null) 'wallpaper_style': wallpaperStyle,
-      if (membersCanSendMedia != null) 'members_can_send_media': membersCanSendMedia,
-      if (disappearingMessages != null) 'disappearing_messages': disappearingMessages,
-      if (dailyCheckinEnabled != null) 'daily_checkin_enabled': dailyCheckinEnabled,
+      if (membersCanSendMedia != null)
+        'members_can_send_media': membersCanSendMedia,
+      if (disappearingMessages != null)
+        'disappearing_messages': disappearingMessages,
+      if (dailyCheckinEnabled != null)
+        'daily_checkin_enabled': dailyCheckinEnabled,
       if (dailyCheckinHour != null) 'daily_checkin_hour': dailyCheckinHour,
-      if (dailyCheckinPrompt != null) 'daily_checkin_prompt': dailyCheckinPrompt,
+      if (dailyCheckinPrompt != null)
+        'daily_checkin_prompt': dailyCheckinPrompt,
     };
   }
 }
