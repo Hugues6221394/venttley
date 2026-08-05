@@ -7,6 +7,7 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tagged_text.dart';
@@ -43,15 +44,17 @@ class ProfileOverview extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final friends = ref.watch(myFriendsProvider).valueOrNull ?? const [];
 
-    final hugsReceived = ref.watch(hugsReceivedProvider(me.userId)).valueOrNull ?? 0;
+    final hugsReceived =
+        ref.watch(hugsReceivedProvider(me.userId)).valueOrNull ?? 0;
     final postsTotal = vents.length + whispers.length;
     final heartsReceived = vents.fold<int>(0, (s, p) => s + p.likesCount) +
         whispers.fold<int>(0, (s, w) => s + w.likesCount);
     final repliesShared = vents.fold<int>(0, (s, p) => s + p.commentsCount) +
         whispers.fold<int>(0, (s, w) => s + w.commentsCount);
-    final peopleComforted =
-        vents.where((p) => p.likesCount > 0 || p.commentsCount > 0).length +
-            whispers.where((w) => w.likesCount > 0 || w.commentsCount > 0).length;
+    final peopleComforted = vents
+            .where((p) => p.likesCount > 0 || p.commentsCount > 0)
+            .length +
+        whispers.where((w) => w.likesCount > 0 || w.commentsCount > 0).length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
@@ -127,98 +130,98 @@ class _HeroCard extends StatelessWidget {
       child: Stack(
         children: [
           Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _GlowAvatar(me: me),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _GlowAvatar(me: me),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                '@${me.anonymousPseudonym}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 21,
+                                  color: context.ink,
+                                ),
+                              ),
+                            ),
+                            if (me.isVerified) ...[
+                              const SizedBox(width: 6),
+                              const Icon(Icons.verified_rounded,
+                                  color: VentlyColors.berryMagenta, size: 20),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            const _Pill(
+                              icon: Icons.shield_outlined,
+                              label: 'Verified Anonymous',
+                            ),
+                            _Pill(
+                              icon: Icons.bar_chart_rounded,
+                              label: 'Level $level Listener',
+                            ),
+                            if (!me.isVerified) _VerificationPill(),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Row(
                       children: [
                         Flexible(
-                          child: Text(
-                            '@${me.anonymousPseudonym}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          child: TaggedText(
+                            (me.bio?.trim().isNotEmpty ?? false)
+                                ? me.bio!.trim()
+                                : 'Here to listen, never to judge.',
                             style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 21,
-                              color: context.ink,
+                              fontSize: 13.5,
+                              height: 1.4,
+                              fontWeight: FontWeight.w600,
+                              color: context.ink.withOpacity(0.78),
                             ),
                           ),
                         ),
-                        if (me.isVerified) ...[
-                          const SizedBox(width: 6),
-                          const Icon(Icons.verified_rounded,
-                              color: VentlyColors.berryMagenta, size: 20),
-                        ],
+                        const SizedBox(width: 6),
+                        Icon(Icons.monitor_heart_outlined,
+                            size: 16,
+                            color: VentlyColors.berryMagenta.withOpacity(0.7)),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [
-                        const _Pill(
-                          icon: Icons.shield_outlined,
-                          label: 'Verified Anonymous',
-                        ),
-                        _Pill(
-                          icon: Icons.bar_chart_rounded,
-                          label: 'Level $level Listener',
-                        ),
-                        if (!me.isVerified) _VerificationPill(),
-                      ],
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+                  _EditButton(),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _StatsPanel(
+                posts: posts,
+                connections: connections,
+                hugs: hugs,
+                trust: trust,
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: TaggedText(
-                        (me.bio?.trim().isNotEmpty ?? false)
-                            ? me.bio!.trim()
-                            : 'Here to listen, never to judge.',
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          height: 1.4,
-                          fontWeight: FontWeight.w600,
-                          color: context.ink.withOpacity(0.78),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(Icons.monitor_heart_outlined,
-                        size: 16,
-                        color: VentlyColors.berryMagenta.withOpacity(0.7)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              _EditButton(),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _StatsPanel(
-            posts: posts,
-            connections: connections,
-            hugs: hugs,
-            trust: trust,
-          ),
-        ],
           ),
           // Settings gear floats in the card's top-right corner so it never
           // squeezes the username row.
@@ -238,79 +241,80 @@ class _GlowAvatar extends ConsumerWidget {
     return GestureDetector(
       onTap: () => _showPhotoSheet(context, ref),
       child: SizedBox(
-      width: 96,
-      height: 96,
-      child: Stack(
-        children: [
-          // Pink glow ring.
-          Container(
-            width: 96,
-            height: 96,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                colors: [Color(0xFFFF9FC4), Color(0xFFE05C93)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: VentlyColors.berryMagenta.withOpacity(0.35),
-                  blurRadius: 22,
-                  spreadRadius: 1,
+        width: 96,
+        height: 96,
+        child: Stack(
+          children: [
+            // Pink glow ring.
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFF9FC4), Color(0xFFE05C93)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-              ],
-            ),
-            padding: const EdgeInsets.all(4),
-            child: ClipOval(
-              child: ColoredBox(
-                color: Colors.white,
-                child: Padding(
-                  padding: const EdgeInsets.all(3),
-                  child: ProfileAvatar(
-                    avatarSeed: me.avatarSeed,
-                    label: me.anonymousPseudonym,
-                    profilePhotoUrl: me.profilePhotoUrl,
-                    size: 82,
+                boxShadow: [
+                  BoxShadow(
+                    color: VentlyColors.berryMagenta.withOpacity(0.35),
+                    blurRadius: 22,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(4),
+              child: ClipOval(
+                child: ColoredBox(
+                  color: Colors.white,
+                  child: Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: ProfileAvatar(
+                      avatarSeed: me.avatarSeed,
+                      label: me.anonymousPseudonym,
+                      profilePhotoUrl: me.profilePhotoUrl,
+                      size: 82,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          // Add-photo affordance (Instagram-style +). Tapping it — or the
-          // avatar — opens the gallery / camera / avatar-builder sheet.
-          Positioned(
-            right: 0,
-            bottom: 2,
-            child: GestureDetector(
-              onTap: () => _showPhotoSheet(context, ref),
-              child: Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  color: VentlyColors.berryMagenta,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2.5),
-                  boxShadow: [
-                    BoxShadow(
-                      color: VentlyColors.berryMagenta.withOpacity(0.35),
-                      blurRadius: 6,
-                    ),
-                  ],
+            // Add-photo affordance (Instagram-style +). Tapping it — or the
+            // avatar — opens the gallery / camera / avatar-builder sheet.
+            Positioned(
+              right: 0,
+              bottom: 2,
+              child: GestureDetector(
+                onTap: () => _showPhotoSheet(context, ref),
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: VentlyColors.berryMagenta,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: VentlyColors.berryMagenta.withOpacity(0.35),
+                        blurRadius: 6,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.add_rounded,
+                      color: Colors.white, size: 17),
                 ),
-                child: const Icon(Icons.add_rounded,
-                    color: Colors.white, size: 17),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
 
   Future<void> _showPhotoSheet(BuildContext context, WidgetRef ref) async {
-    final hasPhoto = me.profilePhotoUrl != null && me.profilePhotoUrl!.isNotEmpty;
+    final hasPhoto =
+        me.profilePhotoUrl != null && me.profilePhotoUrl!.isNotEmpty;
     final action = await showModalBottomSheet<String>(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -337,7 +341,8 @@ class _GlowAvatar extends ConsumerWidget {
             ),
             if (hasPhoto)
               ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                leading:
+                    const Icon(Icons.delete_outline, color: Colors.redAccent),
                 title: const Text('Remove photo',
                     style: TextStyle(fontWeight: FontWeight.w700)),
                 onTap: () => Navigator.pop(ctx, 'remove'),
@@ -371,10 +376,13 @@ class _GlowAvatar extends ConsumerWidget {
       // Re-hydrate the session so the new photo appears immediately.
       await ref.read(sessionProvider.notifier).restore();
       messenger.showSnackBar(
-        SnackBar(content: Text(action == 'remove' ? 'Photo removed.' : 'Photo updated.')),
+        SnackBar(
+            content:
+                Text(action == 'remove' ? 'Photo removed.' : 'Photo updated.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not update photo: $e')));
+      messenger
+          .showSnackBar(SnackBar(content: Text('Could not update photo: $e')));
     }
   }
 }
@@ -437,9 +445,7 @@ class _VerificationPill extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            pending
-                ? Icons.hourglass_top_rounded
-                : Icons.verified_outlined,
+            pending ? Icons.hourglass_top_rounded : Icons.verified_outlined,
             size: 13,
             color: VentlyColors.berryMagenta,
           ),
@@ -462,109 +468,115 @@ class _VerificationPill extends ConsumerWidget {
     );
   }
 
-  void _openApplySheet(BuildContext context, WidgetRef ref) {
-    final noteCtl = TextEditingController();
+  Future<void> _openApplySheet(BuildContext context, WidgetRef ref) async {
     bool busy = false;
-    showModalBottomSheet<void>(
+    await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 18,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Apply for verification',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: context.ink)),
-              const SizedBox(height: 4),
-              Text(
-                'The verified check is earned. Tell us why your presence lifts '
-                'this community — our team reviews every application.',
-                style: TextStyle(
-                    color: context.ink.withOpacity(0.6),
-                    fontSize: 13,
-                    height: 1.35),
+      builder: (ctx) => ModalTextControllerScope(
+        initialValues: const [''],
+        builder: (ctx, controllers) {
+          final noteCtl = controllers.single;
+          return StatefulBuilder(builder: (ctx, setSheet) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 18,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
               ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: noteCtl,
-                maxLines: 4,
-                maxLength: 400,
-                decoration: InputDecoration(
-                  hintText: 'Your case for verification (optional)',
-                  filled: true,
-                  fillColor: const Color(0xFFFFF1F6),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Apply for verification',
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: context.ink)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'The verified check is earned. Tell us why your presence lifts '
+                    'this community — our team reviews every application.',
+                    style: TextStyle(
+                        color: context.ink.withOpacity(0.6),
+                        fontSize: 13,
+                        height: 1.35),
                   ),
-                ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: noteCtl,
+                    maxLines: 4,
+                    maxLength: 400,
+                    decoration: InputDecoration(
+                      hintText: 'Your case for verification (optional)',
+                      filled: true,
+                      fillColor: const Color(0xFFFFF1F6),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: VentlyColors.berryMagenta,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    onPressed: busy
+                        ? null
+                        : () async {
+                            setSheet(() => busy = true);
+                            try {
+                              await ref
+                                  .read(repositoryProvider)
+                                  .requestVerification(
+                                      note: noteCtl.text.trim().isEmpty
+                                          ? null
+                                          : noteCtl.text.trim());
+                              ref.invalidate(myVerificationStatusProvider);
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Application submitted — we\'ll review it soon.')),
+                                );
+                              }
+                            } catch (e) {
+                              if (!ctx.mounted) return;
+                              setSheet(() => busy = false);
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(
+                                    content: Text(e
+                                        .toString()
+                                        .replaceFirst('Exception: ', ''))),
+                              );
+                            }
+                          },
+                    child: busy
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Text('Submit application',
+                            style: TextStyle(fontWeight: FontWeight.w900)),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: VentlyColors.berryMagenta,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: busy
-                    ? null
-                    : () async {
-                        setSheet(() => busy = true);
-                        try {
-                          await ref
-                              .read(repositoryProvider)
-                              .requestVerification(
-                                  note: noteCtl.text.trim().isEmpty
-                                      ? null
-                                      : noteCtl.text.trim());
-                          ref.invalidate(myVerificationStatusProvider);
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      'Application submitted — we\'ll review it soon.')),
-                            );
-                          }
-                        } catch (e) {
-                          setSheet(() => busy = false);
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(
-                                  content: Text(e
-                                      .toString()
-                                      .replaceFirst('Exception: ', ''))),
-                            );
-                          }
-                        }
-                      },
-                child: busy
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : const Text('Submit application',
-                        style: TextStyle(fontWeight: FontWeight.w900)),
-              ),
-            ],
-          ),
-        );
-      }),
+            );
+          });
+        },
+      ),
     );
   }
 }
@@ -613,8 +625,7 @@ class _HeroSettingsButton extends StatelessWidget {
         onTap: () => context.push('/settings'),
         child: Padding(
           padding: const EdgeInsets.all(7),
-          child: Icon(Icons.settings_outlined,
-              size: 18, color: context.ink),
+          child: Icon(Icons.settings_outlined, size: 18, color: context.ink),
         ),
       ),
     );
@@ -745,11 +756,27 @@ class _QuickActionsBar extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _Action(icon: Icons.edit_outlined, label: 'Drop', onTap: () => context.push('/post')),
-          _Action(icon: Icons.help_outline_rounded, label: 'Ask', onTap: () => context.push('/post')),
+          _Action(
+            icon: Icons.edit_outlined,
+            label: 'Drop',
+            onTap: () => context.go('/compose'),
+          ),
+          _Action(
+            icon: Icons.help_outline_rounded,
+            label: 'Ask',
+            onTap: () => context.push('/questions'),
+          ),
           const _CenterAction(),
-          _Action(icon: Icons.menu_book_rounded, label: 'Story', onTap: () => context.push('/post')),
-          _Action(icon: Icons.groups_rounded, label: 'Tribes', onTap: () => context.push('/tribes')),
+          _Action(
+            icon: Icons.menu_book_rounded,
+            label: 'Story',
+            onTap: () => context.push('/compose/story'),
+          ),
+          _Action(
+            icon: Icons.groups_rounded,
+            label: 'Tribes',
+            onTap: () => context.push('/tribes'),
+          ),
         ],
       ),
     );
@@ -778,7 +805,8 @@ class _Action extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: context.glass(0.65),
-                  border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
+                  border: Border.all(
+                      color: VentlyColors.softMauve.withOpacity(0.4)),
                 ),
                 child: Icon(icon, color: VentlyColors.berryMagenta, size: 22),
               ),
@@ -804,7 +832,7 @@ class _CenterAction extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: GestureDetector(
-        onTap: () => context.push('/post'),
+        onTap: () => context.go('/compose'),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -873,8 +901,7 @@ class _FriendsCard extends StatelessWidget {
           if (friends.isEmpty)
             Text('No friends yet.',
                 style: TextStyle(
-                    fontSize: 12,
-                    color: context.ink.withOpacity(0.5)))
+                    fontSize: 12, color: context.ink.withOpacity(0.5)))
           else
             SizedBox(
               height: 34,
@@ -973,8 +1000,7 @@ class _PersonasCard extends ConsumerWidget {
                 child: _CardTitle(
                     icon: Icons.theater_comedy_outlined, title: 'Personas'),
               ),
-              Icon(Icons.chevron_right_rounded,
-                  color: VentlyColors.softMauve),
+              Icon(Icons.chevron_right_rounded, color: VentlyColors.softMauve),
             ],
           ),
           const SizedBox(height: 6),
@@ -1001,32 +1027,47 @@ class _PersonasCard extends ConsumerWidget {
   }
 
   Future<void> _createPersona(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
     final name = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('New persona'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 24,
-          decoration: const InputDecoration(hintText: 'Persona name'),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-              child: const Text('Create')),
-        ],
+      builder: (ctx) => ModalTextControllerScope(
+        initialValues: const [''],
+        builder: (ctx, controllers) {
+          final controller = controllers.single;
+          return AlertDialog(
+            title: const Text('New persona'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              maxLength: 24,
+              decoration: const InputDecoration(hintText: 'Persona name'),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel')),
+              FilledButton(
+                  onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+                  child: const Text('Create')),
+            ],
+          );
+        },
       ),
     );
     if (name == null || name.isEmpty) return;
-    await ref.read(repositoryProvider).createPersona(
-          pseudonym: name,
-          avatarSeed: 'persona-${DateTime.now().millisecondsSinceEpoch}',
-        );
-    ref.invalidate(myPersonasProvider);
+    try {
+      await ref.read(repositoryProvider).createPersona(
+            pseudonym: name,
+            avatarSeed: 'persona-${DateTime.now().millisecondsSinceEpoch}',
+          );
+      ref.invalidate(myPersonasProvider);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Couldn\'t create that persona. Please try again.'),
+        ),
+      );
+    }
   }
 }
 
@@ -1082,8 +1123,8 @@ class _PersonaCreate extends StatelessWidget {
                 style: BorderStyle.solid,
               ),
             ),
-            child: const Icon(Icons.add_rounded,
-                color: VentlyColors.berryMagenta),
+            child:
+                const Icon(Icons.add_rounded, color: VentlyColors.berryMagenta),
           ),
           const SizedBox(height: 5),
           Text('Create New',
@@ -1205,7 +1246,8 @@ class _BadgesCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final catalogue = ref.watch(badgeCatalogueProvider).valueOrNull ?? const [];
-    final earned = ref.watch(badgesForUserProvider(userId)).valueOrNull ?? const [];
+    final earned =
+        ref.watch(badgesForUserProvider(userId)).valueOrNull ?? const [];
     final byKey = {for (final b in catalogue) b.key: b};
     final earnedDefs = earned
         .map((e) => byKey[e.key])
@@ -1235,8 +1277,7 @@ class _BadgesCard extends ConsumerWidget {
           if (earnedDefs.isEmpty)
             Text('No badges yet — keep showing up.',
                 style: TextStyle(
-                    fontSize: 12,
-                    color: context.ink.withOpacity(0.55)))
+                    fontSize: 12, color: context.ink.withOpacity(0.55)))
           else
             Row(
               children: [
@@ -1324,9 +1365,7 @@ class _CardTitle extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 15,
-                color: context.ink),
+                fontWeight: FontWeight.w900, fontSize: 15, color: context.ink),
           ),
         ),
       ],

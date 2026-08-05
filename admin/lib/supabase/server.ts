@@ -83,3 +83,27 @@ export async function createAdminClient() {
   }
   return createSsrClient();
 }
+
+/**
+ * Auth Admin operations must use a server-only secret and can never fall back
+ * to the caller's publishable-key session. Callers must still authorize the
+ * acting staff member before requesting this client.
+ */
+export function createRequiredAuthAdminClient() {
+  if (!serviceRoleConfigured()) {
+    throw new Error(
+      "Auth administration is unavailable: configure SUPABASE_SERVICE_ROLE_KEY."
+    );
+  }
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    }
+  );
+}

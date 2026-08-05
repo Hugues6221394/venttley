@@ -15,8 +15,6 @@ import '../../theme/colors.dart';
 ///
 /// Four story sources (Capture Photo / Gallery / Text Only / Audio Note),
 /// live preview card, privacy + duration row, single Share-to-Story CTA.
-/// Audio Note routes to a friendly "shipping this week" state until the
-/// recorder + signed-URL playback lands.
 class CreateStoryScreen extends ConsumerStatefulWidget {
   const CreateStoryScreen({super.key});
 
@@ -123,7 +121,8 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
         content: captionText.isEmpty ? 'Shared a moment.' : captionText,
         category: 'late_night',
         mood: 'healing',
-        isWhisper: true,
+        isStory: true,
+        storyAudience: _friendsOnly ? 'friends' : 'everyone',
         imagePath: imagePath,
         imageUrl: imageUrl,
         idempotencyKey: operationId,
@@ -148,7 +147,8 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
               'content': captionText.isEmpty ? 'Shared a moment.' : captionText,
               'category': 'late_night',
               'mood': 'healing',
-              'isWhisper': true,
+              'isStory': true,
+              'storyAudience': _friendsOnly ? 'friends' : 'everyone',
               'imagePath': imagePath,
               'imageUrl': imageUrl,
               if (stagedMedia != null) ...stagedMedia.toPayload(),
@@ -214,7 +214,7 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
                       onCapturePhoto: _captureFromCamera,
                       onGallery: _pickFromGallery,
                       onTextOnly: _selectText,
-                      onAudioNote: _audioComingSoon,
+                      onAudioNote: () => context.push('/whispers/new'),
                     ),
                     const SizedBox(height: 18),
                     _PrivacyDurationCard(
@@ -270,17 +270,6 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
     );
   }
 
-  void _audioComingSoon() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Audio Notes are shipping this week — recording UI is live next, '
-          'safety review is in progress.',
-        ),
-      ),
-    );
-  }
-
   static String _mimeFor(String ext) {
     switch (ext.toLowerCase().replaceAll('.', '')) {
       case 'png':
@@ -330,7 +319,8 @@ class _Header extends StatelessWidget {
           IconButton(
             icon: Icon(Icons.settings_outlined,
                 color: context.ink.withOpacity(0.78)),
-            onPressed: () {},
+            tooltip: 'Story settings',
+            onPressed: () => context.push('/settings'),
           ),
         ],
       ),

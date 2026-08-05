@@ -22,11 +22,28 @@ class _TribeAuditScreenState extends ConsumerState<TribeAuditScreen> {
   @override
   Widget build(BuildContext context) {
     final tribe = ref.watch(tribeBySlugProvider(widget.slug)).valueOrNull;
+    final me = ref.watch(sessionProvider);
     if (tribe == null) {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (me == null || tribe.keeperId != me.userId) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(title: const Text('Audit history')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(28),
+            child: Text(
+              'Only the current Plug can view Tribe audit history.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
       );
     }
     final events = ref.watch(tribeAuditLogProvider(tribe.tribeId));

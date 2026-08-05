@@ -149,4 +149,94 @@ void main() {
       contains('REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC'),
     );
   });
+
+  test('every reported public foreign key receives a covering index', () {
+    final migration = Directory('supabase/migrations')
+        .listSync()
+        .whereType<File>()
+        .firstWhere(
+          (file) => file.path.endsWith('_add_missing_foreign_key_indexes.sql'),
+        )
+        .readAsStringSync();
+
+    expect(
+      RegExp(r'CREATE INDEX IF NOT EXISTS idx_fk_')
+          .allMatches(migration)
+          .length,
+      57,
+    );
+    expect(migration, contains('idx_fk_post_likes_user_id'));
+    expect(migration, contains('idx_fk_notifications_actor_id'));
+    expect(migration, contains('idx_fk_tribe_members_user_id'));
+    expect(migration, contains('idx_fk_whispers_author_id'));
+    expect(migration, isNot(contains('ON storage.')));
+  });
+
+  test('RLS auth lookup optimization preserves existing policy contracts', () {
+    final migration = Directory('supabase/migrations')
+        .listSync()
+        .whereType<File>()
+        .firstWhere(
+          (file) => file.path.endsWith('_cache_rls_auth_lookups.sql'),
+        )
+        .readAsStringSync();
+
+    expect(migration, contains('ALTER POLICY %I ON %I.%I'));
+    expect(migration, contains('( SELECT auth.uid() AS uid)'));
+    expect(migration, contains('USING (%s)'));
+    expect(migration, contains('WITH CHECK (%s)'));
+    expect(migration, isNot(contains('DROP POLICY')));
+    expect(migration, isNot(contains('CREATE POLICY')));
+  });
+
+  test('hot-feed cache is private behind a role-checked admin probe', () {
+    final migration = Directory('supabase/migrations')
+        .listSync()
+        .whereType<File>()
+        .firstWhere(
+          (file) =>
+              file.path.endsWith('_protect_hot_posts_materialized_view.sql'),
+        )
+        .readAsStringSync();
+    final adminSystem =
+        File('admin/app/(dashboard)/system/page.tsx').readAsStringSync();
+
+    expect(
+      migration,
+      contains(
+        'REVOKE SELECT ON public.mv_hot_posts FROM PUBLIC, anon, authenticated',
+      ),
+    );
+    expect(migration, contains('public.admin_hot_feed_health'));
+    expect(migration, contains("'super_admin', 'admin'"));
+    expect(
+      migration,
+      contains('FROM PUBLIC, anon'),
+    );
+    expect(adminSystem, contains('rpc("admin_hot_feed_health")'));
+    expect(adminSystem, isNot(contains('.from("mv_hot_posts")')));
+  });
+
+  test('privileged trigger functions are not exposed as client RPCs', () {
+    final migration = File(
+      'supabase/migrations/'
+      '20260728164933_restrict_trigger_function_execution.sql',
+    ).readAsStringSync();
+
+    expect(migration, contains("'pg_catalog.trigger'::pg_catalog.regtype"));
+    expect(
+      migration,
+      contains("'pg_catalog.event_trigger'::pg_catalog.regtype"),
+    );
+    expect(
+      migration,
+      contains(
+        'REVOKE EXECUTE ON FUNCTION %I.%I(%s) FROM PUBLIC, anon, authenticated',
+      ),
+    );
+    expect(
+      migration,
+      contains('GRANT EXECUTE ON FUNCTION %I.%I(%s) TO service_role'),
+    );
+  });
 }

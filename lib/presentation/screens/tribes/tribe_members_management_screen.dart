@@ -6,6 +6,7 @@ import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_premium_background.dart';
 
@@ -26,11 +27,28 @@ class _TribeMembersManagementScreenState
   @override
   Widget build(BuildContext context) {
     final tribe = ref.watch(tribeBySlugProvider(widget.slug)).valueOrNull;
+    final me = ref.watch(sessionProvider);
     if (tribe == null) {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (me == null || tribe.keeperId != me.userId) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(title: const Text('Members')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(28),
+            child: Text(
+              'Only the current Plug can manage Tribe members.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
       );
     }
     final members = ref.watch(tribeMembersProvider(tribe.tribeId));
@@ -233,84 +251,97 @@ class _TribeMembersManagementScreenState
   }
 
   Future<String?> _reasonDialog(String action, String pseudonym) async {
-    final controller = TextEditingController();
     final result = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-            '${action[0].toUpperCase()}${action.substring(1)} @$pseudonym'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 240,
-          minLines: 2,
-          maxLines: 4,
-          decoration: const InputDecoration(labelText: 'Reason'),
+      builder: (dialogContext) => ModalTextControllerScope(
+        initialValues: const [''],
+        builder: (dialogContext, controllers) => AlertDialog(
+          title: Text(
+              '${action[0].toUpperCase()}${action.substring(1)} @$pseudonym'),
+          content: TextField(
+            controller: controllers.single,
+            autofocus: true,
+            maxLength: 240,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(labelText: 'Reason'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                controllers.single.text.trim(),
+              ),
+              child: const Text('Confirm'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Confirm'),
-          ),
-        ],
       ),
     );
-    controller.dispose();
     return result;
   }
 
   Future<void> _showInviteDialog(Tribe tribe) async {
-    final controller = TextEditingController();
     final username = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Invite member'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Username',
-            prefixText: '@',
-            prefixIcon: Icon(Icons.person_search_outlined),
+      builder: (dialogContext) => ModalTextControllerScope(
+        initialValues: const [''],
+        builder: (dialogContext, controllers) => AlertDialog(
+          title: const Text('Invite member'),
+          content: TextField(
+            controller: controllers.single,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Username',
+              prefixText: '@',
+              prefixIcon: Icon(Icons.person_search_outlined),
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                controllers.single.text.trim(),
+              ),
+              child: const Text('Invite'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Invite'),
-          ),
-        ],
       ),
     );
-    controller.dispose();
     if (username == null || username.isEmpty || !mounted) return;
-    final user =
-        await ref.read(repositoryProvider).findUserByPseudonym(username);
-    if (user == null) {
+    try {
+      final user =
+          await ref.read(repositoryProvider).findUserByPseudonym(username);
+      if (user == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No user found with that username.')),
+        );
+        return;
+      }
+      await ref.read(repositoryProvider).inviteToTribe(
+            tribeId: tribe.tribeId,
+            invitedUserId: user.userId,
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No user found with that username.')),
+        SnackBar(content: Text('Invitation sent to @${user.pseudonym}.')),
       );
-      return;
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send this invitation: $error')),
+      );
     }
-    await ref.read(repositoryProvider).inviteToTribe(
-          tribeId: tribe.tribeId,
-          invitedUserId: user.userId,
-        );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Invitation sent to @${user.pseudonym}.')),
-    );
   }
 }
 

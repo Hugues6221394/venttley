@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/colors.dart';
+import '../../widgets/modal_text_controller_scope.dart';
 
 /// Security & 2FA settings. Wires Supabase Auth MFA (TOTP) so a
 /// returning user can require a 6-digit code in addition to their
@@ -73,84 +74,113 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
     final factorId = enroll.id;
     final secret = enroll.totp?.secret ?? '';
     final uri = enroll.totp?.uri ?? '';
-    final codeCtl = TextEditingController();
     String? error;
+    var verifying = false;
     final verified = await showModalBottomSheet<bool>(
       context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Set up authenticator',
-                  style: TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 8),
-              const Text(
-                  'Open Google Authenticator / 1Password / Authy. Add a new account with this secret, then enter the 6-digit code below.',
-                  style: TextStyle(height: 1.4)),
-              const SizedBox(height: 14),
-              _SecretBlock(secret: secret, uri: uri),
-              const SizedBox(height: 14),
-              TextField(
-                controller: codeCtl,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText: '6-digit code',
-                  errorText: error,
-                ),
+      builder: (ctx) => ModalTextControllerScope(
+        initialValues: const [''],
+        builder: (ctx, controllers) {
+          final codeCtl = controllers.single;
+          return StatefulBuilder(builder: (ctx, setSheet) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
               ),
-              const SizedBox(height: 4),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: VentlyColors.berryMagenta,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Set up authenticator',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 8),
+                  const Text(
+                      'Open Google Authenticator / 1Password / Authy. Add a new account with this secret, then enter the 6-digit code below.',
+                      style: TextStyle(height: 1.4)),
+                  const SizedBox(height: 14),
+                  _SecretBlock(secret: secret, uri: uri),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: codeCtl,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: '6-digit code',
+                      errorText: error,
+                    ),
                   ),
-                  onPressed: () async {
-                    final code = codeCtl.text.trim();
-                    if (code.length != 6) {
-                      setSheet(
-                          () => error = 'Enter the 6-digit code.');
-                      return;
-                    }
-                    try {
-                      final challenge = await Supabase.instance.client.auth
-                          .mfa
-                          .challenge(factorId: factorId);
-                      await Supabase.instance.client.auth.mfa.verify(
-                        factorId: factorId,
-                        challengeId: challenge.id,
-                        code: code,
-                      );
-                      if (ctx.mounted) Navigator.pop(ctx, true);
-                    } catch (e) {
-                      setSheet(() => error = 'Code didn\'t match. Try again.');
-                    }
-                  },
-                  child: const Text('Verify & enable 2FA',
-                      style: TextStyle(fontWeight: FontWeight.w900)),
-                ),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: VentlyColors.berryMagenta,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: verifying
+                          ? null
+                          : () async {
+                              final code = codeCtl.text.trim();
+                              if (code.length != 6) {
+                                setSheet(
+                                    () => error = 'Enter the 6-digit code.');
+                                return;
+                              }
+                              setSheet(() {
+                                verifying = true;
+                                error = null;
+                              });
+                              try {
+                                final challenge = await Supabase
+                                    .instance.client.auth.mfa
+                                    .challenge(factorId: factorId);
+                                await Supabase.instance.client.auth.mfa.verify(
+                                  factorId: factorId,
+                                  challengeId: challenge.id,
+                                  code: code,
+                                );
+                                if (ctx.mounted) Navigator.pop(ctx, true);
+                              } catch (_) {
+                                if (!ctx.mounted) return;
+                                setSheet(() {
+                                  verifying = false;
+                                  error = 'Code didn\'t match. Try again.';
+                                });
+                              }
+                            },
+                      child: verifying
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Verify & enable 2FA',
+                              style: TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        );
-      }),
+            );
+          });
+        },
+      ),
     );
     if (verified == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -190,8 +220,8 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
       await _refresh();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Couldn\'t disable: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Couldn\'t disable: $e')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -250,8 +280,7 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                             ? 'Sign-ins require your password plus a 6-digit code from your authenticator app.'
                             : 'Add a 6-digit code from any authenticator app (Google Authenticator, 1Password, Authy) on top of your password.',
                         style: TextStyle(
-                          color:
-                              context.ink.withOpacity(0.7),
+                          color: context.ink.withOpacity(0.7),
                           fontWeight: FontWeight.w600,
                           height: 1.35,
                         ),
@@ -262,8 +291,7 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                           if (f.status == FactorStatus.verified)
                             ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading:
-                                  const Icon(Icons.qr_code_2_rounded),
+                              leading: const Icon(Icons.qr_code_2_rounded),
                               title: Text(f.friendlyName ?? f.factorType.name),
                               subtitle: Text(
                                 'Enrolled ${_short(f.createdAt.toIso8601String())}',
@@ -284,14 +312,12 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: VentlyColors.berryMagenta,
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onPressed: _busy ? null : _enroll,
                             icon: const Icon(Icons.lock_outline, size: 18),
                             label: const Text('Turn on 2FA',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w900)),
+                                style: TextStyle(fontWeight: FontWeight.w900)),
                           ),
                         ),
                     ],
@@ -327,8 +353,7 @@ class _SecretBlock extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFFFF1F6),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-            color: VentlyColors.softMauve.withOpacity(0.4)),
+        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -336,9 +361,7 @@ class _SecretBlock extends StatelessWidget {
           Text(
             'Secret (paste into authenticator)',
             style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: context.ink),
+                fontSize: 11, fontWeight: FontWeight.w800, color: context.ink),
           ),
           const SizedBox(height: 4),
           Row(
@@ -378,8 +401,7 @@ class _SecretBlock extends StatelessWidget {
                 child: SelectableText(
                   uri,
                   maxLines: 2,
-                  style: const TextStyle(
-                      fontFamily: 'monospace', fontSize: 11),
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
                 ),
               ),
               IconButton(

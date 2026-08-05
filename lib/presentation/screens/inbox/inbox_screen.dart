@@ -8,22 +8,17 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_chat_hub.dart';
 import '../../theme/colors.dart';
-import '../../widgets/glass_card.dart';
+import '../../theme/vently_tokens.dart';
 import '../../widgets/premium_motion.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tribe_avatar.dart';
+import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_premium_background.dart';
 
-/// Inbox / "Chat" — Image #14.
+/// Inbox / Chats — premium messaging surface.
 ///
-/// Surface stack:
-///   1. Brand header (menu, magenta "Chat", new-chat, bell)
-///   2. "Search your circle…" rounded search
-///   3. Vibes rail (Your Vent + friends in magenta rings)
-///   4. Pending Requests card (X new souls want to connect)
-///   5. Conversations header with filter
-///   6. Conversation rows — magenta accent for unread, smart timestamp,
-///      delivered / read ticks driven by chat_messages.read_at
+/// Instagram / WhatsApp / Discord inspired: one continuous scroll, soft
+/// surfaces, dense rows, clear unread hierarchy, and fast filters.
 class InboxScreen extends ConsumerStatefulWidget {
   const InboxScreen({super.key});
 
@@ -85,66 +80,95 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
       body: VentlyPremiumBackground(
         child: SafeArea(
           bottom: false,
-          child: Column(
-            children: [
-              _ChatHeader(
-                onCompose: () => context.push('/friends'),
-                onMenu: _showSheetMenu,
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            color: VentlyColors.berryMagenta,
+            edgeOffset: 8,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
               ),
-              _SearchField(
-                controller: _query,
-                onChanged: (_) => setState(() {}),
-              ),
-              if (friends.isNotEmpty) _VibesRail(friends: friends),
-              const _TribeChatsRail(),
-              if (pending > 0)
-                _PendingRequestsCard(
-                  count: pending,
-                  onTap: () => setState(() => _filter = _InboxFilter.requests),
-                ),
-              const SizedBox(height: 4),
-              _ConversationsHeader(
-                filter: _filter,
-                onChange: (f) => setState(() => _filter = f),
-              ),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: _refresh,
-                  color: VentlyColors.berryMagenta,
-                  child: allRoomsAsync.when(
-                    loading: () => const _LoadingSkeleton(),
-                    error: (e, _) => Center(child: Text('$e')),
-                    data: (rooms) {
-                      final filtered =
-                          _applyFilter(rooms, _filter, _query.text);
-                      if (filtered.isEmpty) {
-                        return _EmptyConversations(
-                          filter: _filter,
-                          hasQuery: _query.text.trim().isNotEmpty,
-                          onFindFriends: () => context.push('/friends'),
-                        );
-                      }
-                      return ListView.separated(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        cacheExtent: 800,
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 112),
-                        itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const Divider(
-                          height: 1,
-                          indent: 70,
-                          color: VentlyColors.softMauve,
-                        ),
-                        itemBuilder: (ctx, i) {
-                          return RepaintBoundary(
-                            child: _ConversationRow(room: filtered[i]),
-                          );
-                        },
-                      );
-                    },
+              cacheExtent: 900,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: _ChatHeader(
+                    onCompose: () => context.push('/friends'),
+                    onMenu: _showSheetMenu,
                   ),
                 ),
-              ),
-            ],
+                const SliverToBoxAdapter(child: SizedBox(height: 4)),
+                SliverToBoxAdapter(
+                  child: _SearchField(
+                    controller: _query,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                if (friends.isNotEmpty)
+                  SliverToBoxAdapter(child: _VibesRail(friends: friends)),
+                const SliverToBoxAdapter(child: _TribeChatsRail()),
+                if (pending > 0)
+                  SliverToBoxAdapter(
+                    child: _PendingRequestsCard(
+                      count: pending,
+                      onTap: () =>
+                          setState(() => _filter = _InboxFilter.requests),
+                    ),
+                  ),
+                SliverToBoxAdapter(
+                  child: _ConversationsHeader(
+                    filter: _filter,
+                    onChange: (f) => setState(() => _filter = f),
+                  ),
+                ),
+                ...allRoomsAsync.when(
+                  loading: () => [
+                    const SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _LoadingSkeleton(),
+                    ),
+                  ],
+                  error: (e, _) => [
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: VentlyErrorState(
+                        error: e,
+                        title: 'Chats unavailable',
+                        onRetry: _refresh,
+                      ),
+                    ),
+                  ],
+                  data: (rooms) {
+                    final filtered =
+                        _applyFilter(rooms, _filter, _query.text);
+                    if (filtered.isEmpty) {
+                      return [
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _EmptyConversations(
+                            filter: _filter,
+                            hasQuery: _query.text.trim().isNotEmpty,
+                            onFindFriends: () => context.push('/friends'),
+                          ),
+                        ),
+                      ];
+                    }
+                    return [
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 120),
+                        sliver: SliverList.builder(
+                          itemCount: filtered.length,
+                          itemBuilder: (ctx, i) {
+                            return RepaintBoundary(
+                              child: _ConversationRow(room: filtered[i]),
+                            );
+                          },
+                        ),
+                      ),
+                    ];
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -247,7 +271,7 @@ class _ChatHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 18, 14),
+      padding: const EdgeInsets.fromLTRB(20, 10, 14, 6),
       child: Row(
         children: [
           Expanded(
@@ -257,29 +281,46 @@ class _ChatHeader extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: context.ink,
-                fontSize: 31,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'serif',
-                letterSpacing: 0,
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.6,
+                height: 1.1,
               ),
             ),
           ),
           IconButton(
             tooltip: 'More',
-            icon: Icon(Icons.more_horiz_rounded, color: context.inkMuted),
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.more_horiz_rounded,
+                color: context.inkMuted, size: 22),
             onPressed: onMenu,
           ),
-          const SizedBox(width: 4),
-          SizedBox.square(
-            dimension: 46,
-            child: IconButton(
-              tooltip: 'New chat',
-              icon: Icon(Icons.add_rounded, color: context.ink, size: 25),
-              style: IconButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.surface,
-                side: const BorderSide(color: VentlyColors.softMauve),
+          const SizedBox(width: 2),
+          Material(
+            color: context.isDark
+                ? context.glass()
+                : Colors.white.withOpacity(0.92),
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onCompose,
+              child: Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: context.glassBorder),
+                  boxShadow: [
+                    BoxShadow(
+                      color: VentlyColors.deepBurgundy.withOpacity(0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Icon(Icons.edit_square, color: context.ink, size: 18),
               ),
-              onPressed: onCompose,
             ),
           ),
         ],
@@ -300,20 +341,21 @@ class _SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
       child: Container(
-        height: 50,
-        padding: const EdgeInsets.symmetric(horizontal: 17),
+        height: 42,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: context.isDark ? context.glass() : Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: context.glassBorder),
+          color: context.isDark
+              ? context.glass()
+              : const Color(0xFFF5EEF1),
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           children: [
             Icon(Icons.search_rounded,
-                size: 20, color: context.ink.withOpacity(0.55)),
-            const SizedBox(width: 10),
+                size: 18, color: context.ink.withOpacity(0.42)),
+            const SizedBox(width: 8),
             Expanded(
               child: TextField(
                 controller: controller,
@@ -324,17 +366,27 @@ class _SearchField extends StatelessWidget {
                   fontSize: 14,
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Search your circle…',
+                  hintText: 'Search',
                   hintStyle: TextStyle(
-                    color: context.ink.withOpacity(0.42),
+                    color: context.ink.withOpacity(0.38),
                     fontWeight: FontWeight.w600,
                   ),
                   border: InputBorder.none,
                   filled: false,
                   isDense: true,
+                  contentPadding: EdgeInsets.zero,
                 ),
               ),
             ),
+            if (controller.text.isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  controller.clear();
+                  onChanged('');
+                },
+                child: Icon(Icons.close_rounded,
+                    size: 16, color: context.ink.withOpacity(0.4)),
+              ),
           ],
         ),
       ),
@@ -354,20 +406,21 @@ class _VibesRail extends StatelessWidget {
   Widget build(BuildContext context) {
     final shown = friends.take(12).toList();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+            padding: const EdgeInsets.fromLTRB(16, 2, 8, 8),
             child: Row(
               children: [
                 Text(
                   'Vibes',
                   style: TextStyle(
                     color: context.ink,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    letterSpacing: -0.2,
                   ),
                 ),
                 const Spacer(),
@@ -376,11 +429,12 @@ class _VibesRail extends StatelessWidget {
                   style: TextButton.styleFrom(
                     foregroundColor: VentlyColors.berryMagenta,
                     visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
                   ),
                   child: const Text(
-                    'View all',
+                    'See all',
                     style: TextStyle(
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                       fontSize: 13,
                     ),
                   ),
@@ -389,12 +443,12 @@ class _VibesRail extends StatelessWidget {
             ),
           ),
           SizedBox(
-            height: 86,
+            height: 92,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               itemCount: shown.length + 1,
-              separatorBuilder: (_, __) => const SizedBox(width: 14),
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (ctx, i) {
                 if (i == 0) return const _YourVentBubble();
                 return _VibeBubble(friend: shown[i - 1]);
@@ -419,28 +473,29 @@ class _TribeChatsRail extends ConsumerWidget {
       data: (items) {
         if (items.isEmpty) return const SizedBox.shrink();
         return Padding(
-          padding: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.only(bottom: 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: Text(
                   'Tribe chats',
                   style: TextStyle(
                     color: context.ink,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    letterSpacing: -0.2,
                   ),
                 ),
               ),
               SizedBox(
-                height: 98,
+                height: 72,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
                   itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
                   itemBuilder: (ctx, i) {
                     final item = items[i];
                     return _TribeChatChip(item: item);
@@ -461,81 +516,93 @@ class _TribeChatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 148,
-      child: Material(
-        color: context.isDark
-            ? Theme.of(context).colorScheme.surface
-            : Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: context.glassBorder),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => context.push('/tribe/${item.slug}/chat'),
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        TribeAvatar(avatarUrl: item.avatarUrl, size: 36),
-                        if (item.unreadCount > 0)
-                          Positioned(
-                            right: -4,
-                            top: -4,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: VentlyColors.berryMagenta,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                '${item.unreadCount}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ),
+    return Material(
+      color: context.isDark
+          ? Theme.of(context).colorScheme.surface
+          : Colors.white.withOpacity(0.88),
+      borderRadius: BorderRadius.circular(VentlyTokens.radiusCard),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(VentlyTokens.radiusCard),
+        onTap: () => context.push('/tribe/${item.slug}/chat'),
+        child: Container(
+          width: 210,
+          padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(VentlyTokens.radiusCard),
+            border: Border.all(color: context.glassBorder),
+            boxShadow: [
+              BoxShadow(
+                color: VentlyColors.deepBurgundy.withOpacity(0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  TribeAvatar(avatarUrl: item.avatarUrl, size: 42),
+                  if (item.unreadCount > 0)
+                    Positioned(
+                      right: -3,
+                      top: -3,
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 16),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: VentlyColors.berryMagenta,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: Text(
+                          item.unreadCount > 9 ? '9+' : '${item.unreadCount}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
                           ),
-                      ],
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        item.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 12,
                         ),
                       ),
                     ),
+                ],
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      item.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: context.ink,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                    if (item.lastMessagePreview != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        item.lastMessagePreview!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: context.ink.withOpacity(0.55),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                const Spacer(),
-                if (item.lastMessagePreview != null)
-                  Text(
-                    item.lastMessagePreview!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: context.ink.withOpacity(0.6),
-                    ),
-                  ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -548,27 +615,28 @@ class _YourVentBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 64,
+      width: 68,
       child: Column(
         children: [
           InkWell(
             onTap: () => context.push('/compose/story'),
             customBorder: const CircleBorder(),
             child: DottedCircle(
-              size: 60,
-              color: VentlyColors.berryMagenta.withOpacity(0.55),
+              size: 58,
+              color: VentlyColors.berryMagenta.withOpacity(0.45),
               child: const Icon(Icons.add_rounded,
                   color: VentlyColors.berryMagenta, size: 22),
             ),
           ),
           const SizedBox(height: 6),
           Text(
-            'Your Vent',
+            'Your story',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: TextStyle(
               color: context.ink,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               fontSize: 11,
             ),
           ),
@@ -635,28 +703,41 @@ class _VibeBubble extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return SizedBox(
-      width: 64,
+      width: 68,
       child: Column(
         children: [
           InkWell(
             onTap: () => _openOrStartDm(context, ref),
             customBorder: const CircleBorder(),
             child: Container(
-              width: 60,
-              height: 60,
-              padding: const EdgeInsets.all(2.4),
+              width: 58,
+              height: 58,
+              padding: const EdgeInsets.all(2.2),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: VentlyColors.berryMagenta,
-                  width: 2.2,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    VentlyColors.berryMagenta,
+                    VentlyColors.berryMagenta.withOpacity(0.55),
+                    const Color(0xFFFF8FB3),
+                  ],
                 ),
               ),
-              child: ClipOval(
-                child: ProfileAvatar(
-                  avatarSeed: friend.avatarSeed,
-                  label: friend.pseudonym,
-                  size: 52,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                ),
+                child: ClipOval(
+                  child: ProfileAvatar(
+                    avatarSeed: friend.avatarSeed,
+                    label: friend.pseudonym,
+                    profilePhotoUrl: friend.profilePhotoUrl,
+                    size: 48,
+                  ),
                 ),
               ),
             ),
@@ -666,9 +747,10 @@ class _VibeBubble extends ConsumerWidget {
             _prettyName(friend.pseudonym),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: TextStyle(
               color: context.ink,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               fontSize: 11,
             ),
           ),
@@ -678,11 +760,11 @@ class _VibeBubble extends ConsumerWidget {
   }
 
   static String _prettyName(String p) {
-    final s = p.replaceAll('_', ' ');
-    if (s.length <= 10) return s;
+    final s = p.replaceAll('_', ' ').trim();
+    if (s.length <= 9) return s;
     final firstSpace = s.indexOf(' ');
-    if (firstSpace > 0 && firstSpace < 10) return s.substring(0, firstSpace);
-    return '${s.substring(0, 9)}…';
+    if (firstSpace > 0 && firstSpace <= 9) return s.substring(0, firstSpace);
+    return '${s.substring(0, 8)}…';
   }
 
   Future<void> _openOrStartDm(BuildContext context, WidgetRef ref) async {
@@ -725,77 +807,79 @@ class _PendingRequestsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
-      child: GlassCard(
-        padding: EdgeInsets.zero,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(24),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: context.isDark
-                          ? VentlyColors.berryDesat.withOpacity(0.16)
-                          : VentlyColors.roseTint,
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.group_add_rounded,
-                        color: VentlyColors.berryMagenta, size: 22),
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+      child: Material(
+        color: context.isDark
+            ? VentlyColors.berryDesat.withOpacity(0.12)
+            : VentlyColors.roseTint.withOpacity(0.72),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: context.isDark
+                        ? VentlyColors.berryDesat.withOpacity(0.18)
+                        : Colors.white,
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Pending Requests',
-                          style: TextStyle(
-                            color: context.ink,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 14,
-                          ),
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.mark_email_unread_rounded,
+                      color: VentlyColors.berryMagenta, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Message requests',
+                        style: TextStyle(
+                          color: context.ink,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '$count new soul${count == 1 ? '' : 's'} '
-                          'want${count == 1 ? 's' : ''} to connect',
-                          style: TextStyle(
-                            color: context.ink.withOpacity(0.62),
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: const BoxDecoration(
-                      color: VentlyColors.berryMagenta,
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '$count',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 13,
                       ),
+                      const SizedBox(height: 1),
+                      Text(
+                        '$count waiting for you',
+                        style: TextStyle(
+                          color: context.ink.withOpacity(0.58),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                  padding: const EdgeInsets.symmetric(horizontal: 7),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: VentlyColors.berryMagenta,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right_rounded,
+                    color: context.ink.withOpacity(0.35), size: 20),
+              ],
             ),
           ),
         ),
@@ -816,84 +900,73 @@ class _ConversationsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Messages',
             style: TextStyle(
               color: context.ink,
-              fontWeight: FontWeight.w900,
-              fontSize: 21,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              letterSpacing: -0.2,
             ),
           ),
-          const Spacer(),
-          TextButton(
-            onPressed: () => _showFilterSheet(context),
-            style: TextButton.styleFrom(
-              foregroundColor: VentlyColors.berryMagenta,
-              visualDensity: VisualDensity.compact,
-            ),
-            child: const Text(
-              'Filters',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
-            ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              for (final (label, value) in const [
+                ('All', _InboxFilter.all),
+                ('Active', _InboxFilter.active),
+                ('Requests', _InboxFilter.requests),
+              ]) ...[
+                _FilterChip(
+                  label: label,
+                  selected: filter == value,
+                  onTap: () => onChange(value),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ],
           ),
         ],
       ),
     );
   }
+}
 
-  void _showFilterSheet(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => SafeArea(
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? VentlyColors.berryMagenta
+          : (context.isDark
+              ? context.glass()
+              : const Color(0xFFF5EEF1)),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                  'Filter conversations',
-                  style: TextStyle(
-                    color: context.ink,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              for (final (label, value) in const [
-                ('All conversations', _InboxFilter.all),
-                ('Active only', _InboxFilter.active),
-                ('Pending requests', _InboxFilter.requests),
-              ])
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    filter == value
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_off,
-                    color: VentlyColors.berryMagenta,
-                  ),
-                  title: Text(
-                    label,
-                    style: TextStyle(
-                      color: context.ink,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  onTap: () {
-                    onChange(value);
-                    Navigator.pop(ctx);
-                  },
-                ),
-            ],
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.white : context.ink.withOpacity(0.72),
+              fontWeight: FontWeight.w800,
+              fontSize: 12.5,
+            ),
           ),
         ),
       ),
@@ -923,93 +996,115 @@ class _ConversationRow extends ConsumerWidget {
         ? (room.groupTitle ?? room.peerPseudonym)
         : room.peerPseudonym;
     return Pressable(
-      pressedScale: 0.98,
+      pressedScale: 0.985,
       onTap: () => isRequest
           ? _showRequestSheet(context, ref)
           : context.push('/chat/${room.roomId}'),
       onLongPress: () => _showActionsSheet(context, ref),
-      child: Material(
-        color: Colors.transparent,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          child: Row(
-            children: [
-              ProfileAvatar(
-                avatarSeed:
-                    room.isGroup ? 'group-${room.roomId}' : room.peerAvatarSeed,
-                label: displayName,
-                profilePhotoUrl: avatarUrl,
-                size: 54,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _displayName(displayName),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: context.ink,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    _LastMessageLine(
-                      room: room,
-                      typing: typing,
-                      isRequest: isRequest,
-                      unread: unread,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 44,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      formatTimestamp(activityAt),
-                      maxLines: 1,
-                      style: TextStyle(
-                        color: context.inkFaint,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (room.unreadCount > 0)
-                      Container(
-                        constraints:
-                            const BoxConstraints(minWidth: 24, minHeight: 24),
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: VentlyColors.berryMagenta,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        decoration: BoxDecoration(
+          color: unread
+              ? (context.isDark
+                  ? VentlyColors.berryDesat.withOpacity(0.10)
+                  : VentlyColors.roseTint.withOpacity(0.55))
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            ProfileAvatar(
+              avatarSeed:
+                  room.isGroup ? 'group-${room.roomId}' : room.peerAvatarSeed,
+              label: displayName,
+              profilePhotoUrl: avatarUrl,
+              size: 52,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
                         child: Text(
-                          room.unreadCount > 99 ? '99+' : '${room.unreadCount}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w900,
+                          _displayName(displayName),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: context.ink,
+                            fontWeight: unread ? FontWeight.w800 : FontWeight.w700,
+                            fontSize: 15,
+                            letterSpacing: -0.2,
                           ),
                         ),
-                      )
-                    else
-                      const SizedBox(height: 24),
-                  ],
-                ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        formatTimestamp(activityAt),
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: unread
+                              ? VentlyColors.berryMagenta
+                              : context.inkFaint,
+                          fontSize: 11,
+                          fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _LastMessageLine(
+                          room: room,
+                          typing: typing,
+                          isRequest: isRequest,
+                          unread: unread,
+                        ),
+                      ),
+                      if (room.unreadCount > 0) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          constraints:
+                              const BoxConstraints(minWidth: 20, minHeight: 20),
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: VentlyColors.berryMagenta,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            room.unreadCount > 99
+                                ? '99+'
+                                : '${room.unreadCount}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ] else if (!isRequest && room.initiatedByMe) ...[
+                        const SizedBox(width: 6),
+                        _ReadStateGlyph(
+                          isRequest: isRequest,
+                          initiatedByMe: room.initiatedByMe,
+                          lastOwnMessageRead: room.lastOwnMessageRead,
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1094,6 +1189,7 @@ class _ConversationRow extends ConsumerWidget {
                   ProfileAvatar(
                     avatarSeed: room.peerAvatarSeed,
                     label: room.peerPseudonym,
+                    profilePhotoUrl: room.peerProfilePhotoUrl,
                     size: 44,
                   ),
                   const SizedBox(width: 12),
@@ -1229,86 +1325,42 @@ class _LastMessageLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (typing) {
-      return Row(
-        children: [
-          const Expanded(
-            child: Text(
-              'typing…',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: VentlyColors.berryMagenta,
-                fontWeight: FontWeight.w800,
-                fontSize: 12.5,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          _ReadStateGlyph(
-            isRequest: isRequest,
-            initiatedByMe: room.initiatedByMe,
-            lastOwnMessageRead: room.lastOwnMessageRead,
-          ),
-        ],
+      return const Text(
+        'typing…',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: VentlyColors.berryMagenta,
+          fontWeight: FontWeight.w700,
+          fontSize: 13,
+          fontStyle: FontStyle.italic,
+        ),
       );
     }
     if (isRequest) {
-      return Row(
-        children: [
-          Expanded(
-            child: Text(
-              'New message request',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: context.ink.withOpacity(0.66),
-                fontWeight: FontWeight.w700,
-                fontSize: 12.5,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          _ReadStateGlyph(
-            isRequest: isRequest,
-            initiatedByMe: room.initiatedByMe,
-            lastOwnMessageRead: room.lastOwnMessageRead,
-          ),
-        ],
+      return Text(
+        'Wants to chat',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: context.ink.withOpacity(0.58),
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+        ),
       );
     }
     final preview = (room.lastMessagePreview ?? room.requestPreview).trim();
-    final previewStyle = TextStyle(
-      color: unread ? context.ink : context.ink.withOpacity(0.66),
-      fontWeight: unread ? FontWeight.w900 : FontWeight.w700,
-      fontSize: 12.5,
-      height: 1.3,
-    );
-    return Row(
-      children: [
-        Icon(
-          Icons.lock_outline_rounded,
-          size: 13,
-          color: context.inkFaint,
-        ),
-        const SizedBox(width: 5),
-        Expanded(
-          child: Text(
-            preview.isEmpty ? 'Tap to open chat' : preview,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: previewStyle.copyWith(
-              fontStyle: preview.isEmpty ? FontStyle.italic : null,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        _ReadStateGlyph(
-          isRequest: isRequest,
-          initiatedByMe: room.initiatedByMe,
-          lastOwnMessageRead: room.lastOwnMessageRead,
-        ),
-      ],
+    return Text(
+      preview.isEmpty ? 'Tap to open chat' : preview,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: unread ? context.ink.withOpacity(0.88) : context.ink.withOpacity(0.52),
+        fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
+        fontSize: 13,
+        height: 1.25,
+        fontStyle: preview.isEmpty ? FontStyle.italic : null,
+      ),
     );
   }
 }
@@ -1387,54 +1439,55 @@ class _EmptyConversations extends StatelessWidget {
           break;
       }
     }
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(30, 40, 30, 40),
-      children: [
-        Container(
-          width: 88,
-          height: 88,
-          decoration: BoxDecoration(
-            color: context.isDark
-                ? VentlyColors.berryDesat.withOpacity(0.16)
-                : VentlyColors.roseTint,
-            shape: BoxShape.circle,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(30, 48, 30, 40),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: context.isDark
+                  ? VentlyColors.berryDesat.withOpacity(0.16)
+                  : VentlyColors.roseTint,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.chat_bubble_outline,
+                color: VentlyColors.berryMagenta, size: 34),
           ),
-          child: const Icon(Icons.chat_bubble_outline,
-              color: VentlyColors.berryMagenta, size: 36),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: context.ink,
-            fontWeight: FontWeight.w900,
-            fontSize: 18,
+          const SizedBox(height: 16),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: context.ink,
+              fontWeight: FontWeight.w800,
+              fontSize: 17,
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          body,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: context.ink.withOpacity(0.66),
-            fontWeight: FontWeight.w700,
-            fontSize: 13,
+          const SizedBox(height: 6),
+          Text(
+            body,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: context.ink.withOpacity(0.62),
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              height: 1.35,
+            ),
           ),
-        ),
-        if (!hasQuery && filter == _InboxFilter.all) ...[
-          const SizedBox(height: 20),
-          Center(
-            child: SizedBox(
-              width: 220,
+          if (!hasQuery && filter == _InboxFilter.all) ...[
+            const SizedBox(height: 20),
+            SizedBox(
+              width: 200,
               child: FilledButton.icon(
                 onPressed: onFindFriends,
                 style: FilledButton.styleFrom(
                   backgroundColor: VentlyColors.berryMagenta,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
                 icon: const Icon(Icons.person_add_alt_1, size: 18),
@@ -1444,9 +1497,9 @@ class _EmptyConversations extends StatelessWidget {
                 ),
               ),
             ),
-          ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -1455,16 +1508,21 @@ class _LoadingSkeleton extends StatelessWidget {
   const _LoadingSkeleton();
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      itemCount: 6,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (_, __) => Container(
-        height: 84,
-        decoration: BoxDecoration(
-          color: context.glass(0.9),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.30)),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        children: List.generate(
+          5,
+          (i) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Container(
+              height: 72,
+              decoration: BoxDecoration(
+                color: context.glass(0.9),
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
         ),
       ),
     );

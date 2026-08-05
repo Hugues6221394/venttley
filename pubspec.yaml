@@ -59,6 +59,8 @@ dependencies:
   # Audio playback for Whispers + voice-note bubbles
   just_audio: ^0.9.40
   audio_session: ^0.1.21
+  # Local, pre-upload Whisper voice effects. Audio-only LGPL build.
+  ffmpeg_kit_flutter_new_audio: 2.4.4
 
   # Foreground / in-app local notifications. OS-level push via FCM/APNs
   # is wired through the `push_tokens` table — see docs/notifications.md.

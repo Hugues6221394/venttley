@@ -23,6 +23,9 @@ type Row = {
   category: string;
   is_private: boolean;
   is_featured: boolean;
+  is_active: boolean;
+  lifecycle_status: string | null;
+  deletion_purge_at: string | null;
   member_count: number;
   keeper_id: string | null;
   created_at: string;
@@ -55,7 +58,7 @@ export default async function TribesPage({
   let query = db
     .from("tribes")
     .select(
-      "tribe_id, name, slug, description, category, is_private, is_featured, member_count, keeper_id, created_at"
+      "tribe_id, name, slug, description, category, is_private, is_featured, is_active, lifecycle_status, deletion_purge_at, member_count, keeper_id, created_at"
     )
     .order("member_count", { ascending: false })
     .limit(200);
@@ -199,6 +202,20 @@ export default async function TribesPage({
                       </Badge>
                     )}
                     {t.is_private && <Badge tone="warn">private</Badge>}
+                    {!t.is_active && (
+                      <Badge
+                        tone={
+                          t.lifecycle_status === "pending_deletion"
+                            ? "danger"
+                            : "warn"
+                        }
+                      >
+                        {(t.lifecycle_status ?? "inactive").replaceAll(
+                          "_",
+                          " "
+                        )}
+                      </Badge>
+                    )}
                   </div>
                 </header>
                 {t.description && (

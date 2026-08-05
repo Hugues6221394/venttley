@@ -140,8 +140,18 @@ void navigateFromNotificationPayload(
   String payload, {
   Object? extra,
 }) {
-  final route = routeForNotificationPayload(payload);
+  var route = routeForNotificationPayload(payload);
   if (route == null) return;
+
+  final currentPath = router.routeInformationProvider.value.uri.path;
+  final onRootConversation = currentPath.startsWith('/chat/') ||
+      currentPath.startsWith('/group-chat/') ||
+      currentPath.startsWith('/post-preview/');
+  if (onRootConversation && route.startsWith('/post/')) {
+    route = route.replaceFirst('/post/', '/post-preview/');
+  } else if (onRootConversation && route.startsWith('/user/')) {
+    route = route.replaceFirst('/user/', '/user-preview/');
+  }
 
   final path = Uri.parse(route).path;
   final isShell = path.startsWith('/feed') ||

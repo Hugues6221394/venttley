@@ -8,6 +8,7 @@ import '../../core/constants.dart';
 import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
+import '../theme/vent_card_style.dart';
 import 'anonymous_avatar.dart';
 import 'mood_chip.dart';
 import 'poll_card.dart';
@@ -38,7 +39,12 @@ class PostCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final muted = scheme.onSurface.withOpacity(0.55);
+    final cardBackground = VentCardStyle.parse(post.cardBackgroundColor);
+    final cardText = VentCardStyle.parse(VentCardStyle.readableTextFor(
+      post.cardBackgroundColor,
+      post.cardTextColor,
+    ));
+    final muted = (cardText ?? scheme.onSurface).withOpacity(0.55);
     final dmDisabled = FeedCategories.dmRestricted.contains(post.categoryName);
     final me = ref.watch(sessionProvider);
     final isMine = post.ownedBy(me?.userId);
@@ -84,357 +90,374 @@ class PostCard extends ConsumerWidget {
       pressedScale: 0.98,
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        color: cardBackground,
+        child: DefaultTextStyle.merge(
+          style: TextStyle(color: cardText),
+          child: IconTheme.merge(
+            data: IconThemeData(color: cardText),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (post.authorId != null)
-                    UserProfileLink(
-                      userId: post.authorId!,
-                      pseudonym: post.authorPseudonym,
-                      avatarSeed: post.authorAvatarSeed,
-                      profilePhotoUrl: post.authorProfilePhotoUrl,
-                      size: 36,
-                    )
-                  else
-                    ProfileAvatar(
-                      avatarSeed: post.authorAvatarSeed,
-                      label: post.authorPseudonym,
-                      profilePhotoUrl: post.authorProfilePhotoUrl,
-                      size: 36,
-                    ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: post.authorId != null
-                                  ? InkWell(
-                                      onTap: () => context
-                                          .push('/user/${post.authorId}'),
-                                      child: Text(
-                                        post.authorPseudonym,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    )
-                                  : Text(
-                                      post.authorPseudonym,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                            ),
-                            if (post.authorIsVerified) ...[
-                              const SizedBox(width: 4),
-                              const VerifiedBadge(size: 14),
-                            ],
-                            if (post.authorKarma >= 10) ...[
-                              const SizedBox(width: 4),
-                              Icon(Icons.auto_awesome,
-                                  size: 11, color: scheme.primary),
-                              const SizedBox(width: 2),
-                              Text(
-                                PostCard.compactNumber(post.authorKarma),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  color: scheme.primary,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(width: 6),
-                            Text(
-                              _ago(post.createdAt),
-                              style: TextStyle(color: muted, fontSize: 12),
-                            ),
-                            if (post.isKeeperPick) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: VentlyColors.berryMagenta
-                                      .withOpacity(0.14),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.star,
-                                        size: 10,
-                                        color: VentlyColors.berryMagenta),
-                                    SizedBox(width: 3),
-                                    Text(
-                                      'KEEPER\'S PICK',
-                                      style: TextStyle(
-                                        color: VentlyColors.berryMagenta,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            if (post.isLocked) ...[
-                              const SizedBox(width: 6),
-                              Icon(Icons.lock_outline, size: 12, color: muted),
-                            ],
-                            if (post.isEdited) ...[
-                              const SizedBox(width: 4),
-                              Text(
-                                '· edited',
-                                style: TextStyle(
-                                  color: muted,
-                                  fontSize: 11,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ],
-                          ],
+                  Row(
+                    children: [
+                      if (post.authorId != null)
+                        UserProfileLink(
+                          userId: post.authorId!,
+                          pseudonym: post.authorPseudonym,
+                          avatarSeed: post.authorAvatarSeed,
+                          profilePhotoUrl: post.authorProfilePhotoUrl,
+                          size: 36,
+                        )
+                      else
+                        ProfileAvatar(
+                          avatarSeed: post.authorAvatarSeed,
+                          label: post.authorPseudonym,
+                          profilePhotoUrl: post.authorProfilePhotoUrl,
+                          size: 36,
                         ),
-                        if (post.tribeName != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: GestureDetector(
-                              onTap: post.tribeSlug == null || onTap == null
-                                  ? null
-                                  : onTap!.call,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  TribeAvatar(
-                                    avatarUrl: tribeForPost?.avatarUrl,
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Flexible(
-                                    child: Text(
-                                      post.tribeName!,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: scheme.primary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: post.authorId != null
+                                      ? InkWell(
+                                          onTap: () => context
+                                              .push('/user/${post.authorId}'),
+                                          child: Text(
+                                            post.authorPseudonym,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        )
+                                      : Text(
+                                          post.authorPseudonym,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                ),
+                                if (post.authorIsVerified) ...[
+                                  const SizedBox(width: 4),
+                                  const VerifiedBadge(size: 14),
+                                ],
+                                if (post.authorKarma >= 10) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.auto_awesome,
+                                      size: 11, color: scheme.primary),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    PostCard.compactNumber(post.authorKarma),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: scheme.primary,
                                     ),
                                   ),
                                 ],
-                              ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _ago(post.createdAt),
+                                  style: TextStyle(color: muted, fontSize: 12),
+                                ),
+                                if (post.isKeeperPick) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: VentlyColors.berryMagenta
+                                          .withOpacity(0.14),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.star,
+                                            size: 10,
+                                            color: VentlyColors.berryMagenta),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          'KEEPER\'S PICK',
+                                          style: TextStyle(
+                                            color: VentlyColors.berryMagenta,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                if (post.isLocked) ...[
+                                  const SizedBox(width: 6),
+                                  Icon(Icons.lock_outline,
+                                      size: 12, color: muted),
+                                ],
+                                if (post.isEdited) ...[
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '· edited',
+                                    style: TextStyle(
+                                      color: muted,
+                                      fontSize: 11,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  MoodChip(mood: post.postMood, dense: true),
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (post.isWhisper) ...[
-                Row(
-                  children: [
-                    Icon(Icons.nightlight, size: 12, color: scheme.primary),
-                    const SizedBox(width: 4),
-                    Text(
-                      'WHISPER · expires ${_whisperExpiry(post.whisperRemaining)}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        letterSpacing: 1.0,
-                        fontWeight: FontWeight.w800,
-                        color: scheme.primary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-              ],
-              TaggedText(
-                post.content,
-                style: const TextStyle(fontSize: 15, height: 1.4),
-              ),
-              const SizedBox(height: 10),
-              Consumer(
-                builder: (ctx, r, _) {
-                  final poll =
-                      r.watch(pollForPostProvider(post.postId)).valueOrNull;
-                  if (poll == null) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: PollCard(poll: poll, compact: true),
-                  );
-                },
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  _ReactionButton(post: post),
-                  const SizedBox(width: 16),
-                  _PillAction(
-                    icon: CupertinoIcons.chat_bubble,
-                    label: PostCard.compactNumber(post.commentsCount),
-                    onTap: onComment,
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: Icon(
-                      post.savedByMe ? Icons.bookmark : Icons.bookmark_outline,
-                      color: post.savedByMe ? scheme.primary : muted,
-                    ),
-                    onPressed: () =>
-                        ref.read(repositoryProvider).toggleSave(post.postId),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.send_rounded, color: muted),
-                    onPressed: onShare,
-                  ),
-                  if (!dmDisabled)
-                    IconButton(
-                      icon: Icon(Icons.mail_outline, color: muted),
-                      tooltip: 'Request a chat',
-                      onPressed: onMessage,
-                    ),
-                  PopupMenuButton<String>(
-                    icon: Icon(Icons.more_horiz, color: muted),
-                    tooltip: 'More',
-                    onSelected: (v) async {
-                      if (v == 'report') {
-                        openReportPostSheet(context, ref, post.postId);
-                      } else if (v == 'share_friend') {
-                        showSharePostToFriendSheet(
-                          context,
-                          postId: post.postId,
-                          previewSnippet: post.content,
-                        );
-                      } else if (v == 'edit') {
-                        openEditPostDialog(context, ref, post);
-                      } else if (v == 'delete') {
-                        confirmDeletePost(context, ref, post);
-                      } else if (v == 'lock' || v == 'unlock') {
-                        await ref.read(repositoryProvider).setPostCommentsLock(
-                            postId: post.postId, locked: v == 'lock');
-                        ref.invalidate(postByIdProvider(post.postId));
-                        ref.invalidate(feedPostsProvider);
-                      } else if (v == 'keeper_pick') {
-                        await ref
-                            .read(repositoryProvider)
-                            .toggleKeeperPick(post.postId);
-                        ref.invalidate(postByIdProvider(post.postId));
-                        ref.invalidate(feedPostsProvider);
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
-                        value: 'share_friend',
-                        child: Row(
-                          children: [
-                            Icon(Icons.send_rounded, size: 16),
-                            SizedBox(width: 8),
-                            Text('Share to a friend'),
+                            if (post.tribeName != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: GestureDetector(
+                                  onTap: post.tribeSlug == null || onTap == null
+                                      ? null
+                                      : onTap!.call,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      TribeAvatar(
+                                        avatarUrl: tribeForPost?.avatarUrl,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          post.tribeName!,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: scheme.primary,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
-                      if (isMine)
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Row(
-                            children: [
-                              Icon(Icons.edit_outlined, size: 16),
-                              SizedBox(width: 8),
-                              Text('Edit'),
-                            ],
-                          ),
-                        ),
-                      if (isMine)
-                        PopupMenuItem(
-                          value: post.isLocked ? 'unlock' : 'lock',
-                          child: Row(
-                            children: [
-                              Icon(
-                                  post.isLocked
-                                      ? Icons.lock_open_outlined
-                                      : Icons.lock_outline,
-                                  size: 16),
-                              const SizedBox(width: 8),
-                              Text(post.isLocked
-                                  ? 'Unlock comments'
-                                  : 'Lock comments'),
-                            ],
-                          ),
-                        ),
-                      if (isMine)
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(Icons.delete_outline, size: 16),
-                              SizedBox(width: 8),
-                              Text('Delete'),
-                            ],
-                          ),
-                        ),
-                      if (iAmKeeper)
-                        PopupMenuItem(
-                          value: 'keeper_pick',
-                          child: Row(
-                            children: [
-                              Icon(
-                                  post.isKeeperPick
-                                      ? Icons.star
-                                      : Icons.star_outline,
-                                  size: 16,
-                                  color: VentlyColors.berryMagenta),
-                              const SizedBox(width: 8),
-                              Text(post.isKeeperPick
-                                  ? 'Unpick from Plug\'s'
-                                  : 'Mark as Plug\'s Pick'),
-                            ],
-                          ),
-                        ),
-                      if (!isMine)
-                        const PopupMenuItem(
-                          value: 'report',
-                          child: Row(
-                            children: [
-                              Icon(Icons.flag_outlined, size: 16),
-                              SizedBox(width: 8),
-                              Text('Report'),
-                            ],
-                          ),
-                        ),
+                      MoodChip(mood: post.postMood, dense: true),
                     ],
                   ),
-                ],
-              ),
-              if (dmDisabled)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.shield_outlined, size: 14, color: muted),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'DMs disabled for ${FeedCategories.label(post.categoryName)} to protect this space.',
-                          style: TextStyle(fontSize: 11, color: muted),
+                  const SizedBox(height: 12),
+                  if (post.isWhisper) ...[
+                    Row(
+                      children: [
+                        Icon(Icons.nightlight, size: 12, color: scheme.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          'WHISPER · expires ${_whisperExpiry(post.whisperRemaining)}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            letterSpacing: 1.0,
+                            fontWeight: FontWeight.w800,
+                            color: scheme.primary,
+                          ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+                  TaggedText(
+                    post.content,
+                    style: TextStyle(
+                      color: cardText,
+                      fontSize: 15,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Consumer(
+                    builder: (ctx, r, _) {
+                      final poll =
+                          r.watch(pollForPostProvider(post.postId)).valueOrNull;
+                      if (poll == null) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: PollCard(poll: poll, compact: true),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      _ReactionButton(post: post),
+                      const SizedBox(width: 16),
+                      _PillAction(
+                        icon: CupertinoIcons.chat_bubble,
+                        label: PostCard.compactNumber(post.commentsCount),
+                        onTap: onComment,
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: Icon(
+                          post.savedByMe
+                              ? Icons.bookmark
+                              : Icons.bookmark_outline,
+                          color: post.savedByMe ? scheme.primary : muted,
+                        ),
+                        onPressed: () => ref
+                            .read(repositoryProvider)
+                            .toggleSave(post.postId),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.send_rounded, color: muted),
+                        onPressed: onShare,
+                      ),
+                      if (!dmDisabled)
+                        IconButton(
+                          icon: Icon(Icons.mail_outline, color: muted),
+                          tooltip: 'Request a chat',
+                          onPressed: onMessage,
+                        ),
+                      PopupMenuButton<String>(
+                        icon: Icon(Icons.more_horiz, color: muted),
+                        tooltip: 'More',
+                        onSelected: (v) async {
+                          if (v == 'report') {
+                            openReportPostSheet(context, ref, post.postId);
+                          } else if (v == 'share_friend') {
+                            showSharePostToFriendSheet(
+                              context,
+                              postId: post.postId,
+                              previewSnippet: post.content,
+                            );
+                          } else if (v == 'edit') {
+                            openEditPostDialog(context, ref, post);
+                          } else if (v == 'delete') {
+                            confirmDeletePost(context, ref, post);
+                          } else if (v == 'lock' || v == 'unlock') {
+                            await ref
+                                .read(repositoryProvider)
+                                .setPostCommentsLock(
+                                    postId: post.postId, locked: v == 'lock');
+                            ref.invalidate(postByIdProvider(post.postId));
+                            ref.invalidate(feedPostsProvider);
+                          } else if (v == 'keeper_pick') {
+                            await ref
+                                .read(repositoryProvider)
+                                .toggleKeeperPick(post.postId);
+                            ref.invalidate(postByIdProvider(post.postId));
+                            ref.invalidate(feedPostsProvider);
+                          }
+                        },
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(
+                            value: 'share_friend',
+                            child: Row(
+                              children: [
+                                Icon(Icons.send_rounded, size: 16),
+                                SizedBox(width: 8),
+                                Text('Share to a friend'),
+                              ],
+                            ),
+                          ),
+                          if (isMine)
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit_outlined, size: 16),
+                                  SizedBox(width: 8),
+                                  Text('Edit'),
+                                ],
+                              ),
+                            ),
+                          if (isMine)
+                            PopupMenuItem(
+                              value: post.isLocked ? 'unlock' : 'lock',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                      post.isLocked
+                                          ? Icons.lock_open_outlined
+                                          : Icons.lock_outline,
+                                      size: 16),
+                                  const SizedBox(width: 8),
+                                  Text(post.isLocked
+                                      ? 'Unlock comments'
+                                      : 'Lock comments'),
+                                ],
+                              ),
+                            ),
+                          if (isMine)
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete_outline, size: 16),
+                                  SizedBox(width: 8),
+                                  Text('Delete'),
+                                ],
+                              ),
+                            ),
+                          if (iAmKeeper)
+                            PopupMenuItem(
+                              value: 'keeper_pick',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                      post.isKeeperPick
+                                          ? Icons.star
+                                          : Icons.star_outline,
+                                      size: 16,
+                                      color: VentlyColors.berryMagenta),
+                                  const SizedBox(width: 8),
+                                  Text(post.isKeeperPick
+                                      ? 'Unpick from Plug\'s'
+                                      : 'Mark as Plug\'s Pick'),
+                                ],
+                              ),
+                            ),
+                          if (!isMine)
+                            const PopupMenuItem(
+                              value: 'report',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.flag_outlined, size: 16),
+                                  SizedBox(width: 8),
+                                  Text('Report'),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ),
-                ),
-            ],
+                  if (dmDisabled)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.shield_outlined, size: 14, color: muted),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'DMs disabled for ${FeedCategories.label(post.categoryName)} to protect this space.',
+                              style: TextStyle(fontSize: 11, color: muted),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -938,10 +961,13 @@ Future<void> openEditPostDialog(
   if (saved != true) return;
   if (next.isEmpty && !post.hasImage && !post.hasAudio) return;
   try {
-    await ref.read(repositoryProvider).editPost(
+    final updated = await ref.read(repositoryProvider).editPost(
           postId: post.postId,
           newContent: next,
         );
+    if (!updated) {
+      throw StateError('The post update was not accepted.');
+    }
     ref.invalidate(postByIdProvider(post.postId));
     ref.invalidate(feedPostsProvider);
     if (!context.mounted) return;
@@ -988,7 +1014,10 @@ Future<bool> confirmDeletePost(
   );
   if (ok != true) return false;
   try {
-    await ref.read(repositoryProvider).deletePost(post.postId);
+    final deleted = await ref.read(repositoryProvider).deletePost(post.postId);
+    if (!deleted) {
+      throw StateError('The post deletion was not accepted.');
+    }
     ref.invalidate(postByIdProvider(post.postId));
     ref.invalidate(feedPostsProvider);
     if (!context.mounted) return true;

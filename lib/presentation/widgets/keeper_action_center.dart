@@ -46,7 +46,9 @@ class KeeperActionCenter extends StatelessWidget {
           label: 'New members · 7d',
           count: newMembers7d,
           color: VentlyColors.successGreen,
-          onTap: () => context.push('/tribe/${tribe.slug}/manage'),
+          onTap: () => context.push(
+            '/tribe/${tribe.slug}/manage/settings/members',
+          ),
         ),
     ];
 
@@ -57,7 +59,8 @@ class KeeperActionCenter extends StatelessWidget {
         decoration: BoxDecoration(
           color: VentlyColors.successGreen.withOpacity(0.08),
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: VentlyColors.successGreen.withOpacity(0.25)),
+          border:
+              Border.all(color: VentlyColors.successGreen.withOpacity(0.25)),
         ),
         child: Row(
           children: [

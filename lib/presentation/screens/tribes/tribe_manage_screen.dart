@@ -10,6 +10,7 @@ import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/keeper_action_center.dart';
+import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/post_card.dart';
 
 /// Plugz / Keeper creator dashboard.
@@ -54,8 +55,10 @@ class TribeManageScreen extends ConsumerWidget {
               children: [
                 Icon(Icons.lock_outline,
                     size: 40,
-                    color:
-                        Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withOpacity(0.4)),
                 const SizedBox(height: 12),
                 const Text(
                   'Only the Plug of this Tribe can open the dashboard.',
@@ -73,9 +76,8 @@ class TribeManageScreen extends ConsumerWidget {
     final posts = postsAsync.valueOrNull ?? const <Post>[];
     final statsAsync = ref.watch(tribeStudioStatsProvider(tribe.tribeId));
     final stats = statsAsync.valueOrNull;
-    final unanswered = posts
-        .where((p) => p.commentsCount < 2 && !p.isDeleted)
-        .length;
+    final unanswered =
+        posts.where((p) => p.commentsCount < 2 && !p.isDeleted).length;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -230,8 +232,7 @@ class _HeaderCard extends StatelessWidget {
                   color: scheme.primary.withOpacity(0.20),
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: Icon(Icons.diversity_3,
-                    color: scheme.primary, size: 28),
+                child: Icon(Icons.diversity_3, color: scheme.primary, size: 28),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -243,9 +244,7 @@ class _HeaderCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        color: isDark
-                            ? VentlyColors.softOffWhite
-                            : context.ink,
+                        color: isDark ? VentlyColors.softOffWhite : context.ink,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -371,7 +370,8 @@ class _LivePulseState extends State<_LivePulse>
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final live = widget.value > 0;
-    final color = live ? VentlyColors.successGreen : scheme.onSurface.withOpacity(0.4);
+    final color =
+        live ? VentlyColors.successGreen : scheme.onSurface.withOpacity(0.4);
     return Row(
       children: [
         AnimatedBuilder(
@@ -429,23 +429,21 @@ class _AnalyticsGrid extends StatelessWidget {
     final now = DateTime.now();
     final last7 = now.subtract(const Duration(days: 7));
     final prior7 = now.subtract(const Duration(days: 14));
-    final inLast7 =
-        posts.where((p) => p.createdAt.isAfter(last7)).toList();
-    final inPrior =
-        posts.where((p) =>
-            p.createdAt.isAfter(prior7) &&
-            p.createdAt.isBefore(last7)).toList();
+    final inLast7 = posts.where((p) => p.createdAt.isAfter(last7)).toList();
+    final inPrior = posts
+        .where(
+            (p) => p.createdAt.isAfter(prior7) && p.createdAt.isBefore(last7))
+        .toList();
 
     int sum(Iterable<Post> ps, int Function(Post) f) =>
         ps.fold<int>(0, (a, p) => a + f(p));
 
-    final replies7    = sum(inLast7, (p) => p.commentsCount);
+    final replies7 = sum(inLast7, (p) => p.commentsCount);
     final repliesPrev = sum(inPrior, (p) => p.commentsCount);
-    final likes7      = sum(inLast7, (p) => p.likesCount);
-    final likesPrev   = sum(inPrior, (p) => p.likesCount);
-    final engage7 = inLast7.isEmpty
-        ? 0
-        : (((likes7 + replies7) / inLast7.length).round());
+    final likes7 = sum(inLast7, (p) => p.likesCount);
+    final likesPrev = sum(inPrior, (p) => p.likesCount);
+    final engage7 =
+        inLast7.isEmpty ? 0 : (((likes7 + replies7) / inLast7.length).round());
     final engagePrev = inPrior.isEmpty
         ? 0
         : (((likesPrev + repliesPrev) / inPrior.length).round());
@@ -512,6 +510,7 @@ class _StatTile extends StatelessWidget {
   final String label;
   final String value;
   final String sub;
+
   /// Signed % change vs prior period. Positive = up; negative = down;
   /// null = no honest comparison (prior period was zero).
   final double? deltaPercent;
@@ -523,8 +522,9 @@ class _StatTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color:
-            isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
+        color: isDark
+            ? Theme.of(context).colorScheme.surface
+            : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
@@ -668,8 +668,9 @@ class _SentimentCard extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color:
-            isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
+        color: isDark
+            ? Theme.of(context).colorScheme.surface
+            : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
@@ -798,12 +799,11 @@ class _ActivityCard extends StatelessWidget {
     final buckets = List<int>.filled(7, 0);
     final labels = <String>[];
     for (var i = 6; i >= 0; i--) {
-      final day = DateTime(now.year, now.month, now.day)
-          .subtract(Duration(days: i));
+      final day =
+          DateTime(now.year, now.month, now.day).subtract(Duration(days: i));
       final next = day.add(const Duration(days: 1));
       buckets[6 - i] = posts
-          .where((p) =>
-              p.createdAt.isAfter(day) && p.createdAt.isBefore(next))
+          .where((p) => p.createdAt.isAfter(day) && p.createdAt.isBefore(next))
           .length;
       labels.add(DateFormat.E().format(day).substring(0, 1));
     }
@@ -814,8 +814,9 @@ class _ActivityCard extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color:
-            isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
+        color: isDark
+            ? Theme.of(context).colorScheme.surface
+            : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
@@ -893,8 +894,10 @@ class _QuickActions extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tribeSlug =
-        GoRouterState.of(context).pathParameters['slug'];
+    final tribeSlug = GoRouterState.of(context).pathParameters['slug'];
+    final activeTribe = tribeSlug == null
+        ? null
+        : ref.watch(tribeBySlugProvider(tribeSlug)).valueOrNull;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: SizedBox(
@@ -905,13 +908,10 @@ class _QuickActions extends ConsumerWidget {
             _ActionTile(
               icon: Icons.edit_note_rounded,
               label: 'Post to tribe',
-              onTap: () async {
-                if (tribeSlug == null) return;
-                final tribe =
-                    await ref.read(repositoryProvider).tribeBySlug(tribeSlug);
-                if (tribe == null) return;
-                ref.read(composeTargetTribeProvider.notifier).state = tribe;
-                if (!context.mounted) return;
+              onTap: () {
+                if (activeTribe == null) return;
+                ref.read(composeTargetTribeProvider.notifier).state =
+                    activeTribe;
                 context.go('/compose');
               },
             ),
@@ -919,22 +919,20 @@ class _QuickActions extends ConsumerWidget {
               icon: Icons.help_outline_rounded,
               label: 'Create prompt',
               onTap: () async {
-                if (tribeSlug == null) return;
-                final tribe =
-                    await ref.read(repositoryProvider).tribeBySlug(tribeSlug);
-                if (tribe == null || !context.mounted) return;
-                await _showCreatePromptSheet(context, ref, tribe.tribeId);
+                if (activeTribe == null) return;
+                await _showCreatePromptSheet(
+                  context,
+                  ref,
+                  activeTribe.tribeId,
+                );
               },
             ),
             _ActionTile(
               icon: Icons.group_add_outlined,
               label: 'Invite',
               onTap: () async {
-                if (tribeSlug == null) return;
-                final tribe =
-                    await ref.read(repositoryProvider).tribeBySlug(tribeSlug);
-                if (tribe == null || !context.mounted) return;
-                await _showInviteSheet(context, ref, tribe);
+                if (activeTribe == null) return;
+                await _showInviteSheet(context, ref, activeTribe);
               },
             ),
             _ActionTile(
@@ -958,7 +956,7 @@ class _QuickActions extends ConsumerWidget {
               label: 'Settings',
               onTap: () {
                 if (tribeSlug == null) return;
-                context.push('/tribe/$tribeSlug/manage/edit');
+                context.push('/tribe/$tribeSlug/manage/settings');
               },
             ),
             const SizedBox(width: 4),
@@ -998,8 +996,9 @@ class _ActionTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          color:
-              isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
+          color: isDark
+              ? Theme.of(context).colorScheme.surface
+              : Theme.of(context).cardColor,
           border: Border.all(
             color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
           ),
@@ -1037,99 +1036,102 @@ class _ActionTile extends StatelessWidget {
 /// Per-slug post stream — same backing call as the tribe detail screen but
 /// kept separate so refreshing the manage dashboard doesn't disturb the
 /// public detail screen's cache.
-final _tribeManagePostsProvider =
-    FutureProvider.autoDispose.family<List<Post>, String>(
-        (ref, slug) async =>
-            ref.watch(repositoryProvider).feed(tribeSlug: slug));
+final _tribeManagePostsProvider = FutureProvider.autoDispose
+    .family<List<Post>, String>((ref, slug) async =>
+        ref.watch(repositoryProvider).feed(tribeSlug: slug));
 
 Future<void> _showCreatePromptSheet(
     BuildContext context, WidgetRef ref, String tribeId) async {
-  final controller = TextEditingController();
   final saved = await showModalBottomSheet<bool>(
     context: context,
+    useRootNavigator: true,
+    useSafeArea: true,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (ctx) {
-      return Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 12,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 44,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 14),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(2),
+    builder: (ctx) => ModalTextControllerScope(
+      initialValues: const [''],
+      builder: (ctx, controllers) {
+        final controller = controllers.single;
+        return SingleChildScrollView(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 12,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const Text(
-              'Question of the Day',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Spark a soft, open-ended thread. Members answer anonymously.',
-              style: TextStyle(
-                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.65),
-                fontSize: 12,
+              const Text(
+                'Question of the Day',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
               ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              maxLength: 240,
-              maxLines: 3,
-              autofocus: true,
-              decoration: const InputDecoration(
-                hintText: 'e.g. What helped you breathe today?',
+              const SizedBox(height: 4),
+              Text(
+                'Spark a soft, open-ended thread. Members answer anonymously.',
+                style: TextStyle(
+                  color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.65),
+                  fontSize: 12,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () async {
-                  final t = controller.text.trim();
-                  if (t.length < 5) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(
-                        content: Text('Ask a fuller question (5+ chars).'),
-                      ),
-                    );
-                    return;
-                  }
-                  try {
-                    await ref
-                        .read(repositoryProvider)
-                        .createPromptForTribe(tribeId: tribeId, text: t);
-                    if (!ctx.mounted) return;
-                    Navigator.of(ctx).pop(true);
-                  } catch (e) {
-                    if (!ctx.mounted) return;
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(content: Text('Could not post: $e')),
-                    );
-                  }
-                },
-                child: const Text('Pin to my Tribe'),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                maxLength: 240,
+                maxLines: 3,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'e.g. What helped you breathe today?',
+                ),
               ),
-            ),
-          ],
-        ),
-      );
-    },
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final t = controller.text.trim();
+                    if (t.length < 5) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                          content: Text('Ask a fuller question (5+ chars).'),
+                        ),
+                      );
+                      return;
+                    }
+                    try {
+                      await ref
+                          .read(repositoryProvider)
+                          .createPromptForTribe(tribeId: tribeId, text: t);
+                      if (!ctx.mounted) return;
+                      Navigator.of(ctx).pop(true);
+                    } catch (e) {
+                      if (!ctx.mounted) return;
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(content: Text('Could not post: $e')),
+                      );
+                    }
+                  },
+                  child: const Text('Pin to my Tribe'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
   );
-  controller.dispose();
   if (saved == true && context.mounted) {
     ref.invalidate(promptsProvider);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1140,171 +1142,181 @@ Future<void> _showCreatePromptSheet(
 
 Future<void> _showInviteSheet(
     BuildContext context, WidgetRef ref, Tribe tribe) async {
-  final search = TextEditingController();
-  final message = TextEditingController();
+  ({String userId, String pseudonym, String avatarSeed})? found;
+  var busy = false;
+  String? error;
   await showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
+    useSafeArea: true,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (ctx) {
-      return StatefulBuilder(
-        builder: (ctx, setState) {
-          ({String userId, String pseudonym, String avatarSeed})? found;
-          bool busy = false;
-          String? error;
-
-          Future<void> lookup() async {
-            setState(() {
-              busy = true;
-              error = null;
-              found = null;
-            });
-            final result = await ref
-                .read(repositoryProvider)
-                .findUserByPseudonym(search.text);
-            setState(() {
-              busy = false;
-              found = result;
-              if (result == null) error = 'No member with that pseudonym.';
-            });
-          }
-
-          Future<void> send() async {
-            if (found == null) return;
-            setState(() => busy = true);
-            try {
-              await ref.read(repositoryProvider).inviteToTribe(
-                    tribeId: tribe.tribeId,
-                    invitedUserId: found!.userId,
-                    message: message.text.trim().isEmpty
-                        ? null
-                        : message.text.trim(),
-                  );
-              if (ctx.mounted) Navigator.of(ctx).pop();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                      content: Text(
-                          'Invite sent to @${found!.pseudonym}.')),
-                );
-              }
-            } catch (e) {
+    builder: (ctx) => ModalTextControllerScope(
+      initialValues: const ['', ''],
+      builder: (ctx, controllers) {
+        final search = controllers[0];
+        final message = controllers[1];
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            Future<void> lookup() async {
               setState(() {
-                busy = false;
-                error = 'Could not send: $e';
+                busy = true;
+                error = null;
+                found = null;
               });
+              try {
+                final result = await ref
+                    .read(repositoryProvider)
+                    .findUserByPseudonym(search.text);
+                if (!ctx.mounted) return;
+                setState(() {
+                  busy = false;
+                  found = result;
+                  if (result == null) error = 'No member with that pseudonym.';
+                });
+              } catch (lookupError) {
+                if (!ctx.mounted) return;
+                setState(() {
+                  busy = false;
+                  error = 'Could not search right now: $lookupError';
+                });
+              }
             }
-          }
 
-          return Padding(
-            padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 12,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 44,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 14),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Text(
-                  'Invite to ${tribe.name}',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w800, fontSize: 18),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: search,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: 'Pseudonym',
-                    hintText: 'e.g. @SilentSoul',
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.search),
-                      onPressed: busy ? null : lookup,
+            Future<void> send() async {
+              if (found == null) return;
+              setState(() => busy = true);
+              try {
+                await ref.read(repositoryProvider).inviteToTribe(
+                      tribeId: tribe.tribeId,
+                      invitedUserId: found!.userId,
+                      message: message.text.trim().isEmpty
+                          ? null
+                          : message.text.trim(),
+                    );
+                if (ctx.mounted) Navigator.of(ctx).pop();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                        content: Text('Invite sent to @${found!.pseudonym}.')),
+                  );
+                }
+              } catch (e) {
+                setState(() {
+                  busy = false;
+                  error = 'Could not send: $e';
+                });
+              }
+            }
+
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 12,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  onSubmitted: (_) => lookup(),
-                ),
-                if (error != null) ...[
-                  const SizedBox(height: 6),
                   Text(
-                    error!,
+                    'Invite to ${tribe.name}',
                     style: const TextStyle(
-                      color: Colors.red,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
+                        fontWeight: FontWeight.w800, fontSize: 18),
                   ),
-                ],
-                if (found != null) ...[
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      AnonymousAvatar(
-                        seed: found!.avatarSeed,
-                        label: found!.pseudonym,
-                        size: 36,
+                  TextField(
+                    controller: search,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'Pseudonym',
+                      hintText: 'e.g. @SilentSoul',
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.search),
+                        onPressed: busy ? null : lookup,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          '@${found!.pseudonym}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
+                    ),
+                    onSubmitted: (_) => lookup(),
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      error!,
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                  if (found != null) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        AnonymousAvatar(
+                          seed: found!.avatarSeed,
+                          label: found!.pseudonym,
+                          size: 36,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '@${found!.pseudonym}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: message,
+                      maxLength: 160,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Personal note (optional)',
+                        counterText: '',
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: message,
-                    maxLength: 160,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Personal note (optional)',
-                      counterText: '',
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: busy ? null : send,
-                      child: busy
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Send invite'),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: busy ? null : send,
+                        child: busy
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Send invite'),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
-              ],
-            ),
-          );
-        },
-      );
-    },
+              ),
+            );
+          },
+        );
+      },
+    ),
   );
-  search.dispose();
-  message.dispose();
 }
 
 // =========================================================================
@@ -1328,7 +1340,9 @@ class _MembersCard extends ConsumerWidget {
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
+        color: isDark
+            ? Theme.of(context).colorScheme.surface
+            : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
@@ -1339,8 +1353,7 @@ class _MembersCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.shield_moon_outlined,
-                  size: 16, color: scheme.primary),
+              Icon(Icons.shield_moon_outlined, size: 16, color: scheme.primary),
               const SizedBox(width: 6),
               const Text(
                 'Members & moderators',
@@ -1349,8 +1362,8 @@ class _MembersCard extends ConsumerWidget {
               const Spacer(),
               if (modCount > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: scheme.primary.withOpacity(0.14),
                     borderRadius: BorderRadius.circular(12),
@@ -1483,82 +1496,81 @@ class _MemberRow extends ConsumerWidget {
                         fontSize: 13,
                       ),
                     ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Icon(_roleIcon(member.role), size: 12, color: roleColor),
-                    const SizedBox(width: 4),
-                    Text(
-                      _roleLabel(member.role),
-                      style: TextStyle(
-                        color: roleColor,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Joined ${DateFormat.yMMMd().format(member.joinedAt)}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: scheme.onSurface.withOpacity(0.55),
-                      ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(_roleIcon(member.role),
+                            size: 12, color: roleColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          _roleLabel(member.role),
+                          style: TextStyle(
+                            color: roleColor,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Joined ${DateFormat.yMMMd().format(member.joinedAt)}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: scheme.onSurface.withOpacity(0.55),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          if (!isMe && !isKeeper)
-            PopupMenuButton<String>(
-              tooltip: 'Manage member',
-              icon: Icon(Icons.more_vert,
-                  size: 18, color: scheme.onSurface.withOpacity(0.6)),
-              onSelected: (action) =>
-                  _handleAction(context, ref, action),
-              itemBuilder: (_) => [
-                if (!isMod)
-                  const PopupMenuItem(
-                    value: 'promote',
-                    child: Row(children: [
-                      Icon(Icons.arrow_upward_rounded, size: 16),
-                      SizedBox(width: 8),
-                      Text('Promote to mod'),
-                    ]),
-                  ),
-                if (isMod)
-                  const PopupMenuItem(
-                    value: 'demote',
-                    child: Row(children: [
-                      Icon(Icons.arrow_downward_rounded, size: 16),
-                      SizedBox(width: 8),
-                      Text('Demote to member'),
-                    ]),
-                  ),
-                const PopupMenuItem(
-                  value: 'kick',
-                  child: Row(children: [
-                    Icon(Icons.person_remove_outlined,
-                        size: 16, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('Remove from tribe',
-                        style: TextStyle(color: Colors.red)),
-                  ]),
+              ),
+              if (!isMe && !isKeeper)
+                PopupMenuButton<String>(
+                  tooltip: 'Manage member',
+                  icon: Icon(Icons.more_vert,
+                      size: 18, color: scheme.onSurface.withOpacity(0.6)),
+                  onSelected: (action) => _handleAction(context, ref, action),
+                  itemBuilder: (_) => [
+                    if (!isMod)
+                      const PopupMenuItem(
+                        value: 'promote',
+                        child: Row(children: [
+                          Icon(Icons.arrow_upward_rounded, size: 16),
+                          SizedBox(width: 8),
+                          Text('Promote to mod'),
+                        ]),
+                      ),
+                    if (isMod)
+                      const PopupMenuItem(
+                        value: 'demote',
+                        child: Row(children: [
+                          Icon(Icons.arrow_downward_rounded, size: 16),
+                          SizedBox(width: 8),
+                          Text('Demote to member'),
+                        ]),
+                      ),
+                    const PopupMenuItem(
+                      value: 'kick',
+                      child: Row(children: [
+                        Icon(Icons.person_remove_outlined,
+                            size: 16, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('Remove from tribe',
+                            style: TextStyle(color: Colors.red)),
+                      ]),
+                    ),
+                    if (isMod)
+                      const PopupMenuItem(
+                        value: 'transfer',
+                        child: Row(children: [
+                          Icon(Icons.workspace_premium_rounded, size: 16),
+                          SizedBox(width: 8),
+                          Text('Transfer keepership'),
+                        ]),
+                      ),
+                  ],
                 ),
-                if (isMod)
-                  const PopupMenuItem(
-                    value: 'transfer',
-                    child: Row(children: [
-                      Icon(Icons.workspace_premium_rounded,
-                          size: 16),
-                      SizedBox(width: 8),
-                      Text('Transfer keepership'),
-                    ]),
-                  ),
-              ],
-            ),
-        ],
-      ),
+            ],
+          ),
         ),
       ),
     );
@@ -1571,6 +1583,7 @@ class _MemberRow extends ConsumerWidget {
       ref.invalidate(tribeMembersProvider(tribe.tribeId));
       ref.invalidate(tribeBySlugProvider(tribe.slug));
     }
+
     try {
       switch (action) {
         case 'promote':
@@ -1595,8 +1608,7 @@ class _MemberRow extends ConsumerWidget {
             destructive: true,
           );
           if (ok != true) return;
-          await repo.kickMember(
-              tribeId: tribe.tribeId, userId: member.userId);
+          await repo.kickMember(tribeId: tribe.tribeId, userId: member.userId);
           _snack(context, '@${member.pseudonym} removed.');
           invalidate();
           break;
@@ -1612,8 +1624,7 @@ class _MemberRow extends ConsumerWidget {
           if (ok != true) return;
           await repo.transferKeeper(
               tribeId: tribe.tribeId, toUserId: member.userId);
-          _snack(context,
-              'Plug role transferred to @${member.pseudonym}.');
+          _snack(context, 'Plug role transferred to @${member.pseudonym}.');
           invalidate();
           break;
       }
@@ -1624,8 +1635,7 @@ class _MemberRow extends ConsumerWidget {
 
   void _snack(BuildContext context, String msg) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Future<bool?> _confirm(
@@ -1671,7 +1681,8 @@ class _BrandingCard extends ConsumerStatefulWidget {
 }
 
 class _BrandingCardState extends ConsumerState<_BrandingCard> {
-  late final _welcome = TextEditingController(text: widget.tribe.welcomeMessage ?? '');
+  late final _welcome =
+      TextEditingController(text: widget.tribe.welcomeMessage ?? '');
   late String? _color = widget.tribe.themeColor;
   bool _saving = false;
   bool _dirty = false;
@@ -1697,7 +1708,8 @@ class _BrandingCardState extends ConsumerState<_BrandingCard> {
     try {
       await ref.read(repositoryProvider).setTribeBranding(
             tribeId: widget.tribe.tribeId,
-            welcomeMessage: _welcome.text.trim().isEmpty ? null : _welcome.text.trim(),
+            welcomeMessage:
+                _welcome.text.trim().isEmpty ? null : _welcome.text.trim(),
             themeColor: _color,
           );
       ref.invalidate(tribeBySlugProvider(widget.tribe.slug));
@@ -1734,7 +1746,8 @@ class _BrandingCardState extends ConsumerState<_BrandingCard> {
             onChanged: (_) => setState(() => _dirty = true),
             decoration: const InputDecoration(
               labelText: 'Welcome message',
-              hintText: 'Set the tone — this shows above the feed for everyone.',
+              hintText:
+                  'Set the tone — this shows above the feed for everyone.',
               border: OutlineInputBorder(),
             ),
           ),
@@ -1837,7 +1850,8 @@ class _PinnedPostsCard extends ConsumerWidget {
               child: Text(
                 'Nothing pinned yet. Tap "Pin from feed" to curate.',
                 style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  color:
+                      Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                   fontSize: 13,
                 ),
               ),
@@ -1845,8 +1859,7 @@ class _PinnedPostsCard extends ConsumerWidget {
           }
           return Column(
             children: [
-              for (final p in list)
-                _PinnedRow(post: p, tribeId: tribe.tribeId),
+              for (final p in list) _PinnedRow(post: p, tribeId: tribe.tribeId),
             ],
           );
         },
@@ -1901,7 +1914,10 @@ class _PinnedRow extends ConsumerWidget {
                     '${post.authorPseudonym} · ♡ ${post.likesCount} · 💬 ${post.commentsCount}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.55),
                     ),
                   ),
                 ],
@@ -1912,7 +1928,9 @@ class _PinnedRow extends ConsumerWidget {
             tooltip: 'Unpin',
             icon: const Icon(Icons.close, size: 16),
             onPressed: () async {
-              await ref.read(repositoryProvider).unpinPost(tribeId, post.postId);
+              await ref
+                  .read(repositoryProvider)
+                  .unpinPost(tribeId, post.postId);
               ref.invalidate(tribePinnedPostsProvider(tribeId));
             },
           ),
@@ -1929,7 +1947,8 @@ class _PinPickerSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final pinned = ref.watch(tribePinnedPostsProvider(tribeId)).valueOrNull ?? const [];
+    final pinned =
+        ref.watch(tribePinnedPostsProvider(tribeId)).valueOrNull ?? const [];
     final pinnedIds = pinned.map((p) => p.postId).toSet();
     final candidates =
         tribePosts.where((p) => !pinnedIds.contains(p.postId)).toList();
@@ -1986,7 +2005,8 @@ class _PinPickerSheet extends ConsumerWidget {
                             '${p.authorPseudonym} · ♡ ${p.likesCount} · 💬 ${p.commentsCount}',
                             style: const TextStyle(fontSize: 11),
                           ),
-                          trailing: const Icon(Icons.push_pin_outlined, size: 18),
+                          trailing:
+                              const Icon(Icons.push_pin_outlined, size: 18),
                           onTap: () async {
                             await ref
                                 .read(repositoryProvider)
@@ -2037,7 +2057,8 @@ class _ScheduledPromptsCard extends ConsumerWidget {
               child: Text(
                 'No prompts yet. Try "What\'s been on your mind this week?"',
                 style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  color:
+                      Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                   fontSize: 13,
                 ),
               ),
@@ -2070,36 +2091,48 @@ class _PromptRow extends ConsumerWidget {
   final ScheduledPrompt prompt;
 
   Future<void> _editPrompt(BuildContext context, WidgetRef ref) async {
-    final ctl = TextEditingController(text: prompt.text);
     final updated = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit prompt'),
-        content: TextField(
-          controller: ctl,
-          maxLines: 3,
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctl.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (ctx) => ModalTextControllerScope(
+        initialValues: [prompt.text],
+        builder: (ctx, controllers) {
+          final controller = controllers.single;
+          return AlertDialog(
+            title: const Text('Edit prompt'),
+            content: TextField(
+              controller: controller,
+              maxLines: 3,
+              autofocus: true,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (updated == null || updated.length < 4) return;
-    await ref.read(repositoryProvider).updatePrompt(
-          tribeId: prompt.tribeId,
-          promptId: prompt.promptId,
-          text: updated,
-          scheduledFor: prompt.scheduledFor,
-        );
-    ref.invalidate(tribePromptsProvider(prompt.tribeId));
+    try {
+      await ref.read(repositoryProvider).updatePrompt(
+            tribeId: prompt.tribeId,
+            promptId: prompt.promptId,
+            text: updated,
+            scheduledFor: prompt.scheduledFor,
+          );
+      ref.invalidate(tribePromptsProvider(prompt.tribeId));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update this prompt: $error')),
+      );
+    }
   }
 
   Future<void> _deletePrompt(BuildContext context, WidgetRef ref) async {
@@ -2121,10 +2154,17 @@ class _PromptRow extends ConsumerWidget {
       ),
     );
     if (ok != true) return;
-    await ref
-        .read(repositoryProvider)
-        .deletePrompt(prompt.tribeId, prompt.promptId);
-    ref.invalidate(tribePromptsProvider(prompt.tribeId));
+    try {
+      await ref
+          .read(repositoryProvider)
+          .deletePrompt(prompt.tribeId, prompt.promptId);
+      ref.invalidate(tribePromptsProvider(prompt.tribeId));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete this prompt: $error')),
+      );
+    }
   }
 
   @override
@@ -2221,8 +2261,8 @@ class _PromptComposerSheetState extends ConsumerState<_PromptComposerSheet> {
       initialTime: const TimeOfDay(hour: 9, minute: 0),
     );
     if (time == null) return;
-    setState(() => _when = DateTime(
-        date.year, date.month, date.day, time.hour, time.minute));
+    setState(() => _when =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute));
   }
 
   Future<void> _submit() async {
@@ -2257,9 +2297,8 @@ class _PromptComposerSheetState extends ConsumerState<_PromptComposerSheet> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final whenLabel = _when == null
-        ? 'Post now'
-        : DateFormat('MMM d · HH:mm').format(_when!);
+    final whenLabel =
+        _when == null ? 'Post now' : DateFormat('MMM d · HH:mm').format(_when!);
     return Padding(
       padding: EdgeInsets.only(
         left: 20,
@@ -2399,8 +2438,8 @@ class _SpotlightCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hasSpotlight = tribe.spotlightUserId != null &&
-        tribe.spotlightPseudonym != null;
+    final hasSpotlight =
+        tribe.spotlightUserId != null && tribe.spotlightPseudonym != null;
 
     return _StudioCard(
       title: 'Spotlight',
@@ -2413,7 +2452,8 @@ class _SpotlightCard extends ConsumerWidget {
             )
           : null,
       child: hasSpotlight
-          ? _SpotlightRow(tribe: tribe, onChange: () => _showPicker(context, ref))
+          ? _SpotlightRow(
+              tribe: tribe, onChange: () => _showPicker(context, ref))
           : OutlinedButton.icon(
               icon: const Icon(Icons.star_outline, size: 16),
               label: const Text('Set spotlight'),
@@ -2486,8 +2526,8 @@ class _SpotlightRow extends StatelessWidget {
             children: [
               Text(
                 '@${tribe.spotlightPseudonym}',
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, fontSize: 14),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
               ),
               if (tribe.spotlightNote != null &&
                   tribe.spotlightNote!.isNotEmpty)
@@ -2542,8 +2582,7 @@ class _SpotlightPickerSheet extends ConsumerStatefulWidget {
       _SpotlightPickerSheetState();
 }
 
-class _SpotlightPickerSheetState
-    extends ConsumerState<_SpotlightPickerSheet> {
+class _SpotlightPickerSheetState extends ConsumerState<_SpotlightPickerSheet> {
   final _noteCtrl = TextEditingController();
   String? _selectedId;
   String? _selectedPseudonym;
@@ -2591,8 +2630,7 @@ class _SpotlightPickerSheetState
 
   @override
   Widget build(BuildContext context) {
-    final members =
-        ref.watch(tribeMembersProvider(widget.tribe.tribeId));
+    final members = ref.watch(tribeMembersProvider(widget.tribe.tribeId));
     return Padding(
       padding: EdgeInsets.only(
         left: 20,
@@ -2613,7 +2651,8 @@ class _SpotlightPickerSheetState
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.15),
+                  color:
+                      Theme.of(context).colorScheme.onSurface.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -2632,8 +2671,7 @@ class _SpotlightPickerSheetState
             const SizedBox(height: 12),
             Flexible(
               child: members.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Text('Could not load members: $e'),
                 data: (rows) {
                   if (rows.isEmpty) {
@@ -2661,9 +2699,8 @@ class _SpotlightPickerSheetState
                         title: Text(
                           '@${m.pseudonym}',
                           style: TextStyle(
-                            fontWeight: selected
-                                ? FontWeight.w800
-                                : FontWeight.w600,
+                            fontWeight:
+                                selected ? FontWeight.w800 : FontWeight.w600,
                           ),
                         ),
                         subtitle: Text(
@@ -2732,13 +2769,12 @@ class _TopPostsCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final last7 = DateTime.now().subtract(const Duration(days: 7));
-    final recent =
-        posts.where((p) => p.createdAt.isAfter(last7)).toList()
-          ..sort((a, b) {
-            final ea = a.likesCount + a.commentsCount * 2;
-            final eb = b.likesCount + b.commentsCount * 2;
-            return eb.compareTo(ea);
-          });
+    final recent = posts.where((p) => p.createdAt.isAfter(last7)).toList()
+      ..sort((a, b) {
+        final ea = a.likesCount + a.commentsCount * 2;
+        final eb = b.likesCount + b.commentsCount * 2;
+        return eb.compareTo(ea);
+      });
     final top = recent.take(3).toList();
     if (top.isEmpty) return const SizedBox.shrink();
 
@@ -2746,8 +2782,9 @@ class _TopPostsCard extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
       decoration: BoxDecoration(
-        color:
-            isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
+        color: isDark
+            ? Theme.of(context).colorScheme.surface
+            : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
@@ -2759,8 +2796,7 @@ class _TopPostsCard extends StatelessWidget {
           Row(
             children: [
               const Text('Best this week',
-                  style:
-                      TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
               const Spacer(),
               Text(
                 'Top ${top.length} by engagement',
@@ -2924,8 +2960,9 @@ class _TopContributorsCard extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color:
-            isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
+        color: isDark
+            ? Theme.of(context).colorScheme.surface
+            : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.25 : 0.18),
@@ -2937,8 +2974,7 @@ class _TopContributorsCard extends StatelessWidget {
           Row(
             children: [
               const Text('Top contributors',
-                  style:
-                      TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
               const Spacer(),
               Text(
                 'Last 7 days',

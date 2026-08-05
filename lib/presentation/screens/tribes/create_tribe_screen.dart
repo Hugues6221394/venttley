@@ -125,39 +125,53 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
                   ]
                 : const [],
           );
+      Object? mediaError;
       String? avatarUrl;
       String? bannerUrl;
-      if (_avatarBytes != null) {
-        final upload = await ref.read(repositoryProvider).uploadTribeAvatar(
-              tribeId: tribe.tribeId,
-              bytes: _avatarBytes!,
-              extension: _avatarExtension,
-              contentType: _contentType(_avatarExtension),
-            );
-        avatarUrl = upload.url;
-      }
-      if (_bannerBytes != null) {
-        final upload = await ref.read(repositoryProvider).uploadTribeAvatar(
-              tribeId: tribe.tribeId,
-              bytes: _bannerBytes!,
-              extension: _bannerExtension,
-              contentType: _contentType(_bannerExtension),
-            );
-        bannerUrl = upload.url;
-      }
-      if (avatarUrl != null || bannerUrl != null) {
-        await ref.read(repositoryProvider).updateTribeConfiguration(
-              tribeId: tribe.tribeId,
-              avatarUrl: avatarUrl,
-              bannerUrl: bannerUrl,
-            );
+      try {
+        if (_avatarBytes != null) {
+          final upload = await ref.read(repositoryProvider).uploadTribeAvatar(
+                tribeId: tribe.tribeId,
+                bytes: _avatarBytes!,
+                extension: _avatarExtension,
+                contentType: _contentType(_avatarExtension),
+              );
+          avatarUrl = upload.url;
+        }
+        if (_bannerBytes != null) {
+          final upload = await ref.read(repositoryProvider).uploadTribeAvatar(
+                tribeId: tribe.tribeId,
+                bytes: _bannerBytes!,
+                extension: _bannerExtension,
+                contentType: _contentType(_bannerExtension),
+              );
+          bannerUrl = upload.url;
+        }
+        if (avatarUrl != null || bannerUrl != null) {
+          await ref.read(repositoryProvider).updateTribeConfiguration(
+                tribeId: tribe.tribeId,
+                avatarUrl: avatarUrl,
+                bannerUrl: bannerUrl,
+              );
+        }
+      } catch (error) {
+        mediaError = error;
       }
       ref.invalidate(tribesProvider);
       ref.invalidate(tribesIKeepProvider);
       if (!mounted) return;
       context.go('/tribe/${tribe.slug}/manage/settings');
+      if (mediaError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Tribe created. Its images could not be saved yet: $mediaError',
+            ),
+          ),
+        );
+      }
     } catch (e) {
-      _toast(e.toString());
+      _toast('Could not create this Tribe: $e');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -169,31 +183,35 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   }
 
   Future<void> _pickImage({required bool banner}) async {
-    final image = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 84,
-      maxWidth: banner ? 2048 : 1024,
-      maxHeight: banner ? 1152 : 1024,
-    );
-    if (image == null) return;
-    final bytes = await image.readAsBytes();
-    if (bytes.length > 8 * 1024 * 1024) {
-      _toast('Choose an image smaller than 8 MB.');
-      return;
-    }
-    final extension = image.name.contains('.')
-        ? image.name.split('.').last.toLowerCase()
-        : 'jpg';
-    if (!mounted) return;
-    setState(() {
-      if (banner) {
-        _bannerBytes = bytes;
-        _bannerExtension = extension;
-      } else {
-        _avatarBytes = bytes;
-        _avatarExtension = extension;
+    try {
+      final image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 84,
+        maxWidth: banner ? 2048 : 1024,
+        maxHeight: banner ? 1152 : 1024,
+      );
+      if (image == null) return;
+      final bytes = await image.readAsBytes();
+      if (bytes.length > 8 * 1024 * 1024) {
+        _toast('Choose an image smaller than 8 MB.');
+        return;
       }
-    });
+      final extension = image.name.contains('.')
+          ? image.name.split('.').last.toLowerCase()
+          : 'jpg';
+      if (!mounted) return;
+      setState(() {
+        if (banner) {
+          _bannerBytes = bytes;
+          _bannerExtension = extension;
+        } else {
+          _avatarBytes = bytes;
+          _avatarExtension = extension;
+        }
+      });
+    } catch (error) {
+      _toast('Could not open this image: $error');
+    }
   }
 
   @override

@@ -672,7 +672,8 @@ class SupabaseBackend {
         final personalized = rows
             .cast<Map<String, dynamic>>()
             .map<Post>(_postFromRow)
-            .where((p) => !p.isWhisper || p.createdAt.isAfter(cutoff))
+            .where((p) =>
+                (!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff))
             .toList();
         if (personalized.isNotEmpty ||
             offset > 0 ||
@@ -715,7 +716,8 @@ class SupabaseBackend {
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
     return rows
         .map<Post>(_postFromRow)
-        .where((p) => !p.isWhisper || p.createdAt.isAfter(cutoff))
+        .where(
+            (p) => (!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff))
         .toList();
   }
 
@@ -742,7 +744,7 @@ class SupabaseBackend {
     final posts = await feed(sort: 'hot', limit: fallbackLimit);
     return posts
         .where((p) =>
-            p.isWhisper &&
+            p.isStory &&
             p.authorId != null &&
             p.createdAt.isAfter(cutoff) &&
             (p.authorId == uid || friendIds.contains(p.authorId)))
@@ -774,6 +776,8 @@ class SupabaseBackend {
     String? spaceId,
     String? personaId,
     bool isWhisper = false,
+    bool isStory = false,
+    String storyAudience = 'everyone',
     String? imagePath,
     String? imageUrl,
     String? audioPath,
@@ -781,13 +785,15 @@ class SupabaseBackend {
     int? audioDurationSeconds,
     String? pollQuestion,
     List<String>? pollOptions,
+    String? cardBackgroundColor,
+    String? cardTextColor,
     String? idempotencyKey,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
     final hasImage = imageUrl != null && imageUrl.isNotEmpty;
     final postId = await _client.rpc(
-      'create_post_idempotent',
+      'create_post_idempotent_v3',
       params: {
         'p_mutation_id': idempotencyKey ?? const Uuid().v4(),
         'p_content': content,
@@ -797,6 +803,8 @@ class SupabaseBackend {
         'p_space_id': spaceId,
         'p_persona_id': personaId,
         'p_is_whisper': isWhisper,
+        'p_is_story': isStory,
+        'p_story_audience': storyAudience,
         'p_image_path': imagePath,
         'p_image_url': imageUrl,
         'p_audio_path': audioPath,
@@ -804,14 +812,66 @@ class SupabaseBackend {
         'p_audio_duration_seconds': audioDurationSeconds,
         'p_poll_question': pollQuestion,
         'p_poll_options': pollOptions,
+        'p_card_background_color': cardBackgroundColor,
+        'p_card_text_color': cardTextColor,
       },
     ) as String;
     if (hasImage) {
       unawaited(_scanMedia(kind: 'post', id: postId, imageUrl: imageUrl));
     }
-    final post = await postById(postId);
-    _emitPosts();
-    return post!;
+    Post? post;
+    Object? readError;
+    for (var attempt = 0; attempt < 3 && post == null; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(Duration(milliseconds: 140 * attempt));
+      }
+      try {
+        post = await postById(postId);
+      } catch (error) {
+        readError = error;
+      }
+    }
+    if (post == null) {
+      // The authoritative write already committed. A transient feed-view or
+      // schema-cache failure must not queue the same mutation forever or make
+      // the composer look stuck. Return an optimistic entity; the next feed
+      // refresh reconciles it from the server.
+      log.warn(
+        'post.read_after_write_degraded',
+        props: {'post_id': postId, 'attempts': 3},
+        error: readError,
+      );
+      final me = _me;
+      post = Post(
+        postId: postId,
+        authorId: uid,
+        authorPseudonym: '@${me?.anonymousPseudonym ?? 'anonymous'}',
+        authorAvatarSeed: me?.avatarSeed ?? 'default-orb',
+        authorProfilePhotoUrl: personaId == null ? me?.profilePhotoUrl : null,
+        authorIsVerified: me?.isVerified ?? false,
+        authorKarma: me?.karmaPoints ?? 0,
+        tribeId: tribeId,
+        spaceId: spaceId,
+        categoryName: category,
+        postType: 'user_post',
+        content: content,
+        postMood: mood,
+        isWhisper: isWhisper,
+        isStory: isStory,
+        storyAudience: isStory ? storyAudience : 'everyone',
+        likesCount: 0,
+        commentsCount: 0,
+        cardBackgroundColor: cardBackgroundColor,
+        cardTextColor: cardTextColor,
+        imageUrl: imageUrl,
+        audioUrl: audioUrl,
+        audioDurationSeconds: audioDurationSeconds,
+        createdAt: DateTime.now(),
+        mediaStatus: hasImage ? 'pending' : 'clean',
+      );
+    }
+    unawaited(_emitPosts());
+    return post;
   }
 
   /// Fire the authoritative image safety scan (nudity/gore) for just-uploaded
@@ -965,6 +1025,66 @@ class SupabaseBackend {
       params: {'p_post_id': postId},
     );
     return (res as bool?) ?? false;
+  }
+
+  Future<bool> storyRepliesEnabled() async {
+    final result = await _client.rpc('my_story_replies_enabled');
+    return (result as bool?) ?? true;
+  }
+
+  Future<bool> setStoryRepliesEnabled(bool enabled) async {
+    final result = await _client.rpc(
+      'set_my_story_replies_enabled',
+      params: {'p_enabled': enabled},
+    );
+    return (result as bool?) ?? enabled;
+  }
+
+  Future<bool> canReplyToStory(String postId) async {
+    final result = await _client.rpc(
+      'can_reply_to_story',
+      params: {'p_post_id': postId},
+    );
+    return (result as bool?) ?? false;
+  }
+
+  Future<List<StoryReactionUser>> storyReactions(String postId) async {
+    final rows = await _client.rpc(
+      'story_reactions_for_owner',
+      params: {'p_post_id': postId},
+    ) as List<dynamic>;
+    return rows.map((raw) {
+      final row = raw as Map<String, dynamic>;
+      return StoryReactionUser(
+        userId: row['user_id'] as String,
+        pseudonym: row['pseudonym'] as String,
+        avatarSeed: (row['avatar_seed'] as String?) ?? 'default-orb',
+        profilePhotoUrl: row['profile_photo_url'] as String?,
+        isVerified: (row['is_verified'] as bool?) ?? false,
+        reactionType: (row['reaction_type'] as String?) ?? 'like',
+        reactedAt: DateTime.parse(row['reacted_at'] as String),
+      );
+    }).toList(growable: false);
+  }
+
+  Future<ChatRoom> replyToStory({
+    required String storyPostId,
+    required String reply,
+  }) async {
+    final roomId = await _client.rpc(
+      'reply_to_story',
+      params: {
+        'p_post_id': storyPostId,
+        'p_reply': reply,
+      },
+    ) as String;
+    final row = await _client
+        .from('inbox_rooms')
+        .select()
+        .eq('room_id', roomId)
+        .single();
+    unawaited(_emitRooms());
+    return _chatRoomFromInboxRow(row);
   }
 
   // ===================================================================
@@ -2250,6 +2370,7 @@ class SupabaseBackend {
               otherPseudonym: r['from_pseudonym'] as String,
               otherAvatarSeed:
                   (r['from_avatar_seed'] as String?) ?? 'default-orb',
+              profilePhotoUrl: r['from_profile_photo_url'] as String?,
               otherKarma: (r['from_karma'] as int?) ?? 0,
               note: r['note'] as String?,
               createdAt: DateTime.parse(r['created_at'] as String),
@@ -2271,6 +2392,7 @@ class SupabaseBackend {
               otherPseudonym: r['to_pseudonym'] as String,
               otherAvatarSeed:
                   (r['to_avatar_seed'] as String?) ?? 'default-orb',
+              profilePhotoUrl: r['to_profile_photo_url'] as String?,
               otherKarma: (r['to_karma'] as int?) ?? 0,
               note: r['note'] as String?,
               createdAt: DateTime.parse(r['created_at'] as String),
@@ -2511,6 +2633,8 @@ class SupabaseBackend {
       pseudonym: user['pseudonym'] as String,
       avatarSeed: (user['avatar_seed'] as String?) ?? 'default-orb',
       profilePhotoUrl: user['profile_photo_url'] as String?,
+      bio: user['bio'] as String?,
+      pronouns: user['pronouns'] as String?,
       karma: (user['karma'] as num?)?.toInt() ?? 0,
       isVerified: (user['is_verified'] as bool?) ?? false,
       joinedAt: DateTime.parse(user['joined_at'] as String),
@@ -3617,7 +3741,27 @@ class SupabaseBackend {
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
     return rows
         .map<Post>(_postFromRow)
-        .where((p) => !p.isWhisper || p.createdAt.isAfter(cutoff))
+        .where(
+            (p) => (!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff))
+        .toList();
+  }
+
+  Future<List<Post>> activeStoriesByAuthor(
+    String authorId, {
+    int limit = 24,
+  }) async {
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    final rows = await _client
+        .from('feed_posts')
+        .select()
+        .eq('author_id', authorId)
+        .eq('is_story', true)
+        .gte('created_at', cutoff.toUtc().toIso8601String())
+        .order('created_at', ascending: false)
+        .limit(limit.clamp(1, 100));
+    return rows
+        .map<Post>(_postFromRow)
+        .where((post) => post.isStory && post.createdAt.isAfter(cutoff))
         .toList();
   }
 
@@ -3811,7 +3955,8 @@ class SupabaseBackend {
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
     return rows
         .map<Post>(_postFromRow)
-        .where((p) => !p.isWhisper || p.createdAt.isAfter(cutoff))
+        .where(
+            (p) => (!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff))
         .toList();
   }
 
@@ -5004,10 +5149,7 @@ class SupabaseBackend {
         'p_parent_message_id': parentMessageId,
       },
     ) as String;
-    final list = await messages(roomId);
-    for (final message in list) {
-      if (message.messageId == messageId) return message;
-    }
+    unawaited(_emitRooms());
     return ChatMessage(
       messageId: messageId,
       roomId: roomId,
@@ -5025,37 +5167,98 @@ class SupabaseBackend {
   // ===================================================================
   // PROMPTS
   // ===================================================================
+  static const String _promptSelect =
+      'prompt_id, prompt_text, answers_count, author_id, audience, created_at, '
+      'plug_profiles(display_name, users(avatar_seed)), '
+      'author:users!plug_prompts_author_id_fkey(anonymous_pseudonym, avatar_seed)';
+
+  PlugPrompt _promptFromRow(Map<String, dynamic> r) {
+    final pp = r['plug_profiles'] as Map<String, dynamic>?;
+    final users = pp?['users'] as Map<String, dynamic>?;
+    final author = r['author'] as Map<String, dynamic>?;
+    final displayName = (pp?['display_name'] as String?) ??
+        (author?['anonymous_pseudonym'] != null
+            ? '@${author!['anonymous_pseudonym']}'
+            : '@plug');
+    final createdRaw = r['created_at'] as String?;
+    return PlugPrompt(
+      promptId: r['prompt_id'] as String,
+      plugDisplayName: displayName,
+      plugAvatarSeed: (users?['avatar_seed'] as String?) ??
+          (author?['avatar_seed'] as String?) ??
+          'default-orb',
+      promptText: r['prompt_text'] as String,
+      answersCount: (r['answers_count'] as int?) ?? 0,
+      authorId: r['author_id'] as String?,
+      audience: (r['audience'] as String?) ?? 'everyone',
+      createdAt: createdRaw == null ? null : DateTime.tryParse(createdRaw),
+    );
+  }
+
+  /// Best-effort like overlay for the given prompts. Reads the `question_likes`
+  /// table (migration 0120); if that table hasn't been deployed yet it simply
+  /// degrades to zero likes so the questions list still renders.
+  Future<List<PlugPrompt>> _withQuestionLikeState(
+      List<PlugPrompt> prompts) async {
+    if (prompts.isEmpty) return prompts;
+    final ids = prompts.map((p) => p.promptId).toList();
+    final uid = _uid;
+    try {
+      final rows = await _client
+          .from('question_likes')
+          .select('prompt_id, user_id')
+          .inFilter('prompt_id', ids);
+      final counts = <String, int>{};
+      final mine = <String>{};
+      for (final r in rows) {
+        final pid = r['prompt_id'] as String;
+        counts[pid] = (counts[pid] ?? 0) + 1;
+        if (uid != null && r['user_id'] == uid) mine.add(pid);
+      }
+      return prompts
+          .map((p) => p.copyWith(
+                likeCount: counts[p.promptId] ?? 0,
+                likedByMe: mine.contains(p.promptId),
+              ))
+          .toList();
+    } catch (_) {
+      return prompts;
+    }
+  }
+
   Future<List<PlugPrompt>> prompts() async {
     // Filter on published_at so scheduled-future prompts (migration 0028)
     // stay hidden until the cron fanout (migration 0034) flips them.
     // is_active still gates manual disable. Member questions (migration
-    // 0069) join users via author_id instead of plug_profiles.
+    // 0069) join users via author_id instead of plug_profiles. Friends-only
+    // questions are constrained by RLS.
     final rows = await _client
         .from('plug_prompts')
-        .select('prompt_id, prompt_text, answers_count, '
-            'plug_profiles(display_name, users(avatar_seed)), '
-            'author:users!plug_prompts_author_id_fkey(anonymous_pseudonym, avatar_seed)')
+        .select(_promptSelect)
         .eq('is_active', true)
         .not('published_at', 'is', null)
-        .lte('published_at', DateTime.now().toUtc().toIso8601String());
-    return rows.map<PlugPrompt>((r) {
-      final pp = r['plug_profiles'] as Map<String, dynamic>?;
-      final users = pp?['users'] as Map<String, dynamic>?;
-      final author = r['author'] as Map<String, dynamic>?;
-      final displayName = (pp?['display_name'] as String?) ??
-          (author?['anonymous_pseudonym'] != null
-              ? '@${author!['anonymous_pseudonym']}'
-              : '@plug');
-      return PlugPrompt(
-        promptId: r['prompt_id'] as String,
-        plugDisplayName: displayName,
-        plugAvatarSeed: (users?['avatar_seed'] as String?) ??
-            (author?['avatar_seed'] as String?) ??
-            'default-orb',
-        promptText: r['prompt_text'] as String,
-        answersCount: r['answers_count'] as int,
-      );
-    }).toList();
+        .lte('published_at', DateTime.now().toUtc().toIso8601String())
+        .order('created_at', ascending: false)
+        .limit(100);
+    final prompts = rows.map<PlugPrompt>(_promptFromRow).toList();
+    return _withQuestionLikeState(prompts);
+  }
+
+  /// Every question a given member has asked, newest first — powers the
+  /// "Questions asked" section on their public profile. RLS (migration 0069)
+  /// hides friends-only questions from non-friends automatically.
+  Future<List<PlugPrompt>> questionsByAuthor(String userId) async {
+    final rows = await _client
+        .from('plug_prompts')
+        .select(_promptSelect)
+        .eq('author_id', userId)
+        .eq('is_active', true)
+        .not('published_at', 'is', null)
+        .lte('published_at', DateTime.now().toUtc().toIso8601String())
+        .order('created_at', ascending: false)
+        .limit(50);
+    final prompts = rows.map<PlugPrompt>(_promptFromRow).toList();
+    return _withQuestionLikeState(prompts);
   }
 
   /// Member-authored question (migration 0069). [audience] is 'everyone'
@@ -5076,15 +5279,69 @@ class SupabaseBackend {
           'is_active': true,
           'published_at': DateTime.now().toUtc().toIso8601String(),
         })
-        .select('prompt_id, prompt_text, answers_count')
+        .select(_promptSelect)
         .single();
-    final me = _me;
-    return PlugPrompt(
-      promptId: row['prompt_id'] as String,
-      plugDisplayName: '@${me?.anonymousPseudonym ?? 'anonymous'}',
-      plugAvatarSeed: me?.avatarSeed ?? 'default-orb',
-      promptText: row['prompt_text'] as String,
-      answersCount: (row['answers_count'] as int?) ?? 0,
+    return _promptFromRow(row);
+  }
+
+  /// Edit the text/audience of the caller's own question (RLS author-only,
+  /// migration 0069).
+  Future<void> updateUserQuestion({
+    required String promptId,
+    String? text,
+    String? audience,
+  }) async {
+    final patch = <String, dynamic>{};
+    if (text != null) patch['prompt_text'] = text;
+    if (audience != null) patch['audience'] = audience;
+    if (patch.isEmpty) return;
+    await _client.from('plug_prompts').update(patch).eq('prompt_id', promptId);
+  }
+
+  /// Delete the caller's own question (RLS author-only, migration 0069).
+  Future<void> deleteUserQuestion(String promptId) async {
+    await _client.from('plug_prompts').delete().eq('prompt_id', promptId);
+  }
+
+  /// Like / unlike a question (migration 0120). Best-effort: if the
+  /// question_likes table isn't deployed yet the call is a no-op so the UI
+  /// optimistic toggle simply doesn't persist.
+  Future<void> likeQuestion(String promptId) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    try {
+      await _client.from('question_likes').upsert(
+        {'prompt_id': promptId, 'user_id': uid},
+        onConflict: 'prompt_id,user_id',
+        ignoreDuplicates: true,
+      );
+    } catch (_) {/* not deployed yet */}
+  }
+
+  Future<void> unlikeQuestion(String promptId) async {
+    final uid = _uid;
+    if (uid == null) return;
+    try {
+      await _client
+          .from('question_likes')
+          .delete()
+          .eq('prompt_id', promptId)
+          .eq('user_id', uid);
+    } catch (_) {/* not deployed yet */}
+  }
+
+  /// File a moderation report against a question (migration 0120). Best-effort
+  /// so it degrades gracefully before the migration ships.
+  Future<void> reportQuestion({
+    required String promptId,
+    required String reason,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    await _client.from('question_reports').upsert(
+      {'prompt_id': promptId, 'reporter_id': uid, 'reason': reason},
+      onConflict: 'prompt_id,reporter_id',
+      ignoreDuplicates: true,
     );
   }
 
@@ -5269,7 +5526,7 @@ class SupabaseBackend {
   // ===================================================================
   // Helpers
   // ===================================================================
-  void _emitPosts() async {
+  Future<void> _emitPosts() async {
     try {
       final list = await feed();
       _postsController.add(list);
@@ -5278,7 +5535,7 @@ class SupabaseBackend {
     }
   }
 
-  void _emitRooms() async {
+  Future<void> _emitRooms() async {
     try {
       final list = await inbox(tab: 'all');
       _roomsController.add(list);
@@ -5302,6 +5559,8 @@ class SupabaseBackend {
       likesCount: r['likes_count'] as int,
       commentsCount: r['comments_count'] as int,
       viewCount: (r['view_count'] as int?) ?? 0,
+      cardBackgroundColor: r['card_background_color'] as String?,
+      cardTextColor: r['card_text_color'] as String?,
       imageUrl: r['image_url'] as String?,
       audioUrl: r['audio_url'] as String?,
       audioDurationSeconds: r['audio_duration_seconds'] as int?,
@@ -5321,6 +5580,8 @@ class SupabaseBackend {
       tribeSlug: r['tribe_slug'] as String?,
       spaceId: r['space_id'] as String?,
       isWhisper: (r['is_whisper'] as bool?) ?? false,
+      isStory: (r['is_story'] as bool?) ?? false,
+      storyAudience: (r['story_audience'] as String?) ?? 'everyone',
       myReaction: _myReactions[r['post_id']],
       savedByMe: _savedPosts.contains(r['post_id']),
       crisisLevel: r['crisis_level'] as String?,

@@ -93,7 +93,12 @@ class HomeShell extends ConsumerWidget {
             return;
           }
           if (tab.pushRoute != null) {
-            context.push(tab.pushRoute!);
+            // Friends lives in the Home branch but is presented as a first-
+            // class tab. A push would leave the previous branch selected
+            // underneath it (for example Friends and Profile both active).
+            // Tab changes replace the shell location so there is exactly one
+            // selected destination and a deterministic back stack.
+            context.go(tab.pushRoute!);
             return;
           }
           navigationShell.goBranch(

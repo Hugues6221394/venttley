@@ -61,6 +61,7 @@ import '../screens/keeper/keeper_insights_screen.dart';
 /// shell (chat boxes, full-screen creators/viewers, onboarding).
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
+
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -74,6 +75,46 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     refreshListenable: GoRouterRefreshStream(ref),
+    errorBuilder: (context, state) => Scaffold(
+      appBar: AppBar(
+        leading: context.canPop()
+            ? IconButton(
+                tooltip: 'Back',
+                onPressed: context.pop,
+                icon: const Icon(Icons.arrow_back_rounded),
+              )
+            : null,
+        title: const Text('Page unavailable'),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.link_off_rounded, size: 48),
+              const SizedBox(height: 16),
+              const Text(
+                'We couldn\'t open this page.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'The link may be old or the content may no longer be available.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                onPressed: () => context.go('/feed'),
+                icon: const Icon(Icons.home_outlined),
+                label: const Text('Home'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
     routes: [
       GoRoute(path: '/onboarding', builder: (_, __) => const WelcomeScreen()),
       GoRoute(
@@ -248,6 +289,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                             slug: st.pathParameters['slug']!,
                             initialFilter:
                                 st.uri.queryParameters['filter'] ?? 'all',
+                            initialAction: st.uri.queryParameters['action'],
                           ),
                         ),
                         GoRoute(
@@ -382,6 +424,20 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
         ],
+      ),
+      // Posts opened from a root-level conversation must remain on the root
+      // navigator too. Re-entering the shell-owned /post route from chat can
+      // reserve the stateful branch navigator keys twice.
+      GoRoute(
+        path: '/post-preview/:id',
+        builder: (ctx, st) {
+          final postId = st.pathParameters['id']!;
+          final extra = st.extra;
+          return PostDetailScreen(
+            postId: postId,
+            initialPost: extra is Post && extra.postId == postId ? extra : null,
+          );
+        },
       ),
       GoRoute(
         path: '/group-chat/:roomId/settings',

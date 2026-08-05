@@ -23,11 +23,11 @@ class HomeDiscovery {
     final clock = now ?? DateTime.now();
     final livePosts = posts
         .where((p) =>
-            !p.isWhisper ||
+            (!p.isStory && !p.isWhisper) ||
             p.createdAt.add(const Duration(hours: 24)).isAfter(clock))
         .toList();
     final stories = livePosts
-        .where((p) => p.isWhisper)
+        .where((p) => p.isStory)
         .map((p) => VentStory.fromPost(p, now: clock))
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -72,7 +72,8 @@ class HomeDiscovery {
     final clock = now ?? DateTime.now();
     final activeCutoff = clock.subtract(const Duration(days: 30));
     final topicScores = <String, _TopicAccumulator>{};
-    for (final post in posts.where((post) => !post.isWhisper)) {
+    for (final post
+        in posts.where((post) => !post.isStory && !post.isWhisper)) {
       final category = post.categoryName.trim();
       if (category.isEmpty) continue;
       final accumulator = topicScores.putIfAbsent(
@@ -133,7 +134,7 @@ class HomeDiscovery {
     final clock = now ?? DateTime.now();
     return posts
         .where((p) =>
-            p.isWhisper &&
+            p.isStory &&
             p.createdAt.add(const Duration(hours: 24)).isAfter(clock))
         .where((p) {
           if (p.authorId == null) return false;

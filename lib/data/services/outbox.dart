@@ -489,11 +489,16 @@ class OutboxService extends ChangeNotifier {
           spaceId: payload['spaceId'] as String?,
           personaId: payload['personaId'] as String?,
           isWhisper: (payload['isWhisper'] as bool?) ?? false,
+          isStory: (payload['isStory'] as bool?) ?? false,
+          storyAudience:
+              (payload['storyAudience'] as String?) ?? 'everyone',
           imagePath: payload['imagePath'] as String?,
           imageUrl: payload['imageUrl'] as String?,
           audioPath: payload['audioPath'] as String?,
           audioUrl: payload['audioUrl'] as String?,
           audioDurationSeconds: payload['audioDurationSeconds'] as int?,
+          cardBackgroundColor: payload['cardBackgroundColor'] as String?,
+          cardTextColor: payload['cardTextColor'] as String?,
           idempotencyKey: operation.id,
         );
       case OutboxKind.comment:

@@ -16,6 +16,7 @@ import '../../../data/services/outbox.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
+import '../../theme/vent_card_style.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/mood_chip.dart';
 import '../../widgets/glass_card.dart';
@@ -44,6 +45,8 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   bool _includePoll = false;
   bool _isWhisper = false;
   bool _storyFriendsOnly = true;
+  String? _cardBackgroundColor;
+  String? _cardTextColor;
 
   // Optional attached photo. Bytes live in memory until submit; we
   // only upload on send so a discard costs zero network.
@@ -182,6 +185,135 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     if (source != null) await _pickPhoto(source: source);
   }
 
+  Future<void> _openStyleSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final effectiveText = VentCardStyle.readableTextFor(
+            _cardBackgroundColor,
+            _cardTextColor,
+          );
+          final availableTextColors = _cardBackgroundColor == null
+              ? <String?>[null]
+              : VentCardStyle.textColors
+                  .where((color) =>
+                      VentCardStyle.readableTextFor(
+                        _cardBackgroundColor,
+                        color,
+                      ) ==
+                      color)
+                  .toList();
+
+          void refresh(VoidCallback update) {
+            setState(update);
+            setSheetState(() {});
+          }
+
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withOpacity(0.16),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Vent style',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Choose a card and word color. Unreadable combinations are filtered out.',
+                    style: TextStyle(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.62),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Background',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      for (final color in VentCardStyle.backgrounds)
+                        _ComposeColorSwatch(
+                          color: color == null
+                              ? Theme.of(context).cardColor
+                              : VentCardStyle.parse(color)!,
+                          label: VentCardStyle.backgroundLabel(color),
+                          selected: _cardBackgroundColor == color,
+                          onTap: () => refresh(() {
+                            _cardBackgroundColor = color;
+                            _cardTextColor = VentCardStyle.readableTextFor(
+                              color,
+                              _cardTextColor,
+                            );
+                          }),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  const Text(
+                    'Words',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      for (final color in availableTextColors)
+                        _ComposeColorSwatch(
+                          color: color == null
+                              ? Theme.of(context).colorScheme.onSurface
+                              : VentCardStyle.parse(color)!,
+                          label: VentCardStyle.textLabel(color),
+                          selected: effectiveText == color,
+                          onTap: () => refresh(() => _cardTextColor = color),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      child: const Text('Done'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     final text = _controller.text.trim();
     if (text.isEmpty && _pendingImageBytes == null) return;
@@ -248,9 +380,15 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           'tribeId': effectiveTribeId,
           'spaceId': space?.spaceId,
           'personaId': persona?.personaId,
-          'isWhisper': _isWhisper,
+          'isStory': _isWhisper,
+          'storyAudience': 'friends',
           'imagePath': imagePath,
           'imageUrl': imageUrl,
+          'cardBackgroundColor': _cardBackgroundColor,
+          'cardTextColor': VentCardStyle.readableTextFor(
+            _cardBackgroundColor,
+            _cardTextColor,
+          ),
           if (stagedMedia != null) ...stagedMedia.toPayload(),
         },
         operationId: operationId,
@@ -312,12 +450,18 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
             tribeId: effectiveTribeId,
             spaceId: space?.spaceId,
             personaId: persona?.personaId,
-            isWhisper: _isWhisper,
+            isStory: _isWhisper,
+            storyAudience: 'friends',
             imagePath: imagePath,
             imageUrl: imageUrl,
             pollQuestion: _includePoll ? _pollQ.text.trim() : null,
             pollOptions:
                 _includePoll ? [_pollA.text.trim(), _pollB.text.trim()] : null,
+            cardBackgroundColor: _cardBackgroundColor,
+            cardTextColor: VentCardStyle.readableTextFor(
+              _cardBackgroundColor,
+              _cardTextColor,
+            ),
             idempotencyKey: operationId,
           );
     } catch (e) {
@@ -565,18 +709,61 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                   child: GlassCard(
                     padding: const EdgeInsets.all(12),
                     borderRadius: 20,
+                    tint: VentCardStyle.parse(_cardBackgroundColor),
+                    borderColor: _cardBackgroundColor == null
+                        ? null
+                        : VentCardStyle.parse(
+                            VentCardStyle.readableTextFor(
+                              _cardBackgroundColor,
+                              _cardTextColor,
+                            ),
+                          )?.withOpacity(0.16),
                     child: TagAutocomplete(
                       controller: _controller,
                       fill: true,
                       child: TextField(
                         controller: _controller,
+                        cursorColor: VentCardStyle.parse(
+                          VentCardStyle.readableTextFor(
+                            _cardBackgroundColor,
+                            _cardTextColor,
+                          ),
+                        ),
+                        style: TextStyle(
+                          color: VentCardStyle.parse(
+                            VentCardStyle.readableTextFor(
+                              _cardBackgroundColor,
+                              _cardTextColor,
+                            ),
+                          ),
+                          fontSize: 16,
+                          height: 1.45,
+                        ),
                         maxLength: 1000,
                         maxLines: null,
                         expands: true,
                         textAlignVertical: TextAlignVertical.top,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText:
                               'Drop the thought. Keep names out, keep it real.',
+                          filled: true,
+                          fillColor: Colors.transparent,
+                          hintStyle: TextStyle(
+                            color: VentCardStyle.parse(
+                              VentCardStyle.readableTextFor(
+                                _cardBackgroundColor,
+                                _cardTextColor,
+                              ),
+                            )?.withOpacity(0.55),
+                          ),
+                          counterStyle: TextStyle(
+                            color: VentCardStyle.parse(
+                              VentCardStyle.readableTextFor(
+                                _cardBackgroundColor,
+                                _cardTextColor,
+                              ),
+                            )?.withOpacity(0.72),
+                          ),
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
@@ -602,6 +789,15 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                         ),
                         label: Text(
                             _pendingImageBytes != null ? 'Photo on' : 'Photo'),
+                      ),
+                      TextButton.icon(
+                        onPressed: _openStyleSheet,
+                        icon: Icon(
+                          Icons.palette_outlined,
+                          size: 18,
+                          color: scheme.primary,
+                        ),
+                        label: const Text('Style'),
                       ),
                       TextButton.icon(
                         onPressed: () =>
@@ -721,9 +917,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                     ),
                     const Spacer(),
                     IconButton(
+                      tooltip: 'Story settings',
                       icon: const Icon(Icons.settings_outlined),
                       color: context.ink,
-                      onPressed: () {},
+                      onPressed: () => context.push('/settings'),
                     ),
                   ],
                 ),
@@ -1135,6 +1332,81 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           ),
         ) ??
         false;
+  }
+}
+
+class _ComposeColorSwatch extends StatelessWidget {
+  const _ComposeColorSwatch({
+    required this.color,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Color color;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final outline = selected
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).dividerColor.withOpacity(0.55);
+    final checkColor =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+            ? Colors.white
+            : const Color(0xFF21161B);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 64,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: outline, width: selected ? 3 : 1),
+                  boxShadow: selected
+                      ? [
+                          BoxShadow(
+                            color: outline.withOpacity(0.2),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: selected
+                    ? Icon(Icons.check_rounded, color: checkColor, size: 22)
+                    : null,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

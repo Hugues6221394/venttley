@@ -136,6 +136,18 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                   if (friendsAsync.isLoading &&
                       friendsAsync.valueOrNull == null)
                     const SliverToBoxAdapter(child: _ListSkeleton())
+                  else if (friendsAsync.hasError &&
+                      friendsAsync.valueOrNull == null)
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: 320,
+                        child: VentlyErrorState(
+                          error: friendsAsync.error!,
+                          title: 'Couldn\'t load friends',
+                          onRetry: () => ref.invalidate(myFriendsProvider),
+                        ),
+                      ),
+                    )
                   else if (filteredFriends.isEmpty)
                     SliverToBoxAdapter(
                       child: _EmptyState(
@@ -1168,7 +1180,48 @@ class _RequestsSection extends ConsumerWidget {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {},
+                      onPressed: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        showDragHandle: true,
+                        builder: (sheetContext) => SafeArea(
+                          child: SizedBox(
+                            height:
+                                MediaQuery.sizeOf(sheetContext).height * 0.72,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                                  child: Text(
+                                    'Friend requests · ${incoming.length}',
+                                    style: TextStyle(
+                                      color: context.ink,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: ListView.builder(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      20,
+                                      0,
+                                      20,
+                                      24,
+                                    ),
+                                    itemCount: incoming.length,
+                                    itemBuilder: (_, index) => _RequestCard(
+                                      request: incoming[index],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                       style: TextButton.styleFrom(
                         foregroundColor: VentlyColors.berryMagenta,
                       ),
@@ -1244,6 +1297,7 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
             child: ProfileAvatar(
               avatarSeed: request.otherAvatarSeed,
               label: request.otherPseudonym,
+              profilePhotoUrl: request.profilePhotoUrl,
               size: 48,
             ),
           ),

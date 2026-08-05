@@ -80,10 +80,11 @@ class FeedScreen extends ConsumerWidget {
                 onRetry: () => ref.invalidate(feedPostsProvider),
               ),
               data: (posts) {
-                final feedPosts =
-                    posts.where((post) => !post.isWhisper).toList();
+                final feedPosts = posts
+                    .where((post) => !post.isWhisper && !post.isStory)
+                    .toList();
                 final recommendedPosts = (discoveryPosts ?? const <Post>[])
-                    .where((post) => !post.isWhisper)
+                    .where((post) => !post.isWhisper && !post.isStory)
                     .take(12)
                     .toList();
                 final showingRecommendations =
@@ -97,7 +98,8 @@ class FeedScreen extends ConsumerWidget {
                 final friendStories =
                     storiesAsync.valueOrNull ?? const <VentStory>[];
                 final communityStories = (discoveryPosts ?? const <Post>[])
-                    .where((post) => post.isWhisper)
+                    .where((post) =>
+                        post.isStory && post.storyAudience == 'everyone')
                     .map(VentStory.fromPost)
                     .take(12)
                     .toList();
@@ -568,6 +570,16 @@ class _VentlyStoriesRail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    VentStory? ownStory;
+    final friendStories = <VentStory>[];
+    for (final story in stories) {
+      if (story.authorId != null && story.authorId == me?.userId) {
+        ownStory ??= story;
+      } else {
+        friendStories.add(story);
+      }
+    }
+
     if (stories.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -585,7 +597,7 @@ class _VentlyStoriesRail extends ConsumerWidget {
                 _AddStoryBubble(
                   me: me,
                   alignToCard: true,
-                  onTap: () => context.push('/compose/story'),
+                  onAdd: () => context.push('/compose/story'),
                 ),
                 const SizedBox(width: 14),
                 Container(
@@ -648,16 +660,19 @@ class _VentlyStoriesRail extends ConsumerWidget {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: stories.length + 1,
+            itemCount: friendStories.length + 1,
             separatorBuilder: (_, __) => const SizedBox(width: 12),
             itemBuilder: (ctx, i) {
               if (i == 0) {
                 return _AddStoryBubble(
                   me: me,
-                  onTap: () => context.push('/compose/story'),
+                  onAdd: () => context.push('/compose/story'),
+                  onView: ownStory == null
+                      ? null
+                      : () => context.push('/story/${ownStory!.postId}'),
                 );
               }
-              return _VentlyStoryCircle(story: stories[i - 1]);
+              return _VentlyStoryCircle(story: friendStories[i - 1]);
             },
           ),
         ),
@@ -688,7 +703,7 @@ class _StoriesLoadingRail extends StatelessWidget {
             children: [
               _AddStoryBubble(
                 me: me,
-                onTap: () => context.push('/compose/story'),
+                onAdd: () => context.push('/compose/story'),
               ),
               const SizedBox(width: 14),
               for (var i = 0; i < 4; i++) ...[
@@ -726,7 +741,7 @@ class _StoriesUnavailableRail extends StatelessWidget {
               _AddStoryBubble(
                 me: me,
                 alignToCard: true,
-                onTap: () => context.push('/compose/story'),
+                onAdd: () => context.push('/compose/story'),
               ),
               const SizedBox(width: 14),
               Container(
@@ -828,62 +843,86 @@ class _StoryBubbleSkeleton extends StatelessWidget {
 class _AddStoryBubble extends StatelessWidget {
   const _AddStoryBubble({
     required this.me,
-    required this.onTap,
+    required this.onAdd,
+    this.onView,
     this.alignToCard = false,
   });
 
   final AppUser? me;
-  final VoidCallback onTap;
+  final VoidCallback onAdd;
+  final VoidCallback? onView;
   final bool alignToCard;
 
   @override
   Widget build(BuildContext context) {
     final label = me?.anonymousPseudonym ?? 'You';
-    return Semantics(
-      label: 'Add your 24 hour story',
-      button: true,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: alignToCard ? 2 : 0),
-        child: SizedBox(
-          key: const Key('home-add-story'),
-          width: 64,
-          child: Column(
-            mainAxisAlignment:
-                alignToCard ? MainAxisAlignment.end : MainAxisAlignment.start,
-            children: [
-              Pressable(
-                onTap: onTap,
-                child: SizedBox(
-                  width: 54,
-                  height: 54,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 52,
-                        height: 52,
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: VentlyColors.softMauve,
-                            width: 1.5,
+    final hasStory = onView != null;
+    return Padding(
+      padding: EdgeInsets.only(bottom: alignToCard ? 2 : 0),
+      child: SizedBox(
+        key: const Key('home-add-story'),
+        width: 64,
+        child: Column(
+          mainAxisAlignment:
+              alignToCard ? MainAxisAlignment.end : MainAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 58,
+              height: 54,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Semantics(
+                    label: hasStory
+                        ? 'View your active story'
+                        : 'Add your 24 hour story',
+                    button: true,
+                    child: Pressable(
+                      key: const Key('home-view-story'),
+                      onTap: onView ?? onAdd,
+                      child: SizedBox(
+                        width: 54,
+                        height: 54,
+                        child: Center(
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: hasStory
+                                    ? VentlyColors.berryMagenta
+                                    : VentlyColors.softMauve,
+                                width: hasStory ? 2.4 : 1.5,
+                              ),
+                            ),
+                            child: ProfileAvatar(
+                              avatarSeed:
+                                  me?.avatarSeed ?? 'venttly-story-owner',
+                              label: label,
+                              profilePhotoUrl: me?.profilePhotoUrl,
+                              size: 46,
+                            ),
                           ),
                         ),
-                        child: ProfileAvatar(
-                          avatarSeed: me?.avatarSeed ?? 'venttly-story-owner',
-                          label: label,
-                          profilePhotoUrl: me?.profilePhotoUrl,
-                          size: 46,
-                        ),
                       ),
-                      Positioned(
-                        right: -1,
-                        bottom: 0,
+                    ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Semantics(
+                      label: hasStory ? 'Add another story' : 'Add story',
+                      button: true,
+                      child: Pressable(
+                        key: const Key('home-add-story-button'),
+                        onTap: onAdd,
+                        pressedScale: 0.88,
                         child: Container(
-                          width: 20,
-                          height: 20,
+                          width: 22,
+                          height: 22,
                           decoration: BoxDecoration(
                             color: VentlyColors.berryMagenta,
                             shape: BoxShape.circle,
@@ -894,28 +933,38 @@ class _AddStoryBubble extends StatelessWidget {
                           ),
                           child: const Icon(
                             Icons.add_rounded,
-                            size: 14,
+                            size: 15,
                             color: Colors.white,
                           ),
                         ),
                       ),
-                    ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 5),
+            Semantics(
+              label: hasStory
+                  ? 'View your active story'
+                  : 'Add your 24 hour story',
+              button: true,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onView ?? onAdd,
+                child: Text(
+                  'Your story',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.ink,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-              const SizedBox(height: 5),
-              Text(
-                'Your story',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: context.ink,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

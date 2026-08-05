@@ -219,11 +219,15 @@ class MockBackend {
     String? spaceId,
     String? personaId,
     bool isWhisper = false,
+    bool isStory = false,
+    String storyAudience = 'everyone',
     String? imageUrl,
     String? audioUrl,
     int? audioDurationSeconds,
     String? pollQuestion,
     List<String>? pollOptions,
+    String? cardBackgroundColor,
+    String? cardTextColor,
   }) async {
     final me = _me;
     if (me == null) throw StateError('No active session');
@@ -248,6 +252,10 @@ class MockBackend {
       content: content,
       postMood: mood,
       isWhisper: isWhisper,
+      isStory: isStory,
+      storyAudience: isStory ? storyAudience : 'everyone',
+      cardBackgroundColor: cardBackgroundColor,
+      cardTextColor: cardTextColor,
       likesCount: 0,
       commentsCount: 0,
       createdAt: DateTime.now(),
@@ -412,9 +420,42 @@ class MockBackend {
       plugAvatarSeed: me?.avatarSeed ?? 'default-orb',
       promptText: text,
       answersCount: 0,
+      authorId: me?.userId,
+      audience: audience,
     );
     _prompts.insert(0, prompt);
     return prompt;
+  }
+
+  List<PlugPrompt> questionsByAuthor(String userId) =>
+      _prompts.where((p) => p.authorId == userId).toList();
+
+  void updateUserQuestion({
+    required String promptId,
+    String? text,
+    String? audience,
+  }) {
+    final i = _prompts.indexWhere((p) => p.promptId == promptId);
+    if (i < 0) return;
+    _prompts[i] = _prompts[i].copyWith(promptText: text, audience: audience);
+  }
+
+  void deleteUserQuestion(String promptId) {
+    _prompts.removeWhere((p) => p.promptId == promptId);
+  }
+
+  void likeQuestion(String promptId) {
+    final i = _prompts.indexWhere((p) => p.promptId == promptId);
+    if (i < 0 || _prompts[i].likedByMe) return;
+    _prompts[i] = _prompts[i]
+        .copyWith(likedByMe: true, likeCount: _prompts[i].likeCount + 1);
+  }
+
+  void unlikeQuestion(String promptId) {
+    final i = _prompts.indexWhere((p) => p.promptId == promptId);
+    if (i < 0 || !_prompts[i].likedByMe) return;
+    _prompts[i] = _prompts[i].copyWith(
+        likedByMe: false, likeCount: (_prompts[i].likeCount - 1).clamp(0, 1 << 30));
   }
 
   List<TribeReport> tribeReports(String tribeId) {
@@ -1394,7 +1435,7 @@ class MockBackend {
     final filtered = _posts
         .where((p) =>
             p.authorId == authorId &&
-            (!p.isWhisper || p.createdAt.isAfter(cutoff)))
+            ((!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff)))
         .map((p) => p.copyWith(
               myReaction: _myReactions[p.postId],
               savedByMe: _savedPosts.contains(p.postId),
@@ -1535,21 +1576,31 @@ class MockBackend {
   Future<List<CrisisHelpline>> crisisResources({String? region}) async {
     final base = <CrisisHelpline>[
       const CrisisHelpline(
-        resourceId: 'mock-rw-114',
+        resourceId: 'mock-rw-kigali-mental-health',
         region: 'RW',
-        label: 'Rwanda Mental Health Helpline',
-        reach: 'Call 114 (free, 24/7)',
-        hours: '24/7',
+        label: 'Kigali Mental Health Referral Centre',
+        reach: 'Call 0793902059 or 0736440666',
+        url: 'https://www.kmentalhealth.gov.rw/',
+        hours: 'Contact centre',
         sortOrder: 10,
       ),
       const CrisisHelpline(
-        resourceId: 'mock-rw-3029',
+        resourceId: 'mock-rw-emergency',
         region: 'RW',
-        label: 'Isange One Stop Centre',
-        reach: 'Call 3029 from any phone',
-        url: 'https://rib.gov.rw/isange',
-        hours: '24/7',
+        label: 'Rwanda health emergency',
+        reach: 'Call 114 or 912',
+        url: 'https://www.moh.gov.rw/contact',
+        hours: 'Emergency',
         sortOrder: 20,
+      ),
+      const CrisisHelpline(
+        resourceId: 'mock-rw-isange-3029',
+        region: 'RW',
+        label: 'Isange One Stop Centre (GBV and child abuse)',
+        reach: 'Call 3029',
+        url: 'https://police.gov.rw/',
+        hours: 'Toll-free line',
+        sortOrder: 30,
       ),
       const CrisisHelpline(
         resourceId: 'mock-befrienders',
@@ -1557,15 +1608,6 @@ class MockBackend {
         label: 'International Befrienders',
         reach: 'Find a local line',
         url: 'https://befrienders.org',
-        hours: '24/7',
-        sortOrder: 30,
-      ),
-      const CrisisHelpline(
-        resourceId: 'mock-ctl',
-        region: 'global',
-        label: 'Crisis Text Line',
-        reach: 'Text CARE to 741741',
-        url: 'https://www.crisistextline.org',
         hours: '24/7',
         sortOrder: 40,
       ),
@@ -1742,6 +1784,7 @@ class MockBackend {
         otherUserId: f.requestedBy,
         otherPseudonym: u?.anonymousPseudonym ?? 'anonymous',
         otherAvatarSeed: u?.avatarSeed ?? 'default-orb',
+        profilePhotoUrl: u?.profilePhotoUrl,
         otherKarma: 0,
         note: f.note,
         createdAt: f.createdAt,
@@ -1768,6 +1811,7 @@ class MockBackend {
         otherUserId: otherId,
         otherPseudonym: u?.anonymousPseudonym ?? 'anonymous',
         otherAvatarSeed: u?.avatarSeed ?? 'default-orb',
+        profilePhotoUrl: u?.profilePhotoUrl,
         otherKarma: 0,
         note: f.note,
         createdAt: f.createdAt,

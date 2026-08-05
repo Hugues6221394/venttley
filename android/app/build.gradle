@@ -53,10 +53,9 @@ android {
         applicationId = "rw.vently.vently_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        // Bumped from flutter.minSdkVersion (21) to 23 because record_android
-        // and several other modern Flutter plugins require Android 6.0+.
-        // API 23 still covers ~99% of active Android devices.
-        minSdk = 23
+        // The maintained audio-only FFmpeg runtime used for local Whisper
+        // voice effects requires Android 7.0+. Processing stays on-device.
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

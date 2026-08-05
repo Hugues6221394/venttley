@@ -5,6 +5,7 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/vently_premium_background.dart';
 
 class TribeSpacesManagementScreen extends ConsumerStatefulWidget {
@@ -30,11 +31,28 @@ class _TribeSpacesManagementScreenState
   @override
   Widget build(BuildContext context) {
     final tribe = ref.watch(tribeBySlugProvider(widget.slug)).valueOrNull;
+    final me = ref.watch(sessionProvider);
     if (tribe == null) {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (me == null || tribe.keeperId != me.userId) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(title: const Text('Spaces')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(28),
+            child: Text(
+              'Only the current Plug can manage Tribe Spaces.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
       );
     }
     if (widget.openCreate && !createOpened) {
@@ -176,43 +194,48 @@ class _TribeSpacesManagementScreenState
     }
     var reason = '';
     if (action == 'archive' || action == 'delete') {
-      final controller = TextEditingController();
-      final confirmed = await showDialog<bool>(
+      final result = await showDialog<String>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(action == 'delete' ? 'Delete Space?' : 'Archive Space?'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                action == 'delete'
-                    ? 'Vents will move to General before this Space is removed.'
-                    : 'The Space becomes read-only and can be restored later.',
+        builder: (dialogContext) => ModalTextControllerScope(
+          initialValues: const [''],
+          builder: (dialogContext, controllers) => AlertDialog(
+            title:
+                Text(action == 'delete' ? 'Delete Space?' : 'Archive Space?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  action == 'delete'
+                      ? 'Vents will move to General before this Space is removed.'
+                      : 'The Space becomes read-only and can be restored later.',
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: controllers.single,
+                  maxLength: 240,
+                  decoration: const InputDecoration(labelText: 'Reason'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
               ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: controller,
-                maxLength: 240,
-                decoration: const InputDecoration(labelText: 'Reason'),
+              FilledButton(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  controllers.single.text.trim(),
+                ),
+                child: Text(action == 'delete' ? 'Delete' : 'Archive'),
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text(action == 'delete' ? 'Delete' : 'Archive'),
-            ),
-          ],
         ),
       );
-      reason = controller.text.trim();
-      controller.dispose();
-      if (confirmed != true || !mounted) return;
+      if (result == null || !mounted) return;
+      reason = result;
     }
     setState(() => busySpaceId = space.spaceId);
     try {

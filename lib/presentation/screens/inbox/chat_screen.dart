@@ -490,6 +490,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     );
                   }
                   final m = visible[i - 1];
+                  if (SystemNotice.isSystem(m.plaintext)) {
+                    return _SystemNoticeLine(
+                        text: SystemNotice.strip(m.plaintext));
+                  }
                   return _Bubble(
                     message: m,
                     fontStyle: prefs.fontStyle,
@@ -786,6 +790,39 @@ String _deleteError(Object e) {
     return 'You can only delete your own messages.';
   }
   return 'Could not delete. Please try again.';
+}
+
+/// A centered, WhatsApp-style system line (e.g. disappearing-messages changes).
+class _SystemNoticeLine extends StatelessWidget {
+  const _SystemNoticeLine({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: scheme.primary.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: scheme.primary.withOpacity(0.14)),
+          ),
+          child: Text(
+            text,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: scheme.onSurface.withOpacity(0.7),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _Bubble extends ConsumerWidget {
@@ -1755,7 +1792,7 @@ class _Composer extends StatelessWidget {
 /// snapshot the sender captured at share time (migration 0027) so the
 /// card still renders if the original post was later deleted.
 ///
-/// Tapping deep-links to /post/<id> when the original still exists.
+/// Tapping opens the root-level post preview when the original still exists.
 class _SharedPostCard extends StatelessWidget {
   const _SharedPostCard({
     required this.snapshot,
@@ -1776,7 +1813,9 @@ class _SharedPostCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: deleted ? null : () => context.push('/post/${snapshot.postId}'),
+        onTap: deleted
+            ? null
+            : () => context.push('/post-preview/${snapshot.postId}'),
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(

@@ -119,28 +119,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       );
     }
 
-    final myVents = ref.watch(myVentsProvider).valueOrNull ?? const [];
-    final myWhispers = ref.watch(myWhispersProvider).valueOrNull ?? const [];
-    final mySaved = ref.watch(mySavedProvider).valueOrNull ?? const [];
-    final mySavedWhispers =
-        ref.watch(mySavedWhispersProvider).valueOrNull ?? const [];
+    final myVentsAsync = ref.watch(myVentsProvider);
+    final myStories = ref.watch(myStoriesProvider);
+    final myWhispersAsync = ref.watch(myWhispersProvider);
+    final mySavedAsync = ref.watch(mySavedProvider);
+    final mySavedWhispersAsync = ref.watch(mySavedWhispersProvider);
+    final myVents = myVentsAsync.valueOrNull ?? const <Post>[];
+    final myWhispers = myWhispersAsync.valueOrNull ?? const <Whisper>[];
     final allTribes =
         ref.watch(tribesProvider(const TribeQuery())).valueOrNull ?? const [];
-    final joinedTribes =
-        allTribes.where((t) => t.joinedByMe).toList();
+    final joinedTribes = allTribes.where((t) => t.joinedByMe).toList();
 
-    // A "story" is an ephemeral (24h) post — Post.isWhisper == true. myVents
-    // already drops expired ones, so these are the active stories.
-    final regularVents = myVents.where((p) => !p.isWhisper).toList();
-    final storyVents = myVents.where((p) => p.isWhisper).toList();
-    final imageVents = myVents.where((p) => p.hasImage).toList();
-    final tabs = <_ProfileTab>[
-      _ProfileTab('Vents', regularVents),
-      const _ProfileTab('Whispers', null),
-      _ProfileTab('Stories', storyVents),
-      _ProfileTab('Media', imageVents),
-      _ProfileTab('Liked', mySaved),
-      const _ProfileTab('About', null),
+    // Keep each content type in its own profile tab so audio Whispers never
+    // masquerade as Stories and each query can expose its own load state.
+    final tabs = const <_ProfileTab>[
+      _ProfileTab('Vents', null),
+      _ProfileTab('Whispers', null),
+      _ProfileTab('Stories', null),
+      _ProfileTab('Media', null),
+      _ProfileTab('Liked', null),
+      _ProfileTab('About', null),
     ];
     final tabLabels = tabs.map((t) => t.label).toList();
     // GoRouterState.of throws when this branch isn't the active route
@@ -157,17 +155,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final tabController = _tabController!;
 
     return Scaffold(
-        extendBodyBehindAppBar: true,
-        // No app-bar title band — the hero card is the header (settings lives
-        // inside it now), so the profile content hugs the top of the screen.
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          toolbarHeight: 0,
-        ),
-        body: VentlyPremiumBackground(
-          child: NestedScrollView(
+      extendBodyBehindAppBar: true,
+      // No app-bar title band — the hero card is the header (settings lives
+      // inside it now), so the profile content hugs the top of the screen.
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        toolbarHeight: 0,
+      ),
+      body: VentlyPremiumBackground(
+        child: NestedScrollView(
           headerSliverBuilder: (ctx, _) => [
             // Only clear the status bar — the transparent app bar is 0-height.
             SliverToBoxAdapter(
@@ -189,7 +187,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               delegate: _TabsHeader(
                 tabController: tabController,
                 tabs: tabLabels,
-                bg: isDark ? scheme.surface : Theme.of(context).scaffoldBackgroundColor,
+                bg: isDark
+                    ? scheme.surface
+                    : Theme.of(context).scaffoldBackgroundColor,
               ),
             ),
           ],
@@ -198,32 +198,89 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             children: tabs.map((t) {
               switch (t.label) {
                 case 'Whispers':
-                  return _MyWhispersTab(whispers: myWhispers);
+                  return myWhispersAsync.when(
+                    data: (whispers) => _MyWhispersTab(whispers: whispers),
+                    loading: () => const _ProfileLoading(),
+                    error: (_, __) => _ProfileLoadError(
+                      label: "Couldn't load your whispers.",
+                      onRetry: () => ref.invalidate(myWhispersProvider),
+                    ),
+                  );
                 case 'Liked':
-                  return _SavedTab(posts: mySaved, whispers: mySavedWhispers);
+                  if ((mySavedAsync.isLoading &&
+                          mySavedAsync.valueOrNull == null) ||
+                      (mySavedWhispersAsync.isLoading &&
+                          mySavedWhispersAsync.valueOrNull == null)) {
+                    return const _ProfileLoading();
+                  }
+                  if ((mySavedAsync.hasError &&
+                          mySavedAsync.valueOrNull == null) ||
+                      (mySavedWhispersAsync.hasError &&
+                          mySavedWhispersAsync.valueOrNull == null)) {
+                    return _ProfileLoadError(
+                      label: "Couldn't load your saved posts.",
+                      onRetry: () {
+                        ref.invalidate(mySavedProvider);
+                        ref.invalidate(mySavedWhispersProvider);
+                      },
+                    );
+                  }
+                  return _SavedTab(
+                    posts: mySavedAsync.valueOrNull ?? const <Post>[],
+                    whispers:
+                        mySavedWhispersAsync.valueOrNull ?? const <Whisper>[],
+                  );
                 case 'About':
                   return _AboutTab(me: me);
                 case 'Stories':
-                  return _PostsTab(
-                    posts: t.posts!,
-                    emptyText: 'No active stories. Stories disappear after 24h.',
+                  return myStories.when(
+                    data: (posts) => _PostsTab(
+                      posts: posts,
+                      emptyText:
+                          'No active stories. Stories disappear after 24h.',
+                    ),
+                    loading: () => const Center(
+                      child: CircularProgressIndicator.adaptive(),
+                    ),
+                    error: (_, __) => _ProfileLoadError(
+                      label: "Couldn't load your stories.",
+                      onRetry: () => ref.invalidate(myStoriesProvider),
+                    ),
                   );
                 case 'Media':
-                  return _PostsTab(
-                    posts: t.posts!,
-                    emptyText: 'Photos you post will show here.',
+                  return myVentsAsync.when(
+                    data: (posts) => _PostsTab(
+                      posts: posts.where((post) => post.hasImage).toList(),
+                      emptyText: 'Photos you post will show here.',
+                    ),
+                    loading: () => const _ProfileLoading(),
+                    error: (_, __) => _ProfileLoadError(
+                      label: "Couldn't load your media.",
+                      onRetry: () => ref.invalidate(myVentsProvider),
+                    ),
+                  );
+                case 'Vents':
+                  return myVentsAsync.when(
+                    data: (posts) => _PostsTab(
+                      posts: posts
+                          .where((post) => !post.isWhisper && !post.isStory)
+                          .toList(),
+                      emptyText: "You haven't vented yet.",
+                    ),
+                    loading: () => const _ProfileLoading(),
+                    error: (_, __) => _ProfileLoadError(
+                      label: "Couldn't load your vents.",
+                      onRetry: () => ref.invalidate(myVentsProvider),
+                    ),
                   );
                 default:
-                  return _PostsTab(
-                    posts: t.posts!,
-                    emptyText: "You haven't vented yet.",
-                  );
+                  return const SizedBox.shrink();
               }
             }).toList(),
           ),
         ),
-        ),
-      );
+      ),
+    );
   }
 }
 
@@ -231,6 +288,54 @@ class _ProfileTab {
   const _ProfileTab(this.label, this.posts);
   final String label;
   final List<Post>? posts;
+}
+
+class _ProfileLoadError extends StatelessWidget {
+  const _ProfileLoadError({
+    required this.label,
+    required this.onRetry,
+  });
+
+  final String label;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.cloud_off_outlined,
+            color: Theme.of(context).colorScheme.primary,
+            size: 34,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Try again'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileLoading extends StatelessWidget {
+  const _ProfileLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: CircularProgressIndicator.adaptive(),
+    );
+  }
 }
 
 /// About tab — bio + a few profile facts.
@@ -247,9 +352,7 @@ class _AboutTab extends StatelessWidget {
       children: [
         Text('About',
             style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-                color: context.ink)),
+                fontWeight: FontWeight.w900, fontSize: 18, color: context.ink)),
         const SizedBox(height: 12),
         Text(bio,
             style: TextStyle(
@@ -276,9 +379,8 @@ class _AboutTab extends StatelessWidget {
                     color: context.ink.withOpacity(0.6),
                     fontWeight: FontWeight.w600)),
             Text(v,
-                style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: context.ink)),
+                style:
+                    TextStyle(fontWeight: FontWeight.w800, color: context.ink)),
           ],
         ),
       );
@@ -339,8 +441,7 @@ class _MyWhispersTab extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.graphic_eq_rounded,
-                  size: 48,
-                  color: VentlyColors.berryMagenta.withOpacity(0.45)),
+                  size: 48, color: VentlyColors.berryMagenta.withOpacity(0.45)),
               const SizedBox(height: 14),
               const Text(
                 "You haven't posted a Whisper yet.",
@@ -391,8 +492,7 @@ class _MyWhisperTile extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         leading: Container(
           width: 52,
           height: 52,
@@ -614,7 +714,8 @@ class _TabsHeader extends SliverPersistentHeaderDelegate {
   @override
   double get maxExtent => 50;
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
     // Container with alignment EXPANDS to the sliver's extent even when the
     // TabBar's intrinsic height is smaller (48 on most devices). Without it,
     // paintExtent < layoutExtent throws "SliverGeometry is not valid" on

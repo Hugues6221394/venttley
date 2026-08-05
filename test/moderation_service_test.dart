@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vently_app/data/services/moderation_service.dart';
 
@@ -75,6 +77,31 @@ void main() {
 
       expect(calls, 0);
       expect(result.verdict, SafetyVerdict.safe);
+    });
+
+    test('fallback crisis contacts contain no invented Venttly hotline', () {
+      final resources =
+          kCrisisResources.map((resource) => resource.reach).join(' ');
+
+      expect(resources, isNot(contains('741741')));
+      expect(
+        kCrisisResources.map((resource) => resource.label),
+        contains('Kigali Mental Health Referral Centre'),
+      );
+      expect(resources, contains('114 or 912'));
+      expect(resources, contains('3029'));
+    });
+
+    test('crisis resource migration retires the unsafe global text line', () {
+      final migration = File(
+        'supabase/migrations/'
+        '20260728125529_correct_rwanda_crisis_resources.sql',
+      ).readAsStringSync();
+
+      expect(migration, contains("reach ILIKE '%741741%'"));
+      expect(migration, contains('SET is_active = false'));
+      expect(migration, contains('Kigali Mental Health Referral Centre'));
+      expect(migration, contains('Call 114 or 912'));
     });
   });
 }

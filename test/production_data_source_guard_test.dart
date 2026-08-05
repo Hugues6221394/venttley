@@ -63,6 +63,32 @@ void main() {
         reason: 'UI code must obtain all content through repositories.');
   });
 
+  test('production presentation has no bundled demo identities or tribes', () {
+    final presentation = Directory('lib/presentation')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'));
+    const demoLabels = [
+      'MidnightMind',
+      'University of Rwanda',
+      'Kigali Tech Confessions',
+      'GoldenHour',
+      'BrokenCompass',
+    ];
+    final offenders = <String>[];
+
+    for (final file in presentation) {
+      final source = file.readAsStringSync();
+      if (demoLabels.any(source.contains)) offenders.add(file.path);
+    }
+
+    expect(
+      offenders,
+      isEmpty,
+      reason: 'Seed/demo labels must never be rendered by production UI code.',
+    );
+  });
+
   test('live session state cannot fall through to the mock account', () {
     final source = File(
       'lib/data/repositories/vently_repository.dart',
@@ -99,6 +125,18 @@ void main() {
     expect(source.toUpperCase(), isNot(contains('INSERT INTO')));
     expect(source, isNot(contains('picsum.photos')));
     expect(source, isNot(contains('pravatar.cc')));
+  });
+
+  test('friends directory views expose authoritative profile photos', () {
+    final source = File(
+      'supabase/migrations/20260727202000_friend_directory_profile_photos.sql',
+    ).readAsStringSync();
+
+    expect(source, contains('friend_profile_photo_url'));
+    expect(source, contains('from_profile_photo_url'));
+    expect(source, contains('to_profile_photo_url'));
+    expect(source, contains('u.profile_photo_url'));
+    expect(source, contains('security_invoker = true'));
   });
 
   test('keeper schema migration cannot bootstrap development identities', () {

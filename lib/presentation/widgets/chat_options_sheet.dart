@@ -278,12 +278,20 @@ class _ChatOptionsSheet extends ConsumerWidget {
         ),
       ),
     );
-    if (picked != null) {
+    if (picked != null && picked != current) {
       // Conversation-level (shared) + server-side hard-delete via cron (0099).
-      await ref
-          .read(repositoryProvider)
-          .setRoomDisappearing(room.roomId, picked);
+      final repo = ref.read(repositoryProvider);
+      await repo.setRoomDisappearing(room.roomId, picked);
       ref.invalidate(roomDisappearingProvider(room.roomId));
+      // Notify the other participant with an in-chat system line (WhatsApp
+      // style) so the change is never silent. Best-effort — a failed notice
+      // must not undo the setting.
+      try {
+        await repo.sendMessage(
+          roomId: room.roomId,
+          plaintext: SystemNotice.disappearing(picked),
+        );
+      } catch (_) {/* setting already applied; notice is best-effort */}
     }
   }
 

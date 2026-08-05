@@ -59,7 +59,7 @@ Future<void> showKeeperContentStudioSheet(
       return;
     case KeeperContentStudioAction.pinPost:
       context.push(
-        '/tribe/${tribe.slug}/manage/settings/content?filter=pinned',
+        '/tribe/${tribe.slug}/manage/settings/content?action=pin',
       );
       return;
     case KeeperContentStudioAction.schedule:

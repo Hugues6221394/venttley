@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers.dart';
 import '../../theme/colors.dart';
+import '../../widgets/modal_text_controller_scope.dart';
 
 /// Instagram-style "Password and security" hub: a security checkup summary,
 /// password rotation, a real recovery email, two-factor, and session control.
@@ -65,7 +66,8 @@ class _PasswordSecurityScreenState
             total: 3,
             loading: _loadingFactors,
             items: [
-              const _CheckItem(label: 'Password protects your account', ok: true),
+              const _CheckItem(
+                  label: 'Password protects your account', ok: true),
               _CheckItem(
                 label: _twoFactorOn
                     ? 'Two-factor authentication is on'
@@ -158,149 +160,158 @@ class _PasswordSecurityScreenState
   // ---- Change password ---------------------------------------------------
 
   Future<void> _openChangePassword() async {
-    final current = TextEditingController();
-    final next = TextEditingController();
-    final confirm = TextEditingController();
     String? error;
     bool busy = false;
     bool obscure = true;
 
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
-        InputDecoration deco(String label) => InputDecoration(
-              labelText: label,
-              filled: true,
-              fillColor: const Color(0xFFFFF1F6),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
+      builder: (ctx) => ModalTextControllerScope(
+        initialValues: const ['', '', ''],
+        builder: (ctx, controllers) {
+          final current = controllers[0];
+          final next = controllers[1];
+          final confirm = controllers[2];
+          return StatefulBuilder(builder: (ctx, setSheet) {
+            InputDecoration deco(String label) => InputDecoration(
+                  labelText: label,
+                  filled: true,
+                  fillColor: const Color(0xFFFFF1F6),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                );
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 18,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Change password',
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: context.ink)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Enter your current password, then choose a new one.',
+                    style: TextStyle(
+                        color: context.ink.withOpacity(0.6), fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: current,
+                    obscureText: obscure,
+                    decoration: deco('Current password').copyWith(
+                      suffixIcon: IconButton(
+                        icon: Icon(obscure
+                            ? Icons.visibility_off_rounded
+                            : Icons.visibility_rounded),
+                        onPressed: () => setSheet(() => obscure = !obscure),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: next,
+                    obscureText: obscure,
+                    decoration: deco('New password (8+ characters)'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: confirm,
+                    obscureText: obscure,
+                    decoration: deco('Confirm new password'),
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(error!,
+                        style: const TextStyle(
+                            color: Colors.red, fontWeight: FontWeight.w600)),
+                  ],
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: VentlyColors.berryMagenta,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    onPressed: busy
+                        ? null
+                        : () async {
+                            if (next.text != confirm.text) {
+                              setSheet(
+                                  () => error = 'New passwords don\'t match.');
+                              return;
+                            }
+                            if (next.text.length < 8) {
+                              setSheet(() => error =
+                                  'New password must be 8+ characters.');
+                              return;
+                            }
+                            setSheet(() {
+                              busy = true;
+                              error = null;
+                            });
+                            try {
+                              await ref
+                                  .read(sessionProvider.notifier)
+                                  .changePassword(
+                                    currentPassword: current.text,
+                                    newPassword: next.text,
+                                  );
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('Password updated.')),
+                                );
+                              }
+                            } on AuthException catch (_) {
+                              setSheet(() {
+                                busy = false;
+                                error = 'Current password is incorrect.';
+                              });
+                            } on FormatException catch (e) {
+                              setSheet(() {
+                                busy = false;
+                                error = e.message;
+                              });
+                            } catch (e) {
+                              setSheet(() {
+                                busy = false;
+                                error = 'Couldn\'t update password. Try again.';
+                              });
+                            }
+                          },
+                    child: busy
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Text('Update password',
+                            style: TextStyle(fontWeight: FontWeight.w900)),
+                  ),
+                ],
               ),
             );
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 18,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Change password',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: context.ink)),
-              const SizedBox(height: 4),
-              Text(
-                'Enter your current password, then choose a new one.',
-                style: TextStyle(
-                    color: context.ink.withOpacity(0.6),
-                    fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: current,
-                obscureText: obscure,
-                decoration: deco('Current password').copyWith(
-                  suffixIcon: IconButton(
-                    icon: Icon(obscure
-                        ? Icons.visibility_off_rounded
-                        : Icons.visibility_rounded),
-                    onPressed: () => setSheet(() => obscure = !obscure),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: next,
-                obscureText: obscure,
-                decoration: deco('New password (8+ characters)'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: confirm,
-                obscureText: obscure,
-                decoration: deco('Confirm new password'),
-              ),
-              if (error != null) ...[
-                const SizedBox(height: 10),
-                Text(error!,
-                    style: const TextStyle(
-                        color: Colors.red, fontWeight: FontWeight.w600)),
-              ],
-              const SizedBox(height: 16),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: VentlyColors.berryMagenta,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: busy
-                    ? null
-                    : () async {
-                        if (next.text != confirm.text) {
-                          setSheet(() => error = 'New passwords don\'t match.');
-                          return;
-                        }
-                        if (next.text.length < 8) {
-                          setSheet(() =>
-                              error = 'New password must be 8+ characters.');
-                          return;
-                        }
-                        setSheet(() {
-                          busy = true;
-                          error = null;
-                        });
-                        try {
-                          await ref.read(sessionProvider.notifier).changePassword(
-                                currentPassword: current.text,
-                                newPassword: next.text,
-                              );
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Password updated.')),
-                            );
-                          }
-                        } on AuthException catch (_) {
-                          setSheet(() {
-                            busy = false;
-                            error = 'Current password is incorrect.';
-                          });
-                        } on FormatException catch (e) {
-                          setSheet(() {
-                            busy = false;
-                            error = e.message;
-                          });
-                        } catch (e) {
-                          setSheet(() {
-                            busy = false;
-                            error = 'Couldn\'t update password. Try again.';
-                          });
-                        }
-                      },
-                child: busy
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : const Text('Update password',
-                        style: TextStyle(fontWeight: FontWeight.w900)),
-              ),
-            ],
-          ),
-        );
-      }),
+          });
+        },
+      ),
     );
   }
 
@@ -317,118 +328,126 @@ class _PasswordSecurityScreenState
       return;
     }
 
-    final controller = TextEditingController(
-      text: hasRealEmail ? (session.currentEmail ?? '') : '',
-    );
     String? error;
     bool busy = false;
 
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 18,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(hasRealEmail ? 'Change recovery email' : 'Add recovery email',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: context.ink)),
-              const SizedBox(height: 4),
-              Text(
-                'We\'ll email a confirmation link to this address. Tap it to '
-                'finish — your username login keeps working either way.',
-                style: TextStyle(
-                    color: context.ink.withOpacity(0.6),
-                    fontSize: 13,
-                    height: 1.35),
+      builder: (ctx) => ModalTextControllerScope(
+        initialValues: [hasRealEmail ? (session.currentEmail ?? '') : ''],
+        builder: (ctx, controllers) {
+          final controller = controllers.single;
+          return StatefulBuilder(builder: (ctx, setSheet) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 18,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
-                decoration: InputDecoration(
-                  labelText: 'Email address',
-                  filled: true,
-                  fillColor: const Color(0xFFFFF1F6),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                      hasRealEmail
+                          ? 'Change recovery email'
+                          : 'Add recovery email',
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: context.ink)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'We\'ll email a confirmation link to this address. Tap it to '
+                    'finish — your username login keeps working either way.',
+                    style: TextStyle(
+                        color: context.ink.withOpacity(0.6),
+                        fontSize: 13,
+                        height: 1.35),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.emailAddress,
+                    autocorrect: false,
+                    decoration: InputDecoration(
+                      labelText: 'Email address',
+                      filled: true,
+                      fillColor: const Color(0xFFFFF1F6),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(error!,
+                        style: const TextStyle(
+                            color: Colors.red, fontWeight: FontWeight.w600)),
+                  ],
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: VentlyColors.berryMagenta,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    onPressed: busy
+                        ? null
+                        : () async {
+                            final value = controller.text.trim();
+                            if (!_looksLikeEmail(value)) {
+                              setSheet(
+                                  () => error = 'Enter a valid email address.');
+                              return;
+                            }
+                            setSheet(() {
+                              busy = true;
+                              error = null;
+                            });
+                            try {
+                              await session.setRecoveryEmail(value);
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                        'Confirmation sent to $value. Tap the link '
+                                        'to finish.'),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              setSheet(() {
+                                busy = false;
+                                error = 'Couldn\'t save that email. Try again.';
+                              });
+                            }
+                          },
+                    child: busy
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Text('Send confirmation',
+                            style: TextStyle(fontWeight: FontWeight.w900)),
+                  ),
+                ],
               ),
-              if (error != null) ...[
-                const SizedBox(height: 10),
-                Text(error!,
-                    style: const TextStyle(
-                        color: Colors.red, fontWeight: FontWeight.w600)),
-              ],
-              const SizedBox(height: 16),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: VentlyColors.berryMagenta,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: busy
-                    ? null
-                    : () async {
-                        final value = controller.text.trim();
-                        if (!_looksLikeEmail(value)) {
-                          setSheet(
-                              () => error = 'Enter a valid email address.');
-                          return;
-                        }
-                        setSheet(() {
-                          busy = true;
-                          error = null;
-                        });
-                        try {
-                          await session.setRecoveryEmail(value);
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'Confirmation sent to $value. Tap the link '
-                                    'to finish.'),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          setSheet(() {
-                            busy = false;
-                            error = 'Couldn\'t save that email. Try again.';
-                          });
-                        }
-                      },
-                child: busy
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : const Text('Send confirmation',
-                        style: TextStyle(fontWeight: FontWeight.w900)),
-              ),
-            ],
-          ),
-        );
-      }),
+            );
+          });
+        },
+      ),
     );
   }
 
@@ -436,140 +455,160 @@ class _PasswordSecurityScreenState
   /// 6-digit code pipeline (sendEmailVerification / confirmEmailVerification).
   Future<void> _verifyExistingEmail() async {
     final session = ref.read(sessionProvider.notifier);
-    final codeCtl = TextEditingController();
     String? error;
     bool busy = false;
     bool sent = false;
 
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
-        Future<void> send() async {
-          setSheet(() {
-            busy = true;
-            error = null;
-          });
-          try {
-            await session.sendEmailVerification();
-            setSheet(() {
-              busy = false;
-              sent = true;
-            });
-          } catch (_) {
-            setSheet(() {
-              busy = false;
-              error = 'Couldn\'t send a code right now. Try again shortly.';
-            });
-          }
-        }
+      builder: (ctx) => ModalTextControllerScope(
+        initialValues: const [''],
+        builder: (ctx, controllers) {
+          final codeCtl = controllers.single;
+          return StatefulBuilder(builder: (ctx, setSheet) {
+            Future<void> send() async {
+              setSheet(() {
+                busy = true;
+                error = null;
+              });
+              try {
+                await session.sendEmailVerification();
+                if (!ctx.mounted) return;
+                setSheet(() {
+                  busy = false;
+                  sent = true;
+                });
+              } catch (_) {
+                if (!ctx.mounted) return;
+                setSheet(() {
+                  busy = false;
+                  error = 'Couldn\'t send a code right now. Try again shortly.';
+                });
+              }
+            }
 
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 18,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Confirm recovery email',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: context.ink)),
-              const SizedBox(height: 4),
-              Text(
-                sent
-                    ? 'Enter the 6-digit code we emailed to ${session.currentEmail ?? 'your inbox'}.'
-                    : 'We\'ll email a 6-digit code to ${session.currentEmail ?? 'your inbox'}.',
-                style: TextStyle(
-                    color: context.ink.withOpacity(0.6),
-                    fontSize: 13,
-                    height: 1.35),
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 18,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
               ),
-              const SizedBox(height: 16),
-              if (sent)
-                TextField(
-                  controller: codeCtl,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  decoration: InputDecoration(
-                    labelText: '6-digit code',
-                    counterText: '',
-                    filled: true,
-                    fillColor: const Color(0xFFFFF1F6),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
-                    ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Confirm recovery email',
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: context.ink)),
+                  const SizedBox(height: 4),
+                  Text(
+                    sent
+                        ? 'Enter the 6-digit code we emailed to ${session.currentEmail ?? 'your inbox'}.'
+                        : 'We\'ll email a 6-digit code to ${session.currentEmail ?? 'your inbox'}.',
+                    style: TextStyle(
+                        color: context.ink.withOpacity(0.6),
+                        fontSize: 13,
+                        height: 1.35),
                   ),
-                ),
-              if (error != null) ...[
-                const SizedBox(height: 10),
-                Text(error!,
-                    style: const TextStyle(
-                        color: Colors.red, fontWeight: FontWeight.w600)),
-              ],
-              const SizedBox(height: 16),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: VentlyColors.berryMagenta,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: busy
-                    ? null
-                    : () async {
-                        if (!sent) {
-                          await send();
-                          return;
-                        }
-                        if (codeCtl.text.trim().length != 6) {
-                          setSheet(() => error = 'Enter the 6-digit code.');
-                          return;
-                        }
-                        setSheet(() {
-                          busy = true;
-                          error = null;
-                        });
-                        final ok = await session
-                            .confirmEmailVerification(codeCtl.text.trim());
-                        if (ok) {
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (mounted) {
-                            setState(() {});
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Recovery email confirmed.')),
-                            );
-                          }
-                        } else {
-                          setSheet(() {
-                            busy = false;
-                            error = 'That code didn\'t match. Try again.';
-                          });
-                        }
-                      },
-                child: busy
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : Text(sent ? 'Confirm' : 'Send code',
-                        style: const TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 16),
+                  if (sent)
+                    TextField(
+                      controller: codeCtl,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      decoration: InputDecoration(
+                        labelText: '6-digit code',
+                        counterText: '',
+                        filled: true,
+                        fillColor: const Color(0xFFFFF1F6),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  if (error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(error!,
+                        style: const TextStyle(
+                            color: Colors.red, fontWeight: FontWeight.w600)),
+                  ],
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: VentlyColors.berryMagenta,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    onPressed: busy
+                        ? null
+                        : () async {
+                            if (!sent) {
+                              await send();
+                              return;
+                            }
+                            if (codeCtl.text.trim().length != 6) {
+                              setSheet(() => error = 'Enter the 6-digit code.');
+                              return;
+                            }
+                            setSheet(() {
+                              busy = true;
+                              error = null;
+                            });
+                            try {
+                              final ok = await session.confirmEmailVerification(
+                                  codeCtl.text.trim());
+                              if (ok) {
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                if (mounted) {
+                                  setState(() {});
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content:
+                                          Text('Recovery email confirmed.'),
+                                    ),
+                                  );
+                                }
+                              } else {
+                                setSheet(() {
+                                  busy = false;
+                                  error = 'That code didn\'t match. Try again.';
+                                });
+                              }
+                            } catch (_) {
+                              setSheet(() {
+                                busy = false;
+                                error =
+                                    'Couldn\'t verify that code. Check your connection and try again.';
+                              });
+                            }
+                          },
+                    child: busy
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : Text(sent ? 'Confirm' : 'Send code',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w900)),
+                  ),
+                ],
               ),
-            ],
-          ),
-        );
-      }),
+            );
+          });
+        },
+      ),
     );
   }
 
@@ -635,9 +674,8 @@ class _PasswordSecurityScreenState
     if (at <= 1) return email;
     final name = email.substring(0, at);
     final domain = email.substring(at);
-    final shown = name.length <= 2
-        ? name.substring(0, 1)
-        : name.substring(0, 2);
+    final shown =
+        name.length <= 2 ? name.substring(0, 1) : name.substring(0, 2);
     return '$shown${'•' * (name.length - shown.length)}$domain';
   }
 }
@@ -743,7 +781,9 @@ class _CheckItem extends StatelessWidget {
     return Row(
       children: [
         Icon(
-          ok ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+          ok
+              ? Icons.check_circle_rounded
+              : Icons.radio_button_unchecked_rounded,
           size: 18,
           color: ok
               ? const Color(0xFF2ECC71)
@@ -838,9 +878,7 @@ class _Tile extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 14.5,
-                          color: danger
-                              ? color
-                              : context.ink,
+                          color: danger ? color : context.ink,
                         ),
                       ),
                       const SizedBox(height: 2),

@@ -43,6 +43,7 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
       firstDate: DateTime(now.year - 100),
       lastDate: now,
     );
+    if (!mounted) return;
     if (picked != null) setState(() => _birthDate = picked);
   }
 
@@ -58,14 +59,13 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
       }
       const avatarSeed = 'v2:silhouette=orb;palette=berry;hair=none;'
           'accessory=none;aura=glow;outfit=none';
-      final result =
-          await ref.read(sessionProvider.notifier).registerWithEmail(
-                birthDate: _birthDate!,
-                email: _email.text.trim(),
-                username: _username.text.trim(),
-                password: _password.text,
-                avatarSeed: avatarSeed,
-              );
+      final result = await ref.read(sessionProvider.notifier).registerWithEmail(
+            birthDate: _birthDate!,
+            email: _email.text.trim(),
+            username: _username.text.trim(),
+            password: _password.text,
+            avatarSeed: avatarSeed,
+          );
       if (!mounted) return;
       if (result.user == null) {
         // Email confirmation required — show wait state.
@@ -162,8 +162,7 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color:
-                        Theme.of(context).colorScheme.error.withOpacity(0.1),
+                    color: Theme.of(context).colorScheme.error.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(

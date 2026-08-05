@@ -49,6 +49,8 @@ Future<void> maybeSurfaceChatCrisis({
 Future<void> showCrisisSupportSheet(BuildContext context, WidgetRef ref) {
   return showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
+    useSafeArea: true,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (ctx) => _CrisisSupportSheet(),
@@ -58,8 +60,8 @@ Future<void> showCrisisSupportSheet(BuildContext context, WidgetRef ref) {
 class _CrisisSupportSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Region-aware helplines with a hard-coded fallback so we always show
-    // something even if the network list hasn't loaded.
+    // Region-aware helplines with an official Rwanda fallback so support
+    // remains available when the network catalogue cannot load.
     final live = ref.watch(crisisResourcesProvider).valueOrNull;
     final fallback = kCrisisResources
         .map((r) => CrisisHelpline(
@@ -67,7 +69,7 @@ class _CrisisSupportSheet extends ConsumerWidget {
               region: 'global',
               label: r.label,
               reach: r.reach,
-              hours: '24/7',
+              hours: '',
               sortOrder: 0,
             ))
         .toList();
@@ -116,8 +118,8 @@ class _CrisisSupportSheet extends ConsumerWidget {
             const SizedBox(height: 6),
             Text(
               "It sounds like you're going through something really heavy. "
-              "If you want to talk to someone right now, these lines are free "
-              "and confidential.",
+              "If you are in immediate danger, contact emergency services. "
+              "These contacts can help you find appropriate support.",
               style: TextStyle(
                 fontSize: 13,
                 height: 1.45,
@@ -125,8 +127,7 @@ class _CrisisSupportSheet extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 14),
-            for (final r in resources.take(4))
-              _HelplineTile(resource: r),
+            for (final r in resources.take(4)) _HelplineTile(resource: r),
             const SizedBox(height: 6),
             Align(
               alignment: Alignment.centerRight,
@@ -161,7 +162,8 @@ class _HelplineTile extends StatelessWidget {
             Clipboard.setData(
                 ClipboardData(text: resource.url ?? resource.reach));
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Copied: ${resource.url ?? resource.reach}')),
+              SnackBar(
+                  content: Text('Copied: ${resource.url ?? resource.reach}')),
             );
           },
           child: Padding(
@@ -181,8 +183,7 @@ class _HelplineTile extends StatelessWidget {
                       Text(resource.reach,
                           style: TextStyle(
                               fontSize: 12,
-                              color: context.ink
-                                  .withOpacity(0.7))),
+                              color: context.ink.withOpacity(0.7))),
                     ],
                   ),
                 ),

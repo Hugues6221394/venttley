@@ -495,7 +495,7 @@ class VentlyRepository {
     final stories = _mock
         .feed(sort: 'hot', limit: limit * 4)
         .where((p) =>
-            p.isWhisper &&
+            p.isStory &&
             p.authorId != null &&
             p.createdAt.isAfter(cutoff) &&
             (p.authorId == me.userId || friendIds.contains(p.authorId)))
@@ -672,6 +672,8 @@ class VentlyRepository {
     String? spaceId,
     String? personaId,
     bool isWhisper = false,
+    bool isStory = false,
+    String storyAudience = 'everyone',
     String? imagePath,
     String? imageUrl,
     String? audioPath,
@@ -679,6 +681,8 @@ class VentlyRepository {
     int? audioDurationSeconds,
     String? pollQuestion,
     List<String>? pollOptions,
+    String? cardBackgroundColor,
+    String? cardTextColor,
     String? idempotencyKey,
   }) async {
     final live = _live;
@@ -692,6 +696,8 @@ class VentlyRepository {
         spaceId: spaceId,
         personaId: personaId,
         isWhisper: isWhisper,
+        isStory: isStory,
+        storyAudience: storyAudience,
         imagePath: imagePath,
         imageUrl: imageUrl,
         audioPath: audioPath,
@@ -699,6 +705,8 @@ class VentlyRepository {
         audioDurationSeconds: audioDurationSeconds,
         pollQuestion: pollQuestion,
         pollOptions: pollOptions,
+        cardBackgroundColor: cardBackgroundColor,
+        cardTextColor: cardTextColor,
         idempotencyKey: idempotencyKey,
       );
     } else {
@@ -710,16 +718,20 @@ class VentlyRepository {
         spaceId: spaceId,
         personaId: personaId,
         isWhisper: isWhisper,
+        isStory: isStory,
+        storyAudience: storyAudience,
         imageUrl: imageUrl,
         audioUrl: audioUrl,
         audioDurationSeconds: audioDurationSeconds,
         pollQuestion: pollQuestion,
         pollOptions: pollOptions,
+        cardBackgroundColor: cardBackgroundColor,
+        cardTextColor: cardTextColor,
       );
     }
     // PII rule: never ship `content` — only its dimensions.
     AnalyticsService.instance.track(
-      isWhisper ? Events.storyPublished : Events.postCreated,
+      (isStory || isWhisper) ? Events.storyPublished : Events.postCreated,
       props: {
         'category': category,
         'mood': mood,
@@ -728,6 +740,8 @@ class VentlyRepository {
         'has_tribe': tribeId != null,
         'has_persona': personaId != null,
         'has_poll': pollQuestion != null,
+        'is_story': isStory,
+        'story_audience': isStory ? storyAudience : null,
         'content_chars': content.length,
       },
     );
@@ -767,6 +781,30 @@ class VentlyRepository {
     final live = _live;
     if (live != null) return live.markStoryViewed(postId);
     return Future.value(_mock.markStoryViewed(postId));
+  }
+
+  Future<bool> storyRepliesEnabled() {
+    final live = _live;
+    if (live != null) return live.storyRepliesEnabled();
+    return Future.value(true);
+  }
+
+  Future<bool> setStoryRepliesEnabled(bool enabled) {
+    final live = _live;
+    if (live != null) return live.setStoryRepliesEnabled(enabled);
+    return Future.value(enabled);
+  }
+
+  Future<bool> canReplyToStory(String postId) {
+    final live = _live;
+    if (live != null) return live.canReplyToStory(postId);
+    return Future.value(true);
+  }
+
+  Future<List<StoryReactionUser>> storyReactions(String postId) {
+    final live = _live;
+    if (live != null) return live.storyReactions(postId);
+    return Future.value(const []);
   }
 
   Future<List<SearchHit>> searchGlobal(String query, {int limit = 24}) {
@@ -1784,6 +1822,13 @@ class VentlyRepository {
     required String storyPostId,
     required String reply,
   }) async {
+    final live = _live;
+    if (live != null) {
+      return live.replyToStory(
+        storyPostId: storyPostId,
+        reply: reply,
+      );
+    }
     final room = await sendMessageRequest(
       peerUserId: authorId,
       peerPseudonym: authorPseudonym,
@@ -2286,6 +2331,22 @@ class VentlyRepository {
       },
       ttl: const Duration(seconds: 45),
     );
+  }
+
+  Future<List<Post>> activeStoriesByAuthor(
+    String authorId, {
+    int limit = 24,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.activeStoriesByAuthor(authorId, limit: limit);
+    }
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    return _mock
+        .postsByAuthor(authorId, limit: limit * 4)
+        .where((post) => post.isStory && post.createdAt.isAfter(cutoff))
+        .take(limit)
+        .toList();
   }
 
   // ===================== Comments =====================
@@ -3222,6 +3283,59 @@ class VentlyRepository {
     final live = _live;
     if (live != null) return live.prompts();
     return Future.value(_mock.prompts());
+  }
+
+  /// Questions a given member has asked (public-profile section).
+  Future<List<PlugPrompt>> questionsByAuthor(String userId) {
+    final live = _live;
+    if (live != null) return live.questionsByAuthor(userId);
+    return Future.value(_mock.questionsByAuthor(userId));
+  }
+
+  Future<void> updateUserQuestion({
+    required String promptId,
+    String? text,
+    String? audience,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.updateUserQuestion(
+          promptId: promptId, text: text, audience: audience);
+    }
+    _mock.updateUserQuestion(promptId: promptId, text: text, audience: audience);
+    return Future.value();
+  }
+
+  Future<void> deleteUserQuestion(String promptId) {
+    final live = _live;
+    if (live != null) return live.deleteUserQuestion(promptId);
+    _mock.deleteUserQuestion(promptId);
+    return Future.value();
+  }
+
+  Future<void> likeQuestion(String promptId) {
+    final live = _live;
+    if (live != null) return live.likeQuestion(promptId);
+    _mock.likeQuestion(promptId);
+    return Future.value();
+  }
+
+  Future<void> unlikeQuestion(String promptId) {
+    final live = _live;
+    if (live != null) return live.unlikeQuestion(promptId);
+    _mock.unlikeQuestion(promptId);
+    return Future.value();
+  }
+
+  Future<void> reportQuestion({
+    required String promptId,
+    required String reason,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.reportQuestion(promptId: promptId, reason: reason);
+    }
+    return Future.value();
   }
 
   Future<List<PromptAnswer>> promptAnswers(String promptId) {

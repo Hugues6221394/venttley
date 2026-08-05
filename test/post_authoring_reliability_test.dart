@@ -16,10 +16,18 @@ import 'helpers/memory_sensitive_store.dart';
 void main() {
   group('post authoring reliability contract', () {
     late String migration;
+    late String styleMigration;
+    late String styleVisibilityMigration;
 
     setUpAll(() {
       migration = File(
         'supabase/migrations/20260716212500_post_authoring_reliability.sql',
+      ).readAsStringSync();
+      styleMigration = File(
+        'supabase/migrations/20260727132714_post_card_colors.sql',
+      ).readAsStringSync();
+      styleVisibilityMigration = File(
+        'supabase/migrations/20260727142156_post_card_colors_visibility_repair.sql',
       ).readAsStringSync();
     });
 
@@ -66,6 +74,43 @@ void main() {
       expect(migration, contains('deleted_at = COALESCE(deleted_at, now())'));
     });
 
+    test('vent styles are validated and persisted atomically', () {
+      final backend = File(
+        'lib/data/services/supabase_backend.dart',
+      ).readAsStringSync();
+      final outbox = File(
+        'lib/data/services/outbox.dart',
+      ).readAsStringSync();
+
+      expect(styleMigration, contains('posts_card_background_color_check'));
+      expect(styleMigration, contains('posts_card_text_color_check'));
+      expect(
+        styleMigration,
+        contains('CREATE OR REPLACE FUNCTION public.create_post_idempotent_v2'),
+      );
+      expect(styleMigration, contains('p.card_background_color'));
+      expect(styleMigration, contains('p.card_text_color'));
+      expect(
+        styleVisibilityMigration,
+        contains('private.can_view_post_author(p.author_id)'),
+      );
+      expect(
+        styleVisibilityMigration,
+        isNot(contains('u.shadow_banned IS NOT TRUE')),
+      );
+      expect(backend, contains("'create_post_idempotent_v3'"));
+      expect(backend, contains("'p_card_background_color'"));
+      expect(backend, contains("'post.read_after_write_degraded'"));
+      expect(
+        backend,
+        contains(
+          'A transient feed-view or\n'
+          '      // schema-cache failure must not queue the same mutation',
+        ),
+      );
+      expect(outbox, contains("payload['cardBackgroundColor']"));
+    });
+
     test('composer prevents overflow and partial poll posts', () {
       final composer = File(
         'lib/presentation/screens/compose/compose_screen.dart',
@@ -84,6 +129,14 @@ void main() {
         card,
         contains(
             'if (next.isEmpty && !post.hasImage && !post.hasAudio) return;'),
+      );
+      expect(
+        card,
+        contains("throw StateError('The post update was not accepted.');"),
+      );
+      expect(
+        card,
+        contains("throw StateError('The post deletion was not accepted.');"),
       );
       expect(card, isNot(contains('15-minute edit window')));
     });
@@ -119,6 +172,12 @@ void main() {
       expect(find.text('New Vent'), findsOneWidget);
       expect(find.text('Photo'), findsOneWidget);
       expect(find.text('Poll'), findsOneWidget);
+      expect(find.text('Style'), findsOneWidget);
+      await tester.drag(
+        find.byType(ListView).last,
+        const Offset(-300, 0),
+      );
+      await tester.pumpAndSettle();
       expect(find.text('24h Story'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

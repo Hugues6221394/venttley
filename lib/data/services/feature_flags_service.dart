@@ -29,20 +29,21 @@ abstract class FeatureFlagsService {
   static const Map<String, Object> defaults = {
     'whispers_feed': true,
     'whispers_recorder': true,
-    'voice_filters_dsp': false,        // tag-only until DSP ships
+    'voice_filters_dsp': true,
     'chat_v2': true,
     'tribe_group_chat': true,
     'premium_themes': false,
     'experimental_homepage': false,
-    'ai_recommendations': false,        // locked
-    'e2ee_chat_real': false,            // locked — only label is shown
+    'ai_recommendations': false, // locked
+    'e2ee_chat_real': false, // locked — only label is shown
     'paid_boosted_tribes': false,
     'creator_donations': false,
   };
 
   /// Identify the current user so server-side targeting can scope
   /// rollouts (e.g. percentage rollouts, country buckets).
-  Future<void> identify(String userId, {Map<String, Object?> traits = const {}});
+  Future<void> identify(String userId,
+      {Map<String, Object?> traits = const {}});
 
   /// Returns the boolean value of [key]. Falls back to [defaults] when
   /// unknown / network unreachable.

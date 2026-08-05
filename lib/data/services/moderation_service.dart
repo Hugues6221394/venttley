@@ -398,7 +398,13 @@ class CrisisResource {
 }
 
 const List<CrisisResource> kCrisisResources = [
-  CrisisResource('Venttly Care Line', 'Text CARE to 741741 (free, 24/7)'),
-  CrisisResource('IsangeOne Stop Centre, Rwanda', 'Call 3029 from any phone'),
-  CrisisResource('International Befrienders', 'https://befrienders.org'),
+  CrisisResource(
+    'Kigali Mental Health Referral Centre',
+    'Call 0793902059 or 0736440666',
+  ),
+  CrisisResource('Rwanda health emergency', 'Call 114 or 912'),
+  CrisisResource(
+    'Isange One Stop Centre (GBV and child abuse)',
+    'Call 3029',
+  ),
 ];

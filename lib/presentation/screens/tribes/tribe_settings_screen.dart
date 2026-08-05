@@ -7,6 +7,7 @@ import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_premium_background.dart';
@@ -252,47 +253,52 @@ class TribeSettingsScreen extends ConsumerWidget {
       'cancel_delete' => 'Restore Tribe',
       _ => 'Update Tribe',
     };
-    final reason = TextEditingController();
-    final confirmed = await showDialog<bool>(
+    final reasonText = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(label),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_lifecycleMessage(action)),
-            if (action == 'pause' || action == 'archive') ...[
-              const SizedBox(height: 16),
-              TextField(
-                controller: reason,
-                maxLength: 240,
-                decoration: const InputDecoration(
-                  labelText: 'Reason (optional)',
-                  prefixIcon: Icon(Icons.notes_rounded),
+      builder: (dialogContext) => ModalTextControllerScope(
+        initialValues: const [''],
+        builder: (dialogContext, controllers) => AlertDialog(
+          title: Text(label),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_lifecycleMessage(action)),
+              if (action == 'pause' || action == 'archive') ...[
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controllers.single,
+                  maxLength: 240,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason (optional)',
+                    prefixIcon: Icon(Icons.notes_rounded),
+                  ),
                 ),
-              ),
+              ],
             ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                controllers.single.text.trim(),
+              ),
+              child: Text(label),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(label),
-          ),
-        ],
       ),
     );
-    if (confirmed != true || !context.mounted) return;
+    if (reasonText == null || !context.mounted) return;
     try {
       await ref.read(repositoryProvider).setTribeLifecycle(
             tribeId: overview.tribeId,
             action: action,
-            reason: reason.text.trim(),
+            reason: reasonText,
           );
       ref.invalidate(tribeManagementProvider(overview.tribeId));
       ref.invalidate(tribesIKeepProvider);
@@ -321,8 +327,16 @@ class TribeSettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     TribeManagementOverview overview,
   ) async {
-    final members =
-        await ref.read(tribeMembersProvider(overview.tribeId).future);
+    List<TribeMemberRow> members;
+    try {
+      members = await ref.read(tribeMembersProvider(overview.tribeId).future);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load transfer candidates: $error')),
+      );
+      return;
+    }
     if (!context.mounted) return;
     final eligible = members.where((member) => !member.isKeeper).toList();
     await showModalBottomSheet<void>(

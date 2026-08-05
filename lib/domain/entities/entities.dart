@@ -172,6 +172,26 @@ class UserStreak {
   });
 }
 
+class StoryReactionUser {
+  final String userId;
+  final String pseudonym;
+  final String avatarSeed;
+  final String? profilePhotoUrl;
+  final bool isVerified;
+  final String reactionType;
+  final DateTime reactedAt;
+
+  const StoryReactionUser({
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.isVerified,
+    required this.reactionType,
+    required this.reactedAt,
+    this.profilePhotoUrl,
+  });
+}
+
 class PlugProfile {
   final String plugId;
   final String displayName;
@@ -508,9 +528,16 @@ class Post {
   final String content;
   final String postMood;
   final bool isWhisper;
+  final bool isStory;
+  final String storyAudience;
   final int likesCount;
   final int commentsCount;
   final int viewCount;
+
+  /// Optional, server-validated colors selected by the author. Values are
+  /// opaque hex strings so the domain layer does not depend on Flutter.
+  final String? cardBackgroundColor;
+  final String? cardTextColor;
 
   /// Optional attached image URL (post-media bucket, public). Drives the
   /// rounded image card on the feed.
@@ -574,7 +601,11 @@ class Post {
     this.tribeSlug,
     this.spaceId,
     this.isWhisper = false,
+    this.isStory = false,
+    this.storyAudience = 'everyone',
     this.viewCount = 0,
+    this.cardBackgroundColor,
+    this.cardTextColor,
     this.imageUrl,
     this.audioUrl,
     this.audioDurationSeconds,
@@ -632,7 +663,11 @@ class Post {
       content: content ?? this.content,
       postMood: postMood,
       isWhisper: isWhisper,
+      isStory: isStory,
+      storyAudience: storyAudience,
       viewCount: viewCount ?? this.viewCount,
+      cardBackgroundColor: cardBackgroundColor,
+      cardTextColor: cardTextColor,
       imageUrl: imageUrl,
       audioUrl: audioUrl,
       audioDurationSeconds: audioDurationSeconds,
@@ -975,6 +1010,46 @@ class GroupInvitePreview {
   });
 }
 
+/// In-chat "system" notices (WhatsApp-style centered lines), e.g. when a
+/// participant turns disappearing messages on or off. They are ordinary chat
+/// messages carrying an invisible sentinel prefix so both participants receive
+/// them over the existing realtime channel; the sentinel makes the client
+/// render them as a centered pill instead of a normal bubble, while the inbox
+/// preview still shows the readable text (the sentinel is zero-width).
+class SystemNotice {
+  SystemNotice._();
+
+  /// Two INVISIBLE SEPARATOR code points — zero-width, so previews look clean.
+  static const String sentinel = '⁣⁣';
+
+  /// Notice text for a disappearing-messages change ([seconds] == 0 → off).
+  static String disappearing(int seconds) {
+    final label = seconds <= 0
+        ? 'Disappearing messages turned off'
+        : 'Disappearing messages turned on · ${_duration(seconds)}';
+    return '$sentinel⏳ $label';
+  }
+
+  static bool isSystem(String plaintext) => plaintext.startsWith(sentinel);
+
+  /// The human-readable body with the sentinel removed.
+  static String strip(String plaintext) =>
+      isSystem(plaintext) ? plaintext.substring(sentinel.length) : plaintext;
+
+  static String _duration(int s) {
+    if (s % 86400 == 0) {
+      final d = s ~/ 86400;
+      return d == 1 ? '24 hours' : '$d days';
+    }
+    if (s % 3600 == 0) {
+      final h = s ~/ 3600;
+      return '$h hour${h == 1 ? '' : 's'}';
+    }
+    final m = s ~/ 60;
+    return '$m minute${m == 1 ? '' : 's'}';
+  }
+}
+
 class ChatMessage {
   final String messageId;
   final String roomId;
@@ -1211,13 +1286,56 @@ class PlugPrompt {
   final String promptText;
   final int answersCount;
 
+  /// Member author (migration 0069). Null for Plug/Keeper "question of the day"
+  /// prompts. When it matches the signed-in user the question is theirs to
+  /// edit or delete.
+  final String? authorId;
+
+  /// 'everyone' | 'friends' — friends-only questions are RLS-visible to the
+  /// author's accepted connections.
+  final String audience;
+  final DateTime? createdAt;
+
+  /// Question likes (migration 0120). [likedByMe] reflects the caller.
+  final int likeCount;
+  final bool likedByMe;
+
   const PlugPrompt({
     required this.promptId,
     required this.plugDisplayName,
     required this.plugAvatarSeed,
     required this.promptText,
     required this.answersCount,
+    this.authorId,
+    this.audience = 'everyone',
+    this.createdAt,
+    this.likeCount = 0,
+    this.likedByMe = false,
   });
+
+  /// True when this member question belongs to [myUserId].
+  bool isMine(String? myUserId) =>
+      myUserId != null && authorId != null && authorId == myUserId;
+
+  PlugPrompt copyWith({
+    String? promptText,
+    String? audience,
+    int? answersCount,
+    int? likeCount,
+    bool? likedByMe,
+  }) =>
+      PlugPrompt(
+        promptId: promptId,
+        plugDisplayName: plugDisplayName,
+        plugAvatarSeed: plugAvatarSeed,
+        promptText: promptText ?? this.promptText,
+        answersCount: answersCount ?? this.answersCount,
+        authorId: authorId,
+        audience: audience ?? this.audience,
+        createdAt: createdAt,
+        likeCount: likeCount ?? this.likeCount,
+        likedByMe: likedByMe ?? this.likedByMe,
+      );
 }
 
 /// A keeper-issued invitation to join a Tribe. Lifecycle:
@@ -1843,6 +1961,7 @@ class FriendRequest {
   final String otherUserId;
   final String otherPseudonym;
   final String otherAvatarSeed;
+  final String? profilePhotoUrl;
   final int otherKarma;
   final String? note;
   final DateTime createdAt;
@@ -1859,6 +1978,7 @@ class FriendRequest {
     required this.otherKarma,
     required this.createdAt,
     required this.isOutgoing,
+    this.profilePhotoUrl,
     this.note,
   });
 }

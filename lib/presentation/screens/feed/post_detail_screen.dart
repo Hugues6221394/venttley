@@ -15,6 +15,7 @@ import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tagged_text.dart';
+import '../../widgets/user_link.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/friend_action_button.dart';
@@ -457,7 +458,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                                         MaterialTapTargetSize.shrinkWrap,
                                   ),
                                   onPressed: () =>
-                                      context.push('/user/${post.authorId}'),
+                                      openUserProfile(context, post.authorId),
                                   child: const Text(
                                     'View profile',
                                     style: TextStyle(
@@ -923,7 +924,8 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                         child: InkWell(
                           onTap: comment.authorId == null
                               ? null
-                              : () => context.push('/user/${comment.authorId}'),
+                              : () =>
+                                  openUserProfile(context, comment.authorId),
                           borderRadius: BorderRadius.circular(4),
                           child: Text(
                             comment.authorPseudonym,

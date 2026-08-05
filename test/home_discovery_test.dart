@@ -12,6 +12,7 @@ void main() {
     int likes = 0,
     int comments = 0,
     bool story = false,
+    bool whisper = false,
     String content = 'A tiny story about campus life and music.',
     String? authorId,
   }) {
@@ -27,7 +28,8 @@ void main() {
       likesCount: likes,
       commentsCount: comments,
       createdAt: createdAt,
-      isWhisper: story,
+      isStory: story,
+      isWhisper: whisper,
     );
   }
 
@@ -163,6 +165,37 @@ void main() {
     expect(topics.single.postCount, 3);
     expect(topics.single.commentCount, 16);
     expect(topics.single.reactionCount, 21);
+  });
+
+  test('stories and whispers do not inflate trending post totals', () {
+    final topics = HomeDiscovery.topicStatsFromPosts(
+      [
+        post(
+          id: 'post',
+          category: 'late_night',
+          createdAt: now.subtract(const Duration(hours: 1)),
+          comments: 2,
+        ),
+        post(
+          id: 'story',
+          category: 'late_night',
+          createdAt: now.subtract(const Duration(hours: 1)),
+          story: true,
+          comments: 30,
+        ),
+        post(
+          id: 'whisper',
+          category: 'late_night',
+          createdAt: now.subtract(const Duration(hours: 1)),
+          whisper: true,
+          comments: 40,
+        ),
+      ],
+      now: now,
+    );
+
+    expect(topics.single.postCount, 1);
+    expect(topics.single.commentCount, 2);
   });
 
   test('topic stats omit categories without activity in the trend window', () {

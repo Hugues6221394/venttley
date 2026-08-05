@@ -194,9 +194,12 @@ class SessionController extends StateNotifier<AppUser?> {
   /// Sign out of every device (revokes all refresh tokens), then clear state.
   Future<void> signOutEverywhere() async {
     AnalyticsService.instance.track(Events.logout);
-    await _repo.signOutEverywhere();
-    state = null;
-    await AnalyticsService.instance.reset();
+    try {
+      await _repo.signOutEverywhere();
+    } finally {
+      state = null;
+      await AnalyticsService.instance.reset();
+    }
   }
 
   /// Save edits to the signed-in user's public profile and refresh session
@@ -290,9 +293,12 @@ class SessionController extends StateNotifier<AppUser?> {
 
   Future<void> logout() async {
     AnalyticsService.instance.track(Events.logout);
-    await _repo.logout();
-    state = null;
-    await AnalyticsService.instance.reset();
+    try {
+      await _repo.logout();
+    } finally {
+      state = null;
+      await AnalyticsService.instance.reset();
+    }
   }
 }
 
@@ -470,13 +476,14 @@ final friendStoryPostsProvider =
     FutureProvider.autoDispose<List<Post>>((ref) async {
   final me = ref.watch(sessionProvider);
   if (me == null) return const [];
+  ref.watch(feedPostsProvider);
   final friends = await ref.watch(myFriendsProvider.future);
   final friendIds = friends.map((f) => f.userId).toSet();
   final posts = await ref.watch(repositoryProvider).friendStories(limit: 36);
   final cutoff = DateTime.now().subtract(const Duration(hours: 24));
   return posts
       .where((p) =>
-          p.isWhisper &&
+          p.isStory &&
           p.authorId != null &&
           p.createdAt.isAfter(cutoff) &&
           (p.authorId == me.userId || friendIds.contains(p.authorId)))
@@ -495,6 +502,44 @@ final homeFriendStoriesProvider =
     myUserId: me?.userId,
     friendUserIds: friendIds,
   );
+});
+
+class StoryRepliesEnabledNotifier extends AutoDisposeAsyncNotifier<bool> {
+  @override
+  Future<bool> build() async {
+    final me = ref.watch(sessionProvider);
+    if (me == null) return true;
+    return ref.watch(repositoryProvider).storyRepliesEnabled();
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    final previous = state.valueOrNull ?? true;
+    state = AsyncData(enabled);
+    try {
+      final saved =
+          await ref.read(repositoryProvider).setStoryRepliesEnabled(enabled);
+      state = AsyncData(saved);
+    } catch (error, stackTrace) {
+      state = AsyncData(previous);
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+}
+
+final storyRepliesEnabledProvider =
+    AsyncNotifierProvider.autoDispose<StoryRepliesEnabledNotifier, bool>(
+  StoryRepliesEnabledNotifier.new,
+);
+
+final storyReplyAllowedProvider =
+    FutureProvider.autoDispose.family<bool, String>((ref, postId) {
+  return ref.watch(repositoryProvider).canReplyToStory(postId);
+});
+
+final storyReactionsProvider = FutureProvider.autoDispose
+    .family<List<StoryReactionUser>, String>((ref, postId) {
+  ref.watch(feedPostsProvider);
+  return ref.watch(repositoryProvider).storyReactions(postId);
 });
 
 final inboxTabProvider = StateProvider<String>((ref) => 'requests');
@@ -814,6 +859,12 @@ final promptAnswersProvider = FutureProvider.autoDispose
 final promptsProvider = FutureProvider.autoDispose<List<PlugPrompt>>(
     (ref) async => ref.watch(repositoryProvider).prompts());
 
+/// Questions a given member has asked — powers the "Questions asked" section
+/// on public profiles (and the caller's own list).
+final userQuestionsProvider = FutureProvider.autoDispose
+    .family<List<PlugPrompt>, String>((ref, userId) async =>
+        ref.watch(repositoryProvider).questionsByAuthor(userId));
+
 /// Live notification feed — realtime via the notifications publication
 /// (migration 0113), so the bell list + badge update the instant a like,
 /// reply, or friend request lands.
@@ -856,6 +907,18 @@ final myStreaksProvider = FutureProvider.autoDispose<List<UserStreak>>(
 final myVentsProvider = FutureProvider.autoDispose<List<Post>>((ref) async {
   ref.watch(feedPostsProvider);
   return ref.watch(repositoryProvider).myVents();
+});
+
+/// Current user's active Stories. Keep this separate from [myVentsProvider]:
+/// that mixed-content query is paginated, so a valid Story could otherwise
+/// disappear from the profile when enough newer vents were published.
+final myStoriesProvider = FutureProvider.autoDispose<List<Post>>((ref) async {
+  final me = ref.watch(sessionProvider);
+  if (me == null) return const [];
+  ref.watch(feedPostsProvider);
+  return ref
+      .watch(repositoryProvider)
+      .activeStoriesByAuthor(me.userId, limit: 48);
 });
 
 final mySavedProvider = FutureProvider.autoDispose<List<Post>>((ref) async {
@@ -993,23 +1056,30 @@ final inboxCountsProvider =
 /// Prefer [navInboxBadgeCountProvider] for the tab badge (also folds in
 /// incoming friend requests).
 final unreadInboxCountProvider = FutureProvider.autoDispose<int>((ref) async {
-  ref.watch(inboxStreamProvider);
-  final repo = ref.watch(repositoryProvider);
-  final unreadChats = await repo.unreadChatMessageCount();
-  final pending = await repo.inbox('requests');
-  return unreadChats + pending.length;
+  final rooms = await ref.watch(allInboxRoomsStreamProvider.future);
+  final unreadChats = rooms
+      .where((room) => room.roomStatus == 'active')
+      .fold<int>(0, (total, room) => total + room.unreadCount);
+  final pending = rooms
+      .where(
+          (room) => room.roomStatus == 'pending_request' && !room.initiatedByMe)
+      .length;
+  return unreadChats + pending;
 });
 
 /// Inbox tab badge: pending chat requests + unread peer messages +
 /// incoming friend requests.
 final navInboxBadgeCountProvider = FutureProvider.autoDispose<int>((ref) async {
-  ref.watch(inboxStreamProvider);
-  ref.watch(incomingFriendRequestsProvider);
-  final repo = ref.watch(repositoryProvider);
-  final unreadChats = await repo.unreadChatMessageCount();
-  final pending = await repo.inbox('requests');
-  final incoming = await repo.incomingFriendRequests();
-  return unreadChats + pending.length + incoming.length;
+  final rooms = await ref.watch(allInboxRoomsStreamProvider.future);
+  final incoming = await ref.watch(incomingFriendRequestsProvider.future);
+  final unreadChats = rooms
+      .where((room) => room.roomStatus == 'active')
+      .fold<int>(0, (total, room) => total + room.unreadCount);
+  final pending = rooms
+      .where(
+          (room) => room.roomStatus == 'pending_request' && !room.initiatedByMe)
+      .length;
+  return unreadChats + pending + incoming.length;
 });
 
 // ----------------------------------------------------------------------

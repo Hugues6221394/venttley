@@ -50,6 +50,11 @@ class _SharePostToFriendSheetState
         plaintext: '',
         attachedPostId: widget.postId,
       );
+      ref.invalidate(messagesProvider(room.roomId));
+      ref.invalidate(inboxStreamProvider);
+      ref.invalidate(allInboxRoomsStreamProvider);
+      ref.invalidate(unreadInboxCountProvider);
+      ref.invalidate(navInboxBadgeCountProvider);
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -119,8 +124,8 @@ class _SharePostToFriendSheetState
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: scheme.surface,
                   borderRadius: BorderRadius.circular(14),
@@ -150,8 +155,7 @@ class _SharePostToFriendSheetState
             const Divider(height: 1),
             Expanded(
               child: friends.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
@@ -169,8 +173,7 @@ class _SharePostToFriendSheetState
                         children: [
                           Icon(Icons.diversity_3,
                               size: 36,
-                              color:
-                                  scheme.onSurface.withOpacity(0.4)),
+                              color: scheme.onSurface.withOpacity(0.4)),
                           const SizedBox(height: 12),
                           const Text(
                             'You don\'t have any friends yet.',
@@ -204,15 +207,14 @@ class _SharePostToFriendSheetState
                         ),
                         title: Text(
                           '@${f.pseudonym}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         trailing: isSending
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : Icon(
                                 Icons.send_rounded,

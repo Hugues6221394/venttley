@@ -10,6 +10,7 @@ import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../../core/user_friendly_errors.dart';
 import '../../../data/services/whisper_recorder.dart';
+import '../../../data/services/whisper_voice_processor.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/vently_premium_background.dart';
@@ -19,10 +20,8 @@ import '../../widgets/whisper_preview_sheet.dart';
 /// Create Whisper — record audio + tag category + pick background +
 /// choose voice filter + publish.
 ///
-/// Voice filters are tagged (not yet DSP-processed) so the audio is
-/// uploaded as-is and the `voice_filter` column captures the user's
-/// intent. Real-time filtering ships separately — when it does, only
-/// this screen + the recorder service change.
+/// Voice effects are rendered locally before preview and upload so the raw
+/// recording stays on-device.
 class CreateWhisperScreen extends ConsumerStatefulWidget {
   const CreateWhisperScreen({super.key});
   @override
@@ -31,13 +30,20 @@ class CreateWhisperScreen extends ConsumerStatefulWidget {
 }
 
 class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
+  static const _maximumDuration = Duration(minutes: 10);
+
   Timer? _ticker;
   Duration _elapsed = Duration.zero;
   bool _recording = false;
+  bool _paused = false;
   bool _busy = false;
+  bool _processingVoice = false;
+  bool _autoStopping = false;
+  int _voiceProcessingGeneration = 0;
 
   // Capture results
-  Uint8List? _recordedBytes;
+  Uint8List? _originalRecordedBytes;
+  Uint8List? _previewBytes;
   int _recordedSeconds = 0;
 
   // Composition
@@ -60,24 +66,7 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
 
   Future<void> _toggleRecord() async {
     if (_recording) {
-      final result = await WhisperRecorder.instance.stop();
-      _ticker?.cancel();
-      if (!mounted) return;
-      if (result != null) {
-        setState(() {
-          _recording = false;
-          _recordedBytes = result.bytes;
-          _recordedSeconds = result.duration.inSeconds.clamp(3, 180);
-        });
-      } else {
-        setState(() {
-          _recording = false;
-          _elapsed = Duration.zero;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No audio captured. Try again.')),
-        );
-      }
+      await _finishRecording();
       return;
     }
 
@@ -91,18 +80,127 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
     }
     setState(() {
       _recording = true;
+      _paused = false;
       _elapsed = Duration.zero;
-      _recordedBytes = null;
+      _originalRecordedBytes = null;
+      _previewBytes = null;
       _recordedSeconds = 0;
+      _voiceFilter = 'none';
+      _processingVoice = false;
     });
-    _ticker = Timer.periodic(const Duration(seconds: 1), (t) {
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(milliseconds: 250), (_) {
       if (!mounted) return;
+      final elapsed = WhisperRecorder.instance.elapsed;
       setState(() {
-        _elapsed = Duration(seconds: t.tick);
+        _elapsed = elapsed;
       });
-      if (_elapsed.inSeconds >= 180) {
-        _toggleRecord();
+      if (elapsed >= _maximumDuration && !_autoStopping) {
+        _autoStopping = true;
+        unawaited(_finishRecording());
       }
+    });
+  }
+
+  Future<void> _finishRecording() async {
+    final result = await WhisperRecorder.instance.stop();
+    _ticker?.cancel();
+    _autoStopping = false;
+    if (!mounted) return;
+    if (result != null) {
+      final seconds =
+          result.duration.inSeconds.clamp(0, _maximumDuration.inSeconds);
+      setState(() {
+        _recording = false;
+        _paused = false;
+        _originalRecordedBytes = result.bytes;
+        _previewBytes = result.bytes;
+        _recordedSeconds = seconds;
+        _elapsed = result.duration;
+      });
+    } else {
+      setState(() {
+        _recording = false;
+        _paused = false;
+        _elapsed = Duration.zero;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No audio captured. Try again.')),
+      );
+    }
+  }
+
+  Future<void> _togglePause() async {
+    if (!_recording) return;
+    final changed = _paused
+        ? await WhisperRecorder.instance.resume()
+        : await WhisperRecorder.instance.pause();
+    if (!mounted) return;
+    if (!changed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _paused
+                ? 'Could not resume recording.'
+                : 'Could not pause recording.',
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _paused = !_paused;
+      _elapsed = WhisperRecorder.instance.elapsed;
+    });
+  }
+
+  Future<void> _selectVoiceFilter(String filter) async {
+    if (_voiceFilter == filter && !_processingVoice) return;
+    final original = _originalRecordedBytes;
+    final generation = ++_voiceProcessingGeneration;
+    setState(() {
+      _voiceFilter = filter;
+      _processingVoice = original != null && filter != 'none';
+      if (filter == 'none') _previewBytes = original;
+    });
+    if (original == null || filter == 'none') return;
+
+    try {
+      final processed = await WhisperVoiceProcessor.instance.process(
+        sourceBytes: original,
+        filter: filter,
+      );
+      if (!mounted || generation != _voiceProcessingGeneration) return;
+      setState(() {
+        _previewBytes = processed;
+        _processingVoice = false;
+      });
+    } catch (error) {
+      if (!mounted || generation != _voiceProcessingGeneration) return;
+      setState(() {
+        _voiceFilter = 'none';
+        _previewBytes = original;
+        _processingVoice = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'That voice effect could not be prepared. Your original is safe.',
+          ),
+        ),
+      );
+    }
+  }
+
+  void _retake() {
+    _voiceProcessingGeneration++;
+    setState(() {
+      _originalRecordedBytes = null;
+      _previewBytes = null;
+      _recordedSeconds = 0;
+      _elapsed = Duration.zero;
+      _voiceFilter = 'none';
+      _processingVoice = false;
     });
   }
 
@@ -119,9 +217,16 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
   }
 
   Future<void> _confirmPublish() async {
-    if (_recordedBytes == null) {
+    final audioBytes = _previewBytes;
+    if (audioBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Record your whisper first.')),
+      );
+      return;
+    }
+    if (_processingVoice) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Finishing your voice effect…')),
       );
       return;
     }
@@ -135,7 +240,7 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
     }
     final confirmed = await showWhisperPreviewSheet(
       context: context,
-      audioBytes: _recordedBytes!,
+      audioBytes: audioBytes,
       durationSeconds: _recordedSeconds,
       category: _category,
       voiceFilter: _voiceFilter,
@@ -154,7 +259,7 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
       final repo = ref.read(repositoryProvider);
       // 1. Upload audio
       final upload = await repo.uploadWhisperAudio(
-        bytes: _recordedBytes!,
+        bytes: _previewBytes!,
         extension: 'm4a',
         contentType: 'audio/mp4',
       );
@@ -251,23 +356,25 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
                 const SizedBox(height: 18),
                 _RecordButton(
                   recording: _recording,
+                  paused: _paused,
                   elapsed: _elapsed,
-                  hasRecording: _recordedBytes != null,
+                  hasRecording: _previewBytes != null,
                   recordedSeconds: _recordedSeconds,
                   onTap: _toggleRecord,
-                  onRetake: _recordedBytes == null
-                      ? null
-                      : () => setState(() {
-                            _recordedBytes = null;
-                            _recordedSeconds = 0;
-                            _elapsed = Duration.zero;
-                          }),
+                  onPauseResume: _recording ? _togglePause : null,
+                  onRetake: _previewBytes == null ? null : _retake,
                 ),
-                if (_recordedBytes != null) ...[
+                if (_previewBytes != null) ...[
                   const SizedBox(height: 14),
-                  WhisperAudioPreview(
-                    bytes: _recordedBytes!,
-                    durationSeconds: _recordedSeconds,
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: _processingVoice
+                        ? const _VoiceProcessingCard()
+                        : WhisperAudioPreview(
+                            key: ValueKey(_voiceFilter),
+                            bytes: _previewBytes!,
+                            durationSeconds: _recordedSeconds,
+                          ),
                   ),
                 ],
                 const SizedBox(height: 18),
@@ -282,7 +389,8 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
                 const SizedBox(height: 8),
                 _VoiceFilterPicker(
                   active: _voiceFilter,
-                  onPick: (v) => setState(() => _voiceFilter = v),
+                  enabled: !_recording && !_processingVoice,
+                  onPick: _selectVoiceFilter,
                 ),
                 const SizedBox(height: 18),
                 const _SectionLabel(label: 'Title (optional)'),
@@ -441,17 +549,21 @@ class _BackgroundPreview extends StatelessWidget {
 class _RecordButton extends StatelessWidget {
   const _RecordButton({
     required this.recording,
+    required this.paused,
     required this.elapsed,
     required this.hasRecording,
     required this.recordedSeconds,
     required this.onTap,
+    required this.onPauseResume,
     required this.onRetake,
   });
   final bool recording;
+  final bool paused;
   final Duration elapsed;
   final bool hasRecording;
   final int recordedSeconds;
   final VoidCallback onTap;
+  final VoidCallback? onPauseResume;
   final VoidCallback? onRetake;
   @override
   Widget build(BuildContext context) {
@@ -503,7 +615,9 @@ class _RecordButton extends StatelessWidget {
               children: [
                 Text(
                   recording
-                      ? 'Recording…  $mm:$ss'
+                      ? paused
+                          ? 'Paused  $mm:$ss'
+                          : 'Recording…  $mm:$ss'
                       : hasRecording
                           ? 'Captured  $recordedMm:$recordedSs'
                           : 'Tap to record',
@@ -516,9 +630,11 @@ class _RecordButton extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   recording
-                      ? 'Up to 3 minutes — auto-stops at the limit.'
+                      ? paused
+                          ? 'Take your time. Resume when you are ready.'
+                          : 'Up to 10 minutes — pause whenever you need.'
                       : hasRecording
-                          ? 'Preview below, then tap Publish to review.'
+                          ? 'Try a voice effect and listen before publishing.'
                           : 'Share a thought in your own voice.',
                   style: TextStyle(
                     color: context.ink.withOpacity(0.62),
@@ -529,6 +645,15 @@ class _RecordButton extends StatelessWidget {
               ],
             ),
           ),
+          if (onPauseResume != null)
+            IconButton(
+              icon: Icon(
+                paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                color: VentlyColors.berryMagenta,
+              ),
+              onPressed: onPauseResume,
+              tooltip: paused ? 'Resume recording' : 'Pause recording',
+            ),
           if (onRetake != null)
             IconButton(
               icon: const Icon(Icons.refresh_rounded,
@@ -585,8 +710,13 @@ class _CategoryPicker extends StatelessWidget {
 }
 
 class _VoiceFilterPicker extends StatelessWidget {
-  const _VoiceFilterPicker({required this.active, required this.onPick});
+  const _VoiceFilterPicker({
+    required this.active,
+    required this.enabled,
+    required this.onPick,
+  });
   final String active;
+  final bool enabled;
   final ValueChanged<String> onPick;
   @override
   Widget build(BuildContext context) {
@@ -596,32 +726,38 @@ class _VoiceFilterPicker extends StatelessWidget {
       children: [
         for (final f in WhisperVoiceFilters.all)
           InkWell(
-            onTap: () => onPick(f),
+            onTap: enabled ? () => onPick(f) : null,
             borderRadius: BorderRadius.circular(18),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: f == active
-                    ? VentlyColors.berryMagenta
-                    : const Color(0xFFFFE3EC),
+                color: !enabled
+                    ? VentlyColors.softMauve.withOpacity(0.2)
+                    : f == active
+                        ? VentlyColors.berryMagenta
+                        : const Color(0xFFFFE3EC),
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.graphic_eq_rounded,
-                      color: f == active
-                          ? Colors.white
-                          : VentlyColors.berryMagenta,
+                      color: !enabled
+                          ? context.ink.withOpacity(0.28)
+                          : f == active
+                              ? Colors.white
+                              : VentlyColors.berryMagenta,
                       size: 13),
                   const SizedBox(width: 4),
                   Text(
                     WhisperVoiceFilters.label(f),
                     style: TextStyle(
-                      color: f == active
-                          ? Colors.white
-                          : VentlyColors.berryMagenta,
+                      color: !enabled
+                          ? context.ink.withOpacity(0.28)
+                          : f == active
+                              ? Colors.white
+                              : VentlyColors.berryMagenta,
                       fontWeight: FontWeight.w900,
                       fontSize: 11.5,
                     ),
@@ -631,6 +767,46 @@ class _VoiceFilterPicker extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _VoiceProcessingCard extends StatelessWidget {
+  const _VoiceProcessingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('voice-processing'),
+      height: 72,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: VentlyColors.softMauve.withOpacity(0.45),
+        ),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              'Preparing a private on-device preview…',
+              style: TextStyle(
+                color: context.ink,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

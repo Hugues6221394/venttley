@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,10 +12,10 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/badge_shelf.dart';
 import '../../widgets/friend_action_button.dart';
-import '../../widgets/glass_card.dart';
 import '../../widgets/media_preview_viewer.dart';
 import '../../widgets/profile_stats_panel.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/question_card.dart';
 import '../../widgets/tagged_text.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_premium_background.dart';
@@ -46,15 +48,29 @@ class FriendProfileScreen extends ConsumerWidget {
     }
 
     final async = ref.watch(userProfileProvider(userId));
+    // The content is placed directly inside the Scaffold body. An earlier
+    // `Stack(fit: StackFit.expand)` wrapper (background + floating back button)
+    // rendered the whole route washed-out and non-interactive — the expanded
+    // stack collapsed the profile into a shrunken, dimmed frame. The back
+    // affordance now lives in a transparent AppBar, which restores a clean,
+    // full-opacity, scrollable profile.
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 4, top: 4),
+          child: IconButton(
+            tooltip: 'Back',
+            style: IconButton.styleFrom(
+              backgroundColor:
+                  Theme.of(context).colorScheme.surface.withOpacity(0.82),
+            ),
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => context.pop(),
+          ),
         ),
       ),
       body: VentlyPremiumBackground(
@@ -251,6 +267,7 @@ class _VentsTabState extends ConsumerState<_VentsTab> {
             widget.profile.mostCommented != null)
           _Highlights(profile: widget.profile),
         _WhispersSection(userId: widget.profile.userId),
+        _QuestionsSection(userId: widget.profile.userId),
         _TribesSection(userId: widget.profile.userId),
         if (posts.isNotEmpty) ...[
           const Padding(
@@ -441,144 +458,155 @@ class _VibeLevelBar extends StatelessWidget {
 
 // ─────────────────────── Hero ───────────────────────
 
-class _Hero extends ConsumerWidget {
+/// Premium public-profile hero: an immersive photo/gradient banner, a large
+/// overlapping avatar that opens a full-screen photo preview, and a clean
+/// identity block (name · pronouns/mood pills · joined) above the stat band
+/// and friend actions.
+class _Hero extends StatelessWidget {
   const _Hero({required this.profile});
   final UserProfileView profile;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final daysSince =
         DateTime.now().difference(profile.joinedAt).inDays.clamp(0, 999999);
+    final joinedLabel = daysSince < 7
+        ? 'Just joined'
+        : daysSince < 365
+            ? 'Joined ${daysSince ~/ 7} weeks ago'
+            : 'Joined ${(daysSince / 365).toStringAsFixed(1)} years ago';
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
-      child: GlassCard(
-        elevated: true,
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
-        borderRadius: 24,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: scheme.primary.withOpacity(0.10)),
+          boxShadow: [
+            BoxShadow(
+              color: scheme.primary.withOpacity(0.12),
+              blurRadius: 30,
+              spreadRadius: -10,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
         child: Column(
           children: [
-            _PublicProfilePhoto(profile: profile),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            // Banner with the avatar overlapping its lower edge.
+            Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
               children: [
-                Text(
-                  '@${profile.pseudonym}',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-                if (profile.isVerified) ...[
-                  const SizedBox(width: 6),
-                  Icon(Icons.verified, size: 18, color: scheme.primary),
-                ],
-                if ((profile.pronouns ?? '').trim().isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: scheme.primary.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      profile.pronouns!.trim(),
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: scheme.primary,
-                      ),
-                    ),
-                  ),
-                ],
+                _HeroBanner(photoUrl: (profile.profilePhotoUrl ?? '').trim()),
+                Positioned(bottom: -52, child: _HeroAvatar(profile: profile)),
               ],
             ),
-            // Friends (total connections) directly under the username.
+            const SizedBox(height: 60),
             Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: GestureDetector(
-                onTap: () =>
-                    context.push('/user/${profile.userId}/stat/connections'),
-                child: RichText(
-                  text: TextSpan(
-                    style: TextStyle(color: scheme.onSurface.withOpacity(0.75)),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      TextSpan(
-                        text: PostCard.compactNumber(profile.connectionsCount),
-                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      Flexible(
+                        child: Text(
+                          '@${profile.pseudonym}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.3,
+                              ),
+                        ),
                       ),
-                      TextSpan(
-                        text: profile.connectionsCount == 1
-                            ? ' Connection'
-                            : ' Connections',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
+                      if (profile.isVerified) ...[
+                        const SizedBox(width: 6),
+                        Icon(Icons.verified, size: 20, color: scheme.primary),
+                      ],
                     ],
                   ),
-                ),
-              ),
-            ),
-            if ((profile.bio ?? '').trim().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 10, 8, 0),
-                child: TaggedText(
-                  profile.bio!.trim(),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    height: 1.35,
-                    color: scheme.onSurface.withOpacity(0.82),
+                  if ((profile.pronouns ?? '').trim().isNotEmpty ||
+                      profile.currentMood != null) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        if ((profile.pronouns ?? '').trim().isNotEmpty)
+                          _MetaPill(text: profile.pronouns!.trim()),
+                        if (profile.currentMood != null)
+                          _MetaPill(
+                            text:
+                                '${Moods.emoji(profile.currentMood!)}  ${Moods.label(profile.currentMood!)}',
+                            tinted: true,
+                          ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    joinedLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface.withOpacity(0.5),
+                    ),
                   ),
-                ),
-              ),
-            if (profile.currentMood != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '${Moods.emoji(profile.currentMood!)}  feeling ${Moods.label(profile.currentMood!).toLowerCase()}',
-                  style: TextStyle(color: scheme.onSurface.withOpacity(0.7)),
-                ),
-              ),
-            const SizedBox(height: 6),
-            Text(
-              daysSince < 7
-                  ? 'Just joined'
-                  : daysSince < 365
-                      ? 'Joined ${daysSince ~/ 7} weeks ago'
-                      : 'Joined ${(daysSince / 365).toStringAsFixed(1)} years ago',
-              style: TextStyle(
-                fontSize: 12,
-                color: scheme.onSurface.withOpacity(0.55),
-              ),
-            ),
-            const SizedBox(height: 14),
-            _StatsBanner(profile: profile),
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                FriendActionButton(
-                  otherUserId: profile.userId,
-                  otherPseudonym: profile.pseudonym,
-                ),
-                if (profile.isFriend) ...[
-                  const SizedBox(width: 8),
-                  _MessageButton(profile: profile),
+                  if ((profile.bio ?? '').trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 12, 4, 0),
+                      child: TaggedText(
+                        profile.bio!.trim(),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.4,
+                          color: scheme.onSurface.withOpacity(0.82),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  _StatsBanner(profile: profile),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FriendActionButton(
+                        otherUserId: profile.userId,
+                        otherPseudonym: profile.pseudonym,
+                      ),
+                      if (profile.isFriend) ...[
+                        const SizedBox(width: 8),
+                        _MessageButton(profile: profile),
+                      ],
+                    ],
+                  ),
+                  if (!profile.isFriend &&
+                      profile.relation != FriendStatus.self)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        'Friends can DM. Send a request to unlock messaging.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: scheme.onSurface.withOpacity(0.5),
+                        ),
+                      ),
+                    ),
                 ],
-              ],
-            ),
-            if (!profile.isFriend && profile.relation != FriendStatus.self)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'Friends can DM. Send a request to unlock messaging.',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: scheme.onSurface.withOpacity(0.55),
-                  ),
-                ),
               ),
+            ),
+            const SizedBox(height: 18),
           ],
         ),
       ),
@@ -586,50 +614,178 @@ class _Hero extends ConsumerWidget {
   }
 }
 
-class _PublicProfilePhoto extends StatelessWidget {
-  const _PublicProfilePhoto({required this.profile});
+/// The blurred-photo (or brand-gradient) banner behind the hero avatar. Its
+/// lower edge fades into the card surface so the overlapping avatar sits on a
+/// seamless backdrop.
+class _HeroBanner extends StatelessWidget {
+  const _HeroBanner({required this.photoUrl});
+  final String photoUrl;
 
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final hasPhoto = photoUrl.isNotEmpty;
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      child: SizedBox(
+        height: 116,
+        width: double.infinity,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (hasPhoto)
+              ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+                child: CachedNetworkImage(
+                  imageUrl: photoUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => const _BrandBanner(),
+                  errorWidget: (_, __, ___) => const _BrandBanner(),
+                ),
+              )
+            else
+              const _BrandBanner(),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(hasPhoto ? 0.12 : 0.0),
+                    scheme.surface.withOpacity(0.0),
+                    scheme.surface,
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BrandBanner extends StatelessWidget {
+  const _BrandBanner();
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            VentlyColors.berryMagenta,
+            Color(0xFFE0729A),
+            VentlyColors.softMauve,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The large hero avatar. When the user has uploaded a photo it becomes a
+/// button that opens the full-screen, zoomable preview, and carries a small
+/// "expand" glyph so the affordance is obvious.
+class _HeroAvatar extends StatelessWidget {
+  const _HeroAvatar({required this.profile});
   final UserProfileView profile;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final photoUrl = (profile.profilePhotoUrl ?? '').trim();
-    final avatar = Container(
+    final hasPhoto = photoUrl.isNotEmpty;
+
+    final ringed = Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
+        color: scheme.surface,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: scheme.primary.withOpacity(0.35),
-            blurRadius: 22,
+            color: scheme.primary.withOpacity(0.38),
+            blurRadius: 26,
             spreadRadius: 1,
           ),
         ],
-        border: Border.all(color: scheme.primary, width: 2.5),
+        border: Border.all(color: scheme.primary, width: 3),
       ),
       child: ProfileAvatar(
         avatarSeed: profile.avatarSeed,
         label: profile.pseudonym,
         profilePhotoUrl: profile.profilePhotoUrl,
-        size: 96,
-        showVerifiedBadge: profile.isVerified,
+        size: 104,
       ),
     );
-    if (photoUrl.isEmpty) return avatar;
+
+    final withGlyph = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        ringed,
+        if (hasPhoto)
+          Positioned(
+            right: 2,
+            bottom: 2,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.55),
+                shape: BoxShape.circle,
+                border: Border.all(color: scheme.surface, width: 2.5),
+              ),
+              child: const Icon(
+                Icons.zoom_out_map_rounded,
+                color: Colors.white,
+                size: 15,
+              ),
+            ),
+          ),
+      ],
+    );
+
+    if (!hasPhoto) return withGlyph;
     return Semantics(
       button: true,
-      label: 'Preview @${profile.pseudonym} profile photo',
-      child: InkWell(
-        customBorder: const CircleBorder(),
+      label: 'View @${profile.pseudonym} profile photo',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () => showMediaPreview(
           context,
-          items: [
-            MediaPreviewItem(url: photoUrl, label: 'Profile photo'),
-          ],
+          items: [MediaPreviewItem(url: photoUrl, label: 'Profile photo')],
           title: '@${profile.pseudonym}',
         ),
-        child: avatar,
+        child: withGlyph,
+      ),
+    );
+  }
+}
+
+/// A small rounded label used for pronouns and current-mood in the hero.
+class _MetaPill extends StatelessWidget {
+  const _MetaPill({required this.text, this.tinted = false});
+  final String text;
+  final bool tinted;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+      decoration: BoxDecoration(
+        color: scheme.primary.withOpacity(tinted ? 0.12 : 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.primary.withOpacity(0.14)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: tinted ? scheme.primary : scheme.onSurface.withOpacity(0.72),
+        ),
       ),
     );
   }
@@ -1535,6 +1691,52 @@ class _WhispersSection extends ConsumerWidget {
                   itemBuilder: (_, i) => _WhisperMiniCard(whisper: list[i]),
                 ),
               ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Every question this member has asked — mirrors the vents/whispers rails so
+/// friends can answer, like, or report right from the profile.
+class _QuestionsSection extends ConsumerWidget {
+  const _QuestionsSection({required this.userId});
+  final String userId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(userQuestionsProvider(userId));
+    return async.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (list) {
+        if (list.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const _SectionTitle('Questions asked'),
+                  const Spacer(),
+                  Text(
+                    '${list.length}',
+                    style: TextStyle(
+                      color: VentlyColors.berryMagenta.withOpacity(0.85),
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              for (final q in list)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: QuestionCard(prompt: q, compact: true),
+                ),
             ],
           ),
         );

@@ -74,6 +74,7 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
         child: child!,
       ),
     );
+    if (!mounted) return;
     if (picked != null) setState(() => _birthDate = picked);
   }
 
@@ -112,18 +113,23 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       if (!mounted) return;
       context.go('/onboarding/key', extra: result.recoveryPhrase);
     } on AgeGateBlocked catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString());
     } on UsernameTakenException {
+      if (!mounted) return;
       setState(() => _error = UserFriendlyErrors.message(
             'already exists',
             fallback: 'That username is taken. Try another one.',
           ));
       _shuffleName();
     } on EmailConfirmationStillOnException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString());
     } on FormatException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = UserFriendlyErrors.message(e));
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -252,8 +258,8 @@ class _DobCard extends StatelessWidget {
               onTap: onTap,
               borderRadius: BorderRadius.circular(20),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 14),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
                   color: Theme.of(context).inputDecorationTheme.fillColor,
                   borderRadius: BorderRadius.circular(20),
@@ -431,8 +437,7 @@ class _ErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.warning_amber_outlined,
-              color: scheme.error, size: 18),
+          Icon(Icons.warning_amber_outlined, color: scheme.error, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Text(message,

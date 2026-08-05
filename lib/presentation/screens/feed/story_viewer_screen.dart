@@ -52,10 +52,30 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
   }
 
   void _ensureLoaded(List<Post> posts) {
-    if (_stories.isNotEmpty) return;
     final now = DateTime.now();
     final mapped = posts.map((p) => VentStory.fromPost(p, now: now)).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    if (_stories.isNotEmpty) {
+      final unchanged = mapped.length == _stories.length &&
+          List.generate(mapped.length, (index) {
+            final next = mapped[index];
+            final current = _stories[index];
+            return next.postId == current.postId &&
+                next.reactionsCount == current.reactionsCount &&
+                next.repliesCount == current.repliesCount &&
+                next.viewCount == current.viewCount &&
+                next.myReaction == current.myReaction;
+          }).every((same) => same);
+      if (unchanged) return;
+      final currentPostId = _stories[_index].postId;
+      final nextIndex = mapped.indexWhere((s) => s.postId == currentPostId);
+      if (mapped.isEmpty) return;
+      setState(() {
+        _stories = mapped;
+        _index = nextIndex < 0 ? 0 : nextIndex;
+      });
+      return;
+    }
     final idx = mapped.indexWhere((s) => s.postId == widget.initialPostId);
     setState(() {
       _stories = mapped;
@@ -205,25 +225,205 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
       backgroundColor: const Color(0xFF21161B),
       showDragHandle: true,
       builder: (context) => SafeArea(
-        child: ListTile(
-          leading:
-              const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
-          title: const Text(
-            'Delete story',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
-          ),
-          subtitle: const Text(
-            'Remove it now instead of waiting 24 hours.',
-            style: TextStyle(color: Colors.white70),
-          ),
-          onTap: () => Navigator.of(context).pop('delete'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(
+                Icons.insights_outlined,
+                color: VentlyColors.berryMagenta,
+              ),
+              title: const Text(
+                'Story activity',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              subtitle: const Text(
+                'See everyone who reacted.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              onTap: () => Navigator.of(context).pop('activity'),
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.chat_bubble_outline_rounded,
+                color: Colors.white,
+              ),
+              title: const Text(
+                'Reply settings',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              subtitle: const Text(
+                'Choose whether friends can reply.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              onTap: () => Navigator.of(context).pop('settings'),
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.redAccent,
+              ),
+              title: const Text(
+                'Delete story',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              subtitle: const Text(
+                'Remove it now instead of waiting 24 hours.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              onTap: () => Navigator.of(context).pop('delete'),
+            ),
+          ],
         ),
       ),
     );
     if (!mounted) return;
-    if (action == 'delete') {
+    if (action == 'activity') {
+      await _showStoryActivity();
+    } else if (action == 'settings') {
+      _resume();
+      context.push('/settings');
+    } else if (action == 'delete') {
       await _deleteCurrentStory();
     } else {
+      _resume();
+    }
+  }
+
+  Future<void> _showStoryActivity() async {
+    final story = _stories[_index];
+    try {
+      final reactions =
+          await ref.read(storyReactionsProvider(story.postId).future);
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (sheetContext) => SafeArea(
+          child: FractionallySizedBox(
+            heightFactor: 0.68,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 2, 20, 14),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Story activity',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${reactions.length} ${reactions.length == 1 ? 'reaction' : 'reactions'}',
+                        style: const TextStyle(
+                          color: VentlyColors.berryMagenta,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.visibility_outlined,
+                        size: 18,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withOpacity(0.58),
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        '${story.viewCount} unique ${story.viewCount == 1 ? 'view' : 'views'}',
+                        style: TextStyle(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withOpacity(0.62),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                Expanded(
+                  child: reactions.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No reactions yet.',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                          itemCount: reactions.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 18),
+                          itemBuilder: (_, index) {
+                            final person = reactions[index];
+                            return Row(
+                              children: [
+                                Expanded(
+                                  child: UserProfileLink(
+                                    userId: person.userId,
+                                    pseudonym: person.pseudonym,
+                                    avatarSeed: person.avatarSeed,
+                                    profilePhotoUrl: person.profilePhotoUrl,
+                                    showVerifiedBadge: person.isVerified,
+                                    showName: true,
+                                    size: 44,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  PostReactions.label(person.reactionType),
+                                  style: const TextStyle(
+                                    color: VentlyColors.berryMagenta,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not load story activity.',
+            ),
+          ),
+        ),
+      );
+    } finally {
       _resume();
     }
   }
@@ -340,7 +540,11 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
           final isOwner = story.authorId != null &&
               (story.authorId == me?.userId ||
                   story.authorId == authenticatedUserId);
-          final canReply = story.authorId != null && !isOwner;
+          final replyPermission =
+              ref.watch(storyReplyAllowedProvider(story.postId));
+          final replyAllowed =
+              !isOwner && (replyPermission.valueOrNull ?? false);
+          final canReply = story.authorId != null && !isOwner && replyAllowed;
           return _ViewerBody(
             stories: _stories,
             index: _index,
@@ -348,9 +552,16 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
             busy: _busy,
             reply: _reply,
             canReply: canReply,
+            repliesDisabled: story.authorId != null &&
+                !isOwner &&
+                replyPermission.hasValue &&
+                !replyAllowed,
             isOwner: isOwner,
+            reactionCount: story.reactionsCount,
+            viewCount: story.viewCount,
             onClose: () => Navigator.of(context).maybePop(),
             onOwnerActions: _showOwnerActions,
+            onOpenStoryActivity: _showStoryActivity,
             onTapLeft: _back,
             onTapRight: _advance,
             onLongPressStart: (_) => _pause(),
@@ -372,9 +583,13 @@ class _ViewerBody extends StatelessWidget {
     required this.busy,
     required this.reply,
     required this.canReply,
+    required this.repliesDisabled,
     required this.isOwner,
+    required this.reactionCount,
+    required this.viewCount,
     required this.onClose,
     required this.onOwnerActions,
+    required this.onOpenStoryActivity,
     required this.onTapLeft,
     required this.onTapRight,
     required this.onLongPressStart,
@@ -389,9 +604,13 @@ class _ViewerBody extends StatelessWidget {
   final bool busy;
   final TextEditingController reply;
   final bool canReply;
+  final bool repliesDisabled;
   final bool isOwner;
+  final int reactionCount;
+  final int viewCount;
   final VoidCallback onClose;
   final VoidCallback onOwnerActions;
+  final VoidCallback onOpenStoryActivity;
   final VoidCallback onTapLeft;
   final VoidCallback onTapRight;
   final GestureLongPressStartCallback onLongPressStart;
@@ -492,19 +711,94 @@ class _ViewerBody extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _ReactionTray(onReact: onReact),
-                      if (canReply) ...[
+                      if (isOwner) ...[
+                        const SizedBox(height: 10),
+                        _StoryActivityButton(
+                          viewCount: viewCount,
+                          reactionCount: reactionCount,
+                          onTap: onOpenStoryActivity,
+                        ),
+                      ] else if (canReply) ...[
                         const SizedBox(height: 10),
                         _ReplyComposer(
                           controller: reply,
                           busy: busy,
                           onSend: onSendReply,
                         ),
+                      ] else if (repliesDisabled) ...[
+                        const SizedBox(height: 10),
+                        const _StoryRepliesOff(),
                       ] else
                         const SizedBox(height: 8),
                     ],
                   ),
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StoryActivityButton extends StatelessWidget {
+  const _StoryActivityButton({
+    required this.viewCount,
+    required this.reactionCount,
+    required this.onTap,
+  });
+
+  final int viewCount;
+  final int reactionCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: const Icon(Icons.insights_outlined, size: 19),
+        label: Text(
+          '$viewCount ${viewCount == 1 ? 'view' : 'views'}  ·  '
+          '$reactionCount ${reactionCount == 1 ? 'reaction' : 'reactions'}',
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          side: BorderSide(color: Colors.white.withOpacity(0.30)),
+          backgroundColor: Colors.white.withOpacity(0.10),
+          textStyle: const TextStyle(fontWeight: FontWeight.w900),
+        ),
+      ),
+    );
+  }
+}
+
+class _StoryRepliesOff extends StatelessWidget {
+  const _StoryRepliesOff();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withOpacity(0.16)),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.chat_bubble_outline_rounded,
+              color: Colors.white70, size: 18),
+          SizedBox(width: 8),
+          Text(
+            'Replies are off for this story',
+            style: TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
