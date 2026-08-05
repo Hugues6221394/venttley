@@ -5167,9 +5167,13 @@ class SupabaseBackend {
   // ===================================================================
   // PROMPTS
   // ===================================================================
+  // `plug_profiles` has two FKs to `users` (plug_id owner + approved_by_super
+  // _admin_id), so the nested users embed MUST name the FK or PostgREST fails
+  // with PGRST201 (ambiguous embed) — which silently emptied the questions
+  // list. Pin it to the plug owner via plug_profiles_plug_id_fkey.
   static const String _promptSelect =
       'prompt_id, prompt_text, answers_count, author_id, audience, created_at, '
-      'plug_profiles(display_name, users(avatar_seed)), '
+      'plug_profiles(display_name, users!plug_profiles_plug_id_fkey(avatar_seed)), '
       'author:users!plug_prompts_author_id_fkey(anonymous_pseudonym, avatar_seed)';
 
   PlugPrompt _promptFromRow(Map<String, dynamic> r) {
