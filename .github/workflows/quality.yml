@@ -21,7 +21,10 @@ jobs:
       - uses: subosito/flutter-action@v2.23.0
         with:
           channel: stable
-          flutter-version: 3.24.5
+          # Must track the SDK the team develops on. pubspec.lock resolves to
+          # a Dart >=3.10 floor, so an older pin fails at `pub get` before it
+          # ever reaches analyze or test.
+          flutter-version: 3.44.9
           cache: true
       - run: flutter pub get
       - name: Verify production-readiness formatting

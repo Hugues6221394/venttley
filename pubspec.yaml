@@ -4,7 +4,9 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.5.4
+  # Raised from ^3.5.4 when the toolchain moved to Flutter 3.44 (Xcode 26 /
+  # iOS 26 need it). The resolved dependency set already requires >=3.10.
+  sdk: ^3.10.0
 
 dependencies:
   flutter:
@@ -17,7 +19,11 @@ dependencies:
 
   # Routing
   go_router: ^14.2.7
-  app_links: 6.3.3
+  # 7.0.0 is the first release with UISceneDelegate support. Below it the
+  # plugin rides the deprecated application lifecycle events, which warns on
+  # every launch and stops working once Flutter drops the compatibility
+  # shim — taking `venttly://group-invite/<token>` with it.
+  app_links: ^7.2.1
 
   # Persistence
   shared_preferences: ^2.3.2
