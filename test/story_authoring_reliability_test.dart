@@ -123,8 +123,8 @@ void main() {
       composer,
       contains("storyAudience: _friendsOnly ? 'friends' : 'everyone'"),
     );
-    expect(profile, contains('p.isStory'));
-    expect(profile, contains('!p.isWhisper && !p.isStory'));
+    expect(profile, contains('post.isStory'));
+    expect(profile, contains('!post.isWhisper && !post.isStory'));
     expect(
       profile,
       isNot(contains('myVents.where((p) => p.isWhisper).toList()')),
@@ -148,7 +148,9 @@ void main() {
     expect(backend, contains(".eq('is_story', true)"));
     expect(backend, contains(".gte('created_at'"));
     expect(profile, contains('ref.watch(myStoriesProvider)'));
-    expect(profile, contains("const _ProfileTab('Stories', null)"));
+    // No leading `const`: the tab list is a `const <_ProfileTab>[...]`
+    // literal, so the elements do not repeat the keyword.
+    expect(profile, contains("_ProfileTab('Stories', null)"));
     expect(profile, contains("Couldn't load your stories."));
     expect(profile, contains('ref.invalidate(myStoriesProvider)'));
     expect(expiry, contains('AS RESTRICTIVE'));

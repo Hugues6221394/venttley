@@ -32,7 +32,14 @@ void main() {
     expect(detail, contains('openCover: true'));
     expect(detail, contains('openCover: false'));
     expect(detail, contains('showMediaPreview('));
-    expect(publicProfile, contains('class _PublicProfilePhoto'));
+    // Anchored on the accessibility label rather than the widget's private
+    // class name. The name has already churned once (_PublicProfilePhoto ->
+    // _HeroAvatar in the hero redesign) without the behaviour changing; the
+    // label is what a screen-reader user actually depends on.
+    expect(
+      publicProfile,
+      contains(r"label: 'View @${profile.pseudonym} profile photo'"),
+    );
     expect(publicProfile, contains('showMediaPreview('));
     expect(publicProfile, contains('profile.profilePhotoUrl'));
   });
