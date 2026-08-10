@@ -51,3 +51,7 @@ app.*.map.json
 
 # Claude Code local state (transient locks, session data)
 .claude/
+
+# Golden-test failure output. Rewritten on every failing run, so tracked
+# copies are permanently dirty; read them locally, don't commit them.
+/test/failures/
