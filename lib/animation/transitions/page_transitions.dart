@@ -1,3 +1,6 @@
+// [CupertinoPageTransitionsBuilder] lives in the Cupertino library; the
+// Material library only references it in docs.
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
 import 'fade_scale.dart';
