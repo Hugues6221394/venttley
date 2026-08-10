@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 
 import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
-import '../theme/colors.dart';
 import 'anonymous_avatar.dart';
 import 'post_card.dart' show PostCard;
 
