@@ -100,11 +100,13 @@ class _ChatOptionsSheet extends ConsumerWidget {
       minChildSize: 0.4,
       maxChildSize: 0.92,
       expand: false,
-      builder: (context, scroll) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
+      // Material, not a decorated Container: the tiles below paint their
+      // background and ink splashes onto the nearest Material ancestor, so a
+      // plain background box between them and the sheet's Material would
+      // swallow those effects.
+      builder: (context, scroll) => Material(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         child: ListView(
           controller: scroll,
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
