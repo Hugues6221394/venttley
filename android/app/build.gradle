@@ -30,9 +30,11 @@ if (releaseTaskRequested &&
 android {
     namespace = "rw.vently.vently_app"
     compileSdk = 35
-    // Pinned to the installed NDK. Flutter 3.24.5 defaults `flutter.ndkVersion`
-    // to 23.1.7779620, which is not installed and is older than the 26.1+ that
-    // several plugins require. NDKs are backward-compatible, so the installed
+    // Pinned to the installed NDK. This dates from Flutter 3.24.5, whose
+    // `flutter.ndkVersion` default (23.1.7779620) was neither installed here
+    // nor new enough for the 26.1+ several plugins require. The toolchain is
+    // now on 3.44 with a newer default, so this pin is worth re-checking —
+    // it holds only because NDKs are backward-compatible and the installed
     // 29.x satisfies every plugin.
     ndkVersion = "29.0.14206865"
 

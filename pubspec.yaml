@@ -85,14 +85,20 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^4.0.0
 
-# Pin transitive dependencies that ship newer Android Gradle requirements
-# than Flutter 3.24.5 can satisfy. Plugins published after Flutter 3.27
-# reference `flutter.compileSdkVersion` in their Android build.gradle, which
-# is only injected by Flutter 3.27+. Pinning to the last version that
-# hard-codes `compileSdk 34` keeps the build green on Flutter 3.24.5.
+# These pins were added for Flutter 3.24.5, which did not inject
+# `flutter.compileSdkVersion` into plugin build.gradle files — anything
+# published after 3.27 failed to configure. The toolchain has since moved to
+# 3.44, so that constraint is gone and most of this block is probably
+# removable.
+#
+# It is deliberately still here. Dropping a pin is only proven safe by
+# exercising the feature on a real device, not by a build succeeding:
+# record_* backs Whispers and chat voice notes, which a compiling APK says
+# nothing about. Retire these one at a time, with hardware to test on.
 dependency_overrides:
   # record_android 1.3.3 = "fix: Gradle compile SDK to 34"
-  # 1.4.0+ switched to flutter.compileSdkVersion.
+  # 1.4.0+ switched to flutter.compileSdkVersion. Safe to revisit on 3.44,
+  # but see the note above about verifying audio capture first.
   record_android: 1.3.3
   # record_linux 0.7.2 (auto-resolved by `record: ^5.1.2`) implements an
   # older RecordPlatformInterface than the 1.5.x interface the rest of the
@@ -102,9 +108,9 @@ dependency_overrides:
   # package_info_plus 9.x reads `flutter.compileSdkVersion` from its own
   # android/build.gradle, which only works on Flutter 3.27+ (where the
   # Flutter Gradle plugin propagates the `flutter` extension to all
-  # subprojects). This project is on 3.24.5 → Gradle fails with
-  # "Could not get unknown property 'flutter'". 8.3.0 is the last 8.x
-  # release and hardcodes compileSdk, so it builds cleanly.
+  # subprojects). 8.3.0 is the last 8.x release and hardcodes compileSdk.
+  # On 3.44 this pin is almost certainly obsolete — the package is used
+  # only to tag the Sentry release, so it is the cheapest one to retire.
   package_info_plus: 8.3.0
 
 flutter:
