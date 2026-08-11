@@ -287,7 +287,10 @@ class _ChatHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 14, 6),
+      // Left on the shared column; the title was the last section still at 20.
+      // Right stays 14 — the trailing controls are circular icon buttons whose
+      // own bounds carry the optical inset.
+      padding: const EdgeInsets.fromLTRB(_kColumn, 10, 14, 6),
       child: Row(
         children: [
           Expanded(
