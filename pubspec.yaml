@@ -41,7 +41,7 @@ dependencies:
   # UI utilities
   flutter_svg: ^2.0.10+1
   cached_network_image: ^3.4.1
-  image_picker: ^1.1.2
+  image_picker: ^1.2.3
   shimmer: ^3.0.0
   intl: ^0.19.0
   collection: ^1.18.0
@@ -55,7 +55,7 @@ dependencies:
   flutter_animate: ^4.5.0
 
   # Observability (Sprint 2)
-  sentry_flutter: ^8.10.1
+  sentry_flutter: ^9.26.0
   # Used by Sentry to tag the release id with version+build number.
   # The pinned 8.3.0 lives in dependency_overrides below (Flutter 3.24
   # compatibility) — this declaration just makes it a direct dep so we

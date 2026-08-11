@@ -29,7 +29,10 @@ if (releaseTaskRequested &&
 
 android {
     namespace = "rw.vently.vently_app"
-    compileSdk = 35
+    // Follows the SDK Flutter blesses rather than a hard-coded level, so
+    // AndroidX dependencies that demand a newer compileSdk don't fail the
+    // build. Injected by the Flutter Gradle plugin (3.27+).
+    compileSdk = flutter.compileSdkVersion
     // Pinned to the installed NDK. This dates from Flutter 3.24.5, whose
     // `flutter.ndkVersion` default (23.1.7779620) was neither installed here
     // nor new enough for the 26.1+ several plugins require. The toolchain is
@@ -45,10 +48,6 @@ android {
         // core-library desugaring on minSdk < 26. The dependency below
         // ships the desugar JDK 11 jars Gradle expects.
         coreLibraryDesugaringEnabled = true
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     defaultConfig {
@@ -78,6 +77,14 @@ android {
         release {
             signingConfig = signingConfigs.release
         }
+    }
+}
+
+// Kotlin 2.x replacement for the `kotlinOptions` block that used to live in
+// `android {}`; that DSL is gone in AGP 9.
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 
