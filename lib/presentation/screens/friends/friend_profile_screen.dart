@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -23,7 +22,7 @@ import '../../widgets/post_card.dart' show PostCard;
 
 /// The Friend Profile — section 6 of the social spec. A friend-gated
 /// "safe stalking" view: pseudonym + avatar at the top, an emotional
-/// stats grid, mood distribution ring, mutual friends + tribes,
+/// stats grid, mutual friends + tribes,
 /// badges, recent vents, and the friend-action chip in context.
 ///
 /// Strangers see a stripped view that pushes them toward sending a
@@ -133,8 +132,6 @@ class _FriendProfileBody extends StatelessWidget {
           if (profile.relation == FriendStatus.blockedByMe)
             const SliverToBoxAdapter(child: _BlockedNotice()),
           SliverToBoxAdapter(child: ProfileStatsPanel(profile: profile)),
-          if (profile.topMoods.isNotEmpty)
-            SliverToBoxAdapter(child: _MoodRing(moods: profile.topMoods)),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
@@ -936,155 +933,6 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
   }
 }
 
-// ─────────────────────── Mood ring ───────────────────────
-
-class _MoodRing extends StatelessWidget {
-  const _MoodRing({required this.moods});
-  final List<MoodCount> moods;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final total = moods.fold<int>(0, (s, m) => s + m.count);
-    final top = moods.first;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: scheme.outline.withOpacity(0.25)),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 86,
-              height: 86,
-              child: CustomPaint(
-                painter: _MoodRingPainter(
-                  moods: moods,
-                  base: scheme.surfaceContainerHighest,
-                ),
-                child: Center(
-                  child: Text(
-                    Moods.emoji(top.mood),
-                    style: const TextStyle(fontSize: 28),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Mood distribution',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  Text(
-                    'Top: ${Moods.label(top.mood)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: scheme.onSurface.withOpacity(0.6),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      for (final m in moods.take(4))
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: _moodColor(m.mood, scheme).withOpacity(0.18),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${Moods.emoji(m.mood)} ${Moods.label(m.mood)} · ${total > 0 ? (m.count * 100 / total).round() : 0}%',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: _moodColor(m.mood, scheme),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-Color _moodColor(String mood, ColorScheme scheme) {
-  switch (mood) {
-    case 'happy':
-    case 'grateful':
-    case 'hopeful':
-      return Colors.amber.shade700;
-    case 'healing':
-      return Colors.teal.shade600;
-    case 'sad':
-    case 'lonely':
-    case 'broken':
-      return Colors.indigo.shade400;
-    case 'angry':
-      return Colors.redAccent;
-    case 'anxious':
-    case 'overthinking':
-      return Colors.deepPurple.shade400;
-    case 'exhausted':
-      return Colors.brown.shade400;
-    case 'confused':
-      return Colors.blueGrey.shade400;
-    default:
-      return scheme.primary;
-  }
-}
-
-class _MoodRingPainter extends CustomPainter {
-  _MoodRingPainter({required this.moods, required this.base});
-  final List<MoodCount> moods;
-  final Color base;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromLTWH(4, 4, size.width - 8, size.height - 8);
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 8
-      ..color = base.withOpacity(0.35);
-    canvas.drawArc(rect, 0, math.pi * 2, false, ring);
-
-    final total = moods.fold<int>(0, (s, m) => s + m.count);
-    if (total == 0) return;
-
-    var start = -math.pi / 2;
-    final scheme = ColorScheme.fromSeed(seedColor: Colors.pinkAccent);
-    for (final m in moods.take(6)) {
-      final sweep = (m.count / total) * math.pi * 2;
-      final paint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 8
-        ..strokeCap = StrokeCap.butt
-        ..color = _moodColor(m.mood, scheme);
-      canvas.drawArc(rect, start, sweep, false, paint);
-      start += sweep;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _MoodRingPainter old) =>
-      old.moods != moods || old.base != base;
-}
 
 // ─────────────────────── Badges (legacy row removed — see BadgeShelf) ─────
 
@@ -1313,7 +1161,7 @@ class _StrangerCallout extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Send a friend request to see streaks, badges, mood distribution, and recent vents.',
+              'Send a friend request to see streaks, badges, and recent vents.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
