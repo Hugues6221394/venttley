@@ -1415,7 +1415,17 @@ class _LastMessageLine extends StatelessWidget {
         ),
       );
     }
-    final preview = (room.lastMessagePreview ?? room.requestPreview).trim();
+    // Only ever show text that is actually a message.
+    //
+    // This used to fall back to `room.requestPreview` — a column
+    // start_chat_room writes on chat_rooms, not a row in chat_messages. For a
+    // room with no messages that rendered as if someone had sent something, so
+    // the list showed "Hey" and opening the chat showed an empty thread. Users
+    // reported it as lost messages; nothing was ever lost, the list was lying.
+    //
+    // Requests are already handled above with "Wants to chat", so this path is
+    // only reached by non-request rooms, where the preview never applies.
+    final preview = (room.lastMessagePreview ?? '').trim();
     return Text(
       preview.isEmpty ? 'Tap to open chat' : preview,
       maxLines: 1,
