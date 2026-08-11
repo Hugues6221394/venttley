@@ -528,7 +528,10 @@ class _CompactGreeting extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 16, 6),
+      // Right inset matches the left, and every other section on this screen.
+      // It was 16, which pushed the trailing icon 4px past the column every
+      // other row aligns to — there is no IconButton padding here to absorb it.
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
