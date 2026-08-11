@@ -103,6 +103,42 @@ natural host — mind `HomeShell.navClearance` if the mini-player stacks above i
 Worth stating plainly: unrequested audio on a mental-health app is worse than a
 cosmetic bug. Someone may open this in public, or beside a sleeping partner.
 
+### Mini-player — design, and why it is not additive
+
+**Do not bolt this onto the current exit path.** `6575bcc` makes leaving the
+Whispers branch *pause* (`didChangeDependencies` -> `_pauseOffStage`), verified on
+device. A mini-player means leaving must instead **keep playing and hand off**, so
+this rewrites that path. Built carelessly it reintroduces the original bug —
+audio from a screen nobody opened.
+
+The distinction to preserve: **playback continues only when the user explicitly
+started it.** Autoplay-on-page-settle must still die with the branch; a whisper
+the user chose to listen to may follow them. Today those are the same code path
+(`_onPageChanged` -> `startPlayback`), so they have to be separated first.
+
+Suggested shape:
+
+1. **Move ownership out of the screen.** A `Notifier` holding
+   `{whisperId, title, author, isPlaying, startedByUser}` — `whispers_screen`
+   reports into it rather than owning `WhisperPlayerController` lifecycle.
+2. **Branch exit consults `startedByUser`**: autoplayed -> pause as now; explicitly
+   started -> keep playing and surface the mini-player. That keeps the verified
+   behaviour for the case that caused the complaint.
+3. **Host it in `HomeShell`**, stacked above the nav pill — mind
+   `HomeShell.navClearance`; the mini-player's own height must be added to what
+   scroll views reserve, or it re-creates the occlusion bug fixed in `e371aba`.
+4. **Dismiss must stop playback**, not just hide the widget. The user's words:
+   "you can cancel it when you don't want to go back to the whisper audio."
+5. **Tapping it returns to that whisper** — `goBranch(1)` plus seek to the live
+   position, not a restart.
+
+Re-run the whole checklist above afterwards, plus: dismiss actually silences;
+mini-player does not appear for autoplayed whispers; no double audio when
+returning to the branch while it is showing.
+
+Backgrounding remains untested from the `6575bcc` verification and is easiest to
+cover at the same time.
+
 ---
 
 ## 3. Group invite link is blurred, so nobody can be invited
