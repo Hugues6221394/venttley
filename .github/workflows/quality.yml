@@ -59,6 +59,50 @@ jobs:
       - run: flutter analyze
       - run: flutter test --coverage
 
+  android:
+    # Nothing built Android here before, and it rotted invisibly: Android
+    # Studio's bundled JDK moved to 25, Gradle 8.7 refused to run on it, and
+    # `assembleDebug` failed before compiling a line. Three further breaks
+    # (a plugin pinning Kotlin language version 1.6, another hard-coding
+    # compileSdk 34, a removed Jetifier flag) were stacked behind it. A debug
+    # assemble is the cheapest thing that would have caught any of them.
+    #
+    # This does NOT cover runtime behaviour — audio capture in particular is
+    # only provable on a device, which is why the record_* pins in
+    # dependency_overrides still need hardware to retire.
+    name: Android debug build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      # AGP 9.0.1 requires JDK 17+; 17 matches the project's own
+      # sourceCompatibility and Kotlin jvmTarget.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.44.9
+          cache: true
+      # Gradle 9.1.0's distribution plus the AGP/Kotlin artifacts are a large
+      # cold download; without this the job spends most of its time fetching.
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/settings.gradle', 'android/app/build.gradle', 'pubspec.lock') }}
+          restore-keys: gradle-${{ runner.os }}-
+      - run: flutter pub get
+      # Debug, not release: the signing guard in app/build.gradle intentionally
+      # fails any release task without a private keystore, which CI must not
+      # have. Debug still exercises Gradle, AGP, Kotlin and every plugin's
+      # Android module.
+      - run: flutter build apk --debug
+
   admin:
     name: Admin console typecheck
     runs-on: ubuntu-latest
