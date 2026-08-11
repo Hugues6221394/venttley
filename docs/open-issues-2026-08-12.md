@@ -55,10 +55,46 @@ user's words: playback only while on the Whispers page; when navigating away a
 short widget follows you where applicable and can be dismissed so it does not
 drag you back.
 
-**Likely cause:** not login itself. The home feed renders a *Popular Whispers*
-rail (`popular_whispers_rail.dart`) and the feed is the post-login landing
-route — so a carousel tile or preview autoplaying on build is the more probable
-trigger than any session hook.
+**Root cause (investigated 2026-08-12): the off-screen branch is mounted and
+plays.**
+
+There is no rogue `play()` call. Every one was checked:
+
+- `whisper_audio_preview.dart:82` — behind `_toggle()`, a user tap. Clean.
+- `popular_whispers_rail.dart`, `whisper_carousel_tile.dart` — no `play()` at all,
+  so the home rail is **not** the trigger (the earlier guess was wrong).
+- `whisper_player.dart:27` — the loop handler, replaying on completion when loop
+  is enabled. Legitimate.
+- `whispers_screen` calls `loadAndPlay` on page change, which is correct *on that
+  screen*.
+
+`StatefulShellRoute.indexedStack` renders its branches into an **`IndexedStack`**,
+and `IndexedStack` builds *every* child into the tree — it only controls which is
+visible. So once the shell exists, `whispers_screen` (branch 1) is constructed and
+mounted while Home is on screen. Its `PageView` settles on page 0, `loadAndPlay`
+fires, and audio plays from a screen the user never opened.
+
+That matches the report precisely: it happens "whenever you log in" because that
+is when the shell is first built — no session hook involved.
+
+Corroborating: `providers.dart:358` already lists "no whisper autoplay" as a
+data-saver behaviour. Someone knew autoplay fired too eagerly and gated it behind
+a setting instead of fixing the trigger.
+
+**Fix shape:** make playback conditional on the branch being visible — gate
+`loadAndPlay` on `navigationShell.currentIndex`, or use `TickerMode` /
+a visibility check so an off-screen branch never starts audio.
+
+**Verify all of these before calling it done**, because the failure mode of a
+careless fix is whispers that never play at all — worse than the bug:
+
+- audio stops when switching away from the Whispers branch
+- it does not double-start when returning to it
+- backgrounding and resuming does not restart it
+- the mini-player, once added, is the only thing that continues playback off-branch
+
+**Touches `app_router.dart` / `HomeShell`** — contested with the security agent's
+in-flight work as of 2026-08-12. Read `AGENT-COORDINATION.md` first.
 
 **Pieces that exist:** `WhisperPlayerController` (`whisper_player.dart`),
 `whisper_audio_preview.dart`, `whisper_carousel_tile.dart`,
