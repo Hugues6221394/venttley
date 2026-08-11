@@ -9,6 +9,7 @@ import '../../widgets/post_card.dart';
 import '../../widgets/question_card.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/vently_logo.dart';
+import '../home/home_shell.dart';
 
 /// Question of the Day + every open prompt. Anyone can ask — questions go
 /// to everyone or just your connections. Tapping a prompt opens its real
@@ -114,7 +115,8 @@ class QuestionsScreen extends ConsumerWidget {
                         for (final p in prompts.skip(1))
                           QuestionCard(prompt: p),
                       ],
-                      const SizedBox(height: 32),
+                      // Was 32, leaving the last prompt card under the nav pill.
+                      const SizedBox(height: HomeShell.navClearance),
                     ],
                   ),
                 ),

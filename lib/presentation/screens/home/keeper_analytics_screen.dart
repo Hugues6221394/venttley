@@ -8,6 +8,7 @@ import '../../../domain/keeper/keeper_overview.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/vently_premium_background.dart';
+import 'home_shell.dart';
 
 /// Keeper tab — SaaS-style analytics for tribe operators.
 class KeeperAnalyticsScreen extends ConsumerWidget {
@@ -40,7 +41,13 @@ class KeeperAnalyticsScreen extends ConsumerWidget {
                   ref.invalidate(tribesIKeepProvider);
                 },
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                  // Bottom was 32, leaving the last chart under the nav pill.
+                  padding: const EdgeInsets.fromLTRB(
+                    20,
+                    16,
+                    20,
+                    HomeShell.navClearance,
+                  ),
                   children: [
                     Text(
                       'Analytics',

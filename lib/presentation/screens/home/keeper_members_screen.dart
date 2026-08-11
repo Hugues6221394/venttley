@@ -10,6 +10,7 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_premium_background.dart';
+import 'home_shell.dart';
 
 /// Keeper tab — member roster & management entry points.
 class KeeperMembersScreen extends ConsumerWidget {
@@ -173,6 +174,11 @@ class _MembersBodyState extends ConsumerState<_MembersBody> {
                 label: const Text('Full member management'),
               ),
             ),
+          ),
+          // This list reserved nothing, so its final row sat under the
+          // floating nav pill.
+          const SliverToBoxAdapter(
+            child: SizedBox(height: HomeShell.navClearance),
           ),
         ],
       ),

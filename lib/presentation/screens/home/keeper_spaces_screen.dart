@@ -9,6 +9,7 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_premium_background.dart';
+import 'home_shell.dart';
 
 /// Keeper tab — active tribes & spaces with live activity signals.
 class KeeperSpacesScreen extends ConsumerWidget {
@@ -74,7 +75,10 @@ class KeeperSpacesScreen extends ConsumerWidget {
                         );
                       },
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                    // Was 24, leaving the last space card under the nav pill.
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: HomeShell.navClearance),
+                    ),
                   ],
                 ),
               );
