@@ -1,5 +1,9 @@
 # Messaging hub + friends page redesign — handoff brief
 
+> Plug Studio (`keeper_home_screen.dart`) was later added to the redesign scope —
+> see `open-issues-2026-08-12.md` §4. Three user-reported defects live there too,
+> and the inbox one (§1) outranks any redesign work on this screen.
+
 Companion to `public-profile-redesign-brief.md`. Written from a structural scan,
 not a full read of either file — the class inventory and the counts below are
 verified; the design reading is argued from them and should be checked against
