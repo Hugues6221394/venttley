@@ -19,6 +19,19 @@ class HomeShell extends ConsumerWidget {
   const HomeShell({super.key, required this.navigationShell});
   final StatefulNavigationShell navigationShell;
 
+  /// Bottom space a scrollable surface must reserve so its last item stays
+  /// reachable.
+  ///
+  /// The shell sets `extendBody: true` and floats the nav as a pill, so content
+  /// scrolls *underneath* it — a surface that reserves nothing leaves its final
+  /// row permanently covered. Covers the 78pt pill plus its padding, outer
+  /// margin and the home-indicator inset.
+  ///
+  /// Exposed as a constant because this was previously duplicated as a bare
+  /// `108` in the feed and simply omitted on the keeper home, which occluded
+  /// that screen's last row of cards.
+  static const double navClearance = 108;
+
   static const _memberTabs = [
     _Tab(CupertinoIcons.house, CupertinoIcons.house_fill, 'Home',
         branchIndex: 0),

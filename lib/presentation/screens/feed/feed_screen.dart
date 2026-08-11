@@ -14,6 +14,7 @@ import '../../../domain/home/home_discovery.dart';
 import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
 import '../../widgets/chat_audio_bubble.dart';
+import '../home/home_shell.dart';
 import '../../widgets/friend_action_button.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/sensitive_media_veil.dart';
@@ -253,8 +254,9 @@ class FeedScreen extends ConsumerWidget {
                           },
                         ),
                       ),
-                    // Clearance for the floating glass nav (extendBody).
-                    const SliverToBoxAdapter(child: SizedBox(height: 108)),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: HomeShell.navClearance),
+                    ),
                   ],
                 );
               },

@@ -7,6 +7,7 @@ import '../../../domain/entities/entities.dart';
 import '../../../domain/keeper/keeper_overview.dart';
 import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
+import 'home_shell.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
@@ -130,7 +131,11 @@ class KeeperHomeScreen extends ConsumerWidget {
                         );
                       },
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 28)),
+                    // Was 28, which left the bottom row of stat cards covered
+                    // by the floating nav pill.
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: HomeShell.navClearance),
+                    ),
                   ],
                 ),
               );
