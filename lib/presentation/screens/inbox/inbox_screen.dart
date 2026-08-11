@@ -14,6 +14,7 @@ import '../../widgets/profile_avatar.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../home/home_shell.dart';
 
 /// Inbox / Chats — premium messaging surface.
 ///
@@ -138,8 +139,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                     ),
                   ],
                   data: (rooms) {
-                    final filtered =
-                        _applyFilter(rooms, _filter, _query.text);
+                    final filtered = _applyFilter(rooms, _filter, _query.text);
                     if (filtered.isEmpty) {
                       return [
                         SliverFillRemaining(
@@ -154,7 +154,12 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                     }
                     return [
                       SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 120),
+                        padding: const EdgeInsets.fromLTRB(
+                          _kListInset,
+                          0,
+                          _kListInset,
+                          HomeShell.navClearance,
+                        ),
                         sliver: SliverList.builder(
                           itemCount: filtered.length,
                           itemBuilder: (ctx, i) {
@@ -202,8 +207,10 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.diversity_3, color: context.ink),
-                title: const Text('Friends',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Friends',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   context.go('/friends');
@@ -212,8 +219,10 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.explore_outlined, color: context.ink),
-                title: const Text('Discover',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Discover',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   context.push('/discover');
@@ -222,8 +231,10 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.groups_outlined, color: context.ink),
-                title: const Text('Tribes',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Tribes',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   context.push('/tribes');
@@ -237,7 +248,10 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   }
 
   List<ChatRoom> _applyFilter(
-      List<ChatRoom> rooms, _InboxFilter filter, String query) {
+    List<ChatRoom> rooms,
+    _InboxFilter filter,
+    String query,
+  ) {
     Iterable<ChatRoom> result = rooms;
     switch (filter) {
       case _InboxFilter.all:
@@ -251,9 +265,11 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
     }
     final q = query.trim().toLowerCase();
     if (q.isNotEmpty) {
-      result = result.where((r) =>
-          r.peerPseudonym.toLowerCase().contains(q) ||
-          r.requestPreview.toLowerCase().contains(q));
+      result = result.where(
+        (r) =>
+            r.peerPseudonym.toLowerCase().contains(q) ||
+            r.requestPreview.toLowerCase().contains(q),
+      );
     }
     return result.toList();
   }
@@ -291,8 +307,11 @@ class _ChatHeader extends StatelessWidget {
           IconButton(
             tooltip: 'More',
             visualDensity: VisualDensity.compact,
-            icon: Icon(Icons.more_horiz_rounded,
-                color: context.inkMuted, size: 22),
+            icon: Icon(
+              Icons.more_horiz_rounded,
+              color: context.inkMuted,
+              size: 22,
+            ),
             onPressed: onMenu,
           ),
           const SizedBox(width: 2),
@@ -346,15 +365,16 @@ class _SearchField extends StatelessWidget {
         height: 42,
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: context.isDark
-              ? context.glass()
-              : const Color(0xFFF5EEF1),
+          color: context.isDark ? context.glass() : const Color(0xFFF5EEF1),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           children: [
-            Icon(Icons.search_rounded,
-                size: 18, color: context.ink.withOpacity(0.42)),
+            Icon(
+              Icons.search_rounded,
+              size: 18,
+              color: context.ink.withOpacity(0.42),
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: TextField(
@@ -384,8 +404,11 @@ class _SearchField extends StatelessWidget {
                   controller.clear();
                   onChanged('');
                 },
-                child: Icon(Icons.close_rounded,
-                    size: 16, color: context.ink.withOpacity(0.4)),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: context.ink.withOpacity(0.4),
+                ),
               ),
           ],
         ),
@@ -433,10 +456,7 @@ class _VibesRail extends StatelessWidget {
                   ),
                   child: const Text(
                     'See all',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
                   ),
                 ),
               ],
@@ -551,7 +571,9 @@ class _TribeChatChip extends StatelessWidget {
                       child: Container(
                         constraints: const BoxConstraints(minWidth: 16),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 1),
+                          horizontal: 4,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: VentlyColors.berryMagenta,
                           borderRadius: BorderRadius.circular(8),
@@ -624,8 +646,11 @@ class _YourVentBubble extends StatelessWidget {
             child: DottedCircle(
               size: 58,
               color: VentlyColors.berryMagenta.withOpacity(0.45),
-              child: const Icon(Icons.add_rounded,
-                  color: VentlyColors.berryMagenta, size: 22),
+              child: const Icon(
+                Icons.add_rounded,
+                color: VentlyColors.berryMagenta,
+                size: 22,
+              ),
             ),
           ),
           const SizedBox(height: 6),
@@ -779,7 +804,9 @@ class _VibeBubble extends ConsumerWidget {
       return;
     }
     try {
-      final room = await ref.read(repositoryProvider).sendMessageRequest(
+      final room = await ref
+          .read(repositoryProvider)
+          .sendMessageRequest(
             peerUserId: friend.userId,
             peerPseudonym: friend.pseudonym,
             peerAvatarSeed: friend.avatarSeed,
@@ -789,8 +816,9 @@ class _VibeBubble extends ConsumerWidget {
     } on DmGatingException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
-      messenger
-          .showSnackBar(SnackBar(content: Text('Could not start chat: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not start chat: $e')),
+      );
     }
   }
 }
@@ -830,8 +858,11 @@ class _PendingRequestsCard extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
-                  child: const Icon(Icons.mark_email_unread_rounded,
-                      color: VentlyColors.berryMagenta, size: 20),
+                  child: const Icon(
+                    Icons.mark_email_unread_rounded,
+                    color: VentlyColors.berryMagenta,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -860,7 +891,10 @@ class _PendingRequestsCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 7),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
@@ -877,8 +911,11 @@ class _PendingRequestsCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 4),
-                Icon(Icons.chevron_right_rounded,
-                    color: context.ink.withOpacity(0.35), size: 20),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: context.ink.withOpacity(0.35),
+                  size: 20,
+                ),
               ],
             ),
           ),
@@ -900,7 +937,8 @@ class _ConversationsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      // Same column as the avatars below it.
+      padding: const EdgeInsets.fromLTRB(_kColumn, 10, _kColumn, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -951,9 +989,7 @@ class _FilterChip extends StatelessWidget {
     return Material(
       color: selected
           ? VentlyColors.berryMagenta
-          : (context.isDark
-              ? context.glass()
-              : const Color(0xFFF5EEF1)),
+          : (context.isDark ? context.glass() : const Color(0xFFF5EEF1)),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
@@ -977,6 +1013,21 @@ class _FilterChip extends StatelessWidget {
 // =========================================================================
 // CONVERSATION ROW
 // =========================================================================
+
+/// One column for the conversation list.
+///
+/// Everything the eye tracks down this screen — the "Messages" heading, the
+/// avatars, the unread pill — keys off [_kColumn]. Previously the heading sat at
+/// 16 while avatars landed at 22 (a 12pt list inset plus the row's own 10pt
+/// padding), so nothing shared an edge.
+///
+/// The row keeps its own padding so the unread tint has a halo around the
+/// content instead of hugging it; the list inset is therefore expressed as the
+/// remainder, which keeps the relationship visible rather than leaving two
+/// magic numbers to drift apart.
+const double _kColumn = 16;
+const double _kRowPad = 10;
+const double _kListInset = _kColumn - _kRowPad;
 
 class _ConversationRow extends ConsumerWidget {
   const _ConversationRow({required this.room});
@@ -1005,20 +1056,21 @@ class _ConversationRow extends ConsumerWidget {
         duration: const Duration(milliseconds: 160),
         curve: Curves.easeOut,
         margin: const EdgeInsets.symmetric(vertical: 2),
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        padding: const EdgeInsets.fromLTRB(_kRowPad, 10, _kRowPad, 10),
         decoration: BoxDecoration(
           color: unread
               ? (context.isDark
-                  ? VentlyColors.berryDesat.withOpacity(0.10)
-                  : VentlyColors.roseTint.withOpacity(0.55))
+                    ? VentlyColors.berryDesat.withOpacity(0.10)
+                    : VentlyColors.roseTint.withOpacity(0.55))
               : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
           children: [
             ProfileAvatar(
-              avatarSeed:
-                  room.isGroup ? 'group-${room.roomId}' : room.peerAvatarSeed,
+              avatarSeed: room.isGroup
+                  ? 'group-${room.roomId}'
+                  : room.peerAvatarSeed,
               label: displayName,
               profilePhotoUrl: avatarUrl,
               size: 52,
@@ -1038,7 +1090,9 @@ class _ConversationRow extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: context.ink,
-                            fontWeight: unread ? FontWeight.w800 : FontWeight.w700,
+                            fontWeight: unread
+                                ? FontWeight.w800
+                                : FontWeight.w700,
                             fontSize: 15,
                             letterSpacing: -0.2,
                           ),
@@ -1053,7 +1107,9 @@ class _ConversationRow extends ConsumerWidget {
                               ? VentlyColors.berryMagenta
                               : context.inkFaint,
                           fontSize: 11,
-                          fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
+                          fontWeight: unread
+                              ? FontWeight.w800
+                              : FontWeight.w600,
                         ),
                       ),
                     ],
@@ -1072,8 +1128,10 @@ class _ConversationRow extends ConsumerWidget {
                       if (room.unreadCount > 0) ...[
                         const SizedBox(width: 8),
                         Container(
-                          constraints:
-                              const BoxConstraints(minWidth: 20, minHeight: 20),
+                          constraints: const BoxConstraints(
+                            minWidth: 20,
+                            minHeight: 20,
+                          ),
                           padding: const EdgeInsets.symmetric(horizontal: 6),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
@@ -1146,9 +1204,13 @@ class _ConversationRow extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.delete_outline, color: context.ink),
-                title: Text('Delete conversation',
-                    style: TextStyle(
-                        color: context.ink, fontWeight: FontWeight.w800)),
+                title: Text(
+                  'Delete conversation',
+                  style: TextStyle(
+                    color: context.ink,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
                   try {
@@ -1228,9 +1290,10 @@ class _ConversationRow extends ConsumerWidget {
                       : VentlyColors.cardBlush,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                      color: sheetCtx.isDark
-                          ? sheetCtx.glassBorder
-                          : VentlyColors.softMauve.withOpacity(0.4)),
+                    color: sheetCtx.isDark
+                        ? sheetCtx.glassBorder
+                        : VentlyColors.softMauve.withOpacity(0.4),
+                  ),
                 ),
                 child: Text(
                   '"${room.requestPreview}"',
@@ -1355,7 +1418,9 @@ class _LastMessageLine extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        color: unread ? context.ink.withOpacity(0.88) : context.ink.withOpacity(0.52),
+        color: unread
+            ? context.ink.withOpacity(0.88)
+            : context.ink.withOpacity(0.52),
         fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
         fontSize: 13,
         height: 1.25,
@@ -1453,8 +1518,11 @@ class _EmptyConversations extends StatelessWidget {
                   : VentlyColors.roseTint,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.chat_bubble_outline,
-                color: VentlyColors.berryMagenta, size: 34),
+            child: const Icon(
+              Icons.chat_bubble_outline,
+              color: VentlyColors.berryMagenta,
+              size: 34,
+            ),
           ),
           const SizedBox(height: 16),
           Text(
@@ -1533,17 +1601,17 @@ class _LoadingSkeleton extends StatelessWidget {
 // MERGED ROOMS PROVIDER
 // =========================================================================
 
-final _allRoomsProvider = FutureProvider.autoDispose<List<ChatRoom>>(
-  (ref) async {
-    ref.watch(inboxStreamProvider);
-    final repo = ref.watch(repositoryProvider);
-    final pending = await repo.inbox('requests');
-    final active = await repo.inbox('active');
-    final all = [...pending, ...active];
-    all.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return all;
-  },
-);
+final _allRoomsProvider = FutureProvider.autoDispose<List<ChatRoom>>((
+  ref,
+) async {
+  ref.watch(inboxStreamProvider);
+  final repo = ref.watch(repositoryProvider);
+  final pending = await repo.inbox('requests');
+  final active = await repo.inbox('active');
+  final all = [...pending, ...active];
+  all.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  return all;
+});
 
 String _smartInboxTimestamp(DateTime timestamp) {
   final now = DateTime.now();

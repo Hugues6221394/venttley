@@ -659,11 +659,15 @@ class _PrivacyDurationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
+    // Material, not a decorated Container: the ListTiles below paint their
+    // background and ink splashes onto the nearest Material ancestor, so a
+    // plain colour box between them and the sheet swallows those effects —
+    // and trips a debug assertion on every build.
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.40)),
+        side: BorderSide(color: VentlyColors.softMauve.withOpacity(0.40)),
       ),
       child: Column(
         children: [
