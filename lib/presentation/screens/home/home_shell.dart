@@ -10,6 +10,7 @@ import '../../widgets/connection_banner.dart';
 import '../../widgets/keeper_content_studio_sheet.dart';
 import '../../widgets/premium_motion.dart';
 import '../../widgets/quick_create_sheet.dart';
+import '../../widgets/whisper_mini_player.dart';
 
 /// Bottom-nav shell — role-aware, floating glass pill per the launch mockups.
 ///
@@ -33,17 +34,37 @@ class HomeShell extends ConsumerWidget {
   static const double navClearance = 108;
 
   static const _memberTabs = [
-    _Tab(CupertinoIcons.house, CupertinoIcons.house_fill, 'Home',
-        branchIndex: 0),
-    _Tab(CupertinoIcons.waveform, CupertinoIcons.waveform, 'Whispers',
-        branchIndex: 1),
+    _Tab(
+      CupertinoIcons.house,
+      CupertinoIcons.house_fill,
+      'Home',
+      branchIndex: 0,
+    ),
+    _Tab(
+      CupertinoIcons.waveform,
+      CupertinoIcons.waveform,
+      'Whispers',
+      branchIndex: 1,
+    ),
     _Tab(Icons.add_rounded, Icons.add_rounded, 'Post', isPost: true),
-    _Tab(CupertinoIcons.person_2, CupertinoIcons.person_2_fill, 'Friends',
-        pushRoute: '/friends'),
-    _Tab(CupertinoIcons.chat_bubble, CupertinoIcons.chat_bubble_fill, 'Inbox',
-        branchIndex: 3),
-    _Tab(CupertinoIcons.person, CupertinoIcons.person_fill, 'Profile',
-        branchIndex: 4),
+    _Tab(
+      CupertinoIcons.person_2,
+      CupertinoIcons.person_2_fill,
+      'Friends',
+      pushRoute: '/friends',
+    ),
+    _Tab(
+      CupertinoIcons.chat_bubble,
+      CupertinoIcons.chat_bubble_fill,
+      'Inbox',
+      branchIndex: 3,
+    ),
+    _Tab(
+      CupertinoIcons.person,
+      CupertinoIcons.person_fill,
+      'Profile',
+      branchIndex: 4,
+    ),
   ];
 
   /// Public for navigation contract tests and accessibility audits.
@@ -51,16 +72,32 @@ class HomeShell extends ConsumerWidget {
       List.unmodifiable(_memberTabs.map((tab) => tab.label));
 
   static const _keeperTabs = [
-    _Tab(Icons.dashboard_outlined, Icons.dashboard_rounded, 'Studio',
-        branchIndex: 0),
-    _Tab(Icons.view_agenda_outlined, Icons.view_agenda_rounded, 'Spaces',
-        branchIndex: 1),
+    _Tab(
+      Icons.dashboard_outlined,
+      Icons.dashboard_rounded,
+      'Studio',
+      branchIndex: 0,
+    ),
+    _Tab(
+      Icons.view_agenda_outlined,
+      Icons.view_agenda_rounded,
+      'Spaces',
+      branchIndex: 1,
+    ),
     _Tab(Icons.add_rounded, Icons.add_rounded, 'Create', isPost: true),
-    _Tab(Icons.groups_outlined, Icons.groups_rounded, 'Members',
-        branchIndex: 3),
+    _Tab(
+      Icons.groups_outlined,
+      Icons.groups_rounded,
+      'Members',
+      branchIndex: 3,
+    ),
     _Tab(Icons.forum_outlined, Icons.forum_rounded, 'Chat', isTribeChat: true),
-    _Tab(Icons.insights_outlined, Icons.insights_rounded, 'Analytics',
-        branchIndex: 4),
+    _Tab(
+      Icons.insights_outlined,
+      Icons.insights_rounded,
+      'Analytics',
+      branchIndex: 4,
+    ),
   ];
 
   @override
@@ -78,47 +115,62 @@ class HomeShell extends ConsumerWidget {
           navigationShell,
           // Floats over content so it never shifts layout; SafeArea inside.
           const Positioned(
-              top: 0, left: 0, right: 0, child: ConnectionBanner()),
+            top: 0,
+            left: 0,
+            right: 0,
+            child: ConnectionBanner(),
+          ),
         ],
       ),
-      bottomNavigationBar: _GlassNavBar(
-        tabs: tabs,
-        currentBranch: navigationShell.currentIndex,
-        currentPath: currentPath,
-        onTapTab: (tab) {
-          if (tab.isPost) {
-            if (studioMode) {
-              showKeeperContentStudioSheet(context, ref);
-            } else {
-              showQuickCreateSheet(context, ref);
-            }
-            return;
-          }
-          if (tab.isTribeChat) {
-            final tribe = ref.read(primaryKeeperTribeProvider);
-            if (tribe != null) {
-              context.push('/tribe/${tribe.slug}/chat');
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Create a tribe first.')),
+      // Column, not an overlay: the mini-player must occupy real layout space or
+      // it covers the last row of every scroll view. Screens reserve
+      // [navClearance] for the pill; adding the player to the same slot means
+      // Scaffold grows the inset and that reservation still holds.
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          WhisperMiniPlayer(onOpen: () => navigationShell.goBranch(1)),
+          _GlassNavBar(
+            tabs: tabs,
+            currentBranch: navigationShell.currentIndex,
+            currentPath: currentPath,
+            onTapTab: (tab) {
+              if (tab.isPost) {
+                if (studioMode) {
+                  showKeeperContentStudioSheet(context, ref);
+                } else {
+                  showQuickCreateSheet(context, ref);
+                }
+                return;
+              }
+              if (tab.isTribeChat) {
+                final tribe = ref.read(primaryKeeperTribeProvider);
+                if (tribe != null) {
+                  context.push('/tribe/${tribe.slug}/chat');
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Create a tribe first.')),
+                  );
+                }
+                return;
+              }
+              if (tab.pushRoute != null) {
+                // Friends lives in the Home branch but is presented as a first-
+                // class tab. A push would leave the previous branch selected
+                // underneath it (for example Friends and Profile both active).
+                // Tab changes replace the shell location so there is exactly one
+                // selected destination and a deterministic back stack.
+                context.go(tab.pushRoute!);
+                return;
+              }
+              navigationShell.goBranch(
+                tab.branchIndex!,
+                initialLocation:
+                    tab.branchIndex == navigationShell.currentIndex,
               );
-            }
-            return;
-          }
-          if (tab.pushRoute != null) {
-            // Friends lives in the Home branch but is presented as a first-
-            // class tab. A push would leave the previous branch selected
-            // underneath it (for example Friends and Profile both active).
-            // Tab changes replace the shell location so there is exactly one
-            // selected destination and a deterministic back stack.
-            context.go(tab.pushRoute!);
-            return;
-          }
-          navigationShell.goBranch(
-            tab.branchIndex!,
-            initialLocation: tab.branchIndex == navigationShell.currentIndex,
-          );
-        },
+            },
+          ),
+        ],
       ),
     );
   }
@@ -210,8 +262,9 @@ class _GlassNavBar extends ConsumerWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color:
-                    VentlyColors.berryMagenta.withOpacity(isDark ? 0.10 : 0.08),
+                color: VentlyColors.berryMagenta.withOpacity(
+                  isDark ? 0.10 : 0.08,
+                ),
                 blurRadius: 28,
                 spreadRadius: -10,
                 offset: const Offset(0, 9),
@@ -230,7 +283,9 @@ class _GlassNavBar extends ConsumerWidget {
                 Expanded(
                   child: tab.isPost
                       ? _PostNavButton(
-                          label: tab.label, onTap: () => onTapTab(tab))
+                          label: tab.label,
+                          onTap: () => onTapTab(tab),
+                        )
                       : _NavItem(
                           tab: tab,
                           selected: selectedFor(tab),
@@ -317,10 +372,14 @@ class _NavItem extends StatelessWidget {
                   right: 8,
                   top: 2,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                    constraints:
-                        const BoxConstraints(minWidth: 19, minHeight: 19),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 19,
+                      minHeight: 19,
+                    ),
                     decoration: BoxDecoration(
                       gradient: VentlyGradients.brand,
                       borderRadius: BorderRadius.circular(12),
