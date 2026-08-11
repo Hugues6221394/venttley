@@ -3,8 +3,8 @@
 Three user-reported defects plus one added redesign target. Written at a session
 boundary; hypotheses are marked as such and need confirming before any fix.
 
-Ranked by user impact. Fix #1 first — messaging correctness outranks everything
-visual in this list.
+Ranked by user impact. #1 is fixed; #2 is root-caused but unfixed; #3 is
+uninvestigated.
 
 ---
 
@@ -16,35 +16,30 @@ when I enter in chats it's empty… I doubt the reliability of the app."
 **Confirmed independently.** A simulator capture of the inbox during the same
 session shows a row reading `HealingSlow · Hey · 7/15`.
 
-**Hypothesis (untested): the preview is not a message.**
-`start_chat_room(p_target, p_preview, p_origin_post_id)` writes `p_preview` into
-`chat_rooms.request_preview` — a column on the *room*, not a row in
-`chat_messages`. If `_LastMessageLine` (`inbox_screen.dart:1313`) falls back to
-`request_preview` when a room has no messages, the list advertises text that was
-never sent, and the chat is correctly empty because nothing exists.
+**FIXED — `f8f37df`.** Confirmed by reading the code, not by querying:
+`_LastMessageLine` read `room.lastMessagePreview ?? room.requestPreview`, and
+`requestPreview` is a column `start_chat_room` writes on `chat_rooms`, not a row
+in `chat_messages`. A room with no messages therefore rendered text nobody had
+sent, and the empty chat was correct all along.
 
-If that holds it is a **display bug, not data loss** — nothing is being lost,
-the list is lying. Still serious: it makes the app feel unreliable, which on this
-product is the whole asset.
+**Nothing was ever lost.** Delivery, storage and retrieval were all working — the
+list was displaying a field that is not a message. Worth telling the user
+explicitly, since they said this made them doubt the app's reliability.
 
-**Confirm first:** does that room have any `chat_messages` rows?
+Requests already have their own branch a few lines above ("Wants to chat"), so
+that fallback was only ever reached by non-request rooms, where a request preview
+has no meaning. Removed; such rooms now fall through to the existing "Tap to open
+chat".
 
-```sql
-SELECT count(*) FROM public.chat_messages WHERE room_id = '<room>';
-SELECT room_status, request_preview FROM public.chat_rooms WHERE room_id = '<room>';
-```
+Left deliberately: the request *sheet* still renders `requestPreview` in italic
+quotes, where it genuinely is the sender's note. The search filter
+(`inbox_screen.dart:271`) still matches on it — harmless, though it means you can
+now match text the row does not display.
 
-Zero messages + non-empty `request_preview` confirms it.
+`premium_chats`, the inbox golden, passed unchanged — evidence the fix is narrow.
 
-**Rule out:** disappearing messages. `set_room_disappearing` exists and the
-inbox renders "Disappearing messages turned off" on one room, so expired message
-rows alongside a surviving denormalised preview would look identical and needs a
-different fix.
-
-**Then decide the contract:** either the inbox never shows `request_preview` as
-if it were a message (render it as "wants to connect" instead), or accepting a
-request materialises the preview into a real first message. The first is
-honest and smaller.
+Disappearing messages (`set_room_disappearing`) were considered as an alternative
+cause and are **not** implicated; the fallback fully explains the symptom.
 
 ---
 
