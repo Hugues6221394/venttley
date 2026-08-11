@@ -119,3 +119,49 @@ Carried from the profile brief because they cost real time to learn:
 - The shell's `grep` failed mid-session with a "claude native binary not
   installed" error inside loops, returning silently empty results. Verify with
   Python if tooling looks wrong.
+
+## Measured: the inbox's left edge never settles
+
+Verified by scanning every horizontal inset in `inbox_screen.dart`. Reading down
+the screen, section content starts at:
+
+| Section | Left inset |
+| --- | --- |
+| `_ChatHeader` | 20 |
+| `_SearchField` | 16 (inner 14) |
+| `_VibesRail` heading / rail body | 16 / **14** |
+| `_TribeChatsRail` heading / rail body | 16 / **14** |
+| `_PendingRequestsCard` | 14 |
+| `_ConversationsHeader` | 16 |
+| conversation list | **12**, plus 10 inside `_ConversationRow` |
+| `_LoadingSkeleton` | 16 |
+
+Six values on one vertical axis, so no two sections share a column. Two are
+outright defects of the kind already fixed on the feed greeting
+(`feed_screen.dart:531`, commit `7853c49`):
+
+- a rail heading at 16 with its chips at 14 — twice, in `_VibesRail` and
+  `_TribeChatsRail`
+- `_ConversationsHeader` at 16 above a list at 12, whose rows then add 10 of
+  their own, so the heading and the avatars beneath it are ~6px apart
+
+This is the most probable reason the hub reads as unpolished, ahead of any
+single widget's styling. Establishing one section inset and applying it to
+headings, card margins and the list — while leaving genuinely internal
+component padding alone — is the highest-value first change.
+
+Which value is a judgement call needing the running app: 16 is the de facto
+standard here (five sections use it), while the feed uses 20 throughout, so
+matching the feed would also make the two main surfaces agree.
+
+**Not applied.** Every candidate change shifts `premium_chats.png` and needs a
+visual pass to confirm the rails still read as aligned with their headings —
+chips carry their own internal padding, so matching numbers is not the same as
+matching optical alignment.
+
+### Verified as *not* problems
+
+- All three rails are correctly conditional: `_VibesRail` guards on
+  `friends.isNotEmpty`, `_PendingRequestsCard` on `pending > 0`, and
+  `_TribeChatsRail` self-hides with `SizedBox.shrink()` on loading, error and
+  empty. It looked unconditional at the call site (line 108); it is not.
