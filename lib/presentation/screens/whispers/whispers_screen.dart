@@ -77,8 +77,44 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
     );
   }
 
+  /// True only while this shell branch is the visible one.
+  ///
+  /// StatefulShellRoute.indexedStack keeps every branch mounted — go_router wraps
+  /// them in `Offstage(offstage: !isActive, child: TickerMode(enabled: isActive))`
+  /// — so this screen is built and alive while the user is on Home. TickerMode is
+  /// therefore the honest signal for "am I on screen", and without it the
+  /// bootstrap below started audio from a page nobody had opened.
+  bool get _onStage => TickerMode.of(context);
+
+  bool? _wasOnStage;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final onStage = _onStage;
+    if (onStage == _wasOnStage) return;
+    _wasOnStage = onStage;
+    if (!onStage) {
+      // Leaving the tab: silence it, and clear the bootstrap flag so coming back
+      // re-runs the existing autoplay path rather than returning to a dead page.
+      // Playback that should survive leaving belongs to a mini-player, not here.
+      _bootstrapped = false;
+      unawaited(_pauseOffStage());
+    }
+  }
+
+  Future<void> _pauseOffStage() async {
+    try {
+      final controller = await ref.read(whisperPlayerProvider.future);
+      await controller.pause();
+    } catch (_) {/* nothing playing, or the player is gone */}
+  }
+
   Future<void> _onPageChanged(int index, List<Whisper> whispers) async {
     if (!mounted) return;
+    // The bootstrap and deep-link paths both run in post-frame callbacks, so
+    // re-check here rather than trusting the caller.
+    if (!_onStage) return;
     HapticFeedback.lightImpact();
     setState(() => _currentIndex = index);
 
@@ -184,7 +220,7 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
               _whispers = whispers;
               _scrollToDeepLink(whispers);
 
-              if (!_bootstrapped) {
+              if (!_bootstrapped && _onStage) {
                 _bootstrapped = true;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _onPageChanged(_currentIndex, whispers);
