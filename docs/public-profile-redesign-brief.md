@@ -4,7 +4,7 @@ Written at the end of a session that ran out of context before the redesign
 could start. Everything below is verified against the code, not remembered.
 
 **Target file:** `lib/presentation/screens/friends/friend_profile_screen.dart`
-(1,795 lines). Route: `/user/:userId`, plus `/user/:userId/stat/:statKind`.
+(1,840 lines). Route: `/user/:userId`, plus `/user/:userId/stat/:statKind`.
 
 ## Goal
 
@@ -17,21 +17,31 @@ trustworthy here; density and ornament read as a growth product.
 
 Sliver order inside the profile body:
 
-| Widget | Line (pre-redesign) | Notes |
+| Widget | Line | Notes |
 | --- | --- | --- |
-| `_FriendProfileBody` | 100 | owns the sliver list |
-| `_Hero` | 464 | wraps banner + avatar + identity |
-| `_HeroBanner` | 619 | photo header |
-| `_BrandBanner` | 668 | fallback when no photo |
-| `_HeroAvatar` | 691 | **tap-to-preview + semantics label — keep both** |
-| `_MetaPill` | 766 | pronouns, current mood |
-| `_StatsBanner` | 795 | stat band |
-| `_MessageButton` | 850 | DM CTA |
-| `_Highlights` / `_HighlightCard` | 1092 / 1123 | |
-| `_MutualsSection` | 1194 | |
-| `_StrangerCallout` | 1286 | shown to non-friends |
-| Tabs | `_VentsTab` 189, `_AchievementsTab` 304, `_ActivityTab` 330 | |
-| `_StreakCard` 357, `_VibeLevelBar` 403 | | |
+| `_FriendProfileBody` | 99 | owns the sliver list |
+| `_Hero` | 465 | wraps banner + avatar + identity |
+| `_HeroBanner` | 620 | photo header |
+| `_BrandBanner` | 669 | fallback when no photo |
+| `_HeroAvatar` | 692 | **tap-to-preview + semantics label — keep both** |
+| `_MetaPill` | 767 | pronouns, current mood |
+| `_StatsBanner` | 796 | stat band |
+| `_MessageButton` / `State` | 851 / 859 | dimmed + hinted for restricted minors; tap stays enabled on purpose |
+| `_Highlights` / `_HighlightCard` | 972 / 1003 | |
+| `_MutualsSection` | 1074 | |
+| `_StrangerCallout` | 1168 | shown to non-friends |
+| `_BlockedNotice` | 1211 | |
+| `_SectionTitle` / `_NotAvailable` | 1245 / 1266 | |
+| `_ActivityHeatmap` | 1300 | + `_HeatmapCell` 1472, `_HeatmapDot` 1479 |
+| `_WhispersSection` | 1537 | |
+| `_QuestionsSection` | 1586 | |
+| `_WhisperMiniCard` | 1630 | |
+| `_TribesSection` | 1733 | |
+| Tabs | `_VentsTab` 186 (`State` 194), `_AchievementsTab` 303, `_ActivityTab` 329 | |
+| `_StreakCard` 356, `_VibeLevelBar` 402 | | |
+
+Line numbers verified at commit `b2c0560`; the file is 1,840 lines. Re-derive
+them before trusting this table — two changes have already shifted it.
 
 A mood distribution ring used to sit between the stat band and the tabs. It was
 removed (`420ff4d`) because mood changes daily and nobody maintains the
@@ -86,17 +96,25 @@ now is a different claim from an inferred trend.
 - What does a stranger most need to see to feel safe messaging this person?
   That answer should drive the sliver order.
 
-## Higher priority than this redesign
+## Security work already landed (context, not a to-do)
 
-Three **unrun** migrations sit in `supabase/migrations/`:
+The age floor and minor tier are now enforced server-side. `handle_new_auth_user()`
+used to read `safety_tier` and `birth_year` from client-supplied signup
+metadata, so both the under-13 gate and the minor DM restriction were
+bypassable with the anon key that ships in the app.
+
+Applied by hand in the Supabase SQL editor, then committed as `474ed98`:
 `20260811010000_enforce_age_floor_server_side.sql`,
 `20260811020000_restrict_minor_dm_initiation.sql`,
 `20260811030000_backfill_derived_safety_tier.sql`.
 
-`handle_new_auth_user()` reads `safety_tier` and `birth_year` from
-client-supplied signup metadata, so the under-13 gate and the minor DM
-restriction are both bypassable using the shipped anon key. On a platform
-serving 13–17 year olds that is a compliance exposure. Run `010000` first and
-test a signup immediately — it replaces the trigger firing on every
-`auth.users` insert. They are unvalidated (no Docker locally); CI's `database`
-job replays them.
+`b2c0560` wired the client side: `canInitiateDm` → `dmInitiationAllowedProvider`
+→ `_MessageButton`, which dims and carries a Semantics hint but **keeps the tap
+enabled on purpose**. `can_initiate_dm` is false for a restricted minor even
+when a room already exists, while `start_chat_room` refuses only *new* rooms —
+so a hard disable would strand a minor whose adult friend opened the thread.
+Preserve that distinction if you touch the CTA.
+
+Still open: `isRestrictedMinor` in `entities.dart` has zero call sites. Other
+restrictions the README claims for the tier (no external links) are enforced
+nowhere. Worth an audit of what else it is meant to gate.
