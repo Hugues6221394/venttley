@@ -795,6 +795,14 @@ class VentlyRepository {
     return Future.value(enabled);
   }
 
+  /// Whether the signed-in user may START a new DM with [targetUserId].
+  /// Mock mode has no tier data, so it permits — matching canReplyToStory.
+  Future<bool> canInitiateDm(String targetUserId) {
+    final live = _live;
+    if (live != null) return live.canInitiateDm(targetUserId);
+    return Future.value(true);
+  }
+
   Future<bool> canReplyToStory(String postId) {
     final live = _live;
     if (live != null) return live.canReplyToStory(postId);

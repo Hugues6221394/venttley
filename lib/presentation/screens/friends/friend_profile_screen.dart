@@ -41,9 +41,7 @@ class FriendProfileScreen extends ConsumerWidget {
         if (context.mounted) context.go('/profile');
       });
       // Spinner (not an empty box) so the hand-off never flashes blank.
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final async = ref.watch(userProfileProvider(userId));
@@ -64,8 +62,9 @@ class FriendProfileScreen extends ConsumerWidget {
           child: IconButton(
             tooltip: 'Back',
             style: IconButton.styleFrom(
-              backgroundColor:
-                  Theme.of(context).colorScheme.surface.withOpacity(0.82),
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.surface.withOpacity(0.82),
             ),
             icon: const Icon(Icons.arrow_back_rounded),
             onPressed: () => context.pop(),
@@ -223,11 +222,13 @@ class _VentsTabState extends ConsumerState<_VentsTab> {
   Future<void> _loadMore() async {
     final first =
         ref.read(userPostsProvider(widget.profile.userId)).valueOrNull ??
-            const <Post>[];
+        const <Post>[];
     setState(() => _loadingMore = true);
     try {
       final offset = first.length + _extraPosts.length;
-      final next = await ref.read(repositoryProvider).postsByAuthor(
+      final next = await ref
+          .read(repositoryProvider)
+          .postsByAuthor(
             widget.profile.userId,
             limit: _pageSize,
             offset: offset,
@@ -253,7 +254,7 @@ class _VentsTabState extends ConsumerState<_VentsTab> {
   Widget build(BuildContext context) {
     final firstPosts =
         ref.watch(userPostsProvider(widget.profile.userId)).valueOrNull ??
-            const <Post>[];
+        const <Post>[];
     final posts = [...firstPosts, ..._extraPosts];
 
     return ListView(
@@ -422,8 +423,10 @@ class _VibeLevelBar extends StatelessWidget {
             children: [
               Text(
                 'Vibe level $tier',
-                style:
-                    const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
               ),
               const Spacer(),
               if (mood != null)
@@ -466,13 +469,15 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final daysSince =
-        DateTime.now().difference(profile.joinedAt).inDays.clamp(0, 999999);
+    final daysSince = DateTime.now()
+        .difference(profile.joinedAt)
+        .inDays
+        .clamp(0, 999999);
     final joinedLabel = daysSince < 7
         ? 'Just joined'
         : daysSince < 365
-            ? 'Joined ${daysSince ~/ 7} weeks ago'
-            : 'Joined ${(daysSince / 365).toStringAsFixed(1)} years ago';
+        ? 'Joined ${daysSince ~/ 7} weeks ago'
+        : 'Joined ${(daysSince / 365).toStringAsFixed(1)} years ago';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
@@ -514,9 +519,7 @@ class _Hero extends StatelessWidget {
                           '@${profile.pseudonym}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
+                          style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(
                                 fontWeight: FontWeight.w900,
                                 letterSpacing: -0.3,
@@ -798,33 +801,33 @@ class _StatsBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     Widget stat(String value, String label) => Expanded(
-          child: Column(
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 20,
-                  color: scheme.primary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onSurface.withOpacity(0.6),
-                ),
-              ),
-            ],
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 20,
+              color: scheme.primary,
+            ),
           ),
-        );
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: scheme.onSurface.withOpacity(0.6),
+            ),
+          ),
+        ],
+      ),
+    );
     Widget divider() => Container(
-          width: 1,
-          height: 34,
-          color: scheme.primary.withOpacity(0.12),
-        );
+      width: 1,
+      height: 34,
+      color: scheme.primary.withOpacity(0.12),
+    );
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
@@ -873,13 +876,25 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
       // Shouldn't happen (we only render this button when isFriend),
       // but defensive: friendship can change between render and tap.
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
+      // The server refuses new rooms for restricted minors (migration
+      // 20260811020000). Surfacing the raw PostgrestException here would tell
+      // the user nothing about why, on an action they did nothing wrong to
+      // trigger.
+      final blocked = e.toString().contains('minor_dm_initiation_blocked');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not start chat: $e')),
+        SnackBar(
+          content: Text(
+            blocked
+                ? 'Accounts registered as 13-17 can reply to chats, but not '
+                      'start new ones.'
+                : 'Could not start chat: $e',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -889,50 +904,66 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
+    // Advisory only. can_initiate_dm is false for a restricted minor even when
+    // a room already exists, while the server refuses new rooms only — so this
+    // dims the CTA to set expectations without blocking the tap, which would
+    // strand a minor whose friend opened the thread.
+    final mayStartNew =
+        ref
+            .watch(dmInitiationAllowedProvider(widget.profile.userId))
+            .valueOrNull ??
+        true;
+    final accent = mayStartNew
+        ? scheme.primary
+        : scheme.onSurface.withOpacity(0.45);
+    return Semantics(
+      button: true,
+      hint: mayStartNew
+          ? null
+          : 'Accounts registered as 13-17 cannot start new chats',
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(20),
-        onTap: _busy ? null : _openOrCreateRoom,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.primary.withOpacity(0.6)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_busy)
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: scheme.primary,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: _busy ? null : _openOrCreateRoom,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: accent.withOpacity(0.6)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_busy)
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: accent,
+                    ),
+                  )
+                else
+                  Icon(Icons.chat_bubble_outline, size: 15, color: accent),
+                const SizedBox(width: 6),
+                Text(
+                  'Message',
+                  style: TextStyle(
+                    color: accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
                   ),
-                )
-              else
-                Icon(Icons.chat_bubble_outline,
-                    size: 15, color: scheme.primary),
-              const SizedBox(width: 6),
-              Text(
-                'Message',
-                style: TextStyle(
-                  color: scheme.primary,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 }
-
 
 // ─────────────────────── Badges (legacy row removed — see BadgeShelf) ─────
 
@@ -1079,9 +1110,11 @@ class _MutualsSection extends StatelessWidget {
                       height: 36,
                       child: Stack(
                         children: [
-                          for (var i = 0;
-                              i < profile.mutualFriendSample.length;
-                              i++)
+                          for (
+                            var i = 0;
+                            i < profile.mutualFriendSample.length;
+                            i++
+                          )
                             Positioned(
                               left: i * 24.0,
                               child: UserProfileLink(
@@ -1242,10 +1275,11 @@ class _NotAvailable extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.lock_person,
-                size: 36,
-                color:
-                    Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
+            Icon(
+              Icons.lock_person,
+              size: 36,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+            ),
             const SizedBox(height: 8),
             Text(
               message,
@@ -1314,8 +1348,10 @@ class _ActivityHeatmap extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text('Activity',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text(
+                  'Activity',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 const Spacer(),
                 Text(
                   '$total in 90 days',
@@ -1422,24 +1458,22 @@ class _ActivityHeatmap extends StatelessWidget {
   }
 
   static String _weekdayName(int i) => switch (i) {
-        0 => 'Mon',
-        1 => 'Tue',
-        2 => 'Wed',
-        3 => 'Thu',
-        4 => 'Fri',
-        5 => 'Sat',
-        6 => 'Sun',
-        _ => '',
-      };
+    0 => 'Mon',
+    1 => 'Tue',
+    2 => 'Wed',
+    3 => 'Thu',
+    4 => 'Fri',
+    5 => 'Sat',
+    6 => 'Sun',
+    _ => '',
+  };
 }
 
 class _HeatmapCell {
   final DateTime? day;
   final int count;
   const _HeatmapCell({required this.day, required this.count});
-  const _HeatmapCell.empty()
-      : day = null,
-        count = 0;
+  const _HeatmapCell.empty() : day = null, count = 0;
 }
 
 class _HeatmapDot extends StatelessWidget {
@@ -1489,10 +1523,10 @@ Color _heatmapColor(double intensity, Color accent, ColorScheme scheme) {
   final step = intensity < 0.25
       ? 0.25
       : intensity < 0.5
-          ? 0.5
-          : intensity < 0.75
-              ? 0.75
-              : 1.0;
+      ? 0.5
+      : intensity < 0.75
+      ? 0.75
+      : 1.0;
   return accent.withOpacity(0.18 + step * 0.65);
 }
 
@@ -1624,8 +1658,11 @@ class _WhisperMiniCard extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
-                  child: const Icon(Icons.play_arrow_rounded,
-                      color: Colors.white, size: 18),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -1637,8 +1674,11 @@ class _WhisperMiniCard extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                Icon(Icons.favorite_border,
-                    size: 12, color: context.ink.withOpacity(0.6)),
+                Icon(
+                  Icons.favorite_border,
+                  size: 12,
+                  color: context.ink.withOpacity(0.6),
+                ),
                 const SizedBox(width: 3),
                 Text(
                   '${whisper.likesCount}',
@@ -1742,12 +1782,16 @@ class _TribesSection extends ConsumerWidget {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color:
-                                  VentlyColors.berryMagenta.withOpacity(0.12),
+                              color: VentlyColors.berryMagenta.withOpacity(
+                                0.12,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.diversity_3,
-                                color: VentlyColors.berryMagenta, size: 20),
+                            child: const Icon(
+                              Icons.diversity_3,
+                              color: VentlyColors.berryMagenta,
+                              size: 20,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -1777,8 +1821,10 @@ class _TribesSection extends ConsumerWidget {
                               ],
                             ),
                           ),
-                          const Icon(Icons.chevron_right_rounded,
-                              color: VentlyColors.softMauve),
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            color: VentlyColors.softMauve,
+                          ),
                         ],
                       ),
                     ),

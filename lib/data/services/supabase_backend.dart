@@ -1040,6 +1040,17 @@ class SupabaseBackend {
     return (result as bool?) ?? enabled;
   }
 
+  /// Server-side gate from migration 20260811020000: friendship + no block,
+  /// AND the caller is not a restricted minor. Kept separate from can_dm so
+  /// that function keeps its original meaning for other call sites.
+  Future<bool> canInitiateDm(String targetUserId) async {
+    final result = await _client.rpc(
+      'can_initiate_dm',
+      params: {'p_target': targetUserId},
+    );
+    return (result as bool?) ?? false;
+  }
+
   Future<bool> canReplyToStory(String postId) async {
     final result = await _client.rpc(
       'can_reply_to_story',
