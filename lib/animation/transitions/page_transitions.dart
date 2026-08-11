@@ -1,6 +1,3 @@
-// [CupertinoPageTransitionsBuilder] lives in the Cupertino library; the
-// Material library only references it in docs.
-import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
 import 'fade_scale.dart';
@@ -11,15 +8,17 @@ export 'shared_axis.dart';
 
 /// The app-wide transition theme.
 ///
-/// iOS keeps the Cupertino builder on purpose: it preserves the native
-/// edge-swipe back gesture, which is worth more than a custom curve to an
-/// iPhone user. Everything else gets the shared-axis system.
+/// iOS gets [CupertinoSharedAxisPageTransitionsBuilder]: the shared-axis fade
+/// and scale settle layered over Cupertino's own transition, so the native
+/// edge-swipe back gesture — which is worth more to an iPhone user than any
+/// curve — keeps working. Previously iOS used the plain Cupertino builder,
+/// which meant none of the designed motion ran there at all.
 class VentlyPageTransitions {
   VentlyPageTransitions._();
 
   static const PageTransitionsTheme theme = PageTransitionsTheme(builders: {
     TargetPlatform.android: SharedAxisPageTransitionsBuilder(),
-    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+    TargetPlatform.iOS: CupertinoSharedAxisPageTransitionsBuilder(),
     TargetPlatform.macOS: SharedAxisPageTransitionsBuilder(),
     TargetPlatform.linux: SharedAxisPageTransitionsBuilder(),
     TargetPlatform.windows: SharedAxisPageTransitionsBuilder(),
