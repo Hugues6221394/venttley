@@ -106,7 +106,14 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
       }
       // Autoplayed. Silence it — this is the case that was the reported bug.
       unawaited(_pauseOffStage());
-      ref.read(activeWhisperProvider.notifier).state = null;
+      // Deferred deliberately: didChangeDependencies can run during a build, and
+      // mutating a provider then throws "Tried to modify a provider while the
+      // widget tree was building" — which cascaded into render assertions and a
+      // blank shell.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(activeWhisperProvider.notifier).state = null;
+      });
     }
   }
 
@@ -153,11 +160,21 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
       _wireAutoAdvance(controller);
       await controller.startPlayback(whisperId: w.whisperId, url: w.audioUrl);
       if (mounted) {
+        // Re-entering the tab replays the current page with byUser false. That
+        // must not erase intent the user already expressed for this whisper, or
+        // tapping the mini-player to return would silently strip its right to
+        // follow them out again.
+        final prior = ref.read(activeWhisperProvider);
+        final chosen =
+            byUser ||
+            (prior != null &&
+                prior.whisperId == w.whisperId &&
+                prior.startedByUser);
         ref.read(activeWhisperProvider.notifier).state = ActiveWhisper(
           whisperId: w.whisperId,
           title: (w.title ?? '').trim().isEmpty ? 'Whisper' : w.title!.trim(),
           author: w.authorPseudonym,
-          startedByUser: byUser,
+          startedByUser: chosen,
         );
       }
       // Capture this listener (dedup per user; first listen bumps the public

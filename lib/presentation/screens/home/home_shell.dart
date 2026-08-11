@@ -120,57 +120,49 @@ class HomeShell extends ConsumerWidget {
             right: 0,
             child: ConnectionBanner(),
           ),
+          // Draggable, so it lives in the Stack rather than the nav slot. The
+          // user can move it off anything it covers, or dismiss it.
+          WhisperMiniPlayer(onOpen: () => navigationShell.goBranch(1)),
         ],
       ),
-      // Column, not an overlay: the mini-player must occupy real layout space or
-      // it covers the last row of every scroll view. Screens reserve
-      // [navClearance] for the pill; adding the player to the same slot means
-      // Scaffold grows the inset and that reservation still holds.
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          WhisperMiniPlayer(onOpen: () => navigationShell.goBranch(1)),
-          _GlassNavBar(
-            tabs: tabs,
-            currentBranch: navigationShell.currentIndex,
-            currentPath: currentPath,
-            onTapTab: (tab) {
-              if (tab.isPost) {
-                if (studioMode) {
-                  showKeeperContentStudioSheet(context, ref);
-                } else {
-                  showQuickCreateSheet(context, ref);
-                }
-                return;
-              }
-              if (tab.isTribeChat) {
-                final tribe = ref.read(primaryKeeperTribeProvider);
-                if (tribe != null) {
-                  context.push('/tribe/${tribe.slug}/chat');
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Create a tribe first.')),
-                  );
-                }
-                return;
-              }
-              if (tab.pushRoute != null) {
-                // Friends lives in the Home branch but is presented as a first-
-                // class tab. A push would leave the previous branch selected
-                // underneath it (for example Friends and Profile both active).
-                // Tab changes replace the shell location so there is exactly one
-                // selected destination and a deterministic back stack.
-                context.go(tab.pushRoute!);
-                return;
-              }
-              navigationShell.goBranch(
-                tab.branchIndex!,
-                initialLocation:
-                    tab.branchIndex == navigationShell.currentIndex,
+      bottomNavigationBar: _GlassNavBar(
+        tabs: tabs,
+        currentBranch: navigationShell.currentIndex,
+        currentPath: currentPath,
+        onTapTab: (tab) {
+          if (tab.isPost) {
+            if (studioMode) {
+              showKeeperContentStudioSheet(context, ref);
+            } else {
+              showQuickCreateSheet(context, ref);
+            }
+            return;
+          }
+          if (tab.isTribeChat) {
+            final tribe = ref.read(primaryKeeperTribeProvider);
+            if (tribe != null) {
+              context.push('/tribe/${tribe.slug}/chat');
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Create a tribe first.')),
               );
-            },
-          ),
-        ],
+            }
+            return;
+          }
+          if (tab.pushRoute != null) {
+            // Friends lives in the Home branch but is presented as a first-
+            // class tab. A push would leave the previous branch selected
+            // underneath it (for example Friends and Profile both active).
+            // Tab changes replace the shell location so there is exactly one
+            // selected destination and a deterministic back stack.
+            context.go(tab.pushRoute!);
+            return;
+          }
+          navigationShell.goBranch(
+            tab.branchIndex!,
+            initialLocation: tab.branchIndex == navigationShell.currentIndex,
+          );
+        },
       ),
     );
   }
