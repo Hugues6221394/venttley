@@ -11,7 +11,11 @@ belongs to the other agent.
 
 ## Resume here
 
-One question is blocking, and it is a product decision only you can make.
+**First task, already approved: keyset pagination.** Do it without waiting for
+anything — items (1) and (2) below carry no product decision. Start there.
+
+The ranking question (item 3) stays open until the user answers it; do not pick
+one unilaterally.
 
 ### The whispers feed at scale
 
@@ -35,7 +39,8 @@ implementation, there are three separate problems:
    actual gap behind your request — it is unachievable client-side because there
    is no suggestion signal, only recency.
 
-**(1) and (2) are mechanical — no product decision, pure win. Do them first.**
+**(1) and (2) are mechanical — no product decision, pure win. APPROVED: do these
+first thing, before anything else in this file.**
 
 **(3) needs your answer.** Pick one:
 
