@@ -61,16 +61,26 @@ final miniPlayerOffsetProvider = StateProvider<Offset?>((ref) => null);
 /// Renders nothing unless there is something to show, so it is safe to mount
 /// unconditionally in [HomeShell]'s Stack.
 class WhisperMiniPlayer extends ConsumerWidget {
-  const WhisperMiniPlayer({super.key, required this.onOpen});
+  const WhisperMiniPlayer({
+    super.key,
+    required this.onOpen,
+    required this.onWhispersTab,
+  });
 
   /// Returns to the Whispers tab. Kept as a callback because only the shell can
   /// switch branches without pushing a second copy of the screen.
   final VoidCallback onOpen;
 
+  /// True while the Whispers branch is the visible one. The player is redundant
+  /// there — the full transport is already on screen — and worse, it floats over
+  /// it and steals drags meant for the page.
+  final bool onWhispersTab;
+
   static const double height = 56;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (onWhispersTab) return const SizedBox.shrink();
     final active = ref.watch(activeWhisperProvider);
     if (active == null || !active.startedByUser) {
       return const SizedBox.shrink();

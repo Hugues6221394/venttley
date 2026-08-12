@@ -122,7 +122,10 @@ class HomeShell extends ConsumerWidget {
           ),
           // Draggable, so it lives in the Stack rather than the nav slot. The
           // user can move it off anything it covers, or dismiss it.
-          WhisperMiniPlayer(onOpen: () => navigationShell.goBranch(1)),
+          WhisperMiniPlayer(
+            onOpen: () => navigationShell.goBranch(1),
+            onWhispersTab: navigationShell.currentIndex == 1 && !studioMode,
+          ),
         ],
       ),
       bottomNavigationBar: _GlassNavBar(
