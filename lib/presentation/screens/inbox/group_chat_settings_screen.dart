@@ -39,8 +39,9 @@ class _GroupChatSettingsScreenState
 
   void _show(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -127,7 +128,8 @@ class _GroupSettingsBody extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final membersAsync = ref.watch(groupChatMembersProvider(room.roomId));
     final members = membersAsync.valueOrNull ?? const <GroupChatMember>[];
-    final prefs = ref.watch(dmRoomPrefsProvider(room.roomId)).valueOrNull ??
+    final prefs =
+        ref.watch(dmRoomPrefsProvider(room.roomId)).valueOrNull ??
         DmRoomPrefs.empty;
     final avatarUrl = room.groupAvatarPath == null
         ? null
@@ -143,18 +145,18 @@ class _GroupSettingsBody extends ConsumerWidget {
               GestureDetector(
                 onTap: avatarUrl == null
                     ? (room.isGroupOwner
-                        ? () => _editIdentity(context, ref, avatarUrl)
-                        : null)
+                          ? () => _editIdentity(context, ref, avatarUrl)
+                          : null)
                     : () => showMediaPreview(
-                          context,
-                          items: [
-                            MediaPreviewItem(
-                              url: avatarUrl,
-                              label: '$_title group photo',
-                            ),
-                          ],
-                          title: _title,
-                        ),
+                        context,
+                        items: [
+                          MediaPreviewItem(
+                            url: avatarUrl,
+                            label: '$_title group photo',
+                          ),
+                        ],
+                        title: _title,
+                      ),
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -237,10 +239,9 @@ class _GroupSettingsBody extends ConsumerWidget {
               active: prefs.muted,
               enabled: !working,
               onTap: () => run(() async {
-                await ref.read(repositoryProvider).setDmRoomPref(
-                      roomId: room.roomId,
-                      muted: !prefs.muted,
-                    );
+                await ref
+                    .read(repositoryProvider)
+                    .setDmRoomPref(roomId: room.roomId, muted: !prefs.muted);
                 ref.invalidate(dmRoomPrefsProvider(room.roomId));
               }),
             ),
@@ -259,19 +260,33 @@ class _GroupSettingsBody extends ConsumerWidget {
           subtitle: 'Theme and font',
           onTap: () => _customize(context, ref, prefs),
         ),
+        // Two different flags gate this row, and it used to describe one while
+        // enabling on the other: the subtitle reported groupInviteEnabled, while
+        // `enabled` keyed off whether THIS user may invite. The result was a
+        // greyed-out row that either read "Share a private link to this group"
+        // or "Invite link is disabled" — neither of which says who can fix it,
+        // and tapping did nothing. Say which of the two reasons applies, and for
+        // the one the viewer can act on, say where.
         _SettingsTile(
           icon: Icons.link_rounded,
           title: 'Invite link',
-          subtitle: room.groupInviteEnabled
+          subtitle: !inviteAllowed
+              ? 'Only the group owner can invite people'
+              : room.groupInviteEnabled
               ? 'Share a private link to this group'
-              : 'Invite link is disabled',
-          enabled: inviteAllowed,
+              : 'Turn it on in Privacy & safety',
+          // Also requires the link to be on. Previously an owner could open the
+          // sheet while it was off and share a link that join_group_chat_by_invite
+          // refuses — a link that looks fine and silently fails for whoever
+          // receives it.
+          enabled: inviteAllowed && room.groupInviteEnabled,
           onTap: () => _inviteLink(context, ref),
         ),
         _SettingsTile(
           icon: Icons.badge_outlined,
           title: 'Nicknames',
-          subtitle: members.where((m) => m.isMe).firstOrNull?.nickname ??
+          subtitle:
+              members.where((m) => m.isMe).firstOrNull?.nickname ??
               'Set your name in this group',
           onTap: () => _setNickname(context, ref, members),
         ),
@@ -322,9 +337,11 @@ class _GroupSettingsBody extends ConsumerWidget {
             child: Center(child: CircularProgressIndicator()),
           )
         else if (membersAsync.hasError)
-          _InlineError(onRetry: () {
-            ref.invalidate(groupChatMembersProvider(room.roomId));
-          })
+          _InlineError(
+            onRetry: () {
+              ref.invalidate(groupChatMembersProvider(room.roomId));
+            },
+          )
         else
           for (final member in members)
             _MemberRow(
@@ -408,14 +425,18 @@ class _GroupSettingsBody extends ConsumerWidget {
     await run(() async {
       String? uploadedPath;
       if (bytes != null) {
-        uploadedPath = await ref.read(repositoryProvider).uploadGroupChatAvatar(
+        uploadedPath = await ref
+            .read(repositoryProvider)
+            .uploadGroupChatAvatar(
               roomId: room.roomId,
               bytes: bytes,
               extension: extension,
               contentType: mime,
             );
       }
-      await ref.read(repositoryProvider).updateGroupChatIdentity(
+      await ref
+          .read(repositoryProvider)
+          .updateGroupChatIdentity(
             roomId: room.roomId,
             title: savedTitle,
             avatarPath: uploadedPath,
@@ -476,9 +497,9 @@ class _GroupSettingsBody extends ConsumerWidget {
                         onPressed: selected.isEmpty
                             ? null
                             : () => Navigator.pop(
-                                  sheetContext,
-                                  selected.toList(growable: false),
-                                ),
+                                sheetContext,
+                                selected.toList(growable: false),
+                              ),
                         child: const Text('Add'),
                       ),
                     ],
@@ -507,10 +528,9 @@ class _GroupSettingsBody extends ConsumerWidget {
                               : Icons.radio_button_unchecked_rounded,
                           color: checked
                               ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withOpacity(0.3),
+                              : Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.3),
                         ),
                         onTap: () => setSheetState(() {
                           if (!selected.add(friend.userId)) {
@@ -529,10 +549,9 @@ class _GroupSettingsBody extends ConsumerWidget {
     );
     if (picked == null || picked.isEmpty) return;
     await run(() async {
-      final count = await ref.read(repositoryProvider).addGroupChatMembers(
-            roomId: room.roomId,
-            memberUserIds: picked,
-          );
+      final count = await ref
+          .read(repositoryProvider)
+          .addGroupChatMembers(roomId: room.roomId, memberUserIds: picked);
       refresh();
       showMessage(count == 1 ? '1 person added.' : '$count people added.');
     });
@@ -562,10 +581,9 @@ class _GroupSettingsBody extends ConsumerWidget {
     );
     if (confirmed != true) return;
     await run(() async {
-      await ref.read(repositoryProvider).removeGroupChatMember(
-            roomId: room.roomId,
-            userId: member.userId,
-          );
+      await ref
+          .read(repositoryProvider)
+          .removeGroupChatMember(roomId: room.roomId, userId: member.userId);
       refresh();
       showMessage('${member.displayName} was removed.');
     });
@@ -600,10 +618,9 @@ class _GroupSettingsBody extends ConsumerWidget {
                     avatar: CircleAvatar(backgroundColor: entry.value),
                     label: Text(_capitalize(entry.key)),
                     onSelected: (_) async {
-                      await ref.read(repositoryProvider).setDmRoomPref(
-                            roomId: room.roomId,
-                            theme: entry.key,
-                          );
+                      await ref
+                          .read(repositoryProvider)
+                          .setDmRoomPref(roomId: room.roomId, theme: entry.key);
                       ref.invalidate(dmRoomPrefsProvider(room.roomId));
                       if (sheetContext.mounted) Navigator.pop(sheetContext);
                     },
@@ -626,10 +643,9 @@ class _GroupSettingsBody extends ConsumerWidget {
                 ),
                 onChanged: (value) async {
                   if (value == null) return;
-                  await ref.read(repositoryProvider).setDmRoomPref(
-                        roomId: room.roomId,
-                        fontStyle: value,
-                      );
+                  await ref
+                      .read(repositoryProvider)
+                      .setDmRoomPref(roomId: room.roomId, fontStyle: value);
                   ref.invalidate(dmRoomPrefsProvider(room.roomId));
                   if (sheetContext.mounted) Navigator.pop(sheetContext);
                 },
@@ -644,9 +660,9 @@ class _GroupSettingsBody extends ConsumerWidget {
     var token = room.groupInviteToken;
     if (token == null || token.isEmpty) {
       await run(() async {
-        token = await ref.read(repositoryProvider).regenerateGroupInvite(
-              room.roomId,
-            );
+        token = await ref
+            .read(repositoryProvider)
+            .regenerateGroupInvite(room.roomId);
         refresh();
       });
     }
@@ -689,9 +705,9 @@ class _GroupSettingsBody extends ConsumerWidget {
               if (room.isGroupOwner)
                 TextButton(
                   onPressed: () async {
-                    await ref.read(repositoryProvider).regenerateGroupInvite(
-                          room.roomId,
-                        );
+                    await ref
+                        .read(repositoryProvider)
+                        .regenerateGroupInvite(room.roomId);
                     refresh();
                     if (sheetContext.mounted) Navigator.pop(sheetContext);
                     showMessage('A new invite link is ready.');
@@ -738,13 +754,13 @@ class _GroupSettingsBody extends ConsumerWidget {
     );
     if (nickname == null) return;
     await run(() async {
-      await ref.read(repositoryProvider).setGroupChatNickname(
-            roomId: room.roomId,
-            nickname: nickname,
-          );
+      await ref
+          .read(repositoryProvider)
+          .setGroupChatNickname(roomId: room.roomId, nickname: nickname);
       ref.invalidate(groupChatMembersProvider(room.roomId));
       showMessage(
-          nickname.trim().isEmpty ? 'Nickname removed.' : 'Nickname saved.');
+        nickname.trim().isEmpty ? 'Nickname removed.' : 'Nickname saved.',
+      );
     });
   }
 
@@ -830,7 +846,9 @@ class _GroupSettingsBody extends ConsumerWidget {
                           roomId: room.roomId,
                           plaintext: SystemNotice.disappearing(value),
                         );
-                      } catch (_) {/* best-effort notice */}
+                      } catch (_) {
+                        /* best-effort notice */
+                      }
                       if (sheetContext.mounted) Navigator.pop(sheetContext);
                     },
                   ),
@@ -849,7 +867,9 @@ class _GroupSettingsBody extends ConsumerWidget {
     );
     if (reason == null) return;
     await run(() async {
-      await ref.read(repositoryProvider).reportChat(
+      await ref
+          .read(repositoryProvider)
+          .reportChat(
             roomId: room.roomId,
             reason: reason,
             note: 'Group chat product issue',
@@ -924,10 +944,7 @@ class _GroupSettingsBody extends ConsumerWidget {
 enum _GroupIdentityActionType { pick, remove, save }
 
 class _GroupIdentityAction {
-  const _GroupIdentityAction({
-    required this.type,
-    required this.title,
-  });
+  const _GroupIdentityAction({required this.type, required this.title});
 
   final _GroupIdentityActionType type;
   final String title;
@@ -964,10 +981,7 @@ class _GroupIdentityEditorState extends State<_GroupIdentityEditor> {
   void _closeWith(_GroupIdentityActionType type) {
     Navigator.pop(
       context,
-      _GroupIdentityAction(
-        type: type,
-        title: _titleController.text.trim(),
-      ),
+      _GroupIdentityAction(type: type, title: _titleController.text.trim()),
     );
   }
 
@@ -984,10 +998,7 @@ class _GroupIdentityEditorState extends State<_GroupIdentityEditor> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Edit group',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
+            Text('Edit group', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 18),
             Semantics(
               button: true,
@@ -1081,10 +1092,10 @@ class _MemberRow extends StatelessWidget {
         member.isOwner
             ? 'Owner'
             : member.isAdmin
-                ? 'Admin'
-                : member.isMe
-                    ? 'You'
-                    : 'Member',
+            ? 'Admin'
+            : member.isMe
+            ? 'You'
+            : 'Member',
       ),
       trailing: canRemove
           ? PopupMenuButton<String>(
@@ -1092,7 +1103,9 @@ class _MemberRow extends StatelessWidget {
               onSelected: (_) => onRemove(),
               itemBuilder: (_) => const [
                 PopupMenuItem(
-                    value: 'remove', child: Text('Remove from group')),
+                  value: 'remove',
+                  child: Text('Remove from group'),
+                ),
               ],
             )
           : Icon(Icons.chevron_right_rounded, color: scheme.outline),
@@ -1137,8 +1150,9 @@ class _QuickAction extends StatelessWidget {
                     ? scheme.primary.withOpacity(0.13)
                     : scheme.surface.withOpacity(0.88),
                 shape: BoxShape.circle,
-                border:
-                    Border.all(color: scheme.outlineVariant.withOpacity(0.5)),
+                border: Border.all(
+                  color: scheme.outlineVariant.withOpacity(0.5),
+                ),
               ),
               child: Icon(icon, color: color),
             ),
@@ -1198,10 +1212,10 @@ class _InlineError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-        leading: const Icon(Icons.cloud_off_outlined),
-        title: const Text('Could not load people'),
-        trailing: TextButton(onPressed: onRetry, child: const Text('Retry')),
-      );
+    leading: const Icon(Icons.cloud_off_outlined),
+    title: const Text('Could not load people'),
+    trailing: TextButton(onPressed: onRetry, child: const Text('Retry')),
+  );
 }
 
 class _ErrorState extends StatelessWidget {
@@ -1210,38 +1224,38 @@ class _ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.cloud_off_outlined, size: 42),
-            const SizedBox(height: 12),
-            const Text(
-              'Could not open group details',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
-            TextButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Try again'),
-            ),
-          ],
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.cloud_off_outlined, size: 42),
+        const SizedBox(height: 12),
+        const Text(
+          'Could not open group details',
+          style: TextStyle(fontWeight: FontWeight.w900),
         ),
-      );
+        TextButton.icon(
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Try again'),
+        ),
+      ],
+    ),
+  );
 }
 
 String _capitalize(String value) =>
     value.isEmpty ? value : '${value[0].toUpperCase()}${value.substring(1)}';
 
 String? _fontFamily(String style) => switch (style) {
-      'serif' => 'serif',
-      'mono' => 'monospace',
-      _ => null,
-    };
+  'serif' => 'serif',
+  'mono' => 'monospace',
+  _ => null,
+};
 
 String _imageMime(String extension) => switch (extension) {
-      'png' => 'image/png',
-      'webp' => 'image/webp',
-      'heic' => 'image/heic',
-      'gif' => 'image/gif',
-      _ => 'image/jpeg',
-    };
+  'png' => 'image/png',
+  'webp' => 'image/webp',
+  'heic' => 'image/heic',
+  'gif' => 'image/gif',
+  _ => 'image/jpeg',
+};
