@@ -87,6 +87,25 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
   /// bootstrap below started audio from a page nobody had opened.
   bool get _onStage => TickerMode.of(context);
 
+  bool _refreshing = false;
+
+  /// Re-enters the feed from the top. `_bootstrapped` is cleared so the existing
+  /// autoplay path re-arms on the new first page, and the page controller is sent
+  /// home — otherwise the PageView would keep the old index and land mid-list.
+  Future<void> _refreshFeed() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      _bootstrapped = false;
+      await ref.read(whispersFeedProvider.notifier).refresh();
+      if (!mounted) return;
+      if (_pageController.hasClients) _pageController.jumpToPage(0);
+      setState(() => _currentIndex = 0);
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
   bool? _wasOnStage;
 
   @override
@@ -317,6 +336,8 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
                 activeCategory: cat,
                 onPickCategory: _openCategorySheet,
                 onCompose: _composeSoonState,
+                onRefresh: _refreshFeed,
+                refreshing: _refreshing,
               ),
             ),
           ),
@@ -363,10 +384,19 @@ class _WhispersTopBar extends StatelessWidget {
     required this.activeCategory,
     required this.onPickCategory,
     required this.onCompose,
+    required this.onRefresh,
+    required this.refreshing,
   });
   final String? activeCategory;
   final VoidCallback onPickCategory;
   final VoidCallback onCompose;
+
+  /// Explicit refresh. The feed enters at a random point in the recent unheard
+  /// window, so this genuinely reshuffles rather than re-fetching the same list —
+  /// but a vertical PageView has no pull-to-refresh, so without a button there
+  /// was no way to ask for it.
+  final VoidCallback onRefresh;
+  final bool refreshing;
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -429,6 +459,34 @@ class _WhispersTopBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          InkWell(
+            onTap: refreshing ? null : onRefresh,
+            customBorder: const CircleBorder(),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.42),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: refreshing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.refresh_rounded,
+                      color: Colors.white,
+                      size: 19,
+                    ),
+            ),
+          ),
+          const SizedBox(width: 8),
           InkWell(
             onTap: onCompose,
             customBorder: const CircleBorder(),

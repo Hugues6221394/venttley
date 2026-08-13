@@ -44,7 +44,8 @@ class FeedScreen extends ConsumerWidget {
     final topicStatsAsync = ref.watch(trendingTopicStatsProvider);
     final discoveryPosts = ref.watch(homeDiscoveryPostsProvider).valueOrNull;
     final filter = ref.watch(feedFilterProvider);
-    final tribes = ref
+    final tribes =
+        ref
             .watch(tribesProvider(const TribeQuery()))
             .valueOrNull
             ?.take(6)
@@ -90,8 +91,9 @@ class FeedScreen extends ConsumerWidget {
                     .toList();
                 final showingRecommendations =
                     feedPosts.isEmpty && recommendedPosts.isNotEmpty;
-                final visiblePosts =
-                    showingRecommendations ? recommendedPosts : feedPosts;
+                final visiblePosts = showingRecommendations
+                    ? recommendedPosts
+                    : feedPosts;
                 final discovery = HomeDiscovery.from(
                   posts: discoveryPosts ?? posts,
                   tribes: tribes,
@@ -99,15 +101,18 @@ class FeedScreen extends ConsumerWidget {
                 final friendStories =
                     storiesAsync.valueOrNull ?? const <VentStory>[];
                 final communityStories = (discoveryPosts ?? const <Post>[])
-                    .where((post) =>
-                        post.isStory && post.storyAudience == 'everyone')
+                    .where(
+                      (post) =>
+                          post.isStory && post.storyAudience == 'everyone',
+                    )
                     .map(VentStory.fromPost)
                     .take(12)
                     .toList();
                 final showingCommunityStories =
                     friendStories.isEmpty && communityStories.isNotEmpty;
-                final stories =
-                    showingCommunityStories ? communityStories : friendStories;
+                final stories = showingCommunityStories
+                    ? communityStories
+                    : friendStories;
                 return CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   // Pre-build offscreen items so fast flings never show a
@@ -120,12 +125,8 @@ class FeedScreen extends ConsumerWidget {
                     const SliverToBoxAdapter(child: EmailVerificationBanner()),
                     SliverToBoxAdapter(
                       child: storiesAsync.when(
-                        loading: () => _StoriesLoadingRail(
-                          me: me,
-                        ),
-                        error: (_, __) => _StoriesUnavailableRail(
-                          me: me,
-                        ),
+                        loading: () => _StoriesLoadingRail(me: me),
+                        error: (_, __) => _StoriesUnavailableRail(me: me),
                         data: (_) => FadeSlideIn(
                           index: 1,
                           child: _VentlyStoriesRail(
@@ -224,14 +225,21 @@ class FeedScreen extends ConsumerWidget {
                                 ),
                                 onLike: () async {
                                   try {
-                                    await ref.read(repositoryProvider).react(
-                                        post.postId, post.myReaction ?? 'hug');
+                                    await ref
+                                        .read(repositoryProvider)
+                                        .react(
+                                          post.postId,
+                                          post.myReaction ?? 'hug',
+                                        );
                                   } catch (e) {
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(SnackBar(
-                                              content:
-                                                  Text('Could not react: $e')));
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Could not react: $e'),
+                                        ),
+                                      );
                                     }
                                     return;
                                   }
@@ -383,7 +391,7 @@ class _VentlyFeedTopBar extends ConsumerWidget {
         VentlyNotificationBell.iconData,
         'Notifications',
         '/notifications',
-        false
+        false,
       ),
       (Icons.shield_outlined, 'Security', '/profile/security', false),
       (Icons.settings_outlined, 'Settings', '/settings', false),
@@ -415,8 +423,10 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                   color: context.ink,
                 ),
               ),
-              trailing: const Icon(Icons.chevron_right_rounded,
-                  color: VentlyColors.softMauve),
+              trailing: const Icon(
+                Icons.chevron_right_rounded,
+                color: VentlyColors.softMauve,
+              ),
               onTap: () {
                 Navigator.of(sheetCtx).pop();
                 // Returning to the Studio must exit "member view" first, or the
@@ -441,8 +451,11 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                 color: VentlyColors.dangerRed.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.logout_rounded,
-                  size: 18, color: VentlyColors.dangerRed),
+              child: const Icon(
+                Icons.logout_rounded,
+                size: 18,
+                color: VentlyColors.dangerRed,
+              ),
             ),
             title: const Text(
               'Sign out',
@@ -454,7 +467,8 @@ class _VentlyFeedTopBar extends ConsumerWidget {
             ),
             onTap: () async {
               Navigator.of(sheetCtx).pop();
-              final confirmed = await showDialog<bool>(
+              final confirmed =
+                  await showDialog<bool>(
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('Sign out?'),
@@ -607,8 +621,10 @@ class _VentlyStoriesRail extends ConsumerWidget {
                 const SizedBox(width: 14),
                 Container(
                   width: 230,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: context.glass(0.72),
                     borderRadius: BorderRadius.circular(18),
@@ -868,8 +884,9 @@ class _AddStoryBubble extends StatelessWidget {
         key: const Key('home-add-story'),
         width: 64,
         child: Column(
-          mainAxisAlignment:
-              alignToCard ? MainAxisAlignment.end : MainAxisAlignment.start,
+          mainAxisAlignment: alignToCard
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
           children: [
             SizedBox(
               width: 58,
@@ -1042,7 +1059,10 @@ class _FeedFiltersHeader extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
       alignment: Alignment.topCenter,
@@ -1181,8 +1201,10 @@ class _VentlyFeedPostCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Container(
                     constraints: const BoxConstraints(maxWidth: 124),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 11,
+                      vertical: 7,
+                    ),
                     decoration: BoxDecoration(
                       color: VentlyColors.roseTint,
                       borderRadius: BorderRadius.circular(16),
@@ -1229,8 +1251,10 @@ class _VentlyFeedPostCard extends StatelessWidget {
                         height: 120,
                         color: const Color(0xFFFFE5ED),
                         alignment: Alignment.center,
-                        child: const Icon(Icons.image_outlined,
-                            color: VentlyColors.berryMagenta),
+                        child: const Icon(
+                          Icons.image_outlined,
+                          color: VentlyColors.berryMagenta,
+                        ),
                       ),
                     ),
                   ),
@@ -1270,8 +1294,11 @@ class _VentlyFeedPostCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                       child: Row(
                         children: [
-                          Icon(CupertinoIcons.chat_bubble,
-                              size: 19, color: context.inkMuted),
+                          Icon(
+                            CupertinoIcons.chat_bubble,
+                            size: 19,
+                            color: context.inkMuted,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
@@ -1305,10 +1332,10 @@ class _VentlyFeedPostCard extends StatelessWidget {
   }
 
   static TextStyle _metricStyle(BuildContext context) => TextStyle(
-        color: context.inkMuted,
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
-      );
+    color: context.inkMuted,
+    fontSize: 13,
+    fontWeight: FontWeight.w700,
+  );
 
   static String _ago(DateTime date) {
     final diff = DateTime.now().difference(date);
@@ -1583,8 +1610,11 @@ class _TribeChipCard extends StatelessWidget {
                   if (tribe.joinedByMe)
                     Icon(Icons.check_circle, size: 16, color: scheme.primary)
                   else
-                    Icon(Icons.add_circle_outline,
-                        size: 16, color: scheme.onSurface.withOpacity(0.5)),
+                    Icon(
+                      Icons.add_circle_outline,
+                      size: 16,
+                      color: scheme.onSurface.withOpacity(0.5),
+                    ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -1601,8 +1631,11 @@ class _TribeChipCard extends StatelessWidget {
               const Spacer(),
               Row(
                 children: [
-                  Icon(Icons.people_alt_outlined,
-                      size: 12, color: scheme.onSurface.withOpacity(0.55)),
+                  Icon(
+                    Icons.people_alt_outlined,
+                    size: 12,
+                    color: scheme.onSurface.withOpacity(0.55),
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '${PostCard.compactNumber(tribe.memberCount)} members',
@@ -1693,7 +1726,9 @@ class _FeedSectionHeader extends ConsumerWidget {
                         .update((value) => value.copyWith(clearMood: true)),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 11, vertical: 7),
+                        horizontal: 11,
+                        vertical: 7,
+                      ),
                       decoration: BoxDecoration(
                         color: VentlyColors.roseTint,
                         borderRadius: BorderRadius.circular(18),
@@ -1711,8 +1746,11 @@ class _FeedSectionHeader extends ConsumerWidget {
                             ),
                           ),
                           const SizedBox(width: 5),
-                          const Icon(Icons.close_rounded,
-                              color: VentlyColors.roseDeep, size: 14),
+                          const Icon(
+                            Icons.close_rounded,
+                            color: VentlyColors.roseDeep,
+                            size: 14,
+                          ),
                         ],
                       ),
                     ),
@@ -1809,10 +1847,13 @@ class _FeedSectionHeader extends ConsumerWidget {
                       mood: m,
                       selected: f.mood == m,
                       onTap: () {
-                        sheetRef.read(feedFilterProvider.notifier).update((s) =>
-                            f.mood == m
-                                ? s.copyWith(clearMood: true)
-                                : s.copyWith(mood: m));
+                        sheetRef
+                            .read(feedFilterProvider.notifier)
+                            .update(
+                              (s) => f.mood == m
+                                  ? s.copyWith(clearMood: true)
+                                  : s.copyWith(mood: m),
+                            );
                       },
                     ),
                 ],
@@ -1906,8 +1947,8 @@ class _ScopeToggle extends StatelessWidget {
               color: selected
                   ? Colors.white
                   : disabled
-                      ? scheme.onSurface.withOpacity(0.30)
-                      : scheme.primary,
+                  ? scheme.onSurface.withOpacity(0.30)
+                  : scheme.primary,
             ),
           ),
         ),
@@ -2026,52 +2067,92 @@ class _CategoryRail extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    const items = <String?>[null, ...FeedCategories.all];
+    // "All" is pinned outside the scroll view, not items[0] inside it. With 20
+    // categories it used to scroll off the left the moment you picked something
+    // near the end, so clearing a filter meant hunting back for a chip you
+    // could no longer see. An escape from a filter must never require finding
+    // it first.
     return SizedBox(
       height: 58,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-        itemCount: items.length,
-        itemBuilder: (ctx, i) {
-          final key = items[i];
-          final selected = filter.category == key;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Pressable(
-              onTap: () {
-                ref
-                    .read(feedFilterProvider.notifier)
-                    .update((s) => s.copyWith(category: key));
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 5, 2, 5),
+            child: _chip(context, ref, null, filter.category == null, scheme),
+          ),
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+              itemCount: FeedCategories.all.length,
+              itemBuilder: (ctx, i) {
+                final key = FeedCategories.all[i];
+                return _chip(context, ref, key, filter.category == key, scheme);
               },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                alignment: Alignment.center,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? context.ink
-                      : Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: selected ? context.ink : VentlyColors.softMauve,
-                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// One category chip. [key] null is the pinned "All" reset.
+  Widget _chip(
+    BuildContext context,
+    WidgetRef ref,
+    String? key,
+    bool selected,
+    ColorScheme scheme,
+  ) {
+    // When a filter is active the reset chip carries a clear affordance, so it
+    // reads as "get me out" rather than as one more category to choose from.
+    final isReset = key == null;
+    final filtering = filter.category != null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Pressable(
+        onTap: () {
+          ref
+              .read(feedFilterProvider.notifier)
+              .update((s) => s.copyWith(category: key));
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected
+                ? context.ink
+                : Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: selected ? context.ink : VentlyColors.softMauve,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isReset && filtering) ...[
+                Icon(
+                  Icons.close_rounded,
+                  size: 14,
+                  color: scheme.onSurface.withOpacity(0.7),
                 ),
-                child: Text(
-                  key == null ? 'All' : FeedCategories.label(key),
-                  style: TextStyle(
-                    color: selected
-                        ? Theme.of(context).scaffoldBackgroundColor
-                        : scheme.onSurface.withOpacity(0.7),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                isReset ? 'All' : FeedCategories.label(key),
+                style: TextStyle(
+                  color: selected
+                      ? Theme.of(context).scaffoldBackgroundColor
+                      : scheme.onSurface.withOpacity(0.7),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
                 ),
               ),
-            ),
-          );
-        },
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2129,7 +2210,8 @@ class _SuggestedPeopleRail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final list = ref.watch(friendSuggestionsProvider).valueOrNull ??
+    final list =
+        ref.watch(friendSuggestionsProvider).valueOrNull ??
         const <FriendSuggestion>[];
     if (list.isEmpty) return const SizedBox.shrink();
     return Padding(
