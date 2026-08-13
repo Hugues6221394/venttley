@@ -38,8 +38,33 @@ Unrelated `.range(offset, …)` callers remain in `_refreshLikedAndSaved`,
 `votePoll` and `plugByName`. They page over small, bounded sets, so they are not
 urgent — but they are the same pattern if any of those ever grows.
 
-The ranking question (item 3) stays open until the user answers it; do not pick
-one unilaterally.
+### Whispers feed ranking — DECIDED and built
+
+The user chose the recommended path: recency, plus already-heard filtering, plus a
+randomised entry point. **Engagement-weighting was explicitly rejected** — ranking
+trauma and self-harm-adjacent disclosures by plays_count selects for whatever
+provokes the most reaction, which on this platform means amplifying its most
+distressing content to the 13-17 accounts the safety tier exists to protect. Do
+not reintroduce it without revisiting that reasoning.
+
+- `a195356` — `list_unheard_whispers` RPC skips whispers the listener has
+  finished, using `whisper_listens` (0073). Falls back to plain recency
+  server-side on the first page so **the feed is never empty** — the user was
+  explicit about this. Adds `whispers_created_keyset_idx`, without which the
+  keyset ordering was still a full sort.
+- `20260813210000_whispers_random_entry_point.sql` — first page starts at a
+  random offset inside a bounded window of 120 recent unheard whispers, so
+  refresh varies even when nothing new was posted. Mid-scroll stays strictly
+  sequential or whispers reappear a few swipes later. Offset zero is a possible
+  draw, so the newest still surface regularly.
+
+**Both migrations still need applying by hand.** The client degrades to the
+unfiltered view when the RPC is missing (logs
+`whispers.unheard_rpc_unavailable`) — verified on device, feed rendered normally
+with zero exceptions — so the app is safe between deploy and apply.
+
+Neither migration has been executed anywhere yet. CI's `database` job replays
+them; that is the first real check. No Docker locally.
 
 ### The whispers feed at scale
 
