@@ -11,41 +11,32 @@ belongs to the other agent.
 
 ## Resume here
 
-### ⚠️ Keyset pagination is APPLIED but UNCOMMITTED — and blocked on the other agent
+### Keyset pagination — DONE, landed in `2b0f637`
 
-Written, formatted, analyze-clean, 155 tests pass. It is **not committed**,
-because all three files it touches also hold the security agent's uncommitted
-work (diffs of 366 / 339 / 1276 lines — theirs, not mine). Committing any of them
-would sweep their in-flight changes into my commit, and non-interactive git
-cannot split hunks by author.
+Committed as part of the security agent's commit (the user committed both agents'
+work together, which was the agreed unblock). Verified present in HEAD:
+`listWhispers` takes `beforeCreatedAt` / `beforeWhisperId`, uses `.limit()` with
+no `.range()`, orders by `(created_at desc, whisper_id desc)`, and `_offset` is
+gone from `WhispersFeedNotifier`. Analyze clean, 155 tests pass.
 
-**Two risks while it sits there:** their next write to these files can silently
-clobber it, and nobody can review either change cleanly.
+The cursor is a tuple, not a bare timestamp: PostgREST cannot express a row-value
+comparison, so it is spelled out as
+`or('created_at.lt.<iso>,and(created_at.eq.<iso>,whisper_id.lt.<id>)')`. Without
+the id, two whispers sharing a timestamp straddle the page boundary and one is
+silently dropped — the same class of bug offset pagination already had.
 
-**Unblock by having them commit first, then commit mine.** If it is lost, this is
-the whole change — about ten minutes to re-apply:
+`_fetch` derives the cursor from `current.last` rather than a counter, so the
+cursor and the visible list cannot disagree. That disagreement is exactly how
+offset pagination skipped rows when new whispers shifted the window.
 
-1. `supabase_backend.dart` `listWhispers` — replace `int offset` with
-   `DateTime? beforeCreatedAt` + `String? beforeWhisperId`; drop
-   `.range(offset, offset + limit - 1)` for `.limit(limit)`; order by
-   `created_at desc, whisper_id desc`; when a cursor is present filter
-   `or('created_at.lt.<iso>,and(created_at.eq.<iso>,whisper_id.lt.<id>)')`.
-   PostgREST cannot express a row-value comparison, hence the spelled-out tuple —
-   and the tuple matters, or two whispers sharing a timestamp straddle the
-   boundary and one is dropped.
-2. `vently_repository.dart` `listWhispers` — same signature swap, pass through.
-3. `providers.dart` `WhispersFeedNotifier` — delete `_offset`; `_fetch` takes
-   `Whisper? after` and sends `after?.createdAt` / `after?.whisperId`;
-   `loadMore` passes `current.last`; `build` passes null; `loadMore` also returns
-   early when the list is empty, since there is then no cursor to seek from.
+**Still unverified: paging depth on device.** The dev database holds too few
+whispers for `loadMore` to fetch a second page, so a real multi-page scroll has
+never been exercised. Worth seeding a few hundred rows, or testing against a
+category with more content.
 
-Deriving the cursor from the last row on screen rather than a counter means the
-two can never disagree — which is precisely how offset pagination skipped rows
-once new whispers shifted the window.
-
-Not yet done: verifying paging depth on device. The dev database has few
-whispers, so `loadMore` reaches the end almost immediately and a second page was
-never exercised.
+Unrelated `.range(offset, …)` callers remain in `_refreshLikedAndSaved`,
+`votePoll` and `plugByName`. They page over small, bounded sets, so they are not
+urgent — but they are the same pattern if any of those ever grows.
 
 The ranking question (item 3) stays open until the user answers it; do not pick
 one unilaterally.
