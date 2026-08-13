@@ -29,14 +29,7 @@ void main() {
   test('member footer keeps Friends among all six destinations', () {
     expect(
       HomeShell.memberDestinationLabels,
-      equals(const [
-        'Home',
-        'Whispers',
-        'Post',
-        'Friends',
-        'Inbox',
-        'Profile',
-      ]),
+      equals(const ['Home', 'Whispers', 'Post', 'Friends', 'Inbox', 'Profile']),
     );
   });
 
@@ -54,8 +47,9 @@ void main() {
     );
   });
 
-  testWidgets('empty personal feed falls back to community conversations',
-      (tester) async {
+  testWidgets('empty personal feed falls back to community conversations', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       const FeedScreen(),
@@ -74,8 +68,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('empty Whispers keeps real community discovery visible',
-      (tester) async {
+  testWidgets('empty Whispers keeps real community discovery visible', (
+    tester,
+  ) async {
     await _pumpScreen(tester, const WhispersScreen());
 
     expect(find.text('Be the first voice today'), findsOneWidget);
@@ -84,8 +79,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('premium notifications stay scannable on a compact phone',
-      (tester) async {
+  testWidgets('premium notifications stay scannable on a compact phone', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       NotificationsScreen(referenceTime: _notificationReferenceTime),
@@ -131,8 +127,9 @@ void main() {
     );
   });
 
-  testWidgets('premium circle stays composed on a compact phone',
-      (tester) async {
+  testWidgets('premium circle stays composed on a compact phone', (
+    tester,
+  ) async {
     await _pumpScreen(tester, const FriendsScreen());
 
     expect(find.text('Your circle'), findsOneWidget);
@@ -145,8 +142,9 @@ void main() {
     );
   });
 
-  testWidgets('circle exposes fast Tribe discovery without leaving the tab',
-      (tester) async {
+  testWidgets('circle exposes fast Tribe discovery without leaving the tab', (
+    tester,
+  ) async {
     await _pumpScreen(tester, const FriendsScreen());
 
     await tester.tap(find.text('Explore Tribes'));
@@ -182,10 +180,7 @@ Future<void> _pumpScreen(
     routes: [
       GoRoute(
         path: '/',
-        builder: (_, __) => RepaintBoundary(
-          key: _surfaceKey,
-          child: screen,
-        ),
+        builder: (_, __) => RepaintBoundary(key: _surfaceKey, child: screen),
       ),
     ],
   );
@@ -199,17 +194,14 @@ Future<void> _pumpScreen(
           (_) => Stream.value(feedPosts ?? _posts),
         ),
         if (discoveryPosts != null)
-          homeDiscoveryPostsProvider.overrideWith(
-            (_) async => discoveryPosts,
-          ),
+          homeDiscoveryPostsProvider.overrideWith((_) async => discoveryPosts),
         myFriendsProvider.overrideWith((_) async => _friends),
         incomingFriendRequestsProvider.overrideWith((_) async => _requests),
         outgoingFriendRequestsProvider.overrideWith((_) async => const []),
         friendSuggestionsProvider.overrideWith((_) async => const []),
-        inboxCountsProvider.overrideWith((_) async => const {
-              'requests': 1,
-              'active': 3,
-            }),
+        inboxCountsProvider.overrideWith(
+          (_) async => const {'requests': 1, 'active': 3},
+        ),
         tribeChatInboxProvider.overrideWith((_) async => const []),
         inboxTimestampFormatterProvider.overrideWithValue((timestamp) {
           final age = DateTime.now().difference(timestamp);
@@ -249,10 +241,9 @@ Future<void> _pumpMemberShell(WidgetTester tester) async {
         incomingFriendRequestsProvider.overrideWith((_) async => _requests),
         outgoingFriendRequestsProvider.overrideWith((_) async => const []),
         friendSuggestionsProvider.overrideWith((_) async => const []),
-        inboxCountsProvider.overrideWith((_) async => const {
-              'requests': 1,
-              'active': 3,
-            }),
+        inboxCountsProvider.overrideWith(
+          (_) async => const {'requests': 1, 'active': 3},
+        ),
         navInboxBadgeCountProvider.overrideWith((_) async => 1),
         isKeeperProvider.overrideWith((_) async => false),
         connectionStatusProvider.overrideWith(
@@ -322,6 +313,7 @@ const _user = AppUser(
   isVerified: true,
   safetyTier: 'standard',
   accountStatus: 'active',
+  birthYear: 2000,
   emailVerified: true,
 );
 

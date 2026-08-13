@@ -115,6 +115,19 @@ async function resetPassword(formData: FormData) {
   }
 
   const authAdmin = createRequiredAuthAdminClient();
+  const { data: recoveryState, error: recoveryStateError } = await authAdmin
+    .from("users")
+    .select("recovery_blob")
+    .eq("user_id", id)
+    .maybeSingle();
+  if (recoveryStateError || !recoveryState) {
+    throw new Error("Could not verify the account recovery state.");
+  }
+  if (recoveryState.recovery_blob) {
+    throw new Error(
+      "This account is protected by a recovery phrase. The member must recover or change the password with that phrase."
+    );
+  }
   const { error } = await authAdmin.auth.admin.updateUserById(id, {
     password: pw,
   });
@@ -355,6 +368,10 @@ export default async function UserDetailPage({
                 <label className="h-eyebrow flex items-center gap-1">
                   <KeyRound size={11} /> Reset password (super_admin only)
                 </label>
+                <p className="text-xs text-muted">
+                  Phrase-protected accounts must use their recovery phrase; an
+                  admin reset cannot safely reseal it.
+                </p>
                 <div className="flex gap-2">
                   <input
                     type="text"

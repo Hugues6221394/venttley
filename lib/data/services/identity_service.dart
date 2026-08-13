@@ -6,11 +6,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'recovery_wordlist.dart';
 
-/// Zero-PII identity + account recovery.
+/// Pseudonymous username identity + account recovery.
 ///
-/// v1 uses **username + password**. To stay zero-PII the username is mapped to
-/// a synthetic internal handle (`<username>@id.venttly.app`) that is used as the
-/// Supabase auth email — no real email, phone, or name is ever collected.
+/// The username flow maps **username + password** to a synthetic internal
+/// handle (`<username>@id.venttly.app`) used as the Supabase auth email. Other
+/// optional sign-in/profile flows may collect user-chosen contact or profile
+/// data, so this service never claims the product stores zero personal data.
 ///
 /// The optional **12-word recovery phrase** lets a user restore access on a new
 /// device with no server infrastructure: the password is sealed into an
@@ -18,17 +19,17 @@ import 'recovery_wordlist.dart';
 /// salt are stored on the user row and read back, pre-auth, during recovery.
 class IdentityService {
   IdentityService({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
 
-  static const _kUsername       = 'venttly.username';
-  static const _kAvatarSeed     = 'venttly.avatar_seed';
+  static const _kUsername = 'venttly.username';
+  static const _kAvatarSeed = 'venttly.avatar_seed';
   static const _kRecoveryPhrase = 'venttly.recovery_phrase';
-  static const _kBirthYear      = 'venttly.birth_year';
-  static const _kSafetyTier     = 'venttly.safety_tier';
+  static const _kBirthYear = 'venttly.birth_year';
+  static const _kSafetyTier = 'venttly.safety_tier';
 
-  /// Domain for the synthetic, zero-PII auth handle. Never receives mail.
+  /// Domain for the synthetic username auth handle. Never receives mail.
   static const String identityEmailDomain = 'id.venttly.app';
 
   /// Allowed username shape — also the login handle, so keep it email-safe.
@@ -120,13 +121,17 @@ class IdentityService {
   Future<void> persistSession({
     required String username,
     required String avatarSeed,
-    required int birthYear,
+    required int? birthYear,
     required String safetyTier,
     String? recoveryPhrase,
   }) async {
-    await _storage.write(key: _kUsername,   value: username);
+    await _storage.write(key: _kUsername, value: username);
     await _storage.write(key: _kAvatarSeed, value: avatarSeed);
-    await _storage.write(key: _kBirthYear,  value: birthYear.toString());
+    if (birthYear == null) {
+      await _storage.delete(key: _kBirthYear);
+    } else {
+      await _storage.write(key: _kBirthYear, value: birthYear.toString());
+    }
     await _storage.write(key: _kSafetyTier, value: safetyTier);
     if (recoveryPhrase != null) {
       await _storage.write(key: _kRecoveryPhrase, value: recoveryPhrase);
@@ -134,8 +139,10 @@ class IdentityService {
   }
 
   Future<String?> lastUsername() => _storage.read(key: _kUsername);
-  Future<String?> savedRecoveryPhrase() =>
-      _storage.read(key: _kRecoveryPhrase);
+  Future<String?> savedRecoveryPhrase() => _storage.read(key: _kRecoveryPhrase);
+
+  Future<void> saveRecoveryPhrase(String phrase) =>
+      _storage.write(key: _kRecoveryPhrase, value: _normalizePhrase(phrase));
 
   Future<void> clearSession() async {
     await _storage.delete(key: _kUsername);
@@ -150,22 +157,78 @@ class IdentityService {
 /// `MidnightMind`, `BrokenKing`, `HiddenFlower`...
 class PseudonymGenerator {
   static const _adjectives = [
-    'Silent', 'Midnight', 'Hidden', 'Broken', 'Wandering', 'Whispering',
-    'Quiet', 'Healing', 'Restless', 'Anxious', 'Echo', 'Wild', 'Gentle',
-    'Shadow', 'Velvet', 'Soft', 'Lonely', 'Lost', 'Starry', 'Foggy', 'Patient',
-    'Dreamy', 'Brave', 'Glowing', 'Hopeful', 'Faded', 'Trembling',
+    'Silent',
+    'Midnight',
+    'Hidden',
+    'Broken',
+    'Wandering',
+    'Whispering',
+    'Quiet',
+    'Healing',
+    'Restless',
+    'Anxious',
+    'Echo',
+    'Wild',
+    'Gentle',
+    'Shadow',
+    'Velvet',
+    'Soft',
+    'Lonely',
+    'Lost',
+    'Starry',
+    'Foggy',
+    'Patient',
+    'Dreamy',
+    'Brave',
+    'Glowing',
+    'Hopeful',
+    'Faded',
+    'Trembling',
   ];
 
   static const _nouns = [
-    'Soul', 'Mind', 'Echo', 'Flower', 'King', 'Storm', 'Pulse', 'Thinker',
-    'Whisper', 'Glow', 'Wave', 'Petal', 'Ember', 'Vessel', 'Wanderer',
-    'Cloud', 'Heart', 'Voice', 'Tide', 'Light', 'Moon', 'Ghost', 'Phoenix',
-    'River', 'Pearl', 'Lyric', 'Spark',
+    'Soul',
+    'Mind',
+    'Echo',
+    'Flower',
+    'King',
+    'Storm',
+    'Pulse',
+    'Thinker',
+    'Whisper',
+    'Glow',
+    'Wave',
+    'Petal',
+    'Ember',
+    'Vessel',
+    'Wanderer',
+    'Cloud',
+    'Heart',
+    'Voice',
+    'Tide',
+    'Light',
+    'Moon',
+    'Ghost',
+    'Phoenix',
+    'River',
+    'Pearl',
+    'Lyric',
+    'Spark',
   ];
 
   static const _avatarShapes = [
-    'orb', 'flame', 'petal', 'moon', 'spark', 'wave', 'leaf', 'mist',
-    'bolt', 'vapor', 'ash', 'feather',
+    'orb',
+    'flame',
+    'petal',
+    'moon',
+    'spark',
+    'wave',
+    'leaf',
+    'mist',
+    'bolt',
+    'vapor',
+    'ash',
+    'feather',
   ];
 
   /// A pseudonym with a short numeric suffix — keeps fresh suggestions likely

@@ -48,15 +48,15 @@ class _RecoveryKeyScreenState extends ConsumerState<RecoveryKeyScreen> {
                     child: Text(
                       'This is the only way back in.',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
-                'Venttly doesn’t collect email or phone. If you ever lose '
+                'This username account has no recovery email or phone unless you add one later. If you ever lose '
                 'your password, these 12 words are how you get back into your '
                 'sanctuary on any device. Save them somewhere safe — a password '
                 'manager, a notes app you trust, or even paper.',
@@ -73,7 +73,9 @@ class _RecoveryKeyScreenState extends ConsumerState<RecoveryKeyScreen> {
                     decoration: BoxDecoration(
                       color: scheme.primary.withOpacity(0.06),
                       borderRadius: BorderRadius.circular(22),
-                      border: Border.all(color: scheme.primary.withOpacity(0.3)),
+                      border: Border.all(
+                        color: scheme.primary.withOpacity(0.3),
+                      ),
                     ),
                     child: Column(
                       children: [
@@ -87,15 +89,18 @@ class _RecoveryKeyScreenState extends ConsumerState<RecoveryKeyScreen> {
                             TextButton.icon(
                               onPressed: () =>
                                   setState(() => _revealed = !_revealed),
-                              icon: Icon(_revealed
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined),
+                              icon: Icon(
+                                _revealed
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                              ),
                               label: Text(_revealed ? 'Hide' : 'Reveal'),
                             ),
                             OutlinedButton.icon(
                               onPressed: () {
                                 Clipboard.setData(
-                                    ClipboardData(text: widget.phrase));
+                                  ClipboardData(text: widget.phrase),
+                                );
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text('Recovery phrase copied'),

@@ -3,9 +3,10 @@
 -- suicidal ideation in a tribe hub or DM should reach the Safety queue and be
 -- shown help immediately — not only if a peer happens to report them.
 --
--- The safety classifier runs client-side on the sender's device (DM bodies are
--- E2E-stored as encrypted_payload, so the server never sees DM plaintext). The
--- sending client tags its own just-sent message via the author-only RPCs below.
+-- Historical note: the column is named encrypted_payload, but the current
+-- product stores server-readable plaintext for moderation. Migration
+-- 20260811222118 adds an authoritative database safety trigger; the author-only
+-- RPCs below remain compatible with older clients.
 --
 -- Also folds crisis-flagged messages into admin_safety_queue() (0082).
 
@@ -134,7 +135,7 @@ BEGIN
                CASE cm.crisis_level WHEN 'high' THEN 3 ELSE 2 END,
                cm.message_id, NULL::UUID, NULL::TEXT, NULL::TEXT,
                cm.sender_id, u.anonymous_pseudonym,
-               '(private DM — content encrypted)', TRUE,
+               '(private DM — server-readable; access restricted)', TRUE,
                cm.created_at
           FROM public.chat_messages cm
           LEFT JOIN public.users u ON u.user_id = cm.sender_id
@@ -150,7 +151,7 @@ BEGIN
                    left(p.content, 200),
                    left(tm.content, 200),
                    CASE WHEN r.target_chat_message_id IS NOT NULL
-                        THEN '(private DM — content encrypted)' END,
+                        THEN '(private DM — server-readable; access restricted)' END,
                    CASE WHEN r.target_comment_id IS NOT NULL THEN '(reported comment)' END,
                    CASE WHEN r.target_room_id    IS NOT NULL THEN '(reported conversation)' END,
                    '(reported content)'

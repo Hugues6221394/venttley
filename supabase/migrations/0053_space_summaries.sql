@@ -1,11 +1,11 @@
 -- 0053_space_summaries.sql
 --
--- Cache layer for the AI Space Assistant. Each Space gets one
+-- Cache layer for the Space summary assistant. Each Space gets one
 -- summary per day, computed by the `space-summary-batch` edge
 -- function and persisted here. The client reads from this table
--- directly so the hot path never touches Groq.
+-- directly. The current worker sees aggregate mood counts only.
 --
--- Scale rationale (millions of Spaces):
+-- Scale-oriented structure (capacity still requires sustained-load evidence):
 --
 --   * Read path: one round trip via the `latest_space_summary`
 --     view, indexed by `space_id`. O(log n).
@@ -15,9 +15,8 @@
 --     same row and the second insert is a no-op.
 --   * Idempotency: callers re-running the same date are silently
 --     skipped via `ON CONFLICT DO NOTHING`.
---   * Cost guard: only Spaces with at least one new vent in the
---     last 24 hours are eligible (see view below). Empty Spaces
---     don't burn Groq tokens.
+--   * Work guard: only Spaces with at least one new vent in the
+--     last 24 hours are eligible (see view below).
 
 CREATE TABLE IF NOT EXISTS public.space_summaries (
     summary_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -77,8 +76,8 @@ GRANT SELECT ON public.latest_space_summary TO authenticated, anon;
 -- Pick up to N spaces that:
 --   * Had at least one non-deleted vent in the last 24h
 --   * Don't already have a summary row for today (UTC date)
--- The edge function calls Groq for each row returned here and then
--- UPSERTs the result into space_summaries.
+-- The edge function reads aggregate mood counts for each row and UPSERTs a
+-- deterministic summary into space_summaries. Vent bodies are not exported.
 CREATE OR REPLACE FUNCTION public.pick_spaces_for_summary(p_batch INT DEFAULT 50)
 RETURNS TABLE (
     space_id   UUID,

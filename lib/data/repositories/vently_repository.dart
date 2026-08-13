@@ -27,11 +27,11 @@ class VentlyRepository {
     MockBackend? mock,
     IdentityService? identity,
     bool forceMock = false,
-  })  : _mockOverride = mock,
-        _identity = identity ?? IdentityService(),
-        _live = forceMock || VentlyConfig.useMockBackend
-            ? null
-            : SupabaseBackend.of(Supabase.instance.client);
+  }) : _mockOverride = mock,
+       _identity = identity ?? IdentityService(),
+       _live = forceMock || VentlyConfig.useMockBackend
+           ? null
+           : SupabaseBackend.of(Supabase.instance.client);
 
   // Keep the populated development backend out of live processes entirely.
   // The getter is reached only from explicit mock-mode branches.
@@ -83,8 +83,9 @@ class VentlyRepository {
     if (age < VentlyConfig.minAge) {
       throw AgeGateBlocked();
     }
-    final tier =
-        age <= VentlyConfig.restrictedMaxAge ? 'restricted_minor' : 'standard';
+    final tier = age <= VentlyConfig.restrictedMaxAge
+        ? 'restricted_minor'
+        : 'standard';
 
     final phrase = _identity.generateRecoveryPhrase();
     final sealed = await _identity.sealPassword(
@@ -152,8 +153,9 @@ class VentlyRepository {
     if (age < VentlyConfig.minAge) {
       throw AgeGateBlocked();
     }
-    final tier =
-        age <= VentlyConfig.restrictedMaxAge ? 'restricted_minor' : 'standard';
+    final tier = age <= VentlyConfig.restrictedMaxAge
+        ? 'restricted_minor'
+        : 'standard';
 
     final phrase = _identity.generateRecoveryPhrase();
     final sealed = await _identity.sealPassword(
@@ -199,7 +201,7 @@ class VentlyRepository {
     await _identity.persistSession(
       username: user.anonymousPseudonym,
       avatarSeed: user.avatarSeed,
-      birthYear: user.birthYear ?? DateTime.now().year - 18,
+      birthYear: user.birthYear,
       safetyTier: user.safetyTier,
     );
     return user;
@@ -242,6 +244,7 @@ class VentlyRepository {
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
+    String? recoveryPhrase,
   }) async {
     if (newPassword.length < 8) {
       throw const FormatException('Password must be at least 8 characters.');
@@ -251,10 +254,123 @@ class VentlyRepository {
     }
     final live = _live;
     if (live == null) return;
-    await live.changePassword(
-      currentPassword: currentPassword,
-      newPassword: newPassword,
+    await live.reauthenticate(currentPassword);
+
+    final material = await live.myRecoveryMaterial();
+    ({String blob, String salt})? rotated;
+    String? phrase;
+    if (material != null) {
+      phrase = await _identity.savedRecoveryPhrase() ?? recoveryPhrase?.trim();
+      if (phrase == null || phrase.isEmpty) {
+        throw const FormatException(
+          'Enter your 12-word recovery phrase on this device before changing the password.',
+        );
+      }
+      final recoveredPassword = await _identity.openPassword(
+        blob: material.blob,
+        salt: material.salt,
+        phrase: phrase,
+      );
+      if (recoveredPassword != currentPassword) {
+        throw const FormatException('That recovery phrase is not correct.');
+      }
+      rotated = await _identity.sealPassword(
+        password: newPassword,
+        phrase: phrase,
+      );
+    }
+
+    await _setPasswordWithReadback(
+      live,
+      intendedPassword: newPassword,
+      fallbackPassword: currentPassword,
+      ambiguityMessage:
+          'The password service returned an uncertain result. Try signing in again before retrying.',
     );
+    if (rotated != null) {
+      try {
+        await live.rotateRecoveryMaterial(
+          blob: rotated.blob,
+          salt: rotated.salt,
+        );
+      } catch (rotationError, rotationStack) {
+        // A timeout can happen after Postgres committed. Read back before any
+        // compensation so we never roll Auth back while leaving the new blob.
+        final ({String blob, String salt}) observed;
+        try {
+          final value = await live.myRecoveryMaterial();
+          if (value == null) throw StateError('Recovery material disappeared.');
+          observed = value;
+        } catch (_) {
+          throw StateError(
+            'Password changed but recovery status could not be confirmed. Sign out other sessions and contact support immediately.',
+          );
+        }
+        final rotationCommitted =
+            observed.blob == rotated.blob && observed.salt == rotated.salt;
+        final oldMaterialIntact =
+            material != null &&
+            observed.blob == material.blob &&
+            observed.salt == material.salt;
+        if (!rotationCommitted) {
+          if (!oldMaterialIntact) {
+            throw StateError(
+              'Password changed but recovery material is in an unexpected state. Contact support immediately.',
+            );
+          }
+          try {
+            await _setPasswordWithReadback(
+              live,
+              intendedPassword: currentPassword,
+              fallbackPassword: newPassword,
+              ambiguityMessage:
+                  'Password changed but recovery rollback could not be confirmed. Contact support immediately.',
+            );
+          } catch (_) {
+            throw StateError(
+              'Password changed but recovery rotation failed. Sign out other sessions and contact support immediately.',
+            );
+          }
+          Error.throwWithStackTrace(rotationError, rotationStack);
+        }
+      }
+      await _identity.saveRecoveryPhrase(phrase!);
+    }
+  }
+
+  /// Auth password updates are idempotent, but their HTTP response can be
+  /// lost after commit. Confirm the intended credential before deciding that
+  /// the operation failed; confirm the fallback before surfacing a safe error.
+  Future<void> _setPasswordWithReadback(
+    SupabaseBackend live, {
+    required String intendedPassword,
+    required String fallbackPassword,
+    required String ambiguityMessage,
+  }) async {
+    try {
+      await live.updateAuthenticatedPassword(intendedPassword);
+      return;
+    } catch (updateError, updateStack) {
+      try {
+        await live.reauthenticate(intendedPassword);
+        return;
+      } catch (_) {
+        try {
+          await live.reauthenticate(fallbackPassword);
+        } catch (_) {
+          throw StateError(ambiguityMessage);
+        }
+        Error.throwWithStackTrace(updateError, updateStack);
+      }
+    }
+  }
+
+  Future<bool> needsRecoveryPhraseForPasswordChange() async {
+    final live = _live;
+    if (live == null) return false;
+    final material = await live.myRecoveryMaterial();
+    if (material == null) return false;
+    return await _identity.savedRecoveryPhrase() == null;
   }
 
   Future<void> reauthenticate(String password) async {
@@ -315,7 +431,22 @@ class VentlyRepository {
     await _identity.persistSession(
       username: user.anonymousPseudonym,
       avatarSeed: user.avatarSeed,
-      birthYear: user.birthYear ?? DateTime.now().year - 18,
+      birthYear: user.birthYear,
+      safetyTier: user.safetyTier,
+    );
+    return user;
+  }
+
+  Future<AppUser> completeAgeVerification(DateTime birthDate) async {
+    final live = _live;
+    if (live == null) {
+      throw StateError('Age verification needs the live backend.');
+    }
+    final user = await live.setMyBirthYear(birthDate.year);
+    await _identity.persistSession(
+      username: user.anonymousPseudonym,
+      avatarSeed: user.avatarSeed,
+      birthYear: user.birthYear,
       safetyTier: user.safetyTier,
     );
     return user;
@@ -338,7 +469,7 @@ class VentlyRepository {
     await _identity.persistSession(
       username: user.anonymousPseudonym,
       avatarSeed: user.avatarSeed,
-      birthYear: user.birthYear ?? DateTime.now().year - 18,
+      birthYear: user.birthYear,
       safetyTier: user.safetyTier,
     );
     return user;
@@ -412,13 +543,15 @@ class VentlyRepository {
       final controller = StreamController<List<Post>>();
       late StreamSubscription<List<Post>> sub;
       Future<void> emit() async {
-        controller.add(await live.feed(
-          category: category,
-          mood: mood,
-          tribeSlug: tribeSlug,
-          locationBucket: locationBucket,
-          sort: sort,
-        ));
+        controller.add(
+          await live.feed(
+            category: category,
+            mood: mood,
+            tribeSlug: tribeSlug,
+            locationBucket: locationBucket,
+            sort: sort,
+          ),
+        );
       }
 
       sub = live.postsStream.listen((_) => emit());
@@ -442,7 +575,9 @@ class VentlyRepository {
   /// so a listener that subscribes after the last write waits forever. Wrap
   /// them so every subscription gets the current snapshot immediately.
   Stream<T> _mockSnapshotStream<T>(
-      Stream<dynamic> ticks, T Function() snapshot) {
+    Stream<dynamic> ticks,
+    T Function() snapshot,
+  ) {
     final controller = StreamController<T>();
     late StreamSubscription<dynamic> sub;
     void emit() => controller.add(snapshot());
@@ -473,15 +608,17 @@ class VentlyRepository {
         offset: offset,
       );
     }
-    return Future.value(_mock.feed(
-      category: category,
-      mood: mood,
-      tribeSlug: tribeSlug,
-      locationBucket: locationBucket,
-      sort: sort,
-      limit: limit,
-      offset: offset,
-    ));
+    return Future.value(
+      _mock.feed(
+        category: category,
+        mood: mood,
+        tribeSlug: tribeSlug,
+        locationBucket: locationBucket,
+        sort: sort,
+        limit: limit,
+        offset: offset,
+      ),
+    );
   }
 
   Future<List<Post>> friendStories({int limit = 24}) async {
@@ -494,11 +631,13 @@ class VentlyRepository {
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
     final stories = _mock
         .feed(sort: 'hot', limit: limit * 4)
-        .where((p) =>
-            p.isStory &&
-            p.authorId != null &&
-            p.createdAt.isAfter(cutoff) &&
-            (p.authorId == me.userId || friendIds.contains(p.authorId)))
+        .where(
+          (p) =>
+              p.isStory &&
+              p.authorId != null &&
+              p.createdAt.isAfter(cutoff) &&
+              (p.authorId == me.userId || friendIds.contains(p.authorId)),
+        )
         .take(limit)
         .toList();
     return stories;
@@ -524,11 +663,13 @@ class VentlyRepository {
         contentType: contentType,
       );
     }
-    return Future.value(_mock.uploadMyProfilePhoto(
-      bytes: bytes,
-      extension: extension,
-      contentType: contentType,
-    ));
+    return Future.value(
+      _mock.uploadMyProfilePhoto(
+        bytes: bytes,
+        extension: extension,
+        contentType: contentType,
+      ),
+    );
   }
 
   Future<AppUser> removeMyProfilePhoto() {
@@ -550,11 +691,13 @@ class VentlyRepository {
         homeCampus: homeCampus,
       );
     }
-    return Future.value(_mock.updateMyLocation(
-      homeCity: homeCity,
-      homeCountry: homeCountry,
-      homeCampus: homeCampus,
-    ));
+    return Future.value(
+      _mock.updateMyLocation(
+        homeCity: homeCity,
+        homeCountry: homeCountry,
+        homeCampus: homeCampus,
+      ),
+    );
   }
 
   // ===================== Co-mods =====================
@@ -641,15 +784,11 @@ class VentlyRepository {
   // ===================== Badges + streaks =====================
   /// Badge catalogue is effectively immutable per release — long TTL.
   Future<List<BadgeDefinition>> badgeCatalogue() {
-    return _cache.getOrLoad(
-      'badge_catalogue',
-      () async {
-        final live = _live;
-        if (live != null) return live.badgeCatalogue();
-        return _mock.badgeCatalogue();
-      },
-      ttl: const Duration(hours: 6),
-    );
+    return _cache.getOrLoad('badge_catalogue', () async {
+      final live = _live;
+      if (live != null) return live.badgeCatalogue();
+      return _mock.badgeCatalogue();
+    }, ttl: const Duration(hours: 6));
   }
 
   Future<List<UserBadge>> badgesFor(String userId) {
@@ -766,9 +905,7 @@ class VentlyRepository {
     final live = _live;
     if (live != null) return live.trendingTopicStats(limit: limit);
     final posts = _mock.feed(sort: 'hot', limit: 100000);
-    return Future.value(
-      HomeDiscovery.topicStatsFromPosts(posts, limit: limit),
-    );
+    return Future.value(HomeDiscovery.topicStatsFromPosts(posts, limit: limit));
   }
 
   Future<List<TrendingVoice>> trendingVoices({int limit = 6}) {
@@ -856,10 +993,16 @@ class VentlyRepository {
     final live = _live;
     if (live != null) {
       return live.createPersona(
-          pseudonym: pseudonym, avatarSeed: avatarSeed, bio: bio);
+        pseudonym: pseudonym,
+        avatarSeed: avatarSeed,
+        bio: bio,
+      );
     }
     return _mock.createPersona(
-        pseudonym: pseudonym, avatarSeed: avatarSeed, bio: bio);
+      pseudonym: pseudonym,
+      avatarSeed: avatarSeed,
+      bio: bio,
+    );
   }
 
   Future<Persona> updatePersona({
@@ -1095,10 +1238,7 @@ class VentlyRepository {
   }) {
     final live = _live;
     if (live != null) {
-      return live.voteTribeChatPoll(
-        messageId: messageId,
-        optionId: optionId,
-      );
+      return live.voteTribeChatPoll(messageId: messageId, optionId: optionId);
     }
     return Future.value();
   }
@@ -1115,10 +1255,7 @@ class VentlyRepository {
   }) {
     final live = _live;
     if (live != null) {
-      return live.setTribeMessageReaction(
-        messageId: messageId,
-        emoji: emoji,
-      );
+      return live.setTribeMessageReaction(messageId: messageId, emoji: emoji);
     }
     return Future.value();
   }
@@ -1225,8 +1362,10 @@ class VentlyRepository {
     return Future.value(const []);
   }
 
-  Future<List<TribeChatMediaItem>> tribeChatMedia(String tribeId,
-      {int limit = 60}) {
+  Future<List<TribeChatMediaItem>> tribeChatMedia(
+    String tribeId, {
+    int limit = 60,
+  }) {
     final live = _live;
     if (live != null) return live.tribeChatMedia(tribeId, limit: limit);
     return Future.value(const []);
@@ -1250,7 +1389,8 @@ class VentlyRepository {
   }
 
   Future<({bool hugged, int hugsCount})> toggleTribeMessageHug(
-      String messageId) {
+    String messageId,
+  ) {
     final live = _live;
     if (live != null) return live.toggleTribeMessageHug(messageId);
     return Future.value((hugged: false, hugsCount: 0));
@@ -1327,17 +1467,20 @@ class VentlyRepository {
 
   // ===================== Whispers (migration 0042) =====================
 
+  /// Pass the caller's last row as the cursor; omit it for the first page.
   Future<List<Whisper>> listWhispers({
     int limit = 30,
-    int offset = 0,
     String? category,
+    DateTime? beforeCreatedAt,
+    String? beforeWhisperId,
   }) {
     final live = _live;
     if (live != null) {
       return live.listWhispers(
         limit: limit,
-        offset: offset,
         category: category,
+        beforeCreatedAt: beforeCreatedAt,
+        beforeWhisperId: beforeWhisperId,
       );
     }
     return Future.value(const <Whisper>[]);
@@ -1438,11 +1581,7 @@ class VentlyRepository {
   }) {
     final live = _live;
     if (live != null) {
-      return live.listWhisperComments(
-        whisperId,
-        limit: limit,
-        offset: offset,
-      );
+      return live.listWhisperComments(whisperId, limit: limit, offset: offset);
     }
     return Future.value(const <WhisperComment>[]);
   }
@@ -1567,6 +1706,7 @@ class VentlyRepository {
     String? title,
     String? description,
     String? personaId,
+    String? idempotencyKey,
   }) async {
     final live = _live;
     final id = live != null
@@ -1580,6 +1720,7 @@ class VentlyRepository {
             title: title,
             description: description,
             personaId: personaId,
+            idempotencyKey: idempotencyKey,
           )
         : 'mock-whisper-id';
     AnalyticsService.instance.track(
@@ -1759,7 +1900,7 @@ class VentlyRepository {
 
   // ===================== User lookup =====================
   Future<({String userId, String pseudonym, String avatarSeed})?>
-      findUserByPseudonym(String pseudonym) async {
+  findUserByPseudonym(String pseudonym) async {
     final live = _live;
     if (live != null) {
       final row = await live.findUserByPseudonym(pseudonym);
@@ -1832,10 +1973,7 @@ class VentlyRepository {
   }) async {
     final live = _live;
     if (live != null) {
-      return live.replyToStory(
-        storyPostId: storyPostId,
-        reply: reply,
-      );
+      return live.replyToStory(storyPostId: storyPostId, reply: reply);
     }
     final room = await sendMessageRequest(
       peerUserId: authorId,
@@ -1914,7 +2052,10 @@ class VentlyRepository {
     final live = _live;
     if (live != null) {
       return live.reportTribeMessage(
-          messageId: messageId, reason: reason, note: note);
+        messageId: messageId,
+        reason: reason,
+        note: note,
+      );
     }
     // Mock backend has no moderation store — treat as a no-op.
   }
@@ -1927,7 +2068,10 @@ class VentlyRepository {
     final live = _live;
     if (live != null) {
       return live.reportChatMessage(
-          messageId: messageId, reason: reason, note: note);
+        messageId: messageId,
+        reason: reason,
+        note: note,
+      );
     }
   }
 
@@ -1942,7 +2086,8 @@ class VentlyRepository {
       return live.createPromptForTribe(tribeId: tribeId, text: text);
     }
     return Future.value(
-        _mock.createPromptForTribe(tribeId: tribeId, text: text));
+      _mock.createPromptForTribe(tribeId: tribeId, text: text),
+    );
   }
 
   /// Member-authored question to everyone or friends only (migration 0069).
@@ -1955,7 +2100,8 @@ class VentlyRepository {
       return live.createUserQuestion(text: text, audience: audience);
     }
     return Future.value(
-        _mock.createUserQuestion(text: text, audience: audience));
+      _mock.createUserQuestion(text: text, audience: audience),
+    );
   }
 
   Future<List<TribeReport>> tribeReports(String tribeId) {
@@ -1989,14 +2135,16 @@ class VentlyRepository {
         bannerUrl: bannerUrl,
       );
     }
-    return Future.value(_mock.updateTribe(
-      tribeId: tribeId,
-      name: name,
-      description: description,
-      isPrivate: isPrivate,
-      avatarUrl: avatarUrl,
-      bannerUrl: bannerUrl,
-    ));
+    return Future.value(
+      _mock.updateTribe(
+        tribeId: tribeId,
+        name: name,
+        description: description,
+        isPrivate: isPrivate,
+        avatarUrl: avatarUrl,
+        bannerUrl: bannerUrl,
+      ),
+    );
   }
 
   // ===================== Tribe ownership & lifecycle =====================
@@ -2080,10 +2228,7 @@ class VentlyRepository {
     _mock.respondTribeJoinRequest(requestId, approve: approve);
   }
 
-  Future<String> requestTribeMembership(
-    String tribeId, {
-    String? note,
-  }) async {
+  Future<String> requestTribeMembership(String tribeId, {String? note}) async {
     final live = _live;
     if (live != null) return live.requestTribeMembership(tribeId, note: note);
     return _mock.requestTribeMembership(tribeId, note: note);
@@ -2128,11 +2273,13 @@ class VentlyRepository {
         keepPreviousOwnerAsMod: keepPreviousOwnerAsMod,
       );
     }
-    return Future.value(_mock.initiateTribeTransfer(
-      tribeId: tribeId,
-      toUserId: toUserId,
-      keepPreviousOwnerAsMod: keepPreviousOwnerAsMod,
-    ));
+    return Future.value(
+      _mock.initiateTribeTransfer(
+        tribeId: tribeId,
+        toUserId: toUserId,
+        keepPreviousOwnerAsMod: keepPreviousOwnerAsMod,
+      ),
+    );
   }
 
   Future<void> respondTribeTransfer({
@@ -2141,10 +2288,7 @@ class VentlyRepository {
   }) async {
     final live = _live;
     if (live != null) {
-      await live.respondTribeTransfer(
-        transferId: transferId,
-        accept: accept,
-      );
+      await live.respondTribeTransfer(transferId: transferId, accept: accept);
     } else {
       _mock.respondTribeTransfer(transferId, accept: accept);
     }
@@ -2285,12 +2429,14 @@ class VentlyRepository {
         closesIn: closesIn,
       );
     }
-    return Future.value(_mock.createPoll(
-      postId: postId,
-      question: question,
-      optionTexts: optionTexts,
-      closesIn: closesIn,
-    ));
+    return Future.value(
+      _mock.createPoll(
+        postId: postId,
+        question: question,
+        optionTexts: optionTexts,
+        closesIn: closesIn,
+      ),
+    );
   }
 
   Future<PostPoll?> pollForPost(String postId) {
@@ -2328,17 +2474,13 @@ class VentlyRepository {
     int offset = 0,
   }) {
     final key = 'posts:author:$authorId:$limit:$offset';
-    return _cache.getOrLoad(
-      key,
-      () async {
-        final live = _live;
-        if (live != null) {
-          return live.postsByAuthor(authorId, limit: limit, offset: offset);
-        }
-        return _mock.postsByAuthor(authorId, limit: limit, offset: offset);
-      },
-      ttl: const Duration(seconds: 45),
-    );
+    return _cache.getOrLoad(key, () async {
+      final live = _live;
+      if (live != null) {
+        return live.postsByAuthor(authorId, limit: limit, offset: offset);
+      }
+      return _mock.postsByAuthor(authorId, limit: limit, offset: offset);
+    }, ttl: const Duration(seconds: 45));
   }
 
   Future<List<Post>> activeStoriesByAuthor(
@@ -2417,17 +2559,13 @@ class VentlyRepository {
   /// the directory screen swipes through several categories quickly.
   Future<List<Tribe>> tribes({String? category, String? search}) {
     final key = 'tribes:${category ?? ''}:${search ?? ''}';
-    return _cache.getOrLoad(
-      key,
-      () async {
-        final live = _live;
-        if (live != null) {
-          return live.tribes(category: category, search: search);
-        }
-        return _mock.tribes(category: category, search: search);
-      },
-      ttl: const Duration(minutes: 1),
-    );
+    return _cache.getOrLoad(key, () async {
+      final live = _live;
+      if (live != null) {
+        return live.tribes(category: category, search: search);
+      }
+      return _mock.tribes(category: category, search: search);
+    }, ttl: const Duration(minutes: 1));
   }
 
   Future<List<Tribe>> tribesIKeep() {
@@ -2485,15 +2623,11 @@ class VentlyRepository {
 
   Future<List<Tribe>> tribesByKeeper(String keeperId) {
     final key = 'tribes:keeper:$keeperId';
-    return _cache.getOrLoad(
-      key,
-      () async {
-        final live = _live;
-        if (live != null) return live.tribesByKeeper(keeperId);
-        return _mock.tribesByKeeper(keeperId);
-      },
-      ttl: const Duration(minutes: 1),
-    );
+    return _cache.getOrLoad(key, () async {
+      final live = _live;
+      if (live != null) return live.tribesByKeeper(keeperId);
+      return _mock.tribesByKeeper(keeperId);
+    }, ttl: const Duration(minutes: 1));
   }
 
   Future<List<Post>> postsByKeeper(
@@ -2502,17 +2636,13 @@ class VentlyRepository {
     int offset = 0,
   }) {
     final key = 'posts:keeper:$keeperId:$limit:$offset';
-    return _cache.getOrLoad(
-      key,
-      () async {
-        final live = _live;
-        if (live != null) {
-          return live.postsByKeeper(keeperId, limit: limit, offset: offset);
-        }
-        return _mock.postsByKeeper(keeperId, limit: limit, offset: offset);
-      },
-      ttl: const Duration(seconds: 45),
-    );
+    return _cache.getOrLoad(key, () async {
+      final live = _live;
+      if (live != null) {
+        return live.postsByKeeper(keeperId, limit: limit, offset: offset);
+      }
+      return _mock.postsByKeeper(keeperId, limit: limit, offset: offset);
+    }, ttl: const Duration(seconds: 45));
   }
 
   // ─── Spaces (migration 0050) ────────────────────────────────────────
@@ -2551,7 +2681,10 @@ class VentlyRepository {
     final live = _live;
     if (live != null) {
       return live.createSpace(
-          tribeId: tribeId, name: name, description: description);
+        tribeId: tribeId,
+        name: name,
+        description: description,
+      );
     }
     return Future.error(StateError('not_signed_in'));
   }
@@ -2623,17 +2756,19 @@ class VentlyRepository {
         rules: rules,
       );
     }
-    return Future.value(_mock.createTribe(
-      name: name,
-      category: category,
-      description: description,
-      isPrivate: isPrivate,
-      tags: tags,
-      visibility: visibility,
-      welcomeMessage: welcomeMessage,
-      settings: settings,
-      rules: rules,
-    ));
+    return Future.value(
+      _mock.createTribe(
+        name: name,
+        category: category,
+        description: description,
+        isPrivate: isPrivate,
+        tags: tags,
+        visibility: visibility,
+        welcomeMessage: welcomeMessage,
+        settings: settings,
+        rules: rules,
+      ),
+    );
   }
 
   bool joinedTribe(String tribeId) {
@@ -2704,7 +2839,9 @@ class VentlyRepository {
     final live = _live;
     if (live != null) return live.watchMessages(roomId);
     return _mockSnapshotStream(
-        _mock.roomsStream, () => _mock.roomMessages(roomId));
+      _mock.roomsStream,
+      () => _mock.roomMessages(roomId),
+    );
   }
 
   /// Returns true when the current user is allowed to DM [peerUserId].
@@ -2835,12 +2972,14 @@ class VentlyRepository {
         clearAvatar: clearAvatar,
       );
     }
-    return Future.value(_mock.updateGroupChatIdentity(
-      roomId,
-      title: title,
-      avatarPath: avatarPath,
-      clearAvatar: clearAvatar,
-    ));
+    return Future.value(
+      _mock.updateGroupChatIdentity(
+        roomId,
+        title: title,
+        avatarPath: avatarPath,
+        clearAvatar: clearAvatar,
+      ),
+    );
   }
 
   Future<bool> setGroupChatNickname({
@@ -2867,11 +3006,13 @@ class VentlyRepository {
         inviteEnabled: inviteEnabled,
       );
     }
-    return Future.value(_mock.setGroupChatPrivacy(
-      roomId,
-      allowMemberInvites: allowMemberInvites,
-      inviteEnabled: inviteEnabled,
-    ));
+    return Future.value(
+      _mock.setGroupChatPrivacy(
+        roomId,
+        allowMemberInvites: allowMemberInvites,
+        inviteEnabled: inviteEnabled,
+      ),
+    );
   }
 
   Future<String> regenerateGroupInvite(String roomId) {
@@ -3019,10 +3160,9 @@ class VentlyRepository {
         newPlaintext: newPlaintext,
       );
     }
-    return Future.value(_mock.editChatMessage(
-      messageId: messageId,
-      newPlaintext: newPlaintext,
-    ));
+    return Future.value(
+      _mock.editChatMessage(messageId: messageId, newPlaintext: newPlaintext),
+    );
   }
 
   Future<bool> deleteChatMessage(String messageId) {
@@ -3044,9 +3184,7 @@ class VentlyRepository {
     if (live != null) {
       return live.editPost(postId: postId, newContent: newContent);
     }
-    return Future.value(
-      _mock.editPost(postId: postId, newContent: newContent),
-    );
+    return Future.value(_mock.editPost(postId: postId, newContent: newContent));
   }
 
   Future<bool> deletePost(String postId) {
@@ -3122,10 +3260,7 @@ class VentlyRepository {
 
   /// Used by the sign-in screens after catching
   /// [MfaChallengeRequiredException] to complete AAL2.
-  Future<void> verifyMfa({
-    required String factorId,
-    required String code,
-  }) {
+  Future<void> verifyMfa({required String factorId, required String code}) {
     final live = _live;
     if (live != null) {
       return live.verifyMfa(factorId: factorId, code: code);
@@ -3249,9 +3384,7 @@ class VentlyRepository {
         contentType: contentType,
       );
     }
-    return Future.value(
-      '$roomId/group-avatar-mock.${extension.toLowerCase()}',
-    );
+    return Future.value('$roomId/group-avatar-mock.${extension.toLowerCase()}');
   }
 
   Future<void> deleteChatMedia(String path) {
@@ -3308,9 +3441,16 @@ class VentlyRepository {
     final live = _live;
     if (live != null) {
       return live.updateUserQuestion(
-          promptId: promptId, text: text, audience: audience);
+        promptId: promptId,
+        text: text,
+        audience: audience,
+      );
     }
-    _mock.updateUserQuestion(promptId: promptId, text: text, audience: audience);
+    _mock.updateUserQuestion(
+      promptId: promptId,
+      text: text,
+      audience: audience,
+    );
     return Future.value();
   }
 
@@ -3391,7 +3531,8 @@ class VentlyRepository {
   int _ageFrom(DateTime birth) {
     final now = DateTime.now();
     var age = now.year - birth.year;
-    final hasBirthdayPassed = now.month > birth.month ||
+    final hasBirthdayPassed =
+        now.month > birth.month ||
         (now.month == birth.month && now.day >= birth.day);
     if (!hasBirthdayPassed) age -= 1;
     return age;

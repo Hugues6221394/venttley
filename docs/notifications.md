@@ -17,7 +17,7 @@ and pushes land on real devices.
 | `NotificationsService` (foreground local notifications) | ✅ |
 | `flutter_local_notifications` package | ✅ in pubspec |
 | FCM / APNs token capture in the client | ⏳ needs Firebase wiring |
-| Server-side fan-out (Supabase Edge Function) | ⏳ needs deploy |
+| Durable server-side fan-out | ✅ source + migration; staging evidence pending |
 
 ## Step 1 — Firebase project
 
@@ -80,72 +80,48 @@ Add to `android/app/src/main/AndroidManifest.xml`:
 <false/>
 ```
 
-## Step 5 — Edge function for fan-out
+## Step 5 — Deploy the durable fan-out worker
 
-Deploy a Supabase Edge Function that runs on a postgres webhook from
-`chat_messages` INSERT / `friendships` INSERT / `notifications`
-INSERT and sends to FCM for each token in `push_tokens`.
+`notification-fanout` accepts only a Database Webhook pointer (table + primary
+key), validates `x-webhook-secret`, and re-reads the canonical row in Postgres.
+Postgres expands recipients into `push_delivery_outbox` with a unique event/user
+key. The worker leases bounded batches, retries with backoff, removes invalid
+tokens, and sends generic copy only. User-authored message or Tribe text never
+enters Firebase.
 
-Skeleton (`supabase/functions/push-fanout/index.ts`):
-
-```ts
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-Deno.serve(async (req) => {
-  const { record, table } = await req.json();
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  // Figure out who should receive the push
-  let recipientUserId: string | null = null;
-  let title = "Venttly";
-  let body = "";
-  if (table === "chat_messages") {
-    const { data: room } = await supabase
-      .from("chat_rooms").select("initiated_by, received_by")
-      .eq("room_id", record.room_id).single();
-    recipientUserId = room.initiated_by === record.sender_id
-      ? room.received_by : room.initiated_by;
-    title = "New message";
-    body = record.encrypted_payload?.slice(0, 80) ?? "";
-  }
-  // ...handle friendships, notifications similarly...
-
-  if (!recipientUserId) return new Response("no-op");
-
-  const { data: tokens } = await supabase
-    .from("push_tokens").select("token, platform")
-    .eq("user_id", recipientUserId);
-
-  // Send via FCM HTTP v1 API — needs a Google service-account JWT.
-  // Pseudocode:
-  for (const t of tokens ?? []) {
-    await fetch("https://fcm.googleapis.com/v1/projects/<id>/messages:send", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${await fcmAccessToken()}` },
-      body: JSON.stringify({
-        message: {
-          token: t.token,
-          notification: { title, body },
-          data: { kind: table, id: record.message_id },
-        },
-      }),
-    });
-  }
-  return new Response("ok");
-});
-```
-
-Deploy:
+Set secrets and keep the rollout disabled initially:
 
 ```sh
-supabase functions deploy push-fanout
+supabase secrets set \
+  WEBHOOK_SECRET='<random 32+ byte value>' \
+  FCM_PROJECT_ID='<firebase project id>' \
+  FCM_SERVICE_ACCOUNT_JSON='<service account json>' \
+  PUSH_DELIVERY_ENABLED='off'
+
+supabase functions deploy notification-fanout --no-verify-jwt
 ```
 
-Then wire a Postgres webhook (Supabase dashboard → Database → Webhooks)
-that POSTs to the function on insert for the three tables above.
+Wire INSERT webhooks for `chat_messages`, `tribe_messages`, `friendships`, and
+`notifications`. Every webhook must include the same `x-webhook-secret`. Also
+schedule a periodic POST body such as `{"batch":100}` so queued retries drain
+even when no new webhook arrives.
+
+Before enabling the canary, verify:
+
+- repeated delivery of the same webhook creates one outbox row per recipient;
+- forged table names and missing/wrong secrets return 4xx;
+- muted and non-member recipients are excluded by the canonical SQL query;
+- FCM payload captures contain only generic copy and routing IDs;
+- partial device failure does not duplicate a push on a device that succeeded;
+- invalid tokens are removed, leases recover after worker death, and rows become
+  `dead` after the bounded attempt limit;
+- p95 enqueue-to-device latency and outbox age have dashboards and alerts.
+
+Then enable only in the isolated staging/canary environment:
+
+```sh
+supabase secrets set PUSH_DELIVERY_ENABLED='on'
+```
 
 ## Local foreground notifications today
 

@@ -20,6 +20,7 @@ import '../screens/inbox/group_invite_screen.dart';
 import '../screens/whispers/create_whisper_screen.dart';
 import '../widgets/keep_alive.dart';
 import '../screens/onboarding/email_signup_screen.dart';
+import '../screens/onboarding/age_completion_screen.dart';
 import '../screens/onboarding/identity_screen.dart';
 import '../screens/onboarding/recover_screen.dart';
 import '../screens/onboarding/recovery_key_screen.dart';
@@ -61,7 +62,6 @@ import '../screens/keeper/keeper_insights_screen.dart';
 /// shell (chat boxes, full-screen creators/viewers, onboarding).
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
-
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -71,6 +71,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       final path = state.matchedLocation;
       final onboardingRoute = path.startsWith('/onboarding');
       if (session == null && !onboardingRoute) return '/onboarding';
+      if (session != null &&
+          session.birthYear == null &&
+          path != '/onboarding/age') {
+        return '/onboarding/age';
+      }
+      if (session != null &&
+          session.birthYear != null &&
+          path == '/onboarding/age') {
+        return '/feed';
+      }
       if (session != null && path == '/onboarding') return '/feed';
       return null;
     },
@@ -118,6 +128,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/onboarding', builder: (_, __) => const WelcomeScreen()),
       GoRoute(
+        path: '/onboarding/age',
+        builder: (_, __) => const AgeCompletionScreen(),
+      ),
+      GoRoute(
         path: '/onboarding/identity',
         builder: (_, __) => const IdentityScreen(),
       ),
@@ -127,8 +141,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             RecoveryKeyScreen(phrase: (st.extra as String?) ?? ''),
       ),
       GoRoute(
-          path: '/onboarding/recover',
-          builder: (_, __) => const RecoverScreen()),
+        path: '/onboarding/recover',
+        builder: (_, __) => const RecoverScreen(),
+      ),
       GoRoute(
         path: '/onboarding/email',
         builder: (_, __) => const EmailSignupScreen(),
@@ -149,233 +164,257 @@ final routerProvider = Provider<GoRouter>((ref) {
             HomeShell(navigationShell: navigationShell),
         branches: [
           // ── Home + all browse/detail surfaces ─────────────────────────
-          StatefulShellBranch(routes: [
-            GoRoute(
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
                 path: '/feed',
                 builder: (_, __) =>
-                    const KeepAliveWrapper(child: AdaptiveHomeTab())),
-            GoRoute(
-                path: '/friends', builder: (_, __) => const FriendsScreen()),
-            GoRoute(
-                path: '/discover', builder: (_, __) => const DiscoverScreen()),
-            GoRoute(
-                path: '/tribes',
-                builder: (_, __) => const TribesDirectoryScreen()),
-            GoRoute(
-              path: '/post/:id',
-              builder: (ctx, st) {
-                final postId = st.pathParameters['id']!;
-                final extra = st.extra;
-                return PostDetailScreen(
-                  postId: postId,
-                  initialPost:
-                      extra is Post && extra.postId == postId ? extra : null,
-                );
-              },
-              routes: [
-                GoRoute(
-                  path: 'share',
-                  builder: (ctx, st) =>
-                      ShareCardScreen(postId: st.pathParameters['id']!),
-                ),
-              ],
-            ),
-            GoRoute(
-              path: '/plug/:name',
-              builder: (ctx, st) => PlugProfileScreen(
-                displayName: Uri.decodeComponent(st.pathParameters['name']!),
+                    const KeepAliveWrapper(child: AdaptiveHomeTab()),
               ),
-            ),
-            GoRoute(
-              path: '/keeper/moderation',
-              builder: (_, __) => const KeeperModerationCenterScreen(),
-            ),
-            GoRoute(
-              path: '/keeper/calendar',
-              builder: (_, __) => const KeeperEngagementCalendarScreen(),
-            ),
-            GoRoute(
-              path: '/keeper/comod',
-              builder: (_, __) => const KeeperComodScreen(),
-            ),
-            GoRoute(
-              path: '/keeper/insights',
-              builder: (_, __) => const KeeperInsightsScreen(),
-            ),
-            GoRoute(
-              path: '/tribe/:slug',
-              builder: (ctx, st) =>
-                  TribeDetailScreen(slug: st.pathParameters['slug']!),
-              routes: [
-                GoRoute(
-                  path: 'chat',
-                  // Chat boxes hide the footer nav — best-practice UX.
-                  parentNavigatorKey: rootNavigatorKey,
-                  builder: (ctx, st) => TribeChatScreen(
-                    slug: st.pathParameters['slug']!,
-                    scrollToMessageId: st.uri.queryParameters['message'],
+              GoRoute(
+                path: '/friends',
+                builder: (_, __) => const FriendsScreen(),
+              ),
+              GoRoute(
+                path: '/discover',
+                builder: (_, __) => const DiscoverScreen(),
+              ),
+              GoRoute(
+                path: '/tribes',
+                builder: (_, __) => const TribesDirectoryScreen(),
+              ),
+              GoRoute(
+                path: '/post/:id',
+                builder: (ctx, st) {
+                  final postId = st.pathParameters['id']!;
+                  final extra = st.extra;
+                  return PostDetailScreen(
+                    postId: postId,
+                    initialPost: extra is Post && extra.postId == postId
+                        ? extra
+                        : null,
+                  );
+                },
+                routes: [
+                  GoRoute(
+                    path: 'share',
+                    builder: (ctx, st) =>
+                        ShareCardScreen(postId: st.pathParameters['id']!),
                   ),
-                  routes: [
-                    GoRoute(
-                      path: 'hub',
-                      parentNavigatorKey: rootNavigatorKey,
-                      builder: (ctx, st) =>
-                          TribeChatHubScreen(slug: st.pathParameters['slug']!),
-                    ),
-                  ],
+                ],
+              ),
+              GoRoute(
+                path: '/plug/:name',
+                builder: (ctx, st) => PlugProfileScreen(
+                  displayName: Uri.decodeComponent(st.pathParameters['name']!),
                 ),
-                GoRoute(
-                  path: 'space/:spaceId',
-                  builder: (ctx, st) =>
-                      SpaceHomeScreen(spaceId: st.pathParameters['spaceId']!),
-                ),
-                GoRoute(
-                  path: 'manage',
-                  builder: (ctx, st) =>
-                      TribeManageScreen(slug: st.pathParameters['slug']!),
-                  routes: [
-                    GoRoute(
-                      path: 'reports',
-                      builder: (ctx, st) =>
-                          TribeReportsScreen(slug: st.pathParameters['slug']!),
+              ),
+              GoRoute(
+                path: '/keeper/moderation',
+                builder: (_, __) => const KeeperModerationCenterScreen(),
+              ),
+              GoRoute(
+                path: '/keeper/calendar',
+                builder: (_, __) => const KeeperEngagementCalendarScreen(),
+              ),
+              GoRoute(
+                path: '/keeper/comod',
+                builder: (_, __) => const KeeperComodScreen(),
+              ),
+              GoRoute(
+                path: '/keeper/insights',
+                builder: (_, __) => const KeeperInsightsScreen(),
+              ),
+              GoRoute(
+                path: '/tribe/:slug',
+                builder: (ctx, st) =>
+                    TribeDetailScreen(slug: st.pathParameters['slug']!),
+                routes: [
+                  GoRoute(
+                    path: 'chat',
+                    // Chat boxes hide the footer nav — best-practice UX.
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (ctx, st) => TribeChatScreen(
+                      slug: st.pathParameters['slug']!,
+                      scrollToMessageId: st.uri.queryParameters['message'],
                     ),
-                    GoRoute(
-                      path: 'moderation',
-                      builder: (ctx, st) => TribeModerationScreen(
-                          slug: st.pathParameters['slug']!),
-                    ),
-                    GoRoute(
-                      path: 'edit',
-                      builder: (ctx, st) =>
-                          EditTribeScreen(slug: st.pathParameters['slug']!),
-                    ),
-                    GoRoute(
-                      path: 'settings',
-                      builder: (ctx, st) => TribeSettingsScreen(
-                        slug: st.pathParameters['slug']!,
+                    routes: [
+                      GoRoute(
+                        path: 'hub',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (ctx, st) => TribeChatHubScreen(
+                          slug: st.pathParameters['slug']!,
+                        ),
                       ),
-                      routes: [
-                        GoRoute(
-                          path: 'identity',
-                          builder: (ctx, st) => EditTribeScreen(
-                            slug: st.pathParameters['slug']!,
-                            focusWelcome:
-                                st.uri.queryParameters['focus'] == 'welcome',
-                          ),
-                        ),
-                        GoRoute(
-                          path: 'rules',
-                          builder: (ctx, st) => TribeRulesEditorScreen(
-                            slug: st.pathParameters['slug']!,
-                          ),
-                        ),
-                        GoRoute(
-                          path: 'members',
-                          builder: (ctx, st) => TribeMembersManagementScreen(
-                            slug: st.pathParameters['slug']!,
-                          ),
-                        ),
-                        GoRoute(
-                          path: 'spaces',
-                          builder: (ctx, st) => TribeSpacesManagementScreen(
-                            slug: st.pathParameters['slug']!,
-                            openCreate:
-                                st.uri.queryParameters['create'] == 'true',
-                          ),
-                        ),
-                        GoRoute(
-                          path: 'content',
-                          builder: (ctx, st) => TribeContentManagementScreen(
-                            slug: st.pathParameters['slug']!,
-                            initialFilter:
-                                st.uri.queryParameters['filter'] ?? 'all',
-                            initialAction: st.uri.queryParameters['action'],
-                          ),
-                        ),
-                        GoRoute(
-                          path: 'audit',
-                          builder: (ctx, st) => TribeAuditScreen(
-                            slug: st.pathParameters['slug']!,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            GoRoute(
-              path: '/tribes/new',
-              builder: (_, __) => const CreateTribeScreen(),
-            ),
-            GoRoute(
-                path: '/questions',
-                builder: (_, __) => const QuestionsScreen()),
-            GoRoute(
-              path: '/user/:userId',
-              builder: (ctx, st) =>
-                  FriendProfileScreen(userId: st.pathParameters['userId']!),
-              routes: [
-                GoRoute(
-                  path: 'stat/:statKind',
-                  builder: (ctx, st) => ProfileStatDetailScreen(
-                    userId: st.pathParameters['userId']!,
-                    statKind: st.pathParameters['statKind']!,
+                    ],
                   ),
-                ),
-              ],
-            ),
-            GoRoute(
-              path: '/notifications',
-              builder: (_, __) => const NotificationsScreen(),
-            ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
+                  GoRoute(
+                    path: 'space/:spaceId',
+                    builder: (ctx, st) =>
+                        SpaceHomeScreen(spaceId: st.pathParameters['spaceId']!),
+                  ),
+                  GoRoute(
+                    path: 'manage',
+                    builder: (ctx, st) =>
+                        TribeManageScreen(slug: st.pathParameters['slug']!),
+                    routes: [
+                      GoRoute(
+                        path: 'reports',
+                        builder: (ctx, st) => TribeReportsScreen(
+                          slug: st.pathParameters['slug']!,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'moderation',
+                        builder: (ctx, st) => TribeModerationScreen(
+                          slug: st.pathParameters['slug']!,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'edit',
+                        builder: (ctx, st) =>
+                            EditTribeScreen(slug: st.pathParameters['slug']!),
+                      ),
+                      GoRoute(
+                        path: 'settings',
+                        builder: (ctx, st) => TribeSettingsScreen(
+                          slug: st.pathParameters['slug']!,
+                        ),
+                        routes: [
+                          GoRoute(
+                            path: 'identity',
+                            builder: (ctx, st) => EditTribeScreen(
+                              slug: st.pathParameters['slug']!,
+                              focusWelcome:
+                                  st.uri.queryParameters['focus'] == 'welcome',
+                            ),
+                          ),
+                          GoRoute(
+                            path: 'rules',
+                            builder: (ctx, st) => TribeRulesEditorScreen(
+                              slug: st.pathParameters['slug']!,
+                            ),
+                          ),
+                          GoRoute(
+                            path: 'members',
+                            builder: (ctx, st) => TribeMembersManagementScreen(
+                              slug: st.pathParameters['slug']!,
+                            ),
+                          ),
+                          GoRoute(
+                            path: 'spaces',
+                            builder: (ctx, st) => TribeSpacesManagementScreen(
+                              slug: st.pathParameters['slug']!,
+                              openCreate:
+                                  st.uri.queryParameters['create'] == 'true',
+                            ),
+                          ),
+                          GoRoute(
+                            path: 'content',
+                            builder: (ctx, st) => TribeContentManagementScreen(
+                              slug: st.pathParameters['slug']!,
+                              initialFilter:
+                                  st.uri.queryParameters['filter'] ?? 'all',
+                              initialAction: st.uri.queryParameters['action'],
+                            ),
+                          ),
+                          GoRoute(
+                            path: 'audit',
+                            builder: (ctx, st) => TribeAuditScreen(
+                              slug: st.pathParameters['slug']!,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: '/tribes/new',
+                builder: (_, __) => const CreateTribeScreen(),
+              ),
+              GoRoute(
+                path: '/questions',
+                builder: (_, __) => const QuestionsScreen(),
+              ),
+              GoRoute(
+                path: '/user/:userId',
+                builder: (ctx, st) =>
+                    FriendProfileScreen(userId: st.pathParameters['userId']!),
+                routes: [
+                  GoRoute(
+                    path: 'stat/:statKind',
+                    builder: (ctx, st) => ProfileStatDetailScreen(
+                      userId: st.pathParameters['userId']!,
+                      statKind: st.pathParameters['statKind']!,
+                    ),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: '/notifications',
+                builder: (_, __) => const NotificationsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
                 path: '/whispers',
                 builder: (_, __) =>
-                    const KeepAliveWrapper(child: AdaptiveWhispersTab())),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
+                    const KeepAliveWrapper(child: AdaptiveWhispersTab()),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
                 path: '/compose',
-                builder: (ctx, st) => ComposeScreen(
-                      queryParams: st.uri.queryParameters,
-                    )),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
+                builder: (ctx, st) =>
+                    ComposeScreen(queryParams: st.uri.queryParameters),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
                 path: '/inbox',
                 builder: (_, __) =>
-                    const KeepAliveWrapper(child: AdaptiveInboxTab())),
-          ]),
+                    const KeepAliveWrapper(child: AdaptiveInboxTab()),
+              ),
+            ],
+          ),
           // ── Profile + its sub-pages ───────────────────────────────────
-          StatefulShellBranch(routes: [
-            GoRoute(
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
                 path: '/profile',
                 builder: (_, __) =>
-                    const KeepAliveWrapper(child: AdaptiveProfileTab())),
-            GoRoute(
-              path: '/profile/avatar',
-              builder: (_, __) => const AvatarBuilderScreen(),
-            ),
-            GoRoute(
-              path: '/profile/edit',
-              builder: (_, __) => const EditProfileScreen(),
-            ),
-            GoRoute(
-              path: '/profile/security',
-              builder: (_, __) => const SecurityScreen(),
-            ),
-            GoRoute(
-              path: '/profile/password-security',
-              builder: (_, __) => const PasswordSecurityScreen(),
-            ),
-            GoRoute(
-              path: '/settings',
-              builder: (_, __) => const SettingsScreen(),
-            ),
-          ]),
+                    const KeepAliveWrapper(child: AdaptiveProfileTab()),
+              ),
+              GoRoute(
+                path: '/profile/avatar',
+                builder: (_, __) => const AvatarBuilderScreen(),
+              ),
+              GoRoute(
+                path: '/profile/edit',
+                builder: (_, __) => const EditProfileScreen(),
+              ),
+              GoRoute(
+                path: '/profile/security',
+                builder: (_, __) => const SecurityScreen(),
+              ),
+              GoRoute(
+                path: '/profile/password-security',
+                builder: (_, __) => const PasswordSecurityScreen(),
+              ),
+              GoRoute(
+                path: '/settings',
+                builder: (_, __) => const SettingsScreen(),
+              ),
+            ],
+          ),
         ],
       ),
 
@@ -389,10 +428,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         redirect: (_, state) =>
             '/whispers?whisper=${state.pathParameters['id']}',
       ),
-      GoRoute(
-        path: '/plug-dashboard',
-        redirect: (_, __) => '/feed',
-      ),
+      GoRoute(path: '/plug-dashboard', redirect: (_, __) => '/feed'),
       // DM chat box — root navigator, no footer nav inside conversations.
       GoRoute(
         path: '/group-chat/new',
@@ -441,15 +477,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/group-chat/:roomId/settings',
-        builder: (ctx, st) => GroupChatSettingsScreen(
-          roomId: st.pathParameters['roomId']!,
-        ),
+        builder: (ctx, st) =>
+            GroupChatSettingsScreen(roomId: st.pathParameters['roomId']!),
       ),
       GoRoute(
         path: '/group-invite/:token',
-        builder: (ctx, st) => GroupInviteScreen(
-          token: st.pathParameters['token']!,
-        ),
+        builder: (ctx, st) =>
+            GroupInviteScreen(token: st.pathParameters['token']!),
       ),
       // Full-screen creators + story viewer stay immersive.
       GoRoute(

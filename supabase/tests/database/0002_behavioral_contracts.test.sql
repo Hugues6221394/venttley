@@ -20,7 +20,7 @@ INSERT INTO auth.users (
     'authenticated',
     'phase2-a@id.venttly.app',
     '{"provider":"email","providers":["email"]}'::JSONB,
-    '{"pseudonym":"phase2_a","avatar_seed":"phase2-a","safety_tier":"standard"}'::JSONB,
+    '{"pseudonym":"phase2_a","avatar_seed":"phase2-a","birth_year":2000}'::JSONB,
     NOW() - INTERVAL '2 hours',
     NOW() - INTERVAL '2 hours'
   ),
@@ -30,7 +30,7 @@ INSERT INTO auth.users (
     'authenticated',
     'phase2-b@id.venttly.app',
     '{"provider":"email","providers":["email"]}'::JSONB,
-    '{"pseudonym":"phase2_b","avatar_seed":"phase2-b","safety_tier":"standard"}'::JSONB,
+    '{"pseudonym":"phase2_b","avatar_seed":"phase2-b","birth_year":2000}'::JSONB,
     NOW() - INTERVAL '2 hours',
     NOW() - INTERVAL '2 hours'
   ),
@@ -40,7 +40,7 @@ INSERT INTO auth.users (
     'authenticated',
     'phase2-c@id.venttly.app',
     '{"provider":"email","providers":["email"]}'::JSONB,
-    '{"pseudonym":"phase2_c","avatar_seed":"phase2-c","safety_tier":"standard"}'::JSONB,
+    '{"pseudonym":"phase2_c","avatar_seed":"phase2-c","birth_year":2000}'::JSONB,
     NOW() - INTERVAL '2 hours',
     NOW() - INTERVAL '2 hours'
   ),
@@ -50,7 +50,7 @@ INSERT INTO auth.users (
     'authenticated',
     'phase2-d@id.venttly.app',
     '{"provider":"email","providers":["email"]}'::JSONB,
-    '{"pseudonym":"phase2_d","avatar_seed":"phase2-d","safety_tier":"standard"}'::JSONB,
+    '{"pseudonym":"phase2_d","avatar_seed":"phase2-d","birth_year":2000}'::JSONB,
     NOW() - INTERVAL '2 hours',
     NOW() - INTERVAL '2 hours'
   );

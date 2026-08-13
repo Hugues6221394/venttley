@@ -48,8 +48,8 @@ BEGIN
     IF byear IS NOT NULL THEN
         v_age := EXTRACT(YEAR FROM now())::INT - byear;
 
-        -- The COPPA floor. Raising here aborts the auth.users insert, so the
-        -- signUp call fails and no account exists.
+        -- The product's minimum-age floor. Raising here aborts the auth.users
+        -- insert, so the signUp call fails and no account exists.
         IF v_age < 13 THEN
             RAISE EXCEPTION 'age_below_minimum'
                 USING HINT = 'Venttly is not available under 13.';

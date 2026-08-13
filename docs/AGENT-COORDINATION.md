@@ -29,7 +29,7 @@ What it changed, and why it must not be silently reverted:
   OTP signups that carry no DOB).
 
 A later `CREATE OR REPLACE FUNCTION public.handle_new_auth_user()` that omits any
-of this **reopens a COPPA exposure on a platform serving 13–17 year olds.** If
+of this **reopens an under-13 safety risk on a platform serving teens.** If
 hardening work needs to touch that function, extend it — start from the version
 in `20260811010000`, not from `0002`.
 

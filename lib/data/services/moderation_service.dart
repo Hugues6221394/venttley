@@ -1,10 +1,10 @@
 /// Context-aware safety moderation pipeline.
 ///
-/// Implements the tiered cascade from the PRD:
+/// Implements an advisory client cascade; PostgreSQL remains authoritative:
 ///   1. Fast local keyword dictionary (self-harm, doxxing PII, hate, harassment,
 ///      sexual content). Runs in-process — single-digit ms latency.
-///   2. Server-side Llama Guard — escalates ambiguous content through the
-///      authenticated `moderate` Edge Function. No provider key ships in app.
+///   2. An authenticated, quota-bounded server advisory. Production does not
+///      send user-authored text to an external AI processor.
 ///
 /// Public surface: [ModerationService.review] returns a [ModerationResult]
 /// with a [SafetyVerdict], human-readable reasons, and a [surfaceCrisisHelpline]
@@ -18,7 +18,7 @@ import '../../domain/entities/entities.dart';
 
 enum SafetyVerdict { safe, warn, block }
 
-/// LlamaGuard 3 hazard taxonomy — we map its S* codes back to UI categories.
+/// Stable safety categories shared by client and server responses.
 enum HazardCategory {
   selfHarm,
   hate,
@@ -49,9 +49,8 @@ class ModerationResult {
 class ModerationService {
   ModerationService({this.remoteGuard});
 
-  /// When set, Tier-2 classification is delegated to this callback — the
-  /// server-side `moderate` edge function — instead of calling Groq directly.
-  /// Keeps the API key off-device and enables the trusted verdict cache.
+  /// When set, advisory classification is delegated to the authenticated
+  /// `moderate` Edge Function.
   /// Returns the raw verdict map {verdict, categories, reason}, or null on
   /// failure (treated as safe; Tier-1 still applies).
   final Future<Map<String, dynamic>?> Function(String text)? remoteGuard;
@@ -62,20 +61,19 @@ class ModerationService {
   List<AutomodRule> _dynamicRules = const [];
   void setDynamicRules(List<AutomodRule> rules) => _dynamicRules = rules;
 
-  // --- Tier-2 cost gate ---------------------------------------------------
+  // --- Server advisory cost gate -----------------------------------------
   final _rng = Random();
 
-  /// Fraction of clearly-benign messages still sent to the LLM, so we keep
-  /// coverage on novel harmful phrasing and can monitor classifier drift.
-  static const double _llmSampleRate = 0.05;
+  /// Fraction of clearly-benign messages sampled for a configured, approved
+  /// in-boundary classifier.
+  static const double _advisorySampleRate = 0.05;
 
   /// Minimum length below which a signal-free message is treated as benign
-  /// (a 3-word "i feel sad" doesn't need a Llama Guard round-trip).
-  static const int _llmMinLength = 24;
+  /// (a 3-word "i feel sad" doesn't need a server round-trip).
+  static const int _advisoryMinLength = 24;
 
   /// Coarse risk-adjacent tokens. If none of these appear AND Tier 1 found
-  /// nothing, the content is almost certainly benign venting — the LLM's job
-  /// is nuance around these themes, so its absence means low value / high cost.
+  /// nothing, the content is almost certainly benign venting.
   static final RegExp _riskHints = RegExp(
     r'\b('
     r'die|dead|death|kill|hurt|harm|blood|cut|pills|overdose|suicide|'
@@ -87,13 +85,13 @@ class ModerationService {
     caseSensitive: false,
   );
 
-  /// Decides whether to spend a Tier-2 LLM call. Escalates on any Tier-1
+  /// Decides whether to spend a server advisory call. Escalates on any Tier-1
   /// signal or risk hint; otherwise samples a small fraction.
-  bool _shouldRunLlmGuard(String lower, Set<HazardCategory> categories) {
+  bool _shouldRunServerAdvisory(String lower, Set<HazardCategory> categories) {
     if (categories.isNotEmpty) return true; // confirm/expand a Tier-1 hit
-    if (lower.length < _llmMinLength) return false;
+    if (lower.length < _advisoryMinLength) return false;
     if (_riskHints.hasMatch(lower)) return true; // nuance worth the call
-    return _rng.nextDouble() < _llmSampleRate; // sampled coverage
+    return _rng.nextDouble() < _advisorySampleRate; // sampled coverage
   }
 
   bool _ruleMatches(AutomodRule rule, String original, String lower) {
@@ -107,8 +105,9 @@ class ModerationService {
           return false; // A malformed rule never breaks moderation.
         }
       case 'word':
-        return RegExp('\\b${RegExp.escape(p.toLowerCase())}\\b')
-            .hasMatch(lower);
+        return RegExp(
+          '\\b${RegExp.escape(p.toLowerCase())}\\b',
+        ).hasMatch(lower);
       case 'contains':
       default:
         return lower.contains(p.toLowerCase());
@@ -122,8 +121,9 @@ class ModerationService {
   // Phone-like candidates. Validation below excludes calendar dates and only
   // treats short digit runs as phones when they carry an international prefix
   // or deliberate phone separators.
-  static final RegExp _phoneCandidate =
-      RegExp(r'(?<!\d)\+?\d(?:[\s\-]?\d){6,14}(?!\d)');
+  static final RegExp _phoneCandidate = RegExp(
+    r'(?<!\d)\+?\d(?:[\s\-]?\d){6,14}(?!\d)',
+  );
   static final RegExp _compactYmdDate = RegExp(
     r'^(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])$',
   );
@@ -146,8 +146,10 @@ class ModerationService {
   }
 
   // Bare email addresses — same rationale.
-  static final RegExp _email =
-      RegExp(r'[\w.\-]+@[\w\-]+\.[a-zA-Z]{2,}', caseSensitive: false);
+  static final RegExp _email = RegExp(
+    r'[\w.\-]+@[\w\-]+\.[a-zA-Z]{2,}',
+    caseSensitive: false,
+  );
 
   // Imminent-harm phrases. These short-circuit to [SafetyVerdict.warn] and
   // surface crisis resources — never block, so people in crisis can still
@@ -167,11 +169,7 @@ class ModerationService {
   ];
 
   // Hate speech — small starter set; production loads from a private dict.
-  static const List<String> _hateSlurs = [
-    'retard',
-    'faggot',
-    'n word',
-  ];
+  static const List<String> _hateSlurs = ['retard', 'faggot', 'n word'];
 
   // Targeted harassment of others.
   static const List<String> _harassment = [
@@ -182,11 +180,8 @@ class ModerationService {
     'you should die',
   ];
 
-  // Sexual / explicit content — kept short here; LlamaGuard catches nuance.
-  static const List<String> _sexualKeywords = [
-    'nude pic',
-    'send nudes',
-  ];
+  // Sexual solicitation starter set; the database enforces the same core set.
+  static const List<String> _sexualKeywords = ['nude pic', 'send nudes'];
 
   // ---------------------------------------------------------------------
   // PUBLIC API
@@ -210,7 +205,7 @@ class ModerationService {
       verdict = SafetyVerdict.block;
     }
     for (final phrase in _harassment) {
-      if (t.contains(phrase)) {
+      if (_containsPhraseOrToken(t, phrase)) {
         reasons.add('Targeted harassment language detected.');
         categories.add(HazardCategory.harassment);
         verdict = SafetyVerdict.block;
@@ -218,7 +213,7 @@ class ModerationService {
       }
     }
     for (final slur in _hateSlurs) {
-      if (t.contains(slur)) {
+      if (_containsPhraseOrToken(t, slur)) {
         reasons.add('Hate-speech term detected.');
         categories.add(HazardCategory.hate);
         verdict = SafetyVerdict.block;
@@ -226,7 +221,7 @@ class ModerationService {
       }
     }
     for (final phrase in _sexualKeywords) {
-      if (t.contains(phrase)) {
+      if (_containsPhraseOrToken(t, phrase)) {
         reasons.add('Sexual solicitation detected.');
         categories.add(HazardCategory.sexualContent);
         verdict = SafetyVerdict.block;
@@ -269,16 +264,15 @@ class ModerationService {
       }
     }
 
-    // Tier 2 — Groq-hosted Llama Guard 3. Skipped when no key is configured,
-    // when Tier 1 already blocked, and — at scale — when the content shows no
-    // risk signal at all (cost gate, see _shouldRunLlmGuard). This keeps LLM
-    // spend/latency proportional to actual risk instead of paying per message.
+    // Optional in-boundary server advisory. The database write guard is the
+    // non-bypassable enforcement point; this result improves pre-submit UX.
     if (verdict != SafetyVerdict.block &&
         remoteGuard != null &&
-        _shouldRunLlmGuard(t, categories)) {
+        _shouldRunServerAdvisory(t, categories)) {
       try {
-        final guard =
-            await _llamaGuardReview(text).timeout(const Duration(seconds: 3));
+        final guard = await _serverReview(
+          text,
+        ).timeout(const Duration(seconds: 3));
         if (guard.verdict == SafetyVerdict.block) {
           verdict = SafetyVerdict.block;
           reasons.addAll(guard.reasons);
@@ -307,9 +301,9 @@ class ModerationService {
   }
 
   // ---------------------------------------------------------------------
-  // TIER 2 — authenticated server-side classification.
+  // Authenticated server-side advisory classification.
   // ---------------------------------------------------------------------
-  Future<ModerationResult> _llamaGuardReview(String text) async {
+  Future<ModerationResult> _serverReview(String text) async {
     final remote = remoteGuard;
     if (remote == null) return _safeGuardResult;
     final parsed = await remote(text);
@@ -324,8 +318,8 @@ class ModerationService {
     surfaceCrisisHelpline: false,
   );
 
-  /// Maps the raw model verdict shape {verdict, categories, reason} onto a
-  /// [ModerationResult] — shared by the remote and direct-Groq paths.
+  /// Maps the raw server verdict shape {verdict, categories, reason} onto a
+  /// [ModerationResult].
   ModerationResult _mapGuardParsed(Map<String, dynamic> parsed) {
     final verdictStr = (parsed['verdict'] as String?)?.toLowerCase();
     final rawCats = parsed['categories'];
@@ -345,8 +339,8 @@ class ModerationService {
     // Self-harm never escalates to block — keep crisis support reachable.
     final effective =
         (verdict == SafetyVerdict.block && crisis && cats.length == 1)
-            ? SafetyVerdict.warn
-            : verdict;
+        ? SafetyVerdict.warn
+        : verdict;
 
     return ModerationResult(
       verdict: effective,
@@ -354,12 +348,20 @@ class ModerationService {
         if (reason != null && reason.isNotEmpty)
           reason
         else if (effective == SafetyVerdict.block)
-          'Flagged by Venttly safety AI.',
+          'Flagged by a Venttly safety rule.',
         if (crisis) 'We care about you. Would you like crisis resources?',
       ],
       categories: cats,
       surfaceCrisisHelpline: crisis,
     );
+  }
+
+  static bool _containsPhraseOrToken(String lower, String candidate) {
+    final normalized = candidate.toLowerCase();
+    if (normalized.contains(' ')) return lower.contains(normalized);
+    return RegExp(
+      '(^|[^a-z])${RegExp.escape(normalized)}([^a-z]|\$)',
+    ).hasMatch(lower);
   }
 
   static HazardCategory _categoryFromString(String s) {
@@ -403,8 +405,5 @@ const List<CrisisResource> kCrisisResources = [
     'Call 0793902059 or 0736440666',
   ),
   CrisisResource('Rwanda health emergency', 'Call 114 or 912'),
-  CrisisResource(
-    'Isange One Stop Centre (GBV and child abuse)',
-    'Call 3029',
-  ),
+  CrisisResource('Isange One Stop Centre (GBV and child abuse)', 'Call 3029'),
 ];

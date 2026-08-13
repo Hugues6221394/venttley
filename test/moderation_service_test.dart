@@ -23,16 +23,18 @@ void main() {
       expect(result.categories, contains(HazardCategory.privacy));
     });
 
-    test('does not mistake compact or formatted dates for phone numbers',
-        () async {
-      final service = ModerationService();
+    test(
+      'does not mistake compact or formatted dates for phone numbers',
+      () async {
+        final service = ModerationService();
 
-      final compact = await service.review('Release check 20260718');
-      final formatted = await service.review('The appointment is 2026-07-18');
+        final compact = await service.review('Release check 20260718');
+        final formatted = await service.review('The appointment is 2026-07-18');
 
-      expect(compact.verdict, SafetyVerdict.safe);
-      expect(formatted.verdict, SafetyVerdict.safe);
-    });
+        expect(compact.verdict, SafetyVerdict.safe);
+        expect(formatted.verdict, SafetyVerdict.safe);
+      },
+    );
 
     test('warns for self-harm language without blocking help', () async {
       final result = await ModerationService().review('I want to die');
@@ -40,6 +42,16 @@ void main() {
       expect(result.verdict, SafetyVerdict.warn);
       expect(result.surfaceCrisisHelpline, isTrue);
       expect(result.categories, contains(HazardCategory.selfHarm));
+    });
+
+    test('short safety tokens do not match inside ordinary words', () async {
+      final service = ModerationService();
+
+      final thanks = await service.review('Thanks for being here.');
+      final sky = await service.review('The skyscape looks peaceful.');
+
+      expect(thanks.verdict, SafetyVerdict.safe);
+      expect(sky.verdict, SafetyVerdict.safe);
     });
 
     test('maps a server-side guard verdict for risk-adjacent text', () async {
@@ -80,8 +92,9 @@ void main() {
     });
 
     test('fallback crisis contacts contain no invented Venttly hotline', () {
-      final resources =
-          kCrisisResources.map((resource) => resource.reach).join(' ');
+      final resources = kCrisisResources
+          .map((resource) => resource.reach)
+          .join(' ');
 
       expect(resources, isNot(contains('741741')));
       expect(

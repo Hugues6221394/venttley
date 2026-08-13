@@ -7,8 +7,8 @@ import 'package:path_provider/path_provider.dart';
 
 /// Applies the selected Whisper effect locally before preview or upload.
 ///
-/// The raw recording never leaves the device. Filters preserve duration while
-/// changing pitch/timbre, and the result is encoded as a compact AAC/M4A file.
+/// Filters preserve duration while changing pitch/timbre, and the selected
+/// preview bytes are encoded as AAC/M4A before the user chooses to upload.
 class WhisperVoiceProcessor {
   WhisperVoiceProcessor._();
   static final WhisperVoiceProcessor instance = WhisperVoiceProcessor._();
@@ -60,20 +60,25 @@ class WhisperVoiceProcessor {
   }
 
   static const Map<String, String> _filters = {
-    'anonymous': 'highpass=f=120,lowpass=f=3400,asetrate=44100*0.86,'
+    'anonymous':
+        'highpass=f=120,lowpass=f=3400,asetrate=44100*0.86,'
         'aresample=44100,atempo=1.1627907,'
         'acompressor=threshold=-18dB:ratio=4:attack=20:release=250',
-    'soft': 'highpass=f=90,lowpass=f=4800,'
+    'soft':
+        'highpass=f=90,lowpass=f=4800,'
         'acompressor=threshold=-20dB:ratio=2.5:attack=20:release=300,'
         'volume=0.92',
-    'deep_voice': 'asetrate=44100*0.78,aresample=44100,atempo=1.2820513,'
+    'deep_voice':
+        'asetrate=44100*0.78,aresample=44100,atempo=1.2820513,'
         'lowpass=f=3800',
-    'robot': 'highpass=f=180,lowpass=f=4200,'
+    'robot':
+        'highpass=f=180,lowpass=f=4200,'
         'acrusher=bits=6:mix=0.65,'
         'chorus=0.5:0.9:35:0.35:0.25:2',
     'echo': 'aecho=0.8:0.7:70|140:0.35|0.2',
     'synth': 'chorus=0.6:0.9:20|40:0.35|0.25:0.25|0.4',
-    'dark': 'asetrate=44100*0.70,aresample=44100,atempo=1.4285714,'
+    'dark':
+        'asetrate=44100*0.70,aresample=44100,atempo=1.4285714,'
         'lowpass=f=3000,aecho=0.8:0.65:55:0.18',
   };
 }

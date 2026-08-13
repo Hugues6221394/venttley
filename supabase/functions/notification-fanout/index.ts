@@ -1,277 +1,408 @@
-// notification-fanout
+// Durable, privacy-preserving push delivery worker.
 //
-// Triggered by a Database Webhook on INSERT into:
-//   * chat_messages
-//   * tribe_messages
-//   * friendships
-//   * notifications
+// Database Webhooks submit only an event table + primary key. Postgres
+// re-reads the canonical row and idempotently expands recipients into the
+// server-owned push_delivery_outbox. This worker then leases a bounded batch,
+// sends generic copy (never user-authored text), and records success/retry.
 //
-// For each event, resolves the set of users who should be notified,
-// looks up their `push_tokens`, and POSTs to Firebase Cloud Messaging
-// HTTP v1.
-//
-// Env:
-//   FCM_PROJECT_ID                   — Firebase project id
-//   FCM_SERVICE_ACCOUNT_JSON         — full JSON of a service account
-//                                       w/ Cloud Messaging admin role
-//   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
-//
-// Deploy: supabase functions deploy notification-fanout
-// Wire:   Postgres webhook → POST {functionUrl} on insert.
+// Auth: verify_jwt=false plus x-webhook-secret: <WEBHOOK_SECRET>.
+// Rollout: PUSH_DELIVERY_ENABLED must be explicitly enabled.
 
-import { adminClient } from '../_shared/supabase.ts';
-import { corsHeaders, handleOptions } from '../_shared/cors.ts';
+import { adminClient } from "../_shared/supabase.ts";
+import {
+  rolloutEnabled,
+  verifyInternalSecret,
+} from "../_shared/internal_auth.ts";
 
 interface WebhookPayload {
-  type: 'INSERT' | 'UPDATE' | 'DELETE';
-  table: string;
-  record: Record<string, unknown>;
+  type?: "INSERT" | "UPDATE" | "DELETE";
+  table?: string;
+  record?: Record<string, unknown>;
+  batch?: number;
 }
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return handleOptions()!;
+interface PushDelivery {
+  delivery_id: string;
+  attempts: number;
+  user_id: string;
+  event_kind: "chat" | "tribe_chat" | "friend_request" | "notification";
+  event_data: Record<string, unknown> | null;
+}
 
-  let payload: WebhookPayload;
-  try {
-    payload = await req.json();
-  } catch {
-    return new Response('invalid body', { status: 400, headers: corsHeaders });
+const EVENT_IDS: Record<string, string> = {
+  chat_messages: "message_id",
+  tribe_messages: "message_id",
+  friendships: "friendship_id",
+  notifications: "notification_id",
+};
+
+Deno.serve(async (request) => {
+  if (request.method !== "POST") {
+    return json({ error: "method_not_allowed" }, 405);
   }
-  if (payload.type !== 'INSERT') {
-    return new Response('ignored', { headers: corsHeaders });
+
+  const auth = verifyInternalSecret(request, {
+    envName: "WEBHOOK_SECRET",
+    headerName: "x-webhook-secret",
+  });
+  if (!auth.ok) return json({ error: auth.error }, auth.status);
+  if (!rolloutEnabled("PUSH_DELIVERY_ENABLED")) {
+    return json({ ok: false, disabled: true }, 503);
+  }
+
+  const payload = await request.json().catch(() => null) as
+    | WebhookPayload
+    | null;
+  if (payload == null || typeof payload !== "object") {
+    return json({ error: "invalid_body" }, 400);
   }
 
   const supabase = adminClient();
-  const recipients: { userId: string; title: string; body: string; data: Record<string, string> }[] = [];
-
-  switch (payload.table) {
-    case 'chat_messages': {
-      const r = payload.record as any;
-      const { data: room } = await supabase
-        .from('chat_rooms')
-        .select('initiated_by, received_by')
-        .eq('room_id', r.room_id)
-        .single();
-      if (!room) break;
-      const peer = room.initiated_by === r.sender_id
-        ? room.received_by
-        : room.initiated_by;
-      if (peer) {
-        // Respect the recipient's per-room mute (dm_room_prefs, migration 0098):
-        // a muted room delivers no push.
-        const { data: pref } = await supabase
-          .from('dm_room_prefs')
-          .select('muted')
-          .eq('room_id', r.room_id)
-          .eq('user_id', peer)
-          .maybeSingle();
-        if (!pref?.muted) {
-          recipients.push({
-            userId: peer,
-            title: 'New message',
-            body: 'Tap to read your conversation.',
-            data: { kind: 'chat', room_id: r.room_id, message_id: r.message_id },
-          });
-        }
-      }
-      break;
+  let enqueued = 0;
+  if (payload.record != null || payload.table != null || payload.type != null) {
+    if (payload.type !== "INSERT" || !payload.table || !payload.record) {
+      return json({ error: "invalid_webhook_event" }, 400);
     }
-    case 'tribe_messages': {
-      const r = payload.record as Record<string, unknown>;
-      const tribeId = String(r.tribe_id);
-      const messageId = String(r.message_id);
-      const senderId = r.sender_id as string | null;
-
-      const { data: tribe } = await supabase
-        .from('tribes')
-        .select('slug, name')
-        .eq('tribe_id', tribeId)
-        .maybeSingle();
-
-      const slug = (tribe?.slug as string | undefined) ?? tribeId;
-      const tribeName = (tribe?.name as string | undefined) ?? 'Tribe chat';
-
-      const { data: members } = await supabase
-        .from('tribe_members')
-        .select('user_id')
-        .eq('tribe_id', tribeId);
-
-      const content = r.content;
-      const preview =
-        typeof content === 'string' && content.trim().length > 0
-          ? content.slice(0, 80)
-          : 'New message in tribe chat';
-
-      for (const m of members ?? []) {
-        if (m.user_id === senderId) continue;
-        recipients.push({
-          userId: m.user_id as string,
-          title: tribeName,
-          body: preview,
-          data: {
-            kind: 'tribe_chat',
-            payload: `tribe_chat:${slug}/${messageId}`,
-            tribe_slug: slug,
-            message_id: messageId,
-          },
-        });
-      }
-      break;
+    const idColumn = EVENT_IDS[payload.table];
+    const eventId = idColumn == null ? null : payload.record[idColumn];
+    if (
+      idColumn == null || typeof eventId !== "string" || eventId.length === 0
+    ) {
+      return json({ error: "unsupported_webhook_event" }, 400);
     }
-    case 'friendships': {
-      const r = payload.record as any;
-      if (r.status === 'pending') {
-        const target = r.requested_by === r.user_a ? r.user_b : r.user_a;
-        recipients.push({
-          userId: target,
-          title: 'New friend request',
-          body: 'Someone wants to connect with you.',
-          data: { kind: 'friend_request', friendship_id: r.friendship_id },
-        });
-      }
-      break;
+    const enqueue = await supabase.rpc("enqueue_push_event", {
+      p_table: payload.table,
+      p_event_id: eventId,
+    });
+    if (enqueue.error) {
+      console.error(
+        "push enqueue failed",
+        enqueue.error.code ?? "database_error",
+      );
+      return json({ error: "enqueue_failed" }, 500);
     }
-    case 'notifications': {
-      const r = payload.record as any;
-      const payloadObj = r.payload ?? {};
-      recipients.push({
-        userId: r.user_id,
-        title: payloadObj.title ?? 'Venttly',
-        body: payloadObj.body ?? '',
-        data: { kind: r.kind, notification_id: r.notification_id },
-      });
-      break;
-    }
-    default:
-      return new Response('unknown table', { status: 200, headers: corsHeaders });
+    enqueued = typeof enqueue.data === "number" ? enqueue.data : 0;
   }
 
-  if (recipients.length === 0) {
-    return new Response('no recipients', { headers: corsHeaders });
+  const batch = clamp(
+    typeof payload.batch === "number" ? payload.batch : 100,
+    1,
+    250,
+  );
+  const claimed = await supabase.rpc("claim_push_deliveries", {
+    p_batch: batch,
+  });
+  if (claimed.error) {
+    console.error("push claim failed", claimed.error.code ?? "database_error");
+    return json({ error: "claim_failed" }, 500);
+  }
+  const deliveries = (claimed.data ?? []) as PushDelivery[];
+  if (deliveries.length === 0) {
+    return json({ ok: true, enqueued, claimed: 0, sent: 0, retried: 0 });
   }
 
-  // Fan out to FCM. We look up tokens once per unique user.
-  const uniqueUserIds = [...new Set(recipients.map((r) => r.userId))];
-  const { data: tokens } = await supabase
-    .from('push_tokens')
-    .select('user_id, token, platform')
-    .in('user_id', uniqueUserIds);
+  const userIds = [...new Set(deliveries.map((delivery) => delivery.user_id))];
+  const tokenResult = await supabase
+    .from("push_tokens")
+    .select("user_id, token, platform")
+    .in("user_id", userIds);
+  if (tokenResult.error) {
+    await releaseAll(supabase, deliveries, "token_lookup_failed");
+    return json({ error: "token_lookup_failed" }, 500);
+  }
+
+  const tokensByUser = new Map<string, string[]>();
+  for (const row of tokenResult.data ?? []) {
+    if (!tokensByUser.has(row.user_id)) tokensByUser.set(row.user_id, []);
+    tokensByUser.get(row.user_id)!.push(row.token);
+  }
 
   const accessToken = await fcmAccessToken();
-  const projectId = Deno.env.get('FCM_PROJECT_ID');
+  const projectId = Deno.env.get("FCM_PROJECT_ID");
   if (!accessToken || !projectId) {
-    console.warn('FCM not configured — skipping send');
-    return new Response('fcm disabled', { headers: corsHeaders });
-  }
-
-  const tokenByUser = new Map<string, { token: string; platform: string }[]>();
-  for (const t of tokens ?? []) {
-    if (!tokenByUser.has(t.user_id)) tokenByUser.set(t.user_id, []);
-    tokenByUser.get(t.user_id)!.push({ token: t.token, platform: t.platform });
+    await releaseAll(supabase, deliveries, "fcm_not_configured");
+    return json({ error: "fcm_not_configured" }, 503);
   }
 
   let sent = 0;
-  await Promise.all(
-    recipients.map(async (r) => {
-      const userTokens = tokenByUser.get(r.userId) ?? [];
-      for (const t of userTokens) {
-        try {
-          const res = await fetch(
-            `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                message: {
-                  token: t.token,
-                  notification: { title: r.title, body: r.body },
-                  data: r.data,
-                },
-              }),
-            },
-          );
-          if (res.ok) sent++;
-        } catch (e) {
-          console.error('FCM send failed', e);
-        }
-      }
-    }),
-  );
+  let retried = 0;
+  await runPool(deliveries, 20, async (delivery) => {
+    const tokens = tokensByUser.get(delivery.user_id) ?? [];
+    if (tokens.length === 0) {
+      await completeDelivery(
+        supabase,
+        delivery.delivery_id,
+        delivery.attempts,
+        true,
+        "no_active_tokens",
+      );
+      return;
+    }
 
-  return new Response(JSON.stringify({ sent }), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    let deliveredToADevice = false;
+    let retryableFailures = 0;
+    for (const token of tokens) {
+      const outcome = await sendPush(
+        projectId,
+        accessToken,
+        token,
+        delivery,
+      );
+      if (outcome === "invalid_token") {
+        await supabase.from("push_tokens").delete()
+          .eq("user_id", delivery.user_id)
+          .eq("token", token);
+      } else if (outcome === "retry") {
+        retryableFailures++;
+      } else {
+        deliveredToADevice = true;
+      }
+    }
+
+    // A user-level delivery succeeds once any active device accepted it. This
+    // avoids duplicating a notification on a successful device merely because
+    // another device had a transient failure. Retry only when every usable
+    // token failed transiently.
+    if (!deliveredToADevice && retryableFailures > 0) {
+      retried++;
+      await completeDelivery(
+        supabase,
+        delivery.delivery_id,
+        delivery.attempts,
+        false,
+        "fcm_retryable",
+      );
+    } else {
+      sent++;
+      await completeDelivery(
+        supabase,
+        delivery.delivery_id,
+        delivery.attempts,
+        true,
+        null,
+      );
+    }
+  });
+
+  return json({
+    ok: true,
+    enqueued,
+    claimed: deliveries.length,
+    sent,
+    retried,
   });
 });
 
-/**
- * Mints an OAuth access token for FCM from the service account JSON.
- * Cached for ~50 minutes (tokens are valid for 1 hour).
- */
+async function sendPush(
+  projectId: string,
+  accessToken: string,
+  token: string,
+  delivery: PushDelivery,
+): Promise<"sent" | "invalid_token" | "retry"> {
+  const copy = notificationCopy(delivery.event_kind);
+  const data = stringifyData(delivery.event_data ?? {});
+  try {
+    const response = await fetch(
+      `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: {
+            token,
+            notification: copy,
+            data: { kind: delivery.event_kind, ...data },
+            android: { collapse_key: delivery.delivery_id },
+            apns: {
+              headers: { "apns-collapse-id": delivery.delivery_id },
+            },
+          },
+        }),
+        signal: AbortSignal.timeout(6000),
+      },
+    );
+    if (response.ok) return "sent";
+    if (response.status === 400 || response.status === 404) {
+      return "invalid_token";
+    }
+    return "retry";
+  } catch {
+    return "retry";
+  }
+}
+
+function notificationCopy(kind: PushDelivery["event_kind"]): {
+  title: string;
+  body: string;
+} {
+  switch (kind) {
+    case "chat":
+      return { title: "New message", body: "Tap to open your conversation." };
+    case "tribe_chat":
+      return { title: "New Tribe message", body: "Tap to open your Tribe." };
+    case "friend_request":
+      return { title: "New friend request", body: "Someone wants to connect." };
+    case "notification":
+    default:
+      return {
+        title: "New activity",
+        body: "Open Venttly to see what happened.",
+      };
+  }
+}
+
+function stringifyData(data: Record<string, unknown>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (typeof value === "string" && value.length <= 256) result[key] = value;
+  }
+  return result;
+}
+
+async function completeDelivery(
+  supabase: ReturnType<typeof adminClient>,
+  deliveryId: string,
+  attempt: number,
+  succeeded: boolean,
+  error: string | null,
+): Promise<void> {
+  const result = await supabase.rpc("complete_push_delivery", {
+    p_delivery_id: deliveryId,
+    p_attempt: attempt,
+    p_succeeded: succeeded,
+    p_error_code: error,
+  });
+  if (result.error) {
+    console.error(
+      "push completion failed",
+      result.error.code ?? "database_error",
+    );
+  }
+}
+
+async function releaseAll(
+  supabase: ReturnType<typeof adminClient>,
+  deliveries: PushDelivery[],
+  error: string,
+): Promise<void> {
+  await Promise.all(
+    deliveries.map((delivery) =>
+      completeDelivery(
+        supabase,
+        delivery.delivery_id,
+        delivery.attempts,
+        false,
+        error,
+      )
+    ),
+  );
+}
+
+async function runPool<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const runners = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (next < items.length) {
+        const index = next++;
+        await worker(items[index]);
+      }
+    },
+  );
+  await Promise.all(runners);
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(Math.trunc(value), minimum), maximum);
+}
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 let cachedToken: { token: string; expiresAt: number } | null = null;
 async function fcmAccessToken(): Promise<string | null> {
   const now = Date.now();
   if (cachedToken && cachedToken.expiresAt > now + 5 * 60_000) {
     return cachedToken.token;
   }
-  const raw = Deno.env.get('FCM_SERVICE_ACCOUNT_JSON');
+  const raw = Deno.env.get("FCM_SERVICE_ACCOUNT_JSON");
   if (!raw) return null;
-  const sa = JSON.parse(raw);
-  const jwt = await mintJwt(sa);
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: jwt,
-    }),
-  });
-  if (!res.ok) return null;
-  const body = await res.json();
-  cachedToken = {
-    token: body.access_token,
-    expiresAt: now + (body.expires_in ?? 3600) * 1000,
-  };
-  return cachedToken.token;
+  try {
+    const serviceAccount = JSON.parse(raw);
+    const jwt = await mintJwt(serviceAccount);
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion: jwt,
+      }),
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!response.ok) return null;
+    const body = await response.json();
+    cachedToken = {
+      token: body.access_token,
+      expiresAt: now + (body.expires_in ?? 3600) * 1000,
+    };
+    return cachedToken.token;
+  } catch {
+    return null;
+  }
 }
 
-async function mintJwt(sa: { client_email: string; private_key: string }): Promise<string> {
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const iat = Math.floor(Date.now() / 1000);
+async function mintJwt(
+  serviceAccount: { client_email: string; private_key: string },
+): Promise<string> {
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
   const claim = {
-    iss: sa.client_email,
-    scope: 'https://www.googleapis.com/auth/firebase.messaging',
-    aud: 'https://oauth2.googleapis.com/token',
-    iat,
-    exp: iat + 3600,
+    iss: serviceAccount.client_email,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: issuedAt,
+    exp: issuedAt + 3600,
   };
-  const enc = (o: unknown) =>
-    btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
-  const unsigned = `${enc(header)}.${enc(claim)}`;
-  const key = await importPkcs8(sa.private_key);
-  const sig = await crypto.subtle.sign(
-    { name: 'RSASSA-PKCS1-v1_5' },
+  const encode = (value: unknown) =>
+    btoa(JSON.stringify(value)).replace(/=+$/, "").replace(/\+/g, "-").replace(
+      /\//g,
+      "_",
+    );
+  const unsigned = `${encode(header)}.${encode(claim)}`;
+  const key = await importPkcs8(serviceAccount.private_key);
+  const signature = await crypto.subtle.sign(
+    { name: "RSASSA-PKCS1-v1_5" },
     key,
     new TextEncoder().encode(unsigned),
   );
-  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
-    .replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
-  return `${unsigned}.${sigB64}`;
+  const encodedSignature = btoa(
+    String.fromCharCode(...new Uint8Array(signature)),
+  )
+    .replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+  return `${unsigned}.${encodedSignature}`;
 }
 
 async function importPkcs8(pem: string): Promise<CryptoKey> {
-  const body = pem
-    .replace('-----BEGIN PRIVATE KEY-----', '')
-    .replace('-----END PRIVATE KEY-----', '')
-    .replace(/\s+/g, '');
-  const raw = Uint8Array.from(atob(body), (c) => c.charCodeAt(0));
+  const bytes = Uint8Array.from(
+    atob(pem.replace(/-----[^-]+-----|\s/g, "")),
+    (character) => character.charCodeAt(0),
+  );
   return crypto.subtle.importKey(
-    'pkcs8',
-    raw.buffer,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    "pkcs8",
+    bytes,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
     false,
-    ['sign'],
+    ["sign"],
   );
 }

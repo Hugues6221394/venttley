@@ -263,7 +263,7 @@ CREATE TRIGGER whisper_comments_write_guard
 
 -- ============================================================
 -- 7. Chat messages (DM + tribe): rate limit
---    (DM payloads are encrypted — no content rewriting there.)
+--    (The historical encrypted_payload column stores server-readable text.)
 -- ============================================================
 CREATE OR REPLACE FUNCTION public._chat_write_guard()
 RETURNS TRIGGER

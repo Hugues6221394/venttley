@@ -33,8 +33,10 @@ class _PasswordSecurityScreenState
       final res = await Supabase.instance.client.auth.mfa.listFactors();
       if (!mounted) return;
       setState(() {
-        _twoFactorOn = [...res.totp, ...res.phone]
-            .any((f) => f.status == FactorStatus.verified);
+        _twoFactorOn = [
+          ...res.totp,
+          ...res.phone,
+        ].any((f) => f.status == FactorStatus.verified);
         _loadingFactors = false;
       });
     } catch (_) {
@@ -67,7 +69,9 @@ class _PasswordSecurityScreenState
             loading: _loadingFactors,
             items: [
               const _CheckItem(
-                  label: 'Password protects your account', ok: true),
+                label: 'Password protects your account',
+                ok: true,
+              ),
               _CheckItem(
                 label: _twoFactorOn
                     ? 'Two-factor authentication is on'
@@ -78,8 +82,8 @@ class _PasswordSecurityScreenState
                 label: recoveryOk
                     ? 'Recovery email verified'
                     : hasRealEmail
-                        ? 'Confirm your recovery email'
-                        : 'Add a recovery email',
+                    ? 'Confirm your recovery email'
+                    : 'Add a recovery email',
                 ok: recoveryOk,
               ),
             ],
@@ -98,8 +102,8 @@ class _PasswordSecurityScreenState
             subtitle: email == null || !hasRealEmail
                 ? 'Not set — add one to recover your account'
                 : recoveryOk
-                    ? _mask(email)
-                    : '${_mask(email)} • unconfirmed',
+                ? _mask(email)
+                : '${_mask(email)} • unconfirmed',
             trailingBadge: hasRealEmail && !emailVerified ? 'Confirm' : null,
             onTap: _openRecoveryEmail,
           ),
@@ -160,6 +164,22 @@ class _PasswordSecurityScreenState
   // ---- Change password ---------------------------------------------------
 
   Future<void> _openChangePassword() async {
+    final bool needsRecoveryPhrase;
+    try {
+      needsRecoveryPhrase = await ref
+          .read(sessionProvider.notifier)
+          .needsRecoveryPhraseForPasswordChange();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Couldn\'t verify recovery protection. Try again.'),
+          ),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
     String? error;
     bool busy = false;
     bool obscure = true;
@@ -174,142 +194,188 @@ class _PasswordSecurityScreenState
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => ModalTextControllerScope(
-        initialValues: const ['', '', ''],
+        initialValues: const ['', '', '', ''],
         builder: (ctx, controllers) {
           final current = controllers[0];
           final next = controllers[1];
           final confirm = controllers[2];
-          return StatefulBuilder(builder: (ctx, setSheet) {
-            InputDecoration deco(String label) => InputDecoration(
-                  labelText: label,
-                  filled: true,
-                  fillColor: const Color(0xFFFFF1F6),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
-                  ),
-                );
-            return SingleChildScrollView(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 18,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Change password',
+          final recoveryPhrase = controllers[3];
+          return StatefulBuilder(
+            builder: (ctx, setSheet) {
+              InputDecoration deco(String label) => InputDecoration(
+                labelText: label,
+                filled: true,
+                fillColor: const Color(0xFFFFF1F6),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              );
+              return SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 18,
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Change password',
                       style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: context.ink)),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Enter your current password, then choose a new one.',
-                    style: TextStyle(
-                        color: context.ink.withOpacity(0.6), fontSize: 13),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: current,
-                    obscureText: obscure,
-                    decoration: deco('Current password').copyWith(
-                      suffixIcon: IconButton(
-                        icon: Icon(obscure
-                            ? Icons.visibility_off_rounded
-                            : Icons.visibility_rounded),
-                        onPressed: () => setSheet(() => obscure = !obscure),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: context.ink,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: next,
-                    obscureText: obscure,
-                    decoration: deco('New password (8+ characters)'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: confirm,
-                    obscureText: obscure,
-                    decoration: deco('Confirm new password'),
-                  ),
-                  if (error != null) ...[
-                    const SizedBox(height: 10),
-                    Text(error!,
-                        style: const TextStyle(
-                            color: Colors.red, fontWeight: FontWeight.w600)),
-                  ],
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: VentlyColors.berryMagenta,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Enter your current password, then choose a new one.',
+                      style: TextStyle(
+                        color: context.ink.withOpacity(0.6),
+                        fontSize: 13,
+                      ),
                     ),
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            if (next.text != confirm.text) {
-                              setSheet(
-                                  () => error = 'New passwords don\'t match.');
-                              return;
-                            }
-                            if (next.text.length < 8) {
-                              setSheet(() => error =
-                                  'New password must be 8+ characters.');
-                              return;
-                            }
-                            setSheet(() {
-                              busy = true;
-                              error = null;
-                            });
-                            try {
-                              await ref
-                                  .read(sessionProvider.notifier)
-                                  .changePassword(
-                                    currentPassword: current.text,
-                                    newPassword: next.text,
-                                  );
-                              if (ctx.mounted) Navigator.pop(ctx);
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Password updated.')),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: current,
+                      obscureText: obscure,
+                      decoration: deco('Current password').copyWith(
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscure
+                                ? Icons.visibility_off_rounded
+                                : Icons.visibility_rounded,
+                          ),
+                          onPressed: () => setSheet(() => obscure = !obscure),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: next,
+                      obscureText: obscure,
+                      decoration: deco('New password (8+ characters)'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: confirm,
+                      obscureText: obscure,
+                      decoration: deco('Confirm new password'),
+                    ),
+                    if (needsRecoveryPhrase) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: recoveryPhrase,
+                        minLines: 2,
+                        maxLines: 3,
+                        textCapitalization: TextCapitalization.none,
+                        autocorrect: false,
+                        decoration: deco('12-word recovery phrase').copyWith(
+                          helperText:
+                              'Required because this device does not have your saved phrase.',
+                        ),
+                      ),
+                    ],
+                    if (error != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        error!,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: VentlyColors.berryMagenta,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: busy
+                          ? null
+                          : () async {
+                              if (next.text != confirm.text) {
+                                setSheet(
+                                  () => error = 'New passwords don\'t match.',
                                 );
+                                return;
                               }
-                            } on AuthException catch (_) {
+                              if (next.text.length < 8) {
+                                setSheet(
+                                  () => error =
+                                      'New password must be 8+ characters.',
+                                );
+                                return;
+                              }
                               setSheet(() {
-                                busy = false;
-                                error = 'Current password is incorrect.';
+                                busy = true;
+                                error = null;
                               });
-                            } on FormatException catch (e) {
-                              setSheet(() {
-                                busy = false;
-                                error = e.message;
-                              });
-                            } catch (e) {
-                              setSheet(() {
-                                busy = false;
-                                error = 'Couldn\'t update password. Try again.';
-                              });
-                            }
-                          },
-                    child: busy
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : const Text('Update password',
-                            style: TextStyle(fontWeight: FontWeight.w900)),
-                  ),
-                ],
-              ),
-            );
-          });
+                              try {
+                                await ref
+                                    .read(sessionProvider.notifier)
+                                    .changePassword(
+                                      currentPassword: current.text,
+                                      newPassword: next.text,
+                                      recoveryPhrase: needsRecoveryPhrase
+                                          ? recoveryPhrase.text
+                                          : null,
+                                    );
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Password updated.'),
+                                    ),
+                                  );
+                                }
+                              } on AuthException catch (_) {
+                                setSheet(() {
+                                  busy = false;
+                                  error = 'Current password is incorrect.';
+                                });
+                              } on FormatException catch (e) {
+                                setSheet(() {
+                                  busy = false;
+                                  error = e.message;
+                                });
+                              } on StateError catch (e) {
+                                setSheet(() {
+                                  busy = false;
+                                  error = e.message;
+                                });
+                              } catch (e) {
+                                setSheet(() {
+                                  busy = false;
+                                  error =
+                                      'Couldn\'t update password. Try again.';
+                                });
+                              }
+                            },
+                      child: busy
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Update password',
+                              style: TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
         },
       ),
     );
@@ -344,108 +410,125 @@ class _PasswordSecurityScreenState
         initialValues: [hasRealEmail ? (session.currentEmail ?? '') : ''],
         builder: (ctx, controllers) {
           final controller = controllers.single;
-          return StatefulBuilder(builder: (ctx, setSheet) {
-            return SingleChildScrollView(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 18,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
+          return StatefulBuilder(
+            builder: (ctx, setSheet) {
+              return SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 18,
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
                       hasRealEmail
                           ? 'Change recovery email'
                           : 'Add recovery email',
                       style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: context.ink)),
-                  const SizedBox(height: 4),
-                  Text(
-                    'We\'ll email a confirmation link to this address. Tap it to '
-                    'finish — your username login keeps working either way.',
-                    style: TextStyle(
-                        color: context.ink.withOpacity(0.6),
-                        fontSize: 13,
-                        height: 1.35),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.emailAddress,
-                    autocorrect: false,
-                    decoration: InputDecoration(
-                      labelText: 'Email address',
-                      filled: true,
-                      fillColor: const Color(0xFFFFF1F6),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: context.ink,
                       ),
                     ),
-                  ),
-                  if (error != null) ...[
-                    const SizedBox(height: 10),
-                    Text(error!,
-                        style: const TextStyle(
-                            color: Colors.red, fontWeight: FontWeight.w600)),
-                  ],
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: VentlyColors.berryMagenta,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    const SizedBox(height: 4),
+                    Text(
+                      'We\'ll email a confirmation link to this address. Tap it to '
+                      'finish — your username login keeps working either way.',
+                      style: TextStyle(
+                        color: context.ink.withOpacity(0.6),
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
                     ),
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            final value = controller.text.trim();
-                            if (!_looksLikeEmail(value)) {
-                              setSheet(
-                                  () => error = 'Enter a valid email address.');
-                              return;
-                            }
-                            setSheet(() {
-                              busy = true;
-                              error = null;
-                            });
-                            try {
-                              await session.setRecoveryEmail(value);
-                              if (ctx.mounted) Navigator.pop(ctx);
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                        'Confirmation sent to $value. Tap the link '
-                                        'to finish.'),
-                                  ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.emailAddress,
+                      autocorrect: false,
+                      decoration: InputDecoration(
+                        labelText: 'Email address',
+                        filled: true,
+                        fillColor: const Color(0xFFFFF1F6),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        error!,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: VentlyColors.berryMagenta,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: busy
+                          ? null
+                          : () async {
+                              final value = controller.text.trim();
+                              if (!_looksLikeEmail(value)) {
+                                setSheet(
+                                  () => error = 'Enter a valid email address.',
                                 );
+                                return;
                               }
-                            } catch (e) {
                               setSheet(() {
-                                busy = false;
-                                error = 'Couldn\'t save that email. Try again.';
+                                busy = true;
+                                error = null;
                               });
-                            }
-                          },
-                    child: busy
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : const Text('Send confirmation',
-                            style: TextStyle(fontWeight: FontWeight.w900)),
-                  ),
-                ],
-              ),
-            );
-          });
+                              try {
+                                await session.setRecoveryEmail(value);
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Confirmation sent to $value. Tap the link '
+                                        'to finish.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                setSheet(() {
+                                  busy = false;
+                                  error =
+                                      'Couldn\'t save that email. Try again.';
+                                });
+                              }
+                            },
+                      child: busy
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Send confirmation',
+                              style: TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
         },
       ),
     );
@@ -472,141 +555,164 @@ class _PasswordSecurityScreenState
         initialValues: const [''],
         builder: (ctx, controllers) {
           final codeCtl = controllers.single;
-          return StatefulBuilder(builder: (ctx, setSheet) {
-            Future<void> send() async {
-              setSheet(() {
-                busy = true;
-                error = null;
-              });
-              try {
-                await session.sendEmailVerification();
-                if (!ctx.mounted) return;
+          return StatefulBuilder(
+            builder: (ctx, setSheet) {
+              Future<void> send() async {
                 setSheet(() {
-                  busy = false;
-                  sent = true;
+                  busy = true;
+                  error = null;
                 });
-              } catch (_) {
-                if (!ctx.mounted) return;
-                setSheet(() {
-                  busy = false;
-                  error = 'Couldn\'t send a code right now. Try again shortly.';
-                });
+                try {
+                  await session.sendEmailVerification();
+                  if (!ctx.mounted) return;
+                  setSheet(() {
+                    busy = false;
+                    sent = true;
+                  });
+                } catch (_) {
+                  if (!ctx.mounted) return;
+                  setSheet(() {
+                    busy = false;
+                    error =
+                        'Couldn\'t send a code right now. Try again shortly.';
+                  });
+                }
               }
-            }
 
-            return SingleChildScrollView(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 18,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Confirm recovery email',
+              return SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 18,
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Confirm recovery email',
                       style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: context.ink)),
-                  const SizedBox(height: 4),
-                  Text(
-                    sent
-                        ? 'Enter the 6-digit code we emailed to ${session.currentEmail ?? 'your inbox'}.'
-                        : 'We\'ll email a 6-digit code to ${session.currentEmail ?? 'your inbox'}.',
-                    style: TextStyle(
-                        color: context.ink.withOpacity(0.6),
-                        fontSize: 13,
-                        height: 1.35),
-                  ),
-                  const SizedBox(height: 16),
-                  if (sent)
-                    TextField(
-                      controller: codeCtl,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      decoration: InputDecoration(
-                        labelText: '6-digit code',
-                        counterText: '',
-                        filled: true,
-                        fillColor: const Color(0xFFFFF1F6),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: context.ink,
                       ),
                     ),
-                  if (error != null) ...[
-                    const SizedBox(height: 10),
-                    Text(error!,
-                        style: const TextStyle(
-                            color: Colors.red, fontWeight: FontWeight.w600)),
-                  ],
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: VentlyColors.berryMagenta,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    const SizedBox(height: 4),
+                    Text(
+                      sent
+                          ? 'Enter the 6-digit code we emailed to ${session.currentEmail ?? 'your inbox'}.'
+                          : 'We\'ll email a 6-digit code to ${session.currentEmail ?? 'your inbox'}.',
+                      style: TextStyle(
+                        color: context.ink.withOpacity(0.6),
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
                     ),
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            if (!sent) {
-                              await send();
-                              return;
-                            }
-                            if (codeCtl.text.trim().length != 6) {
-                              setSheet(() => error = 'Enter the 6-digit code.');
-                              return;
-                            }
-                            setSheet(() {
-                              busy = true;
-                              error = null;
-                            });
-                            try {
-                              final ok = await session.confirmEmailVerification(
-                                  codeCtl.text.trim());
-                              if (ok) {
-                                if (ctx.mounted) Navigator.pop(ctx);
-                                if (mounted) {
-                                  setState(() {});
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content:
-                                          Text('Recovery email confirmed.'),
-                                    ),
-                                  );
+                    const SizedBox(height: 16),
+                    if (sent)
+                      TextField(
+                        controller: codeCtl,
+                        keyboardType: TextInputType.number,
+                        maxLength: 6,
+                        decoration: InputDecoration(
+                          labelText: '6-digit code',
+                          counterText: '',
+                          filled: true,
+                          fillColor: const Color(0xFFFFF1F6),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                    if (error != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        error!,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: VentlyColors.berryMagenta,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: busy
+                          ? null
+                          : () async {
+                              if (!sent) {
+                                await send();
+                                return;
+                              }
+                              if (codeCtl.text.trim().length != 6) {
+                                setSheet(
+                                  () => error = 'Enter the 6-digit code.',
+                                );
+                                return;
+                              }
+                              setSheet(() {
+                                busy = true;
+                                error = null;
+                              });
+                              try {
+                                final ok = await session
+                                    .confirmEmailVerification(
+                                      codeCtl.text.trim(),
+                                    );
+                                if (ok) {
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  if (mounted) {
+                                    setState(() {});
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Recovery email confirmed.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                } else {
+                                  setSheet(() {
+                                    busy = false;
+                                    error =
+                                        'That code didn\'t match. Try again.';
+                                  });
                                 }
-                              } else {
+                              } catch (_) {
                                 setSheet(() {
                                   busy = false;
-                                  error = 'That code didn\'t match. Try again.';
+                                  error =
+                                      'Couldn\'t verify that code. Check your connection and try again.';
                                 });
                               }
-                            } catch (_) {
-                              setSheet(() {
-                                busy = false;
-                                error =
-                                    'Couldn\'t verify that code. Check your connection and try again.';
-                              });
-                            }
-                          },
-                    child: busy
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : Text(sent ? 'Confirm' : 'Send code',
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w900)),
-                  ),
-                ],
-              ),
-            );
-          });
+                            },
+                      child: busy
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              sent ? 'Confirm' : 'Send code',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
         },
       ),
     );
@@ -615,7 +721,8 @@ class _PasswordSecurityScreenState
   // ---- Sessions ----------------------------------------------------------
 
   Future<void> _signOutEverywhere() async {
-    final ok = await showDialog<bool>(
+    final ok =
+        await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Sign out everywhere?'),
@@ -674,8 +781,9 @@ class _PasswordSecurityScreenState
     if (at <= 1) return email;
     final name = email.substring(0, at);
     final domain = email.substring(at);
-    final shown =
-        name.length <= 2 ? name.substring(0, 1) : name.substring(0, 2);
+    final shown = name.length <= 2
+        ? name.substring(0, 1)
+        : name.substring(0, 2);
     return '$shown${'•' * (name.length - shown.length)}$domain';
   }
 }
@@ -747,8 +855,8 @@ class _CheckupCard extends StatelessWidget {
                       loading
                           ? 'Checking…'
                           : allGood
-                              ? 'You\'re fully protected'
-                              : '$covered of $total steps done',
+                          ? 'You\'re fully protected'
+                          : '$covered of $total steps done',
                       style: TextStyle(
                         color: context.ink,
                         fontWeight: FontWeight.w900,
@@ -896,8 +1004,10 @@ class _Tile extends StatelessWidget {
                 if (trailingBadge != null) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: VentlyColors.berryMagenta,
                       borderRadius: BorderRadius.circular(20),
@@ -915,8 +1025,10 @@ class _Tile extends StatelessWidget {
                   const SizedBox(width: 8),
                   trailing!,
                 ] else if (onTap != null)
-                  Icon(Icons.chevron_right_rounded,
-                      color: context.ink.withOpacity(0.3)),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: context.ink.withOpacity(0.3),
+                  ),
               ],
             ),
           ),

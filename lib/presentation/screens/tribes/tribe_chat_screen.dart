@@ -40,7 +40,7 @@ import '../../../data/services/whisper_recorder.dart';
 ///
 /// Realtime fan-out of `tribe_messages` for one tribe; bubbles for text,
 /// audio (waveform card), and image. Composer with +, mic, image, emoji
-/// and a magenta send. Persistent privacy banner ("End-to-end encrypted"
+/// and a magenta send. Persistent community-safety banner
 /// per the v2 brief — see notes in README; transport is TLS, server-side
 /// moderation review is honored).
 class TribeChatScreen extends ConsumerStatefulWidget {
@@ -95,10 +95,9 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
     if (tribe == null || me == null) return;
     if (_composer.text.trim().isEmpty) return;
     _typingDebounce?.cancel();
-    ref.read(repositoryProvider).broadcastTribeTyping(
-          tribe.tribeId,
-          pseudonym: me.anonymousPseudonym,
-        );
+    ref
+        .read(repositoryProvider)
+        .broadcastTribeTyping(tribe.tribeId, pseudonym: me.anonymousPseudonym);
     _typingDebounce = Timer(const Duration(milliseconds: 1500), () {});
   }
 
@@ -226,7 +225,9 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
     String? sentId;
     try {
       await VentlyHaptics.send();
-      sentId = await ref.read(repositoryProvider).sendTribeMessage(
+      sentId = await ref
+          .read(repositoryProvider)
+          .sendTribeMessage(
             tribeId: tribeId,
             content: text,
             replyToMessageId: replyId,
@@ -239,20 +240,18 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
       // Offline: queue for automatic retry instead of dropping the text.
       try {
         final outbox = await ref.read(outboxProvider.future);
-        await outbox.enqueue(
-          OutboxKind.tribeMessage,
-          {
-            'tribeId': tribeId,
-            'content': text,
-            'replyToMessageId': replyId,
-          },
-          operationId: operationId,
-        );
+        await outbox.enqueue(OutboxKind.tribeMessage, {
+          'tribeId': tribeId,
+          'content': text,
+          'replyToMessageId': replyId,
+        }, operationId: operationId);
         await _draftSaver?.clear();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text(
-                  "You're offline — message queued, it will send automatically.")),
+            content: Text(
+              "You're offline — message queued, it will send automatically.",
+            ),
+          ),
         );
       } catch (queueError) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -307,8 +306,9 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
     String? imageUrl;
     try {
       final bytes = await picked.readAsBytes();
-      final ext =
-          picked.name.contains('.') ? picked.name.split('.').last : 'jpg';
+      final ext = picked.name.contains('.')
+          ? picked.name.split('.').last
+          : 'jpg';
       stagedMedia = await outbox.stageMedia(
         operationId: operationId,
         bytes: bytes,
@@ -316,14 +316,18 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
         contentType: picked.mimeType ?? 'image/jpeg',
         mediaType: 'image',
       );
-      final upload = await ref.read(repositoryProvider).uploadTribeChatImage(
+      final upload = await ref
+          .read(repositoryProvider)
+          .uploadTribeChatImage(
             bytes: bytes,
             extension: ext,
             contentType: picked.mimeType ?? 'image/jpeg',
           );
       imagePath = upload.path;
       imageUrl = upload.url;
-      await ref.read(repositoryProvider).sendTribeMessage(
+      await ref
+          .read(repositoryProvider)
+          .sendTribeMessage(
             tribeId: tribeId,
             content: null,
             imagePath: upload.path,
@@ -334,17 +338,13 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
       _scrollToBottomSoon();
     } catch (_) {
       if (stagedMedia != null) {
-        await outbox.enqueue(
-          OutboxKind.tribeMessage,
-          {
-            'tribeId': tribeId,
-            'content': null,
-            'imagePath': imagePath,
-            'imageUrl': imageUrl,
-            ...stagedMedia.toPayload(),
-          },
-          operationId: operationId,
-        );
+        await outbox.enqueue(OutboxKind.tribeMessage, {
+          'tribeId': tribeId,
+          'content': null,
+          'imagePath': imagePath,
+          'imageUrl': imageUrl,
+          ...stagedMedia.toPayload(),
+        }, operationId: operationId);
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -381,10 +381,10 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
         final messagesAsync = ref.watch(tribeMessagesProvider(tribe.tribeId));
         final presence =
             ref.watch(tribeChatPresenceProvider(tribe.tribeId)).valueOrNull ??
-                tribe.memberCount;
+            tribe.memberCount;
         final typing =
             ref.watch(tribeTypingProvider(tribe.tribeId)).valueOrNull ??
-                const [];
+            const [];
         final me = ref.watch(sessionProvider);
         final typingOthers = typing
             .where((t) => t.userId != me?.userId)
@@ -436,22 +436,28 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
                                   .read(repositoryProvider)
                                   .unpinTribeMessage(tribe.tribeId);
                               ref.invalidate(
-                                  tribeMessagesProvider(tribe.tribeId));
+                                tribeMessagesProvider(tribe.tribeId),
+                              );
                               ref.invalidate(tribeBySlugProvider(tribe.slug));
                             }
                           : null,
                     ),
                   KeeperControlStrip(
                     tribe: tribe,
-                    onPinPrompt: () => showTribePromptComposer(context,
-                        tribeId: tribe.tribeId),
+                    onPinPrompt: () => showTribePromptComposer(
+                      context,
+                      tribeId: tribe.tribeId,
+                    ),
                     onSlowModeToggle: () async {
-                      final next =
-                          tribe.chatSettings.slowModeSeconds == 0 ? 30 : 0;
-                      await ref.read(repositoryProvider).setTribeChatSettings(
-                        tribeId: tribe.tribeId,
-                        patch: {'slow_mode_seconds': next},
-                      );
+                      final next = tribe.chatSettings.slowModeSeconds == 0
+                          ? 30
+                          : 0;
+                      await ref
+                          .read(repositoryProvider)
+                          .setTribeChatSettings(
+                            tribeId: tribe.tribeId,
+                            patch: {'slow_mode_seconds': next},
+                          );
                       ref.invalidate(tribeBySlugProvider(tribe.slug));
                     },
                   ),
@@ -528,7 +534,11 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
                                         setState(() => _replyTo = m),
                                     onJumpTo: _jumpToMessage,
                                     onQuestionTap: (m) => _openQuestionAnswers(
-                                        context, ref, m, tribe),
+                                      context,
+                                      ref,
+                                      m,
+                                      tribe,
+                                    ),
                                   ),
                                   if (threadSize > 0)
                                     _TopicThreadChip(
@@ -552,8 +562,8 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
                     typingLabel: typingOthers.isEmpty
                         ? null
                         : (typingOthers.length == 1
-                            ? '@${typingOthers.first} is typing…'
-                            : '${typingOthers.length} people typing…'),
+                              ? '@${typingOthers.first} is typing…'
+                              : '${typingOthers.length} people typing…'),
                     onClearReply: () => setState(() => _replyTo = null),
                     onSend: () => _send(tribe.tribeId),
                     onPickImage: () => _sendImage(tribe.tribeId),
@@ -583,9 +593,9 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
       if (result == null || result.bytes.isEmpty) return;
       if (result.duration.inSeconds < 1) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Recording too short')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Recording too short')));
         }
         return;
       }
@@ -605,12 +615,14 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
           mediaType: 'audio',
           durationSeconds: durationSeconds,
         );
-        final upload = await ref.read(repositoryProvider).uploadTribeChatAudio(
-              bytes: result.bytes,
-            );
+        final upload = await ref
+            .read(repositoryProvider)
+            .uploadTribeChatAudio(bytes: result.bytes);
         audioPath = upload.path;
         audioUrl = upload.url;
-        await ref.read(repositoryProvider).sendTribeMessage(
+        await ref
+            .read(repositoryProvider)
+            .sendTribeMessage(
               tribeId: tribeId,
               audioPath: upload.path,
               audioUrl: upload.url,
@@ -621,18 +633,14 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
         _scrollToBottomSoon();
       } catch (_) {
         if (stagedMedia != null) {
-          await outbox.enqueue(
-            OutboxKind.tribeMessage,
-            {
-              'tribeId': tribeId,
-              'content': null,
-              'audioPath': audioPath,
-              'audioUrl': audioUrl,
-              'audioDurationSeconds': durationSeconds,
-              ...stagedMedia.toPayload(),
-            },
-            operationId: operationId,
-          );
+          await outbox.enqueue(OutboxKind.tribeMessage, {
+            'tribeId': tribeId,
+            'content': null,
+            'audioPath': audioPath,
+            'audioUrl': audioUrl,
+            'audioDurationSeconds': durationSeconds,
+            ...stagedMedia.toPayload(),
+          }, operationId: operationId);
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -688,8 +696,10 @@ class _ChatHeader extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.chevron_left_rounded,
-                color: VentlyColors.berryMagenta),
+            icon: const Icon(
+              Icons.chevron_left_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
             onPressed: () => context.pop(),
           ),
           GestureDetector(
@@ -780,10 +790,7 @@ class _ChatHeader extends StatelessWidget {
 // =========================================================================
 
 class _ChatSearchBar extends StatelessWidget {
-  const _ChatSearchBar({
-    required this.controller,
-    required this.onClose,
-  });
+  const _ChatSearchBar({required this.controller, required this.onClose});
   final TextEditingController controller;
   final VoidCallback onClose;
 
@@ -797,8 +804,11 @@ class _ChatSearchBar extends StatelessWidget {
         child: Row(
           children: [
             const SizedBox(width: 4),
-            const Icon(Icons.search_rounded,
-                color: VentlyColors.berryMagenta, size: 20),
+            const Icon(
+              Icons.search_rounded,
+              color: VentlyColors.berryMagenta,
+              size: 20,
+            ),
             Expanded(
               child: TextField(
                 controller: controller,
@@ -879,10 +889,10 @@ class _MessageSearchResults extends StatelessWidget {
         final preview = msg.content?.trim().isNotEmpty == true
             ? msg.content!.trim()
             : msg.hasAudio
-                ? 'Voice note'
-                : msg.hasImage
-                    ? 'Photo'
-                    : 'Message';
+            ? 'Voice note'
+            : msg.hasImage
+            ? 'Photo'
+            : 'Message';
         return Material(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -1125,11 +1135,11 @@ class _PrivacyBanner extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.lock_outline, size: 14, color: Color(0xFF2E7D44)),
+          Icon(Icons.shield_outlined, size: 14, color: Color(0xFF2E7D44)),
           SizedBox(width: 6),
           Flexible(
             child: Text(
-              'End-to-end encrypted for your safety',
+              'Community safety rules apply',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -1285,8 +1295,9 @@ class _MessageBubble extends ConsumerWidget {
                   ),
                 ),
               Row(
-                mainAxisAlignment:
-                    mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+                mainAxisAlignment: mine
+                    ? MainAxisAlignment.end
+                    : MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   if (!mine) ...[
@@ -1348,8 +1359,11 @@ class _MessageBubble extends ConsumerWidget {
                               ),
                               if (mine) ...[
                                 const SizedBox(width: 6),
-                                const Icon(Icons.done_all_rounded,
-                                    size: 13, color: VentlyColors.berryMagenta),
+                                const Icon(
+                                  Icons.done_all_rounded,
+                                  size: 13,
+                                  color: VentlyColors.berryMagenta,
+                                ),
                               ],
                             ],
                           ),
@@ -1408,26 +1422,27 @@ class _MessageBubble extends ConsumerWidget {
   void _copyText(BuildContext context) {
     Clipboard.setData(ClipboardData(text: message.content ?? ''));
     VentlyHaptics.selection();
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Copied.')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Copied.')));
   }
 
   Future<void> _reportMessage(BuildContext context, WidgetRef ref) async {
     final reason = await showReportReasonSheet(context);
     if (reason == null || !context.mounted) return;
     try {
-      await ref.read(repositoryProvider).reportTribeMessage(
-            messageId: message.messageId,
-            reason: reason,
-          );
+      await ref
+          .read(repositoryProvider)
+          .reportTribeMessage(messageId: message.messageId, reason: reason);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Thank you — a moderator will review.')),
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Could not send: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not send: $e')));
     }
   }
 
@@ -1439,8 +1454,9 @@ class _MessageBubble extends ConsumerWidget {
       if (ok) ref.invalidate(tribeMessagesProvider(tribeId));
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(_friendly(e))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_friendly(e))));
       }
     }
   }
@@ -1453,8 +1469,9 @@ class _MessageBubble extends ConsumerWidget {
       if (ok) ref.invalidate(tribeMessagesProvider(tribeId));
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(_friendly(e))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_friendly(e))));
       }
     }
   }
@@ -1474,7 +1491,9 @@ class _MessageBubble extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
             child: const Text('Save'),
@@ -1485,15 +1504,15 @@ class _MessageBubble extends ConsumerWidget {
     if (updated == null || updated.isEmpty) return;
     if (updated == (message.content ?? '')) return;
     try {
-      final ok = await ref.read(repositoryProvider).editTribeMessage(
-            messageId: message.messageId,
-            newContent: updated,
-          );
+      final ok = await ref
+          .read(repositoryProvider)
+          .editTribeMessage(messageId: message.messageId, newContent: updated);
       if (ok) ref.invalidate(tribeMessagesProvider(tribeId));
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(_friendly(e))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_friendly(e))));
       }
     }
   }
@@ -1564,8 +1583,11 @@ class _TribeSwipeActionState extends State<_TribeSwipeAction> {
               padding: const EdgeInsets.only(left: 12),
               child: Opacity(
                 opacity: (_dx / _trigger).clamp(0.0, 1.0),
-                child: Icon(widget.icon,
-                    size: 20, color: VentlyColors.berryMagenta),
+                child: Icon(
+                  widget.icon,
+                  size: 20,
+                  color: VentlyColors.berryMagenta,
+                ),
               ),
             ),
           AnimatedSlide(
@@ -1794,10 +1816,14 @@ class _Composer extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     child: ListTile(
                       dense: true,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 10),
-                      leading: const Icon(Icons.reply,
-                          size: 18, color: VentlyColors.berryMagenta),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                      ),
+                      leading: const Icon(
+                        Icons.reply,
+                        size: 18,
+                        color: VentlyColors.berryMagenta,
+                      ),
                       title: Text(
                         'Reply to @${replyTo!.senderPseudonym}',
                         style: const TextStyle(
@@ -1858,8 +1884,10 @@ class _Composer extends StatelessWidget {
                     child: IconButton(
                       iconSize: 18,
                       padding: EdgeInsets.zero,
-                      icon: const Icon(Icons.add_rounded,
-                          color: VentlyColors.berryMagenta),
+                      icon: const Icon(
+                        Icons.add_rounded,
+                        color: VentlyColors.berryMagenta,
+                      ),
                       onPressed: _showAttachmentSheet(context),
                     ),
                   ),
@@ -1867,7 +1895,9 @@ class _Composer extends StatelessWidget {
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 6),
+                        horizontal: 14,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: context.isDark
                             ? Colors.white.withOpacity(0.08)
@@ -1911,8 +1941,11 @@ class _Composer extends StatelessWidget {
                             visualDensity: VisualDensity.compact,
                           ),
                           IconButton(
-                            icon: Icon(Icons.image_outlined,
-                                color: context.ink, size: 20),
+                            icon: Icon(
+                              Icons.image_outlined,
+                              color: context.ink,
+                              size: 20,
+                            ),
                             onPressed: onPickImage,
                             visualDensity: VisualDensity.compact,
                           ),
@@ -1940,8 +1973,11 @@ class _Composer extends StatelessWidget {
                                 strokeWidth: 2.5,
                               ),
                             )
-                          : const Icon(Icons.send_rounded,
-                              color: Colors.white, size: 20),
+                          : const Icon(
+                              Icons.send_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                     ),
                   ),
                 ],
@@ -1965,10 +2001,14 @@ class _Composer extends StatelessWidget {
             children: [
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.photo_outlined,
-                    color: VentlyColors.berryMagenta),
-                title: const Text('Photo',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                leading: const Icon(
+                  Icons.photo_outlined,
+                  color: VentlyColors.berryMagenta,
+                ),
+                title: const Text(
+                  'Photo',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   onPickImage();
@@ -1976,10 +2016,14 @@ class _Composer extends StatelessWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.poll_outlined,
-                    color: VentlyColors.berryMagenta),
-                title: const Text('Poll',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                leading: const Icon(
+                  Icons.poll_outlined,
+                  color: VentlyColors.berryMagenta,
+                ),
+                title: const Text(
+                  'Poll',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   onPoll();
@@ -1987,10 +2031,14 @@ class _Composer extends StatelessWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.help_outline,
-                    color: VentlyColors.berryMagenta),
-                title: const Text('Question of the day',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                leading: const Icon(
+                  Icons.help_outline,
+                  color: VentlyColors.berryMagenta,
+                ),
+                title: const Text(
+                  'Question of the day',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   onQuestion();
@@ -1998,8 +2046,10 @@ class _Composer extends StatelessWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.mic_none_rounded,
-                    color: VentlyColors.berryMagenta),
+                leading: const Icon(
+                  Icons.mic_none_rounded,
+                  color: VentlyColors.berryMagenta,
+                ),
                 title: Text(
                   recording ? 'Tap mic again to send' : 'Voice note',
                   style: const TextStyle(fontWeight: FontWeight.w800),
@@ -2082,8 +2132,9 @@ class _TopicThreadChip extends StatelessWidget {
         right: alignEnd ? 8 : 0,
       ),
       child: Row(
-        mainAxisAlignment:
-            alignEnd ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: alignEnd
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
           InkWell(
             onTap: onTap,
@@ -2164,7 +2215,9 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
     setState(() => _sending = true);
     try {
       await VentlyHaptics.send();
-      await ref.read(repositoryProvider).sendTribeMessage(
+      await ref
+          .read(repositoryProvider)
+          .sendTribeMessage(
             tribeId: widget.tribe.tribeId,
             content: text,
             replyToMessageId: widget.root.messageId,
@@ -2172,9 +2225,9 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
       _controller.clear();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not send: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not send: $e')));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -2285,8 +2338,9 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
                                       DateFormat.jm().format(m.createdAt),
                                       style: TextStyle(
                                         fontSize: 10,
-                                        color:
-                                            scheme.onSurface.withOpacity(0.5),
+                                        color: scheme.onSurface.withOpacity(
+                                          0.5,
+                                        ),
                                       ),
                                     ),
                                   ],

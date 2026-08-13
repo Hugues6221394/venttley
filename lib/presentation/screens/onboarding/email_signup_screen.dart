@@ -57,9 +57,12 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
       if (_birthDate == null) {
         throw const FormatException('Pick your birth date so we can age-gate.');
       }
-      const avatarSeed = 'v2:silhouette=orb;palette=berry;hair=none;'
+      const avatarSeed =
+          'v2:silhouette=orb;palette=berry;hair=none;'
           'accessory=none;aura=glow;outfit=none';
-      final result = await ref.read(sessionProvider.notifier).registerWithEmail(
+      final result = await ref
+          .read(sessionProvider.notifier)
+          .registerWithEmail(
             birthDate: _birthDate!,
             email: _email.text.trim(),
             username: _username.text.trim(),
@@ -93,8 +96,10 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('Continue with email',
-            style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Continue with email',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -104,7 +109,7 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
             children: [
               Text(
                 'Use email if you want password reset to come to your inbox. '
-                'Your handle on Venttly stays anonymous either way.',
+                'Your public handle stays pseudonymous either way.',
                 style: TextStyle(
                   color: context.ink.withOpacity(0.7),
                   fontWeight: FontWeight.w700,
@@ -151,7 +156,7 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
                   _birthDate == null
                       ? 'Pick your birth date'
                       : 'Birth date: '
-                          '${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}',
+                            '${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}',
                 ),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(50),
@@ -236,8 +241,11 @@ class _CheckInboxState extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: const Icon(Icons.mark_email_read_outlined,
-                    color: VentlyColors.berryMagenta, size: 42),
+                child: const Icon(
+                  Icons.mark_email_read_outlined,
+                  color: VentlyColors.berryMagenta,
+                  size: 42,
+                ),
               ),
               const SizedBox(height: 18),
               Text(

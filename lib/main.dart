@@ -56,7 +56,9 @@ Future<void> main() async {
   try {
     final info = await PackageInfo.fromPlatform();
     release = '${info.packageName}@${info.version}+${info.buildNumber}';
-  } catch (_) {/* keep fallback */}
+  } catch (_) {
+    /* keep fallback */
+  }
 
   await SentryFlutter.init(
     (options) {
@@ -64,7 +66,7 @@ Future<void> main() async {
       options.environment = VentlyConfig.env;
       options.release = release;
       options.tracesSampleRate = VentlyConfig.sentryTracesSampleRate;
-      options.sendDefaultPii = false; // anonymous app — never ship PII
+      options.sendDefaultPii = false; // do not collect SDK-default identifiers
       options.attachScreenshot = false;
       // Defence in depth — strip any PII that slipped into tags or
       // contexts on top of [PiiScrubber] at the Logger boundary.
@@ -80,8 +82,9 @@ Future<void> main() async {
 
 SentryEvent _scrubSentryEvent(SentryEvent event) {
   final tags = <String, String>{};
-  for (final entry in event.tags?.entries ??
-      const Iterable<MapEntry<String, String>>.empty()) {
+  for (final entry
+      in event.tags?.entries ??
+          const Iterable<MapEntry<String, String>>.empty()) {
     final scrubbed = PiiScrubber.scrub({entry.key: entry.value});
     final value = scrubbed[entry.key];
     if (value != null) tags[entry.key] = value.toString();
@@ -94,9 +97,7 @@ SentryEvent _scrubSentryEvent(SentryEvent event) {
               : PiiScrubber.scrubText(breadcrumb.message!),
           data: breadcrumb.data == null
               ? null
-              : PiiScrubber.scrub(
-                  Map<String, Object?>.from(breadcrumb.data!),
-                ),
+              : PiiScrubber.scrub(Map<String, Object?>.from(breadcrumb.data!)),
         ),
       )
       .toList();
@@ -147,8 +148,9 @@ SentryEvent _scrubSentryEvent(SentryEvent event) {
         ? null
         : PiiScrubber.scrubError(event.throwable),
     level: event.level,
-    culprit:
-        event.culprit == null ? null : PiiScrubber.scrubText(event.culprit!),
+    culprit: event.culprit == null
+        ? null
+        : PiiScrubber.scrubText(event.culprit!),
     contexts: event.contexts,
     debugMeta: event.debugMeta,
     type: event.type,
@@ -265,13 +267,10 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _appLinkSubscription = AppLinks().uriLinkStream.listen(
-          _handleAppLink,
-          onError: (Object error, StackTrace stack) => Logger.instance.warn(
-            'app_link.invalid',
-            error: error,
-            stack: stack,
-          ),
-        );
+      _handleAppLink,
+      onError: (Object error, StackTrace stack) =>
+          Logger.instance.warn('app_link.invalid', error: error, stack: stack),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       ref.read(sessionProvider.notifier).restore();
       AnalyticsService.instance.track(Events.appOpened);
@@ -320,8 +319,9 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       // "Black" is our own third appearance: same dark theme, true-black
       // canvas — so it rides ThemeMode.dark with a pureBlack theme variant.
       darkTheme: VentlyTheme.dark(pureBlack: mode == VentlyThemeMode.black),
-      themeMode:
-          mode == VentlyThemeMode.light ? ThemeMode.light : ThemeMode.dark,
+      themeMode: mode == VentlyThemeMode.light
+          ? ThemeMode.light
+          : ThemeMode.dark,
       routerConfig: router,
       // Premium blush gradient painted once behind the whole navigator —
       // screens opt in by making their Scaffold transparent.

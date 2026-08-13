@@ -1,7 +1,7 @@
 -- 0091_moderation_cache.sql
--- Server-owned moderation verdict cache. Identical content (spam blasts, common
--- phrases) is classified by the LLM once, then served from cache — cutting Groq
--- cost/latency further on top of the client-side cost gate.
+-- Server-owned advisory moderation verdict cache. Production does not use an
+-- off-platform text classifier; this table remains available for an approved
+-- in-boundary classifier and is never client-writable.
 --
 -- CRITICAL: this table has NO RLS policies and NO grants to authenticated/anon,
 -- so it is reachable ONLY by the service role — i.e. the `moderate` edge

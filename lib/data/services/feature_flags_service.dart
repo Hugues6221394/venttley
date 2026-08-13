@@ -35,7 +35,9 @@ abstract class FeatureFlagsService {
     'premium_themes': false,
     'experimental_homepage': false,
     'ai_recommendations': false, // locked
-    'e2ee_chat_real': false, // locked — only label is shown
+    // Reserved for a future, independently reviewed cryptographic protocol.
+    // A disabled flag must never cause an encryption claim to appear in UI.
+    'e2ee_chat_real': false,
     'paid_boosted_tribes': false,
     'creator_donations': false,
   };

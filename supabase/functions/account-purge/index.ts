@@ -34,8 +34,11 @@
 //
 // Schedule: once daily via pg_cron → net.http_post (see migration 0076).
 
-import { adminClient } from '../_shared/supabase.ts';
-import { corsHeaders, handleOptions } from '../_shared/cors.ts';
+import { adminClient } from "../_shared/supabase.ts";
+import {
+  rolloutEnabled,
+  verifyInternalSecret,
+} from "../_shared/internal_auth.ts";
 
 const GRACE_DAYS = 30;
 const DEFAULT_BATCH = 500;
@@ -45,22 +48,22 @@ interface DueRow {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return handleOptions()!;
-  if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+  if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
-  // --- Auth gate: shared secret, constant-time-ish compare --------------
-  const expected = Deno.env.get('CRON_SECRET');
-  if (!expected) return json({ error: 'CRON_SECRET not configured' }, 500);
-  const presented = req.headers.get('x-cron-secret') ?? '';
-  if (!secretsMatch(presented, expected)) {
-    return json({ error: 'unauthorized' }, 401);
+  const auth = verifyInternalSecret(req, {
+    envName: "CRON_SECRET",
+    headerName: "x-cron-secret",
+  });
+  if (!auth.ok) return json({ error: auth.error }, auth.status);
+  if (!rolloutEnabled("ACCOUNT_PURGE_ENABLED")) {
+    return json({ ok: false, disabled: true }, 503);
   }
 
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const batchSize = clamp(
-    typeof body?.batch === 'number' ? body.batch : DEFAULT_BATCH,
+    typeof body?.batch === "number" ? body.batch : DEFAULT_BATCH,
     1,
-    2000,
+    500,
   );
 
   const sb = adminClient();
@@ -70,14 +73,14 @@ Deno.serve(async (req) => {
 
   // 1) Collect the due accounts. Service role bypasses RLS + column grants.
   const { data: due, error: pickErr } = await sb
-    .from('users')
-    .select('user_id')
-    .not('deletion_requested_at', 'is', null)
-    .lt('deletion_requested_at', cutoff)
+    .from("users")
+    .select("user_id")
+    .not("deletion_requested_at", "is", null)
+    .lt("deletion_requested_at", cutoff)
     .limit(batchSize);
 
   if (pickErr) {
-    return json({ error: `select due: ${pickErr.message}` }, 500);
+    return json({ error: "due_account_lookup_failed" }, 500);
   }
 
   const allDue = (due ?? []) as DueRow[];
@@ -88,11 +91,13 @@ Deno.serve(async (req) => {
   // LEGAL HOLD: never purge an account tied to an open/reported CSAM incident —
   // its content + author link must be preserved as evidence (migration 0094).
   const dueIds = allDue.map((r) => r.user_id);
-  const { data: holds } = await sb
-    .from('csam_incidents')
-    .select('author_id')
-    .in('author_id', dueIds)
-    .in('status', ['detected', 'reported']);
+  const { data: holds, error: holdError } = await sb
+    .from("csam_incidents")
+    .select("author_id")
+    .in("author_id", dueIds)
+    .in("status", ["detected", "reported"]);
+  // Legal-hold lookup failure must stop deletion, never fail open.
+  if (holdError) return json({ error: "legal_hold_lookup_failed" }, 500);
   const held = new Set(
     (holds ?? []).map((h) => (h as { author_id: string }).author_id),
   );
@@ -116,17 +121,17 @@ Deno.serve(async (req) => {
 
       // public.users — cascades every child table.
       const { error: pubErr } = await sb
-        .from('users')
+        .from("users")
         .delete()
-        .eq('user_id', user_id);
+        .eq("user_id", user_id);
       if (pubErr) throw new Error(`public: ${pubErr.message}`);
 
       purged++;
     } catch (e) {
       failed++;
       console.error(
-        `account-purge[${user_id}] failed:`,
-        e instanceof Error ? e.message : e,
+        "account purge item failed",
+        e instanceof Error ? "operation_error" : "unknown_error",
       );
     }
   }
@@ -139,21 +144,10 @@ Deno.serve(async (req) => {
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { "Content-Type": "application/json" },
   });
 }
 
 function clamp(n: number, lo: number, hi: number): number {
-  return Math.min(Math.max(n, lo), hi);
-}
-
-/// Length-safe equality that doesn't early-return on the first mismatched
-/// byte, to avoid leaking the secret via timing.
-function secretsMatch(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
+  return Math.min(Math.max(Math.trunc(n), lo), hi);
 }

@@ -3,10 +3,10 @@
 This document is the canonical map of which subsystem owns what, how
 they talk, and what unlocks when each external service is provisioned.
 
-Phase A (what's in the repo today) is the **integration architecture** —
-service interfaces + edge function scaffolds + schemas. Phase B is
-plugging in real keys; the code doesn't change when that happens, only
-the env vars do.
+This map distinguishes implemented controls from integrations that still need
+staging and production evidence. Adding a credential never silently enables a
+risky processor; rollout switches, reviewed configuration, and validation are
+required.
 
 ---
 
@@ -18,12 +18,13 @@ the env vars do.
 | Identity (future) | **Clerk** | `clerk_flutter_sdk` (TBD) | JWT verify in Supabase RLS |
 | Application data | **Supabase Postgres** | `supabase_flutter` | Postgres + RLS + RPCs |
 | Durable social writes | **Supabase Postgres** | encrypted outbox | idempotent RPCs + private mutation receipts |
-| Media storage | **Supabase Storage** | encrypted pending-media store + `supabase_flutter` | Bucket policies |
+| Media storage | **Supabase Storage** | locally encrypted pending-media recovery + `supabase_flutter` upload | Bucket policies + pending scan state |
+| Media moderation | **Sightengine** (explicit opt-in) | n/a | owner-bound pending-image scan; fail-safe veil |
 | Realtime | **Supabase Realtime** | `supabase_flutter` | Postgres-changes channels |
 | Foreground notifications | `flutter_local_notifications` | `NotificationsService` | n/a |
-| Push notifications | **Firebase Cloud Messaging** | `firebase_messaging` (TBD) | `notification-fanout` Edge Function |
-| Transactional email | **Resend** | `EmailService` queues a row | `email-dispatcher` Edge Function |
-| Subscriptions | **Stripe** | `SubscriptionService` reads `subscriptions` table | `payment-webhook` Edge Function |
+| Push notifications | **Firebase Cloud Messaging** | `firebase_messaging` (TBD) | secret-gated durable outbox worker; generic copy only |
+| Transactional email | **Resend** | `EmailService` queues a row | leased outbox + provider idempotency key |
+| Subscriptions | **Stripe** | `SubscriptionService` reads `subscriptions` table | signed, deduplicated, reorder-safe webhook |
 | Product analytics | **PostHog** | `AnalyticsService` | (events also mirror to `analytics_events`) |
 | Feature flags | **PostHog** (or GrowthBook) | `FeatureFlagsService` | `feature_flag_overrides` table |
 | Error monitoring | **Sentry** | `sentry_flutter` | n/a |
@@ -32,23 +33,22 @@ the env vars do.
 | Observability | **OpenTelemetry** | `OtelExporter` (TBD) | OTLP collector |
 | Audio capture | `record` package | `WhisperRecorder` | n/a |
 | Audio playback | `just_audio` | `WhisperPlayerController` | n/a |
-| Moderation (text) | **Groq LlamaGuard** | `ModerationService` (local Tier 1) | authenticated `moderate` Edge Function (Tier 2) |
+| Moderation (text) | **Supabase Postgres** | advisory local scan | authoritative ingress triggers + staff rules |
 
 ---
 
 ## Boundary rules
 
 1. **The Flutter client never holds a service secret.** Resend key,
-   Stripe secret key, FCM service account, Groq key (server-side) — all
+   Stripe secret key and FCM service account — all
    live in Edge Function env vars. Only publishable/anon keys ship in
    `--dart-define`.
 
-2. **Every external integration has a no-op fallback.** When the env
-   var is empty, the service's `instance` resolves to a default that
-   either uses the Supabase equivalent (search → Postgres RPC) or
-   silently records the call locally (PostHog → Sentry breadcrumb).
-   This means dev / CI / preview builds work with zero external
-   accounts.
+2. **Risky integrations fail closed and roll out explicitly.** Service-role
+   workers require a cron/webhook secret before constructing an admin client.
+   Media scan, push, summaries, cleanup, and whisper moderation also require a
+   dedicated rollout switch. Missing configuration never becomes silent
+   authorization or an unscanned-public state.
 
 3. **Writes from the client go through Supabase only.** Retryable posts,
    comments, DMs, and tribe messages carry a UUID from the first attempt
@@ -67,10 +67,15 @@ the env vars do.
    encrypted outbox and deleted only after the idempotent row write is
    confirmed or the user removes the failed send.
 
-5. **PII never leaves the device unless the user typed it.** Every
-   payload sent to PostHog, Sentry, OTEL, or the Logger sinks runs
-   through `PiiScrubber.scrub()`. Confession bodies, message
-   plaintext, recovery phrases, and emails are dropped or masked.
+5. **Data minimization is processor-specific.** User content goes to Supabase,
+   the system of record. User-authored bodies, message previews, and Whisper
+   audio do not go to analytics, error telemetry, push, or an external AI
+   service. Telemetry passes through `PiiScrubber`; FCM receives generic copy
+   and routing identifiers. When the media-scan switch is enabled, Sightengine
+   receives the canonical uploaded image URL and image bytes solely to return a
+   safety verdict; this requires processor terms and a user-facing disclosure.
+   Transactional email addresses go to Resend only for the email flow the
+   member requested.
 
 ---
 
@@ -113,7 +118,7 @@ supabase/
     notification-fanout/               # FCM fan-out
     email-dispatcher/                  # Resend drain
     payment-webhook/                   # Stripe → subscriptions
-    moderate/                          # authenticated Tier-2 text guard
+    moderate/                          # authenticated, quota-bounded advisory API
     storage-cleanup/                   # orphan sweeper
 docs/
   notifications.md                     # FCM/APNs ops guide
@@ -140,8 +145,10 @@ no-op path is the system of record.
 ### Firebase Cloud Messaging
 - See `docs/notifications.md` for the full setup. Final steps:
 - [ ] Deploy `supabase functions deploy notification-fanout`
-- [ ] Set `FCM_PROJECT_ID` + `FCM_SERVICE_ACCOUNT_JSON` secrets
-- [ ] Wire Postgres Webhook → `notification-fanout` for the 4 tables
+- [ ] Set `FCM_PROJECT_ID`, `FCM_SERVICE_ACCOUNT_JSON`, and `WEBHOOK_SECRET`
+- [ ] Wire Database Webhooks with `x-webhook-secret`; add a cron drain
+- [ ] Validate generic payloads, retries, invalid tokens, and p95 latency
+- [ ] Set `PUSH_DELIVERY_ENABLED=on` for the canary environment only
 - [ ] Add `--dart-define=FCM_ENABLED=true`
 
 ### Resend
@@ -199,25 +206,32 @@ These are deliberately deferred so Phase A doesn't sprawl:
 - **OpenTelemetry Dart SDK.** No mature OTLP exporter ships with the
   Dart SDK today. When one does, it slots into `Logger.onRecord` +
   `Sentry.beforeBreadcrumb` without changing call sites.
-- **Cloudinary image transforms.** The current Supabase Storage +
-  `cached_network_image` pipeline serves a million users at our
-  expected throughput. The brief asked to abstract image processing
-  behind an interface — that interface is `ImageTransformService`
-  (TBD when actually needed).
+- **Cloudinary image transforms.** The current Supabase Storage pipeline has
+  no demonstrated million-user capacity baseline. Add transformation or CDN
+  infrastructure only after real-device and sustained-load evidence identifies
+  the bottleneck.
 
 ---
 
 ## Privacy posture (non-negotiable)
 
-We never ship any of the following to off-platform sinks:
+The current implementation never ships any of the following to third-party AI,
+analytics, error-monitoring, or push payloads:
 
 - Confession / vent body text
 - DM / tribe-chat message plaintext
 - Whisper audio or transcript
-- Email addresses
 - Recovery phrases / blobs / salts
 - Real names if a user ever entered one
-- IP addresses (Supabase logs them; we don't export them)
+- IP addresses (infrastructure may process them; application code does not send
+  them to a geolocation provider)
+
+Transactional email necessarily sends the destination address and template
+variables to Resend. Firebase receives device tokens, generic notification copy,
+and bounded routing identifiers. When media scanning is enabled, Sightengine
+receives the canonical pending-image URL and image bytes for safety
+classification. These are explicit processor boundaries, not exceptions hidden
+behind configuration.
 
 The `PiiScrubber` is the chokepoint that enforces this. Any new
 analytics property, log field, or breadcrumb routes through it. If

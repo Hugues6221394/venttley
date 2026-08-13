@@ -179,7 +179,7 @@ enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
-minimum_password_length = 6
+minimum_password_length = 8
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
 password_requirements = ""
@@ -225,7 +225,7 @@ double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
 enable_confirmations = false
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
-secure_password_change = false
+secure_password_change = true
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
 max_frequency = "1s"
 # Number of characters used in the email OTP.
@@ -388,6 +388,11 @@ verify_jwt = false
 [functions.email-dispatcher]
 verify_jwt = false
 
+# Stripe cannot present a Supabase JWT. The handler instead validates Stripe's
+# signature over the unmodified request body before service-role mutations.
+[functions.payment-webhook]
+verify_jwt = false
+
 # geo-capture records the COARSE country (never the IP) a signed-in user
 # connects from, for the admin geo analytics. Unlike the cron functions above
 # it is user-facing, so JWT verification stays ON: only a real logged-in user's
@@ -401,11 +406,24 @@ verify_jwt = true
 [functions.media-scan]
 verify_jwt = true
 
-# moderate runs Tier-2 safety classification (Groq Llama Guard) server-side so
-# the API key isn't shipped in the app, and caches verdicts in a service-role-
-# only table. User-facing → JWT verification ON.
+# moderate is an authenticated, quota-bounded advisory endpoint. Authoritative
+# safety rules execute in Postgres; production makes no off-platform text call.
 [functions.moderate]
 verify_jwt = true
+
+# Internal Database Webhook / cron workers authenticate a dedicated shared
+# secret inside the handler. They do not accept public or user JWTs.
+[functions.notification-fanout]
+verify_jwt = false
+
+[functions.space-summary-batch]
+verify_jwt = false
+
+[functions.storage-cleanup]
+verify_jwt = false
+
+[functions.whisper-moderation]
+verify_jwt = false
 
 [edge_runtime]
 enabled = true

@@ -36,6 +36,7 @@ jobs:
           lib/core/pii_scrubber.dart
           lib/data/repositories/vently_repository.dart
           lib/data/services/draft_store.dart
+          lib/data/services/identity_service.dart
           lib/data/services/moderation_service.dart
           lib/data/services/outbox.dart
           lib/data/services/pending_media_store.dart
@@ -43,11 +44,17 @@ jobs:
           lib/data/services/supabase_backend.dart
           lib/data/services/telemetry_service.dart
           lib/main.dart
+          lib/presentation/router/app_router.dart
           lib/presentation/screens/compose/compose_screen.dart
           lib/presentation/screens/compose/create_story_screen.dart
           lib/presentation/screens/feed/post_detail_screen.dart
           lib/presentation/screens/inbox/chat_screen.dart
+          lib/presentation/screens/onboarding/age_completion_screen.dart
+          lib/presentation/screens/onboarding/email_signup_screen.dart
+          lib/presentation/screens/onboarding/welcome_screen.dart
+          lib/presentation/screens/profile/password_security_screen.dart
           lib/presentation/screens/tribes/tribe_chat_screen.dart
+          lib/presentation/screens/whispers/create_whisper_screen.dart
           lib/presentation/widgets/connection_banner.dart
           lib/presentation/widgets/whisper_comments_sheet.dart
           test/draft_store_test.dart
@@ -56,7 +63,10 @@ jobs:
           test/pending_media_store_test.dart
           test/pii_scrubber_test.dart
           test/production_safety_contract_test.dart
-      - run: flutter analyze
+          test/trust_boundary_hardening_test.dart
+      # Keep errors/warnings fatal while the existing informational lint debt
+      # is retired incrementally.
+      - run: flutter analyze --no-fatal-infos
       - run: flutter test --coverage
 
   android:
@@ -118,7 +128,9 @@ jobs:
           cache: npm
           cache-dependency-path: admin/package-lock.json
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
+      - run: npm run build
 
   database:
     name: Migration replay and lint
@@ -150,12 +162,37 @@ jobs:
         with:
           deno-version: lts
           cache: true
-      - name: Check moderation function formatting
+      - name: Check security-sensitive function formatting
         run: >-
           deno fmt --check
-          supabase/functions/moderate
           supabase/functions/_shared
-      - name: Type-check moderation entrypoint
-        run: deno check supabase/functions/moderate/index.ts
-      - name: Run isolated moderation tests
-        run: deno test supabase/functions/moderate/handler_test.ts
+          supabase/functions/account-purge
+          supabase/functions/email-dispatcher
+          supabase/functions/geo-capture
+          supabase/functions/media-scan
+          supabase/functions/moderate
+          supabase/functions/notification-fanout
+          supabase/functions/payment-webhook
+          supabase/functions/space-summary-batch
+          supabase/functions/storage-cleanup
+          supabase/functions/whisper-moderation
+      - name: Type-check security-sensitive entrypoints
+        run: >-
+          deno check
+          supabase/functions/account-purge/index.ts
+          supabase/functions/email-dispatcher/index.ts
+          supabase/functions/geo-capture/index.ts
+          supabase/functions/media-scan/index.ts
+          supabase/functions/moderate/index.ts
+          supabase/functions/notification-fanout/index.ts
+          supabase/functions/payment-webhook/index.ts
+          supabase/functions/space-summary-batch/index.ts
+          supabase/functions/storage-cleanup/index.ts
+          supabase/functions/whisper-moderation/index.ts
+      - name: Run adversarial Edge Function unit tests
+        run: >-
+          deno test
+          supabase/functions/_shared/internal_auth_test.ts
+          supabase/functions/media-scan/ownership_test.ts
+          supabase/functions/moderate/handler_test.ts
+          supabase/functions/space-summary-batch/summary_test.ts

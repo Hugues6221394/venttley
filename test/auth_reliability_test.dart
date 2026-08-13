@@ -11,10 +11,7 @@ void main() {
     expect(recovery, contains('var verifying = false'));
     expect(recovery, contains('onPressed: verifying'));
     expect(recovery, contains("ref.read(sessionProvider) == null"));
-    expect(
-      recovery,
-      contains('your session could not be restored'),
-    );
+    expect(recovery, contains('your session could not be restored'));
     expect(recovery, contains('ModalTextControllerScope('));
   });
 
@@ -47,10 +44,7 @@ void main() {
         ),
       ),
     );
-    expect(
-      verifyEmail,
-      contains('if (mounted) _send(initial: true)'),
-    );
+    expect(verifyEmail, contains('if (mounted) _send(initial: true)'));
   });
 
   test('MFA enrollment verification is single-flight', () {
@@ -80,14 +74,15 @@ void main() {
     expect(adminUser, contains('actorProfile?.user_role !== "super_admin"'));
     expect(adminUser, contains('actorProfile.account_status !== "active"'));
     expect(adminUser, contains('if (pw.length < 12)'));
+    expect(adminUser, contains('.select("recovery_blob")'));
+    expect(adminUser, contains('recoveryState.recovery_blob'));
+    expect(adminUser, contains('protected by a recovery phrase'));
     expect(adminUser, isNot(contains('rpc("admin_reset_user_password"')));
     expect(server, contains('SUPABASE_SERVICE_ROLE_KEY'));
     expect(server, contains('detectSessionInUrl: false'));
     expect(
       migration,
-      contains(
-        'FROM PUBLIC, anon, authenticated, service_role',
-      ),
+      contains('FROM PUBLIC, anon, authenticated, service_role'),
     );
   });
 }

@@ -92,9 +92,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not pick image: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not pick image: $e')));
     }
   }
 
@@ -120,13 +120,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           mediaType: 'audio',
           durationSeconds: durationSeconds,
         );
-        final up = await ref.read(repositoryProvider).uploadChatAudio(
+        final up = await ref
+            .read(repositoryProvider)
+            .uploadChatAudio(
               roomId: widget.roomId,
               bytes: result.bytes,
               durationSeconds: durationSeconds,
             );
         mediaPath = up.path;
-        await ref.read(repositoryProvider).sendMessage(
+        await ref
+            .read(repositoryProvider)
+            .sendMessage(
               roomId: widget.roomId,
               plaintext: '',
               attachedMediaPath: up.path,
@@ -137,17 +141,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ref.invalidate(messagesProvider(widget.roomId));
       } catch (_) {
         if (stagedMedia != null) {
-          await outbox.enqueue(
-            OutboxKind.dm,
-            {
-              'roomId': widget.roomId,
-              'plaintext': '',
-              'attachedMediaPath': mediaPath,
-              'attachedMediaType': mediaPath == null ? null : 'audio',
-              ...stagedMedia.toPayload(),
-            },
-            operationId: operationId,
-          );
+          await outbox.enqueue(OutboxKind.dm, {
+            'roomId': widget.roomId,
+            'plaintext': '',
+            'attachedMediaPath': mediaPath,
+            'attachedMediaType': mediaPath == null ? null : 'audio',
+            ...stagedMedia.toPayload(),
+          }, operationId: operationId);
         }
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -167,7 +167,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Microphone unavailable — check permissions.')),
+          content: Text('Microphone unavailable — check permissions.'),
+        ),
       );
       return;
     }
@@ -180,11 +181,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Mark the room as read the moment the screen opens.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ref.read(repositoryProvider).markRoomRead(widget.roomId).then((_) {
-          ref.invalidate(navInboxBadgeCountProvider);
-          ref.invalidate(unreadInboxCountProvider);
-          ref.invalidate(inboxStreamProvider);
-        }).catchError((_) {});
+        ref
+            .read(repositoryProvider)
+            .markRoomRead(widget.roomId)
+            .then((_) {
+              ref.invalidate(navInboxBadgeCountProvider);
+              ref.invalidate(unreadInboxCountProvider);
+              ref.invalidate(inboxStreamProvider);
+            })
+            .catchError((_) {});
       }
     });
     _controller.addListener(_handleTyping);
@@ -243,13 +248,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     final messages =
         ref.watch(messagesProvider(widget.roomId)).valueOrNull ?? const [];
-    final prefs = ref.watch(dmRoomPrefsProvider(widget.roomId)).valueOrNull ??
+    final prefs =
+        ref.watch(dmRoomPrefsProvider(widget.roomId)).valueOrNull ??
         DmRoomPrefs.empty;
     final peerName = r.isGroup
         ? (r.groupTitle ?? r.peerPseudonym)
         : (prefs.peerNickname?.trim().isNotEmpty ?? false)
-            ? prefs.peerNickname!.trim()
-            : r.peerPseudonym;
+        ? prefs.peerNickname!.trim()
+        : r.peerPseudonym;
     final groupAvatarUrl = r.groupAvatarPath == null
         ? null
         : ref.watch(groupAvatarUrlProvider(r.groupAvatarPath!)).valueOrNull;
@@ -293,30 +299,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     // Mark unread peer messages as read whenever the messages list ticks
     // forward (new arrivals while the screen is open).
-    ref.listen<AsyncValue<List<ChatMessage>>>(
-      messagesProvider(widget.roomId),
-      (prev, next) {
-        final list = next.valueOrNull;
-        if (list == null) return;
-        final previousLength = prev?.valueOrNull?.length ?? 0;
-        if (list.length > previousLength) {
-          final nearLatest = !_scrollController.hasClients ||
-              _scrollController.position.maxScrollExtent -
-                      _scrollController.position.pixels <
-                  180;
-          if (nearLatest || list.last.sentByMe) _scrollToLatest();
-        }
-        final hasUnreadFromPeer =
-            list.any((m) => !m.sentByMe && m.readAt == null);
-        if (hasUnreadFromPeer) {
-          ref.read(repositoryProvider).markRoomRead(widget.roomId).then((_) {
-            ref.invalidate(navInboxBadgeCountProvider);
-            ref.invalidate(unreadInboxCountProvider);
-            ref.invalidate(inboxStreamProvider);
-          });
-        }
-      },
-    );
+    ref.listen<AsyncValue<List<ChatMessage>>>(messagesProvider(widget.roomId), (
+      prev,
+      next,
+    ) {
+      final list = next.valueOrNull;
+      if (list == null) return;
+      final previousLength = prev?.valueOrNull?.length ?? 0;
+      if (list.length > previousLength) {
+        final nearLatest =
+            !_scrollController.hasClients ||
+            _scrollController.position.maxScrollExtent -
+                    _scrollController.position.pixels <
+                180;
+        if (nearLatest || list.last.sentByMe) _scrollToLatest();
+      }
+      final hasUnreadFromPeer = list.any(
+        (m) => !m.sentByMe && m.readAt == null,
+      );
+      if (hasUnreadFromPeer) {
+        ref.read(repositoryProvider).markRoomRead(widget.roomId).then((_) {
+          ref.invalidate(navInboxBadgeCountProvider);
+          ref.invalidate(unreadInboxCountProvider);
+          ref.invalidate(inboxStreamProvider);
+        });
+      }
+    });
 
     // The last own-message that the peer has read. We show "Seen" on
     // exactly this bubble so the indicator doesn't pollute every message.
@@ -369,11 +377,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       ProfileAvatar(
-                        avatarSeed:
-                            r.isGroup ? 'group-${r.roomId}' : r.peerAvatarSeed,
+                        avatarSeed: r.isGroup
+                            ? 'group-${r.roomId}'
+                            : r.peerAvatarSeed,
                         label: peerName,
-                        profilePhotoUrl:
-                            r.isGroup ? groupAvatarUrl : r.peerProfilePhotoUrl,
+                        profilePhotoUrl: r.isGroup
+                            ? groupAvatarUrl
+                            : r.peerProfilePhotoUrl,
                         size: 34,
                       ),
                       const SizedBox(width: 9),
@@ -472,7 +482,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       child: Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 4),
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: VentlyColors.softMauve.withOpacity(0.35),
                             borderRadius: BorderRadius.circular(20),
@@ -492,7 +504,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   final m = visible[i - 1];
                   if (SystemNotice.isSystem(m.plaintext)) {
                     return _SystemNoticeLine(
-                        text: SystemNotice.strip(m.plaintext));
+                      text: SystemNotice.strip(m.plaintext),
+                    );
                   }
                   return _Bubble(
                     message: m,
@@ -504,9 +517,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     }),
                     onCopy: () {
                       Clipboard.setData(ClipboardData(text: m.plaintext));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Copied.')),
-                      );
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(const SnackBar(content: Text('Copied.')));
                     },
                     onEdit: () {
                       setState(() {
@@ -583,20 +596,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   if (t.isEmpty) return;
                   final original = _editingMessage!;
                   try {
-                    final moderation =
-                        await ref.read(moderationServiceProvider).review(t);
+                    final moderation = await ref
+                        .read(moderationServiceProvider)
+                        .review(t);
                     if (!mounted) return;
                     if (moderation.isBlocked) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(moderation.reasons.isEmpty
-                              ? 'Held back by safety AI.'
-                              : moderation.reasons.first),
+                          content: Text(
+                            moderation.reasons.isEmpty
+                                ? 'Held back by safety AI.'
+                                : moderation.reasons.first,
+                          ),
                         ),
                       );
                       return;
                     }
-                    await ref.read(repositoryProvider).editChatMessage(
+                    await ref
+                        .read(repositoryProvider)
+                        .editChatMessage(
                           messageId: original.messageId,
                           newPlaintext: t,
                         );
@@ -605,10 +623,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     setState(() => _editingMessage = null);
                     ref.invalidate(messagesProvider(widget.roomId));
                     if (moderation.surfaceCrisisHelpline && mounted) {
-                      unawaited(ref
-                          .read(repositoryProvider)
-                          .setChatMessageCrisis(original.messageId, 'elevated')
-                          .catchError((_) {}));
+                      unawaited(
+                        ref
+                            .read(repositoryProvider)
+                            .setChatMessageCrisis(
+                              original.messageId,
+                              'elevated',
+                            )
+                            .catchError((_) {}),
+                      );
                       await showCrisisSupportSheet(context, ref);
                     }
                   } catch (e) {
@@ -624,15 +647,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 if (t.isEmpty && pending == null) return;
                 ModerationResult? moderation;
                 if (t.isNotEmpty) {
-                  moderation =
-                      await ref.read(moderationServiceProvider).review(t);
+                  moderation = await ref
+                      .read(moderationServiceProvider)
+                      .review(t);
                   if (!context.mounted) return;
                   if (moderation.isBlocked) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(moderation.reasons.isEmpty
-                            ? 'Held back by safety AI.'
-                            : moderation.reasons.first),
+                        content: Text(
+                          moderation.reasons.isEmpty
+                              ? 'Held back by safety AI.'
+                              : moderation.reasons.first,
+                        ),
                       ),
                     );
                     return;
@@ -654,17 +680,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       contentType: _pendingImageMime,
                       mediaType: 'image',
                     );
-                    final up =
-                        await ref.read(repositoryProvider).uploadChatImage(
-                              roomId: widget.roomId,
-                              bytes: pending,
-                              extension: _pendingImageExt,
-                              contentType: _pendingImageMime,
-                            );
+                    final up = await ref
+                        .read(repositoryProvider)
+                        .uploadChatImage(
+                          roomId: widget.roomId,
+                          bytes: pending,
+                          extension: _pendingImageExt,
+                          contentType: _pendingImageMime,
+                        );
                     mediaPath = up.path;
                     mediaType = 'image';
                   }
-                  sent = await ref.read(repositoryProvider).sendMessage(
+                  sent = await ref
+                      .read(repositoryProvider)
+                      .sendMessage(
                         roomId: widget.roomId,
                         plaintext: t,
                         attachedMediaPath: mediaPath,
@@ -687,18 +716,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     return;
                   }
                   try {
-                    await outbox.enqueue(
-                      OutboxKind.dm,
-                      {
-                        'roomId': widget.roomId,
-                        'plaintext': t,
-                        'attachedMediaPath': mediaPath,
-                        'attachedMediaType': mediaType,
-                        'parentMessageId': parentMessageId,
-                        if (stagedMedia != null) ...stagedMedia.toPayload(),
-                      },
-                      operationId: operationId,
-                    );
+                    await outbox.enqueue(OutboxKind.dm, {
+                      'roomId': widget.roomId,
+                      'plaintext': t,
+                      'attachedMediaPath': mediaPath,
+                      'attachedMediaType': mediaType,
+                      'parentMessageId': parentMessageId,
+                      if (stagedMedia != null) ...stagedMedia.toPayload(),
+                    }, operationId: operationId);
                     await _draftSaver?.clear();
                     _controller.clear();
                     if (mounted) setState(() => _replyingTo = null);
@@ -733,22 +758,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 }
                 ref.invalidate(messagesProvider(widget.roomId));
                 _scrollToLatest();
-                // Safety scan on the sender's own message — reuses the verdict
-                // already computed above (DM bodies are encrypted, so this is the
-                // only place with plaintext). Offers help + flags for the queue.
+                // Reuse the advisory pre-submit verdict to surface help quickly.
+                // PostgreSQL separately scans the server-readable body at
+                // ingress, so a modified client cannot bypass the safety rule.
                 if (moderation != null &&
                     moderation.surfaceCrisisHelpline &&
                     context.mounted) {
                   final level =
                       moderation.categories.contains(HazardCategory.selfHarm) &&
-                              moderation.reasons
-                                  .any((r) => r.contains('care about you'))
-                          ? 'high'
-                          : 'elevated';
-                  unawaited(ref
-                      .read(repositoryProvider)
-                      .setChatMessageCrisis(sent.messageId, level)
-                      .catchError((_) {}));
+                          moderation.reasons.any(
+                            (r) => r.contains('care about you'),
+                          )
+                      ? 'high'
+                      : 'elevated';
+                  unawaited(
+                    ref
+                        .read(repositoryProvider)
+                        .setChatMessageCrisis(sent.messageId, level)
+                        .catchError((_) {}),
+                  );
                   await showCrisisSupportSheet(context, ref);
                 }
               },
@@ -763,19 +791,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final reason = await showReportReasonSheet(context);
     if (reason == null || !context.mounted) return;
     try {
-      await ref.read(repositoryProvider).reportChatMessage(
-            messageId: m.messageId,
-            reason: reason,
-          );
+      await ref
+          .read(repositoryProvider)
+          .reportChatMessage(messageId: m.messageId, reason: reason);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Thank you — a moderator will review.')),
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not send: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not send: $e')));
     }
   }
 }
@@ -869,9 +896,9 @@ class _Bubble extends ConsumerWidget {
       ref.invalidate(messagesProvider(message.roomId));
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not react: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not react: $e')));
       }
     }
   }
@@ -896,8 +923,10 @@ class _Bubble extends ConsumerWidget {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.reply_rounded, color: context.ink),
-                  title: const Text('Reply',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  title: const Text(
+                    'Reply',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
                   onTap: () {
                     Navigator.pop(sheetCtx);
                     onReply!();
@@ -906,8 +935,10 @@ class _Bubble extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.add_reaction_outlined, color: context.ink),
-                title: const Text('React',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'React',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(sheetCtx);
                   _react(context, ref);
@@ -917,8 +948,10 @@ class _Bubble extends ConsumerWidget {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.copy_rounded, color: context.ink),
-                  title: const Text('Copy',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  title: const Text(
+                    'Copy',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
                   onTap: () {
                     Navigator.pop(sheetCtx);
                     onCopy!();
@@ -928,8 +961,10 @@ class _Bubble extends ConsumerWidget {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.edit_outlined, color: context.ink),
-                  title: const Text('Edit',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  title: const Text(
+                    'Edit',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
                   subtitle: const Text(
                     'Within 30 minutes of sending',
                     style: TextStyle(fontSize: 11, color: Color(0xFF8B5566)),
@@ -942,8 +977,10 @@ class _Bubble extends ConsumerWidget {
               if (onDeleteForMe != null)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.delete_outline,
-                      color: Theme.of(context).colorScheme.error),
+                  leading: Icon(
+                    Icons.delete_outline,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                   title: Text(
                     'Delete',
                     style: TextStyle(
@@ -960,8 +997,10 @@ class _Bubble extends ConsumerWidget {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.flag_outlined, color: context.ink),
-                  title: const Text('Report',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  title: const Text(
+                    'Report',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
                   onTap: () {
                     Navigator.pop(sheetCtx);
                     onReport!();
@@ -995,17 +1034,19 @@ class _Bubble extends ConsumerWidget {
             children: [
               const Padding(
                 padding: EdgeInsets.only(bottom: 6),
-                child: Text('Delete message?',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                child: Text(
+                  'Delete message?',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                ),
               ),
               if (canEveryone)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.public_off_rounded, color: error),
-                  title: Text('Delete for everyone',
-                      style:
-                          TextStyle(color: error, fontWeight: FontWeight.w800)),
+                  title: Text(
+                    'Delete for everyone',
+                    style: TextStyle(color: error, fontWeight: FontWeight.w800),
+                  ),
                   onTap: () {
                     Navigator.pop(sheetCtx);
                     HapticFeedback.mediumImpact();
@@ -1015,8 +1056,10 @@ class _Bubble extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.delete_outline, color: context.ink),
-                title: const Text('Delete for me',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Delete for me',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 subtitle: const Text(
                   'Removes it from your view only',
                   style: TextStyle(fontSize: 11, color: Color(0xFF8B5566)),
@@ -1029,8 +1072,10 @@ class _Bubble extends ConsumerWidget {
               const SizedBox(height: 4),
               TextButton(
                 onPressed: () => Navigator.pop(sheetCtx),
-                child: const Text('Cancel',
-                    style: TextStyle(fontWeight: FontWeight.w700)),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
             ],
           ),
@@ -1056,7 +1101,8 @@ class _Bubble extends ConsumerWidget {
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.74),
+            maxWidth: MediaQuery.of(context).size.width * 0.74,
+          ),
           decoration: BoxDecoration(
             color: VentlyColors.softMauve.withOpacity(0.18),
             borderRadius: BorderRadius.circular(16),
@@ -1065,8 +1111,11 @@ class _Bubble extends ConsumerWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.do_not_disturb_on_outlined,
-                  size: 12, color: scheme.onSurface.withOpacity(0.55)),
+              Icon(
+                Icons.do_not_disturb_on_outlined,
+                size: 12,
+                color: scheme.onSurface.withOpacity(0.55),
+              ),
               const SizedBox(width: 6),
               Text(
                 'Message deleted',
@@ -1089,8 +1138,9 @@ class _Bubble extends ConsumerWidget {
       child: Align(
         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
         child: Column(
-          crossAxisAlignment:
-              mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment: mine
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
           children: [
             if (message.parentMessageId != null)
               Container(
@@ -1099,10 +1149,13 @@ class _Bubble extends ConsumerWidget {
                   left: mine ? 0 : 6,
                   right: mine ? 6 : 0,
                 ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.72),
+                  maxWidth: MediaQuery.of(context).size.width * 0.72,
+                ),
                 decoration: BoxDecoration(
                   color: VentlyColors.softMauve.withOpacity(0.18),
                   borderRadius: BorderRadius.circular(12),
@@ -1140,10 +1193,7 @@ class _Bubble extends ConsumerWidget {
             // this vent" then "their thought about it" in order.
             if (snapshot != null)
               Container(
-                margin: EdgeInsets.only(
-                  top: 4,
-                  bottom: hasText ? 2 : 4,
-                ),
+                margin: EdgeInsets.only(top: 4, bottom: hasText ? 2 : 4),
                 constraints: BoxConstraints(
                   maxWidth: MediaQuery.of(context).size.width * 0.78,
                 ),
@@ -1156,16 +1206,11 @@ class _Bubble extends ConsumerWidget {
             if (message.attachedMediaPath != null &&
                 message.attachedMediaType == 'image')
               Container(
-                margin: EdgeInsets.only(
-                  top: 4,
-                  bottom: hasText ? 2 : 4,
-                ),
+                margin: EdgeInsets.only(top: 4, bottom: hasText ? 2 : 4),
                 constraints: BoxConstraints(
                   maxWidth: MediaQuery.of(context).size.width * 0.72,
                 ),
-                child: _ChatImage(
-                  storagePath: message.attachedMediaPath!,
-                ),
+                child: _ChatImage(storagePath: message.attachedMediaPath!),
               ),
             if (message.attachedMediaPath != null &&
                 message.attachedMediaType == 'audio')
@@ -1188,10 +1233,13 @@ class _Bubble extends ConsumerWidget {
                 onLongPress: () => _openActionSheet(context, ref),
                 child: Container(
                   margin: const EdgeInsets.symmetric(vertical: 4),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                   constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.78),
+                    maxWidth: MediaQuery.of(context).size.width * 0.78,
+                  ),
                   decoration: BoxDecoration(
                     color: mine ? scheme.primary : Theme.of(context).cardColor,
                     borderRadius: BorderRadius.only(
@@ -1203,7 +1251,8 @@ class _Bubble extends ConsumerWidget {
                     border: mine
                         ? null
                         : Border.all(
-                            color: VentlyColors.softMauve.withOpacity(0.4)),
+                            color: VentlyColors.softMauve.withOpacity(0.4),
+                          ),
                   ),
                   child: Text(
                     message.plaintext,
@@ -1234,11 +1283,9 @@ class _Bubble extends ConsumerWidget {
                         emoji: PostReactions.emoji(entry.key),
                         count: entry.value,
                         mine: message.myReaction == entry.key,
-                        onTap: () =>
-                            ref.read(repositoryProvider).setMessageReaction(
-                                  message.messageId,
-                                  entry.key,
-                                ),
+                        onTap: () => ref
+                            .read(repositoryProvider)
+                            .setMessageReaction(message.messageId, entry.key),
                       ),
                   ],
                 ),
@@ -1513,8 +1560,9 @@ class _PresenceLine extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final id = peerUserId;
-    final presence =
-        id == null ? null : ref.watch(peerPresenceProvider(id)).valueOrNull;
+    final presence = id == null
+        ? null
+        : ref.watch(peerPresenceProvider(id)).valueOrNull;
 
     String label;
     Color color = accent;
@@ -1592,13 +1640,16 @@ class _TypingChip extends StatelessWidget {
               child: Row(
                 children: [
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Theme.of(context).cardColor,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                          color: VentlyColors.softMauve.withOpacity(0.4)),
+                        color: VentlyColors.softMauve.withOpacity(0.4),
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1730,7 +1781,9 @@ class _Composer extends StatelessWidget {
                         child: Text(
                           'Image attached. Hit send to share.',
                           style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w600),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       IconButton(
@@ -1765,15 +1818,18 @@ class _Composer extends StatelessWidget {
                     minLines: 1,
                     maxLines: 5,
                     decoration: InputDecoration(
-                      hintText:
-                          recording ? 'Recording… tap ■ to send' : 'Message',
+                      hintText: recording
+                          ? 'Recording… tap ■ to send'
+                          : 'Message',
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Container(
                   decoration: BoxDecoration(
-                      color: scheme.primary, shape: BoxShape.circle),
+                    color: scheme.primary,
+                    shape: BoxShape.circle,
+                  ),
                   child: IconButton(
                     icon: const Icon(Icons.send_rounded, color: Colors.white),
                     onPressed: onSend,
@@ -1881,20 +1937,18 @@ class _SharedPostCard extends StatelessWidget {
                   Icon(
                     Icons.open_in_new,
                     size: 11,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withOpacity(0.55),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.55),
                   ),
                   const SizedBox(width: 4),
                   Text(
                     deleted ? 'Original no longer available' : 'Open original',
                     style: TextStyle(
                       fontSize: 10.5,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withOpacity(0.55),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.55),
                     ),
                   ),
                 ],
@@ -1970,8 +2024,9 @@ class _PaletteEmoji extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          color:
-              selected ? scheme.primary.withOpacity(0.12) : Colors.transparent,
+          color: selected
+              ? scheme.primary.withOpacity(0.12)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
@@ -2011,8 +2066,9 @@ class _ChatImageState extends ConsumerState<_ChatImage> {
   @override
   void initState() {
     super.initState();
-    _urlFuture =
-        ref.read(repositoryProvider).chatImageSignedUrl(widget.storagePath);
+    _urlFuture = ref
+        .read(repositoryProvider)
+        .chatImageSignedUrl(widget.storagePath);
   }
 
   void _openFullscreen(BuildContext context, String url) {
@@ -2031,11 +2087,13 @@ class _ChatImageState extends ConsumerState<_ChatImage> {
               child: CachedNetworkImage(
                 imageUrl: url,
                 fit: BoxFit.contain,
-                placeholder: (_, __) => const Center(
-                  child: CircularProgressIndicator(),
+                placeholder: (_, __) =>
+                    const Center(child: CircularProgressIndicator()),
+                errorWidget: (_, __, ___) => const Icon(
+                  Icons.broken_image,
+                  color: Colors.white54,
+                  size: 48,
                 ),
-                errorWidget: (_, __, ___) => const Icon(Icons.broken_image,
-                    color: Colors.white54, size: 48),
               ),
             ),
           ),
@@ -2105,8 +2163,9 @@ class _ChatVoiceNoteState extends ConsumerState<_ChatVoiceNote> {
   @override
   void initState() {
     super.initState();
-    _urlFuture =
-        ref.read(repositoryProvider).chatImageSignedUrl(widget.storagePath);
+    _urlFuture = ref
+        .read(repositoryProvider)
+        .chatImageSignedUrl(widget.storagePath);
   }
 
   int get _durationSeconds {

@@ -71,6 +71,7 @@ class AppUser {
     String? safetyTier,
     String? userRole,
     bool? isVerified,
+    Object? birthYear = _unset,
     int? karmaPoints,
     String? homeCity,
     String? homeCountry,
@@ -89,7 +90,7 @@ class AppUser {
       isVerified: isVerified ?? this.isVerified,
       safetyTier: safetyTier ?? this.safetyTier,
       accountStatus: accountStatus,
-      birthYear: birthYear,
+      birthYear: birthYear == _unset ? this.birthYear : birthYear as int?,
       karmaPoints: karmaPoints ?? this.karmaPoints,
       homeCity: homeCity ?? this.homeCity,
       homeCountry: homeCountry ?? this.homeCountry,
@@ -219,7 +220,7 @@ class Tribe {
   final String slug;
   final String? description;
   final String
-      category; // campus | city | interest_group | hobby | support | venting
+  category; // campus | city | interest_group | hobby | support | venting
   final int memberCount;
   final bool isPrivate;
   final String? avatarUrl;
@@ -566,7 +567,7 @@ class Post {
   final bool isKeeperPick;
   final DateTime? keeperPickAt;
   final String?
-      myReaction; // null | hug | love | strong | hope | pray | felt | proud
+  myReaction; // null | hug | love | strong | hope | pray | felt | proud
   final bool savedByMe;
 
   /// Null when the safety classifier saw nothing concerning. `'elevated'` for
@@ -683,11 +684,13 @@ class Post {
       tribeName: tribeName,
       tribeSlug: tribeSlug,
       spaceId: spaceId == _unset ? this.spaceId : spaceId as String?,
-      myReaction:
-          myReaction == _unset ? this.myReaction : myReaction as String?,
+      myReaction: myReaction == _unset
+          ? this.myReaction
+          : myReaction as String?,
       savedByMe: savedByMe ?? this.savedByMe,
-      crisisLevel:
-          crisisLevel == _unset ? this.crisisLevel : crisisLevel as String?,
+      crisisLevel: crisisLevel == _unset
+          ? this.crisisLevel
+          : crisisLevel as String?,
       mediaStatus: mediaStatus,
     );
   }
@@ -1055,7 +1058,7 @@ class ChatMessage {
   final String roomId;
   final String senderId;
   final String
-      plaintext; // stored server-side as plaintext for moderation review.
+  plaintext; // stored server-side as plaintext for moderation review.
   final DateTime createdAt;
   final bool sentByMe;
 
@@ -1323,19 +1326,18 @@ class PlugPrompt {
     int? answersCount,
     int? likeCount,
     bool? likedByMe,
-  }) =>
-      PlugPrompt(
-        promptId: promptId,
-        plugDisplayName: plugDisplayName,
-        plugAvatarSeed: plugAvatarSeed,
-        promptText: promptText ?? this.promptText,
-        answersCount: answersCount ?? this.answersCount,
-        authorId: authorId,
-        audience: audience ?? this.audience,
-        createdAt: createdAt,
-        likeCount: likeCount ?? this.likeCount,
-        likedByMe: likedByMe ?? this.likedByMe,
-      );
+  }) => PlugPrompt(
+    promptId: promptId,
+    plugDisplayName: plugDisplayName,
+    plugAvatarSeed: plugAvatarSeed,
+    promptText: promptText ?? this.promptText,
+    answersCount: answersCount ?? this.answersCount,
+    authorId: authorId,
+    audience: audience ?? this.audience,
+    createdAt: createdAt,
+    likeCount: likeCount ?? this.likeCount,
+    likedByMe: likedByMe ?? this.likedByMe,
+  );
 }
 
 /// A keeper-issued invitation to join a Tribe. Lifecycle:
@@ -1501,14 +1503,14 @@ enum FriendStatus {
   blockedMe;
 
   static FriendStatus parse(String? raw) => switch (raw) {
-        'self' => FriendStatus.self,
-        'friends' => FriendStatus.friends,
-        'pending_outgoing' => FriendStatus.pendingOutgoing,
-        'pending_incoming' => FriendStatus.pendingIncoming,
-        'blocked_by_me' => FriendStatus.blockedByMe,
-        'blocked_me' => FriendStatus.blockedMe,
-        _ => FriendStatus.none,
-      };
+    'self' => FriendStatus.self,
+    'friends' => FriendStatus.friends,
+    'pending_outgoing' => FriendStatus.pendingOutgoing,
+    'pending_incoming' => FriendStatus.pendingIncoming,
+    'blocked_by_me' => FriendStatus.blockedByMe,
+    'blocked_me' => FriendStatus.blockedMe,
+    _ => FriendStatus.none,
+  };
 }
 
 /// A friend (from the `my_friends` view).
@@ -1640,35 +1642,33 @@ class Whisper {
     String? description,
     DateTime? editedAt,
     DateTime? deletedAt,
-  }) =>
-      Whisper(
-        whisperId: whisperId,
-        authorId: authorId,
-        authorPseudonym: authorPseudonym,
-        authorAvatarSeed: authorAvatarSeed,
-        authorProfilePhotoUrl: authorProfilePhotoUrl,
-        authorIsVerified: authorIsVerified,
-        audioUrl: audioUrl,
-        audioDurationSeconds: audioDurationSeconds,
-        backgroundImageUrl: backgroundImageUrl,
-        voiceFilter: voiceFilter,
-        category: category,
-        title: title ?? this.title,
-        description: description ?? this.description,
-        playsCount: playsCount,
-        likesCount: likesCount ?? this.likesCount,
-        commentsCount: commentsCount,
-        crisisLevel: crisisLevel,
-        editedAt: editedAt ?? this.editedAt,
-        deletedAt: deletedAt ?? this.deletedAt,
-        createdAt: createdAt,
-        likedByMe: likedByMe ?? this.likedByMe,
-        savedByMe: savedByMe ?? this.savedByMe,
-        reactionCounts: reactionCounts ?? this.reactionCounts,
-        myReaction:
-            myReaction == _unset ? this.myReaction : myReaction as String?,
-        mediaStatus: mediaStatus,
-      );
+  }) => Whisper(
+    whisperId: whisperId,
+    authorId: authorId,
+    authorPseudonym: authorPseudonym,
+    authorAvatarSeed: authorAvatarSeed,
+    authorProfilePhotoUrl: authorProfilePhotoUrl,
+    authorIsVerified: authorIsVerified,
+    audioUrl: audioUrl,
+    audioDurationSeconds: audioDurationSeconds,
+    backgroundImageUrl: backgroundImageUrl,
+    voiceFilter: voiceFilter,
+    category: category,
+    title: title ?? this.title,
+    description: description ?? this.description,
+    playsCount: playsCount,
+    likesCount: likesCount ?? this.likesCount,
+    commentsCount: commentsCount,
+    crisisLevel: crisisLevel,
+    editedAt: editedAt ?? this.editedAt,
+    deletedAt: deletedAt ?? this.deletedAt,
+    createdAt: createdAt,
+    likedByMe: likedByMe ?? this.likedByMe,
+    savedByMe: savedByMe ?? this.savedByMe,
+    reactionCounts: reactionCounts ?? this.reactionCounts,
+    myReaction: myReaction == _unset ? this.myReaction : myReaction as String?,
+    mediaStatus: mediaStatus,
+  );
 }
 
 /// A comment on an audio Whisper.
@@ -2249,8 +2249,12 @@ class HomeStats {
     required this.streakDays,
   });
 
-  static const HomeStats empty =
-      HomeStats(ventsToday: 0, supporters: 0, dailyHugs: 0, streakDays: 0);
+  static const HomeStats empty = HomeStats(
+    ventsToday: 0,
+    supporters: 0,
+    dailyHugs: 0,
+    streakDays: 0,
+  );
 }
 
 /// One Global Pulse chip. Returned by `trending_categories()`.

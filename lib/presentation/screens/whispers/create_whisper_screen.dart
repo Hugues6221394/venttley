@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
@@ -31,6 +32,7 @@ class CreateWhisperScreen extends ConsumerStatefulWidget {
 
 class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
   static const _maximumDuration = Duration(minutes: 10);
+  final String _publishMutationId = const Uuid().v4();
 
   Timer? _ticker;
   Duration _elapsed = Duration.zero;
@@ -108,8 +110,10 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
     _autoStopping = false;
     if (!mounted) return;
     if (result != null) {
-      final seconds =
-          result.duration.inSeconds.clamp(0, _maximumDuration.inSeconds);
+      final seconds = result.duration.inSeconds.clamp(
+        0,
+        _maximumDuration.inSeconds,
+      );
       setState(() {
         _recording = false;
         _paused = false;
@@ -285,22 +289,25 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
         voiceFilter: _voiceFilter,
         title: _titleCtl.text.trim().isEmpty ? null : _titleCtl.text.trim(),
         description: _descCtl.text.trim().isEmpty ? null : _descCtl.text.trim(),
+        idempotencyKey: _publishMutationId,
       );
       ref.invalidate(whispersFeedProvider);
       ref.invalidate(myWhispersProvider);
       ref.invalidate(popularWhispersProvider);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Whisper published.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Whisper published.')));
       context.go('/whispers?whisper=$whisperId');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            UserFriendlyErrors.message(e,
-                fallback: 'Could not publish whisper.'),
+            UserFriendlyErrors.message(
+              e,
+              fallback: 'Could not publish whisper.',
+            ),
           ),
         ),
       );
@@ -315,8 +322,10 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Record a Whisper',
-            style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Record a Whisper',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         backgroundColor: Colors.transparent,
         foregroundColor: context.ink,
         elevation: 0,
@@ -404,9 +413,7 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
                   ),
                   decoration: InputDecoration(
                     hintText: 'A tiny headline for your story…',
-                    hintStyle: TextStyle(
-                      color: context.ink.withOpacity(0.42),
-                    ),
+                    hintStyle: TextStyle(color: context.ink.withOpacity(0.42)),
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
@@ -431,9 +438,7 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
                   decoration: InputDecoration(
                     hintText:
                         'Add context, advice, or a question for listeners…',
-                    hintStyle: TextStyle(
-                      color: context.ink.withOpacity(0.42),
-                    ),
+                    hintStyle: TextStyle(color: context.ink.withOpacity(0.42)),
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
@@ -534,8 +539,11 @@ class _BackgroundPreview extends StatelessWidget {
                       color: Colors.black.withOpacity(0.55),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.close_rounded,
-                        color: Colors.white, size: 18),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                   ),
                 ),
               ),
@@ -616,11 +624,11 @@ class _RecordButton extends StatelessWidget {
                 Text(
                   recording
                       ? paused
-                          ? 'Paused  $mm:$ss'
-                          : 'Recording…  $mm:$ss'
+                            ? 'Paused  $mm:$ss'
+                            : 'Recording…  $mm:$ss'
                       : hasRecording
-                          ? 'Captured  $recordedMm:$recordedSs'
-                          : 'Tap to record',
+                      ? 'Captured  $recordedMm:$recordedSs'
+                      : 'Tap to record',
                   style: TextStyle(
                     color: context.ink,
                     fontWeight: FontWeight.w900,
@@ -631,11 +639,11 @@ class _RecordButton extends StatelessWidget {
                 Text(
                   recording
                       ? paused
-                          ? 'Take your time. Resume when you are ready.'
-                          : 'Up to 10 minutes — pause whenever you need.'
+                            ? 'Take your time. Resume when you are ready.'
+                            : 'Up to 10 minutes — pause whenever you need.'
                       : hasRecording
-                          ? 'Try a voice effect and listen before publishing.'
-                          : 'Share a thought in your own voice.',
+                      ? 'Try a voice effect and listen before publishing.'
+                      : 'Share a thought in your own voice.',
                   style: TextStyle(
                     color: context.ink.withOpacity(0.62),
                     fontSize: 12,
@@ -656,8 +664,10 @@ class _RecordButton extends StatelessWidget {
             ),
           if (onRetake != null)
             IconButton(
-              icon: const Icon(Icons.refresh_rounded,
-                  color: VentlyColors.berryMagenta),
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: VentlyColors.berryMagenta,
+              ),
               onPressed: onRetake,
               tooltip: 'Retake',
             ),
@@ -690,7 +700,8 @@ class _CategoryPicker extends StatelessWidget {
                 border: c == active
                     ? null
                     : Border.all(
-                        color: VentlyColors.softMauve.withOpacity(0.4)),
+                        color: VentlyColors.softMauve.withOpacity(0.4),
+                      ),
               ),
               child: Text(
                 FeedCategories.label(c),
@@ -735,20 +746,22 @@ class _VoiceFilterPicker extends StatelessWidget {
                 color: !enabled
                     ? VentlyColors.softMauve.withOpacity(0.2)
                     : f == active
-                        ? VentlyColors.berryMagenta
-                        : const Color(0xFFFFE3EC),
+                    ? VentlyColors.berryMagenta
+                    : const Color(0xFFFFE3EC),
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.graphic_eq_rounded,
-                      color: !enabled
-                          ? context.ink.withOpacity(0.28)
-                          : f == active
-                              ? Colors.white
-                              : VentlyColors.berryMagenta,
-                      size: 13),
+                  Icon(
+                    Icons.graphic_eq_rounded,
+                    color: !enabled
+                        ? context.ink.withOpacity(0.28)
+                        : f == active
+                        ? Colors.white
+                        : VentlyColors.berryMagenta,
+                    size: 13,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     WhisperVoiceFilters.label(f),
@@ -756,8 +769,8 @@ class _VoiceFilterPicker extends StatelessWidget {
                       color: !enabled
                           ? context.ink.withOpacity(0.28)
                           : f == active
-                              ? Colors.white
-                              : VentlyColors.berryMagenta,
+                          ? Colors.white
+                          : VentlyColors.berryMagenta,
                       fontWeight: FontWeight.w900,
                       fontSize: 11.5,
                     ),
@@ -783,9 +796,7 @@ class _VoiceProcessingCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: VentlyColors.softMauve.withOpacity(0.45),
-        ),
+        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.45)),
       ),
       child: Row(
         children: [
