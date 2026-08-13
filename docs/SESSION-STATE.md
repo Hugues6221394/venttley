@@ -6,19 +6,44 @@ hardening in this repo concurrently; uncommitted files under `supabase/` and
 
 **Suite: 158 tests, 0 errors, 0 warnings. iOS and Android both build.**
 
+Last worked: the group invite link (see below). Whispers work is complete.
+
 ---
 
 ## Resume here
 
-1. **Group invite link is blurred** (`open-issues-2026-08-12.md` section 3) — the
-   only reported defect still untouched. The blur presumably guards against
-   shoulder-surfing, but it stops the person who needs to *send* the link from
-   reading it. The real question is product: reveal on tap, or skip revealing and
-   use share-sheet / copy so the token never has to be read aloud.
-2. **Four redesigns**, all specified with line numbers:
+### 1. Invite link — UI fixed, DATA QUESTION OPEN
+
+`17901ad` fixed the dead end: the row now names why it is unavailable and, where
+the viewer can act, says where ("Only the group owner can invite people" / "Turn
+it on in Privacy & safety"). Reproduced on device first — in "friend circle" the
+row was greyed with "Invite link is disabled" and tapping did nothing. Greyed
+reads as blurred; that was the "blur".
+
+**Still unexplained: why that group has invites off at all.** Both columns are
+`NOT NULL DEFAULT TRUE` in the schema, so a fresh group should permit this. Run:
+
+```sql
+SELECT room_id, created_by, invite_enabled, allow_member_invites,
+       invite_token IS NOT NULL AS has_token
+FROM public.chat_rooms
+WHERE room_id = '<friend circle room id>';
+```
+
+* **Returns `true, true`** → the flags are not reaching the client, and
+  `supabase_backend.dart:4629-4631` turns a missing column into `false`. A
+  missing field silently becoming "denied" is how a whole feature disappears —
+  fix the query/RPC, not the UI.
+* **Returns `false`** → the data really is off, and the question becomes what set
+  it, since nothing in the UI should have given those defaults.
+
+Also seen and unexplained: the chat header says **"2 members"** while Group
+details says **"1 members"** for the same room. Two counts from two sources.
+
+### 2. Four redesigns, all specified with line numbers:
    `public-profile-redesign-brief.md`, `inbox-friends-redesign-brief.md`, and
    Plug Studio (`open-issues-2026-08-12.md` section 4).
-3. **Whispers ranking beyond recency** — the user chose recency + already-heard +
+### 3. Whispers ranking beyond recency — the user chose recency + already-heard +
    randomised entry, and explicitly rejected engagement weighting. Do not
    reintroduce it without revisiting that reasoning; on this platform it would
    amplify the most distressing content to the accounts least able to handle it.
