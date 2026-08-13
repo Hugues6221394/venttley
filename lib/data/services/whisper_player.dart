@@ -127,23 +127,31 @@ class WhisperPlayerController {
     if (_activeId == whisperId && _player.audioSource != null) {
       await VentlyAudioSession.instance.ensurePlayback();
       if (restart) await _player.seek(Duration.zero);
-      if (!_player.playing) await _player.play();
+      // NOT awaited: just_audio's play() future completes when playback
+      // *finishes*, not when it starts. Awaiting it left startPlayback pending
+      // for the whole whisper, so every follow-up the caller does was deferred
+      // by minutes.
+      if (!_player.playing) unawaited(_player.play());
       return;
     }
     _activeId = whisperId;
     try {
       await VentlyAudioSession.instance.ensurePlayback();
-      if (_preloadedUrl == url) {
-        await _player.setUrl(url);
-        _preloadedUrl = null;
-      } else {
-        await _player.setUrl(url);
-      }
+      // Bounded. setUrl awaits the media actually loading, and an unreachable
+      // or stalled URL otherwise leaves the screen on a dead play button with no
+      // error at all — nothing to retry, nothing to explain. Failing is
+      // recoverable; hanging is not. Matters most on a poor connection.
+      await _player.setUrl(url).timeout(const Duration(seconds: 20));
+      _preloadedUrl = null;
       await _player.setSpeed(_speed);
       await _player.setVolume(1.0);
       await _player.setLoopMode(_loopEnabled ? LoopMode.one : LoopMode.off);
       await _player.seek(Duration.zero);
-      await _player.play();
+      // See above — starting playback must not be awaited. This is why the
+      // now-playing handle was never published, the listen was never recorded,
+      // and the next track was never preloaded: all of it sat behind a future
+      // that only completes when the audio ends.
+      unawaited(_player.play());
     } catch (_) {
       _activeId = null;
       rethrow;
@@ -155,7 +163,7 @@ class WhisperPlayerController {
       await _player.pause();
     } else if (_player.audioSource != null) {
       await VentlyAudioSession.instance.ensurePlayback();
-      await _player.play();
+      unawaited(_player.play());
     }
   }
 

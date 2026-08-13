@@ -289,7 +289,6 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
 
               _whispers = whispers;
               _scrollToDeepLink(whispers);
-
               if (!_bootstrapped && _onStage) {
                 _bootstrapped = true;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
