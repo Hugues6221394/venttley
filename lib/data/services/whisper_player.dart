@@ -56,6 +56,16 @@ class WhisperPlayerController {
   bool isActiveWhisper(String whisperId) =>
       _activeId == whisperId && _player.audioSource != null;
 
+  /// True while [whisperId] is the track being loaded and its media has not
+  /// arrived yet.
+  ///
+  /// [isActiveWhisper] is deliberately false in this window — audioSource is
+  /// still null — which is correct for "can I control it", but left the UI with
+  /// no way to say "this is loading". On a slow connection that window is
+  /// seconds of a play button that does nothing.
+  bool isLoadingWhisper(String whisperId) =>
+      _activeId == whisperId && _player.audioSource == null;
+
   Future<void> _loadPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();

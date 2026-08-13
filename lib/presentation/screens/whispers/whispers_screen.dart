@@ -857,19 +857,29 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
   @override
   Widget build(BuildContext context) {
     final totalSecs = widget.whisper.audioDurationSeconds;
-    final isThisActive =
-        widget.isActive &&
-        widget.controller.isActiveWhisper(widget.whisper.whisperId);
-
-    if (!isThisActive) {
-      return _StaticPausedRow(whisper: widget.whisper, onPlay: _togglePlay);
-    }
-
+    // The active/inactive branch sits INSIDE the stream on purpose. It used to
+    // return early, outside any subscription, so when the media finished loading
+    // nothing rebuilt this widget — the row stayed on a static play button until
+    // some unrelated frame happened to repaint it.
     return StreamBuilder<PlayerState>(
       stream: widget.controller.stateStream,
       builder: (ctx, stateSnap) {
         final playing = stateSnap.data?.playing ?? false;
         final processing = stateSnap.data?.processingState;
+
+        final isThisActive =
+            widget.isActive &&
+            widget.controller.isActiveWhisper(widget.whisper.whisperId);
+
+        if (!isThisActive) {
+          return _StaticPausedRow(
+            whisper: widget.whisper,
+            onPlay: _togglePlay,
+            loading:
+                widget.isActive &&
+                widget.controller.isLoadingWhisper(widget.whisper.whisperId),
+          );
+        }
 
         return StreamBuilder<Duration>(
           stream: widget.controller.positionStream,
@@ -1082,16 +1092,24 @@ class _PlaybackChip extends StatelessWidget {
 }
 
 class _StaticPausedRow extends StatelessWidget {
-  const _StaticPausedRow({required this.whisper, required this.onPlay});
+  const _StaticPausedRow({
+    required this.whisper,
+    required this.onPlay,
+    this.loading = false,
+  });
   final Whisper whisper;
   final VoidCallback onPlay;
+
+  /// Media is still downloading. Shows a spinner instead of a play button that
+  /// would do nothing, and swallows the tap so it cannot queue a second load.
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         InkWell(
-          onTap: onPlay,
+          onTap: loading ? null : onPlay,
           customBorder: const CircleBorder(),
           child: Container(
             width: 50,
@@ -1101,11 +1119,20 @@ class _StaticPausedRow extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
-            child: const Icon(
-              Icons.play_arrow_rounded,
-              color: VentlyColors.berryMagenta,
-              size: 30,
-            ),
+            child: loading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: VentlyColors.berryMagenta,
+                    ),
+                  )
+                : const Icon(
+                    Icons.play_arrow_rounded,
+                    color: VentlyColors.berryMagenta,
+                    size: 30,
+                  ),
           ),
         ),
         const SizedBox(width: 14),
