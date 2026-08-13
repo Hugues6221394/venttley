@@ -20,14 +20,14 @@ class WhisperPlayerController {
     await VentlyAudioSession.instance.ensurePlayback();
     final controller = WhisperPlayerController._(AudioPlayer(), AudioPlayer());
     await controller._loadPrefs();
-    controller._completeSub = controller._player.processingStateStream.listen(
-      (state) {
-        if (state == ProcessingState.completed && controller._loopEnabled) {
-          unawaited(controller._player.seek(Duration.zero));
-          unawaited(controller._player.play());
-        }
-      },
-    );
+    controller._completeSub = controller._player.processingStateStream.listen((
+      state,
+    ) {
+      if (state == ProcessingState.completed && controller._loopEnabled) {
+        unawaited(controller._player.seek(Duration.zero));
+        unawaited(controller._player.play());
+      }
+    });
     return controller;
   }
 
@@ -65,10 +65,10 @@ class WhisperPlayerController {
       }
       _loopEnabled = prefs.getBool(_loopKey) ?? false;
       await _player.setSpeed(_speed);
-      await _player.setLoopMode(
-        _loopEnabled ? LoopMode.one : LoopMode.off,
-      );
-    } catch (_) {/* best-effort */}
+      await _player.setLoopMode(_loopEnabled ? LoopMode.one : LoopMode.off);
+    } catch (_) {
+      /* best-effort */
+    }
   }
 
   Future<void> _persistSpeed() async {
@@ -103,21 +103,30 @@ class WhisperPlayerController {
 
   Future<bool> toggleLoop() async {
     _loopEnabled = !_loopEnabled;
-    await _player.setLoopMode(
-      _loopEnabled ? LoopMode.one : LoopMode.off,
-    );
+    await _player.setLoopMode(_loopEnabled ? LoopMode.one : LoopMode.off);
     await _persistLoop();
     return _loopEnabled;
   }
 
-  /// Load [url] and start playback from the beginning (Reels autoplay).
+  /// Load [url] and play it.
+  ///
+  /// [restart] only matters when this whisper is already the active one. True
+  /// rewinds to the beginning — the Reels behaviour for deliberately landing on
+  /// a whisper again. False resumes where it left off, which is what returning
+  /// to the tab or tapping the mini-player should do: the listener did not ask
+  /// to start over, they asked to come back.
+  ///
+  /// A whisper can be several minutes long. Silently rewinding someone to zero
+  /// because they checked a message is the difference between a player and a
+  /// nuisance.
   Future<void> startPlayback({
     required String whisperId,
     required String url,
+    bool restart = true,
   }) async {
     if (_activeId == whisperId && _player.audioSource != null) {
       await VentlyAudioSession.instance.ensurePlayback();
-      await _player.seek(Duration.zero);
+      if (restart) await _player.seek(Duration.zero);
       if (!_player.playing) await _player.play();
       return;
     }
@@ -132,9 +141,7 @@ class WhisperPlayerController {
       }
       await _player.setSpeed(_speed);
       await _player.setVolume(1.0);
-      await _player.setLoopMode(
-        _loopEnabled ? LoopMode.one : LoopMode.off,
-      );
+      await _player.setLoopMode(_loopEnabled ? LoopMode.one : LoopMode.off);
       await _player.seek(Duration.zero);
       await _player.play();
     } catch (_) {
@@ -189,10 +196,7 @@ class WhisperPlayerController {
 
   Future<void> dispose() async {
     await _completeSub?.cancel();
-    await Future.wait([
-      _player.dispose(),
-      _preloadPlayer.dispose(),
-    ]);
+    await Future.wait([_player.dispose(), _preloadPlayer.dispose()]);
     _activeId = null;
     _preloadedUrl = null;
   }

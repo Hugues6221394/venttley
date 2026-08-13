@@ -177,7 +177,13 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
     try {
       final controller = await ref.read(whisperPlayerProvider.future);
       _wireAutoAdvance(controller);
-      await controller.startPlayback(whisperId: w.whisperId, url: w.audioUrl);
+      await controller.startPlayback(
+        whisperId: w.whisperId,
+        url: w.audioUrl,
+        // Re-entry (the bootstrap and deep-link paths) resumes; only a
+        // deliberate swipe onto a whisper starts it over.
+        restart: byUser,
+      );
       if (mounted) {
         // Re-entering the tab replays the current page with byUser false. That
         // must not erase intent the user already expressed for this whisper, or
