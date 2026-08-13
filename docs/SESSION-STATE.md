@@ -1,177 +1,128 @@
-# Where we stopped — 2026-08-12, late
+# Where we stopped — 2026-08-14
 
-Read this first, then `AGENT-COORDINATION.md` (a second agent is working
-security hardening in this repo concurrently).
+Read this first, then `AGENT-COORDINATION.md` (a second agent works security
+hardening in this repo concurrently; uncommitted files under `supabase/` and
+`.github/` are usually theirs).
 
-**Suite: 155 tests, 0 errors, 0 warnings. iOS and Android both build.**
-All of this session's work is committed. Anything uncommitted in the tree
-belongs to the other agent.
+**Suite: 158 tests, 0 errors, 0 warnings. iOS and Android both build.**
 
 ---
 
 ## Resume here
 
-### Keyset pagination — DONE, landed in `2b0f637`
-
-Committed as part of the security agent's commit (the user committed both agents'
-work together, which was the agreed unblock). Verified present in HEAD:
-`listWhispers` takes `beforeCreatedAt` / `beforeWhisperId`, uses `.limit()` with
-no `.range()`, orders by `(created_at desc, whisper_id desc)`, and `_offset` is
-gone from `WhispersFeedNotifier`. Analyze clean, 155 tests pass.
-
-The cursor is a tuple, not a bare timestamp: PostgREST cannot express a row-value
-comparison, so it is spelled out as
-`or('created_at.lt.<iso>,and(created_at.eq.<iso>,whisper_id.lt.<id>)')`. Without
-the id, two whispers sharing a timestamp straddle the page boundary and one is
-silently dropped — the same class of bug offset pagination already had.
-
-`_fetch` derives the cursor from `current.last` rather than a counter, so the
-cursor and the visible list cannot disagree. That disagreement is exactly how
-offset pagination skipped rows when new whispers shifted the window.
-
-**Still unverified: paging depth on device.** The dev database holds too few
-whispers for `loadMore` to fetch a second page, so a real multi-page scroll has
-never been exercised. Worth seeding a few hundred rows, or testing against a
-category with more content.
-
-Unrelated `.range(offset, …)` callers remain in `_refreshLikedAndSaved`,
-`votePoll` and `plugByName`. They page over small, bounded sets, so they are not
-urgent — but they are the same pattern if any of those ever grows.
-
-### Whispers feed ranking — DECIDED and built
-
-The user chose the recommended path: recency, plus already-heard filtering, plus a
-randomised entry point. **Engagement-weighting was explicitly rejected** — ranking
-trauma and self-harm-adjacent disclosures by plays_count selects for whatever
-provokes the most reaction, which on this platform means amplifying its most
-distressing content to the 13-17 accounts the safety tier exists to protect. Do
-not reintroduce it without revisiting that reasoning.
-
-- `a195356` — `list_unheard_whispers` RPC skips whispers the listener has
-  finished, using `whisper_listens` (0073). Falls back to plain recency
-  server-side on the first page so **the feed is never empty** — the user was
-  explicit about this. Adds `whispers_created_keyset_idx`, without which the
-  keyset ordering was still a full sort.
-- `20260813210000_whispers_random_entry_point.sql` — first page starts at a
-  random offset inside a bounded window of 120 recent unheard whispers, so
-  refresh varies even when nothing new was posted. Mid-scroll stays strictly
-  sequential or whispers reappear a few swipes later. Offset zero is a possible
-  draw, so the newest still surface regularly.
-
-**Both migrations still need applying by hand.** The client degrades to the
-unfiltered view when the RPC is missing (logs
-`whispers.unheard_rpc_unavailable`) — verified on device, feed rendered normally
-with zero exceptions — so the app is safe between deploy and apply.
-
-Neither migration has been executed anywhere yet. CI's `database` job replays
-them; that is the first real check. No Docker locally.
-
-### The whispers feed at scale
-
-You asked for random refresh that brings new suggested whispers. Reading the
-implementation, there are three separate problems:
-
-1. **Offset pagination will not survive scale.** `listWhispers`
-   (`supabase_backend.dart:1690`) uses `.range(offset, offset + limit - 1)` —
-   Postgres `OFFSET n LIMIT m`. At offset 100,000 the database scans and discards
-   100k rows to return 30. It gets linearly slower the further anyone scrolls.
-   Fix: keyset pagination — `WHERE created_at < <cursor> ORDER BY created_at DESC
-   LIMIT 30`. Constant cost at any depth; `whispers_feed` already exposes
-   `created_at`.
-2. **Offset pagination silently skips whispers.** New rows shift the window, so
-   page 2 overlaps page 1. `loadMore` (`providers.dart:1319`) dedups by
-   `whisperId`, which hides duplicates — but anything that shifted *past* the
-   boundary is never shown. Keyset fixes this too.
-3. **Refresh cannot bring variety.** Ordering is `created_at DESC` and nothing
-   else, so every user sees the same newest whispers in the same order and
-   `refresh()` returns an identical list unless somebody posted. This is the
-   actual gap behind your request — it is unachievable client-side because there
-   is no suggestion signal, only recency.
-
-**(1) and (2) are mechanical — no product decision, pure win. APPROVED: do these
-first thing, before anything else in this file.**
-
-**(3) needs your answer.** Pick one:
-
-- **Recency with jitter** — cheapest. Seed a random offset within a recent window
-  so refresh reshuffles. Ships in an hour, feels random, is not personalised.
-- **Engagement-weighted** — order by a score over `plays_count` / `likes_count`
-  with a per-refresh seed. Needs a server-side ordering change, probably an RPC.
-- **Per-user recommendation** — `recordWhisperListen` already captures listen
-  history, so the data exists. Most work, the only one that is genuinely
-  "suggested".
-
-Note: no Docker locally, so migrations cannot be replayed before pushing. CI's
-`database` job is the first real execution.
-
----
-
-## Landed today, verified on device
-
-| Commit | What |
-| --- | --- |
-| `7877113` | mini-player hidden on its own tab; clamped out of the notch |
-| `170f7d1` | mini-player draggable; **fixed a blank-shell regression I caused** |
-| `78416cf` | dismissible mini-player for a user-chosen whisper |
-| `6575bcc` | no autoplay from an off-screen branch (the reported bug) |
-| `f8f37df` | inbox no longer shows a preview as if it were a message |
-| `8f21d9b` `6ee9b92` | one 16pt column for the inbox |
-| `474ed98` `b2c0560` | server-side age floor + minor DM gating, wired client-side |
-| `4904040` `13a3da8` | Android buildable again, plus a CI job so it cannot rot silently |
-| `396e1ec` | iOS shared-axis transitions keeping swipe-back |
-| `73f3fc3` | PII scrubber stopped mangling UUIDs |
-| `e371aba` `0df7623` | five surfaces stopped clipping content behind the nav |
-| `420ff4d` | mood distribution ring removed |
-
-### Verified by driving the simulator with idb
-
-- autoplay: silent on Home, plays on entering Whispers, stops on leaving, no
-  double-start on return
-- mini-player: appears only for a whisper the user swiped to, survives
-  leave → return → leave, dismiss removes it, tap-to-return reaches the right
-  whisper, **drag works**
-- inbox column: headings and avatars share one left edge
-
-### Known gaps, not bugs to rediscover
-
-- **Tap-to-return restarts playback** (0:05 of 7:05) instead of resuming at the
-  live position — re-entry re-runs `startPlayback`.
-- **Backgrounding** is untested for both autoplay and the mini-player.
-- **Member view does not survive a reinstall** — the app comes up in Keeper
-  Studio, where branch 1 is Spaces, not Whispers. Cost me one invalid test run.
-  Switch via the Studio drawer → "Member feed".
-
----
-
-## Still open
-
-1. Whispers feed — keyset pagination, then the ranking decision above.
-2. `#3` from `open-issues-2026-08-12.md`: the blurred group invite link.
-   Untouched. The real question is product: reveal on tap, or skip revealing and
-   use share/copy so the token never has to be read.
-3. Four redesigns, all specified with line numbers:
+1. **Group invite link is blurred** (`open-issues-2026-08-12.md` section 3) — the
+   only reported defect still untouched. The blur presumably guards against
+   shoulder-surfing, but it stops the person who needs to *send* the link from
+   reading it. The real question is product: reveal on tap, or skip revealing and
+   use share-sheet / copy so the token never has to be read aloud.
+2. **Four redesigns**, all specified with line numbers:
    `public-profile-redesign-brief.md`, `inbox-friends-redesign-brief.md`, and
-   Plug Studio (`open-issues-2026-08-12.md` §4).
-4. `isRestrictedMinor` still has zero call sites; other restrictions the README
-   claims for that tier (no external links) are enforced nowhere.
+   Plug Studio (`open-issues-2026-08-12.md` section 4).
+3. **Whispers ranking beyond recency** — the user chose recency + already-heard +
+   randomised entry, and explicitly rejected engagement weighting. Do not
+   reintroduce it without revisiting that reasoning; on this platform it would
+   amplify the most distressing content to the accounts least able to handle it.
+
+---
+
+## The whispers work is done and verified on device
+
+Every item below was checked by driving the simulator with `idb`, not inferred.
+
+| Behaviour | Commit |
+| --- | --- |
+| Keyset pagination (replaced OFFSET) | `2b0f637` |
+| No autoplay from an off-screen branch | `6575bcc` |
+| Mini-player for a user-chosen whisper | `78416cf` |
+| Mini-player draggable | `170f7d1` |
+| Hidden on its own tab; clamped out of the notch | `7877113` |
+| Already-heard filter (`whisper_listens`) | `a195356` |
+| Randomised first-page entry point | `8a609bd` |
+| Reachable mini-player, refresh button, escapable category rail | `e391070` |
+| Resume instead of restart on re-entry | `9061865` |
+| **Stopped awaiting `play()`** | `c53c1d3` |
+| Loading spinner on the transport | `cdc6516` |
+
+Both whispers migrations are applied and live: `20260813200000` (already-heard
+filter, never-empty fallback, keyset index) and `20260813210000` (randomised
+entry point). Confirmed by `whispers.unheard_rpc_unavailable` dropping to 0.
+
+### The one worth reading about: `c53c1d3`
+
+`just_audio`'s `play()` returns a Future that completes when playback
+**finishes**, not when it starts. `startPlayback` awaited it, so it stayed
+pending for the entire whisper and silently disabled three things:
+
+* the now-playing handle was never published, so the mini-player never appeared
+* `recordWhisperListen` never fired, so the already-heard filter was querying an
+  almost-empty table — correct code running on no data
+* the next track was never preloaded, so every swipe paid a cold load
+
+No exception, no log. Found by instrumenting each `await` after two wrong
+hypotheses. **Lesson worth keeping: when a code path just stops with no error,
+suspect an un-completing Future before suspecting logic.**
+
+The user has since confirmed via SQL that listens are recording again.
+
+---
+
+## Known gaps — do not rediscover these as bugs
+
+- **Backgrounding is untested** for both autoplay and the mini-player.
+- **The already-heard filter cannot be isolated in the UI** at this data size.
+  With ~7 whispers and a randomised entry point, distinct results are consistent
+  with either mechanism. Observe `whisper_listens` instead.
+- **Member view does not survive a reinstall** — the app opens in Keeper Studio,
+  where branch 1 is Spaces, not Whispers. Switch via the Studio drawer then
+  "Member feed". This invalidated a test run before it was noticed.
+- **Three methods still use offset-range** — `_refreshLikedAndSaved`, `votePoll`,
+  `plugByName`. All bounded sets, so not urgent, but the same pattern keyset
+  replaced in `listWhispers`.
+- **`isRestrictedMinor`** still has zero call sites; other restrictions the
+  README claims for that tier (no external links) are enforced nowhere.
+
+---
+
+## Method notes that cost real time
+
+- **Drive the app; do not reason from a screenshot.** Several conclusions this
+  session were wrong that way — an "inbox tab is broken" call, a grep false
+  positive on `post_card.dart`, an "empty feed" theory.
+- **Read each site before editing.** A grep-driven pass on the feed flagged
+  `horizontal: 16` as a misaligned inset when it was internal padding of a
+  fixed-width card, with nothing to align to.
+- **`Positioned` must be a *direct* child of `Stack`.** Wrapped in a
+  `LayoutBuilder` it is silently discarded and the child lands top-left — which
+  is why the mini-player appeared over the status bar. Flutter logs "Incorrect
+  use of ParentDataWidget"; grep for it.
+- **State read outside a subscription never updates.** The transport's
+  active/inactive branch returned early outside its stream, so it could not react
+  to loading finishing.
+- **`flutter analyze` can pass while the CFE rejects the build.** Verify with
+  `flutter build bundle --debug`.
+- The shell's `grep` broke mid-session with a "claude native binary not
+  installed" error inside loops, returning silently empty results. Verify with
+  Python if tooling looks wrong.
 
 ---
 
 ## Tooling
 
-`idb` drives the simulator — use it rather than reasoning from a screenshot.
-Two conclusions this session were wrong for exactly that reason, and both drag
-bugs above were only found by actually dragging.
-
 ```
 idb ui tap   --udid <udid> <x> <y>
-idb ui swipe --udid <udid> <x1> <y1> <x2> <y2> --duration 0.35
+idb ui swipe --udid <udid> <x1> <y1> <x2> <y2> --duration 0.5
 ```
 
 Logical points; iPhone 17 is 402x874 @3x. Client at
 `~/Library/Python/3.9/bin/idb`, installed under `/usr/bin/python3` (3.9.6)
 because `fb-idb` calls `asyncio.get_event_loop()` and raises on 3.12+.
 
-Nav positions in member view, y=810: Home 48 · Whispers 109 · Post 170 ·
-Friends 232 · Inbox 295 · Profile 353. Studio drawer is (38, 105);
-"Member feed" is (115, 202).
+Member-view nav at y=810: Home 48, Whispers 109, Post 170, Friends 232,
+Inbox 295, Profile 353. Studio drawer (38, 105); "Member feed" (115, 202).
+Whispers refresh button (320, 91).
+
+Swipe the whisper PageView from a clear band — roughly y 500 to 150. Lower starts
+land on the transport card, which swallows the drag.
+
+No Docker locally, so migrations cannot be replayed before pushing; CI's
+`database` job is the first real execution. The user applies them by hand.
