@@ -1708,6 +1708,46 @@ class SupabaseBackend {
     DateTime? beforeCreatedAt,
     String? beforeWhisperId,
   }) async {
+    // Prefer the RPC: it skips whispers this listener has already finished, and
+    // falls back to plain recency server-side so the feed is never empty.
+    try {
+      final rows = await _client.rpc(
+        'list_unheard_whispers',
+        params: {
+          'p_limit': limit,
+          'p_category': category,
+          'p_before_created_at': beforeCreatedAt?.toUtc().toIso8601String(),
+          'p_before_whisper_id': beforeWhisperId,
+        },
+      );
+      final base = (rows as List)
+          .cast<Map<String, dynamic>>()
+          .map(_whisperFromRow)
+          .toList();
+      if (base.isEmpty) return base;
+      return _whispersWithMyFlags(base);
+    } catch (e) {
+      // The migration may not be applied yet — this project applies them by
+      // hand. Degrade to the unfiltered view rather than showing no whispers at
+      // all; the user still gets a feed, just without the already-heard filter.
+      log.warn('whispers.unheard_rpc_unavailable', props: {'error': '$e'});
+      return _listWhispersFromView(
+        limit: limit,
+        category: category,
+        beforeCreatedAt: beforeCreatedAt,
+        beforeWhisperId: beforeWhisperId,
+      );
+    }
+  }
+
+  /// Keyset read straight from the view, with no listener filter. Retained as
+  /// the fallback path for [listWhispers].
+  Future<List<Whisper>> _listWhispersFromView({
+    required int limit,
+    required String? category,
+    required DateTime? beforeCreatedAt,
+    required String? beforeWhisperId,
+  }) async {
     var q = _client
         .from('whispers_feed')
         .select()
