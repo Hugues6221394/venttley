@@ -1,12 +1,32 @@
-# Where we stopped — 2026-08-14
+# Where we stopped — 2026-08-15
 
 Read this first, then `AGENT-COORDINATION.md` (a second agent works security
 hardening in this repo concurrently; uncommitted files under `supabase/` and
 `.github/` are usually theirs).
 
-**Suite: 158 tests, 0 errors, 0 warnings. iOS and Android both build.**
+**Suite: 173 tests, 0 errors, 0 warnings. iOS and Android both build.**
 
-Last worked: the group invite link (see below). Whispers work is complete.
+Last worked: the **public profile** (`faeaa04`, `aee667c`) — done and verified
+on device. See `public-profile-redesign-brief.md` for what changed and why.
+Whispers work is complete.
+
+---
+
+## Driving the simulator — set this up first
+
+`flutter run` cannot be hot-reloaded from a tool call unless you own its stdin,
+and reloading through the raw Dart VM service **does not work** (the flutter
+tool owns kernel compilation; `reloadSources` returns "Error while starting
+Kernel isolate task"). Launch it against a FIFO instead:
+
+```sh
+mkfifo $S/ctl.fifo
+( sleep 100000 > $S/ctl.fifo ) &          # holder, or the FIFO hits EOF
+flutter run -d <udid> < $S/ctl.fifo > $S/run.log 2>&1 &
+printf 'r' > $S/ctl.fifo                  # hot reload
+printf 'R' > $S/ctl.fifo                  # hot restart (needed for
+                                          # StatelessWidget → Stateful)
+```
 
 ---
 
@@ -40,9 +60,22 @@ WHERE room_id = '<friend circle room id>';
 Also seen and unexplained: the chat header says **"2 members"** while Group
 details says **"1 members"** for the same room. Two counts from two sources.
 
-### 2. Four redesigns, all specified with line numbers:
-   `public-profile-redesign-brief.md`, `inbox-friends-redesign-brief.md`, and
-   Plug Studio (`open-issues-2026-08-12.md` section 4).
+### 2. Redesigns — public profile is **done**; three left
+
+`inbox-friends-redesign-brief.md` (messaging hub + friends page) and Plug
+Studio (`open-issues-2026-08-12.md` section 4). Both specified with line
+numbers.
+
+The public profile is finished and verified on device. Two things it surfaced
+that apply to the others:
+
+* **The screen had two of everything before it had a layout problem.** The real
+  defect was duplicated stats presented twice with no hierarchy, not spacing —
+  every section inset was already 20. Look for duplication before reaching for
+  the grid.
+* **Empty states are a design surface, not a fallback.** A brand-new account
+  rendered four zeros where the profile is supposed to argue for connecting
+  with someone. Check what each new block looks like at zero.
 ### 3. Whispers ranking beyond recency — the user chose recency + already-heard +
    randomised entry, and explicitly rejected engagement weighting. Do not
    reintroduce it without revisiting that reasoning; on this platform it would
@@ -112,7 +145,11 @@ The user has since confirmed via SQL that listens are recording again.
 
 - **Drive the app; do not reason from a screenshot.** Several conclusions this
   session were wrong that way — an "inbox tab is broken" call, a grep false
-  positive on `post_card.dart`, an "empty feed" theory.
+  positive on `post_card.dart`, an "empty feed" theory. It cuts both ways:
+  putting the profile on screen is what surfaced the squircle-in-a-circle
+  avatar and the wall of zeros, neither of which is visible in the source.
+- **Member view does not survive a reinstall.** The app opens in Plug Studio.
+  "Member feed" is at logical (335, 431) on the Studio home.
 - **Read each site before editing.** A grep-driven pass on the feed flagged
   `horizontal: 16` as a misaligned inset when it was internal padding of a
   fixed-width card, with nothing to align to.
