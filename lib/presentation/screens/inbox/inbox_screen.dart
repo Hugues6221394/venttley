@@ -8,7 +8,6 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_chat_hub.dart';
 import '../../theme/colors.dart';
-import '../../theme/vently_tokens.dart';
 import '../../widgets/premium_motion.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tribe_avatar.dart';
@@ -71,6 +70,9 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   Widget build(BuildContext context) {
     _syncTabIntent(GoRouterState.of(context).uri.queryParameters['tab']);
     final allRoomsAsync = ref.watch(_allRoomsProvider);
+    final tribeChats =
+        ref.watch(tribeChatInboxProvider).valueOrNull ??
+        const <TribeChatInboxSummary>[];
     final friends = ref.watch(myFriendsProvider).valueOrNull ?? const [];
     final counts =
         ref.watch(inboxCountsProvider).valueOrNull ?? const <String, int>{};
@@ -106,7 +108,6 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                 ),
                 if (friends.isNotEmpty)
                   SliverToBoxAdapter(child: _VibesRail(friends: friends)),
-                const SliverToBoxAdapter(child: _TribeChatsRail()),
                 if (pending > 0)
                   SliverToBoxAdapter(
                     child: _PendingRequestsCard(
@@ -139,7 +140,12 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                     ),
                   ],
                   data: (rooms) {
-                    final filtered = _applyFilter(rooms, _filter, _query.text);
+                    final filtered = _applyFilter(
+                      rooms,
+                      tribeChats,
+                      _filter,
+                      _query.text,
+                    );
                     if (filtered.isEmpty) {
                       return [
                         SliverFillRemaining(
@@ -163,8 +169,11 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                         sliver: SliverList.builder(
                           itemCount: filtered.length,
                           itemBuilder: (ctx, i) {
+                            final entry = filtered[i];
                             return RepaintBoundary(
-                              child: _ConversationRow(room: filtered[i]),
+                              child: entry.room != null
+                                  ? _ConversationRow(room: entry.room!)
+                                  : _TribeConversationRow(tribe: entry.tribe!),
                             );
                           },
                         ),
@@ -247,32 +256,79 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
     );
   }
 
-  List<ChatRoom> _applyFilter(
+  List<_InboxEntry> _applyFilter(
     List<ChatRoom> rooms,
+    List<TribeChatInboxSummary> tribes,
     _InboxFilter filter,
     String query,
   ) {
-    Iterable<ChatRoom> result = rooms;
+    final q = query.trim().toLowerCase();
+
+    Iterable<ChatRoom> roomResult = rooms;
     switch (filter) {
       case _InboxFilter.all:
         break;
       case _InboxFilter.active:
-        result = result.where((r) => r.roomStatus == 'active');
+        roomResult = roomResult.where((r) => r.roomStatus == 'active');
         break;
       case _InboxFilter.requests:
-        result = result.where((r) => r.roomStatus == 'pending_request');
+        roomResult = roomResult.where((r) => r.roomStatus == 'pending_request');
         break;
     }
-    final q = query.trim().toLowerCase();
     if (q.isNotEmpty) {
-      result = result.where(
+      roomResult = roomResult.where(
         (r) =>
             r.peerPseudonym.toLowerCase().contains(q) ||
-            r.requestPreview.toLowerCase().contains(q),
+            // Group rooms are titled, and searching a group by the name on its
+            // own row used to return nothing.
+            (r.groupTitle ?? '').toLowerCase().contains(q) ||
+            r.requestPreview.toLowerCase().contains(q) ||
+            (r.lastMessagePreview ?? '').toLowerCase().contains(q),
       );
     }
-    return result.toList();
+
+    // Tribe chats belong under All and Active. They can never be a friend
+    // request, which is the only thing Requests is for.
+    Iterable<TribeChatInboxSummary> tribeResult = filter ==
+            _InboxFilter.requests
+        ? const []
+        : tribes;
+    if (q.isNotEmpty) {
+      tribeResult = tribeResult.where(
+        (t) =>
+            t.name.toLowerCase().contains(q) ||
+            (t.lastMessagePreview ?? '').toLowerCase().contains(q),
+      );
+    }
+
+    return [
+      ...roomResult.map(_InboxEntry.room),
+      ...tribeResult.map(_InboxEntry.tribe),
+    ]..sort((a, b) => b.activityAt.compareTo(a.activityAt));
   }
+}
+
+/// One line in the hub, whichever backend it came from.
+///
+/// Tribe chats used to live in their own horizontal rail *above* the
+/// conversation list — a rail of chats sitting on top of a list of chats. With
+/// one tribe it rendered as a single card clipped by the edge of the screen,
+/// and it pushed the first real conversation past halfway down the display.
+/// They are conversations, so they are in the list, ordered by the same
+/// recency key as everything else.
+@immutable
+class _InboxEntry {
+  const _InboxEntry.room(ChatRoom this.room) : tribe = null;
+  const _InboxEntry.tribe(TribeChatInboxSummary this.tribe) : room = null;
+
+  final ChatRoom? room;
+  final TribeChatInboxSummary? tribe;
+
+  DateTime get activityAt =>
+      room?.lastMessageAt ??
+      room?.createdAt ??
+      tribe?.lastMessageAt ??
+      DateTime.fromMillisecondsSinceEpoch(0);
 }
 
 // =========================================================================
@@ -437,7 +493,7 @@ class _VibesRail extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 2, 8, 8),
+            padding: const EdgeInsets.fromLTRB(_kColumn, 0, 8, 6),
             child: Row(
               children: [
                 Text(
@@ -465,11 +521,14 @@ class _VibesRail extends StatelessWidget {
               ],
             ),
           ),
+          // 92 -> 76. This rail is a shortcut, not the point of the screen; at
+          // its old height the first actual conversation started below the
+          // midpoint of the display.
           SizedBox(
-            height: 92,
+            height: 76,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              padding: const EdgeInsets.symmetric(horizontal: _kColumn),
               itemCount: shown.length + 1,
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (ctx, i) {
@@ -484,151 +543,139 @@ class _VibesRail extends StatelessWidget {
   }
 }
 
-class _TribeChatsRail extends ConsumerWidget {
-  const _TribeChatsRail();
+/// A tribe chat rendered with the same anatomy as a direct or group
+/// conversation, because that is what it is.
+///
+/// Distinguished from a DM by the tribe glyph beside the name rather than by
+/// living somewhere else on the screen — a stranger-facing group room should be
+/// legible as one at a glance, but it does not need its own region.
+class _TribeConversationRow extends ConsumerWidget {
+  const _TribeConversationRow({required this.tribe});
+  final TribeChatInboxSummary tribe;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final inboxAsync = ref.watch(tribeChatInboxProvider);
-    return inboxAsync.when(
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
-      data: (items) {
-        if (items.isEmpty) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                child: Text(
-                  'Tribe chats',
-                  style: TextStyle(
-                    color: context.ink,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ),
-              SizedBox(
-                height: 72,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (ctx, i) {
-                    final item = items[i];
-                    return _TribeChatChip(item: item);
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
+    final formatTimestamp = ref.watch(inboxTimestampFormatterProvider);
+    final unread = tribe.unreadCount > 0;
+    final preview = (tribe.lastMessagePreview ?? '').trim();
 
-class _TribeChatChip extends StatelessWidget {
-  const _TribeChatChip({required this.item});
-  final TribeChatInboxSummary item;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: context.isDark
-          ? Theme.of(context).colorScheme.surface
-          : Colors.white.withOpacity(0.88),
-      borderRadius: BorderRadius.circular(VentlyTokens.radiusCard),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(VentlyTokens.radiusCard),
-        onTap: () => context.push('/tribe/${item.slug}/chat'),
-        child: Container(
-          width: 210,
-          padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(VentlyTokens.radiusCard),
-            border: Border.all(color: context.glassBorder),
-            boxShadow: [
-              BoxShadow(
-                color: VentlyColors.deepBurgundy.withOpacity(0.04),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
+    return Pressable(
+      pressedScale: 0.985,
+      onTap: () => context.push('/tribe/${tribe.slug}/chat'),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        padding: const EdgeInsets.fromLTRB(_kRowPad, 10, _kRowPad, 10),
+        decoration: BoxDecoration(
+          color: unread
+              ? (context.isDark
+                    ? VentlyColors.berryDesat.withOpacity(0.10)
+                    : VentlyColors.roseTint.withOpacity(0.55))
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            TribeAvatar(avatarUrl: tribe.avatarUrl, size: 52),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  TribeAvatar(avatarUrl: item.avatarUrl, size: 42),
-                  if (item.unreadCount > 0)
-                    Positioned(
-                      right: -3,
-                      top: -3,
-                      child: Container(
-                        constraints: const BoxConstraints(minWidth: 16),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: VentlyColors.berryMagenta,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white, width: 1.5),
-                        ),
+                  Row(
+                    children: [
+                      Flexible(
                         child: Text(
-                          item.unreadCount > 9 ? '9+' : '${item.unreadCount}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w900,
+                          tribe.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: context.ink,
+                            fontWeight: unread
+                                ? FontWeight.w800
+                                : FontWeight.w700,
+                            fontSize: 15,
+                            letterSpacing: -0.2,
                           ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      item.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: context.ink,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
+                      const SizedBox(width: 5),
+                      Icon(
+                        Icons.diversity_3_rounded,
+                        size: 13,
+                        color: context.inkFaint,
                       ),
-                    ),
-                    if (item.lastMessagePreview != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        item.lastMessagePreview!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: context.ink.withOpacity(0.55),
+                      const Spacer(),
+                      const SizedBox(width: 8),
+                      if (tribe.lastMessageAt != null)
+                        Text(
+                          formatTimestamp(tribe.lastMessageAt!),
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: unread
+                                ? VentlyColors.berryMagenta
+                                : context.inkFaint,
+                            fontSize: 11,
+                            fontWeight: unread
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          preview.isEmpty ? 'No messages yet' : preview,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: unread ? context.ink : context.inkFaint,
+                            fontSize: 13,
+                            fontStyle: preview.isEmpty
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                            fontWeight: unread
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                          ),
                         ),
                       ),
+                      if (unread) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          constraints: const BoxConstraints(
+                            minWidth: 20,
+                            minHeight: 20,
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: VentlyColors.berryMagenta,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            tribe.unreadCount > 99
+                                ? '99+'
+                                : '${tribe.unreadCount}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -640,14 +687,14 @@ class _YourVentBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 68,
+      width: 62,
       child: Column(
         children: [
           InkWell(
             onTap: () => context.push('/compose/story'),
             customBorder: const CircleBorder(),
             child: DottedCircle(
-              size: 58,
+              size: 50,
               color: VentlyColors.berryMagenta.withOpacity(0.45),
               child: const Icon(
                 Icons.add_rounded,
@@ -656,7 +703,7 @@ class _YourVentBubble extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           Text(
             'Your story',
             maxLines: 1,
@@ -731,15 +778,15 @@ class _VibeBubble extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return SizedBox(
-      width: 68,
+      width: 62,
       child: Column(
         children: [
           InkWell(
             onTap: () => _openOrStartDm(context, ref),
             customBorder: const CircleBorder(),
             child: Container(
-              width: 58,
-              height: 58,
+              width: 50,
+              height: 50,
               padding: const EdgeInsets.all(2.2),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
@@ -838,7 +885,7 @@ class _PendingRequestsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+      padding: const EdgeInsets.fromLTRB(_kColumn, 4, _kColumn, 4),
       child: Material(
         color: context.isDark
             ? VentlyColors.berryDesat.withOpacity(0.12)
@@ -1152,7 +1199,14 @@ class _ConversationRow extends ConsumerWidget {
                             ),
                           ),
                         ),
-                      ] else if (!isRequest && room.initiatedByMe) ...[
+                      ] else if (!isRequest &&
+                          room.initiatedByMe &&
+                          // No messages means there is no "own message" whose
+                          // read state this could describe. Rooms with an empty
+                          // thread were rendering a double-tick beside "No
+                          // messages yet" — the same kind of lie the preview
+                          // fallback above was fixed for.
+                          room.lastMessageAt != null) ...[
                         const SizedBox(width: 6),
                         _ReadStateGlyph(
                           isRequest: isRequest,
@@ -1427,7 +1481,10 @@ class _LastMessageLine extends StatelessWidget {
     // only reached by non-request rooms, where the preview never applies.
     final preview = (room.lastMessagePreview ?? '').trim();
     return Text(
-      preview.isEmpty ? 'Tap to open chat' : preview,
+      // "No messages yet" rather than "Tap to open chat": the row is already
+      // obviously tappable, and what the reader cannot otherwise tell is
+      // whether the thread is empty or just failed to load a preview.
+      preview.isEmpty ? 'No messages yet' : preview,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
@@ -1622,7 +1679,17 @@ final _allRoomsProvider = FutureProvider.autoDispose<List<ChatRoom>>((
   final pending = await repo.inbox('requests');
   final active = await repo.inbox('active');
   final all = [...pending, ...active];
-  all.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  // By last activity, not by room creation. Sorting on createdAt pinned the
+  // order to when each thread was opened, so a chat you replied to a minute ago
+  // stayed wherever it was and an old room never moved — in a messaging hub
+  // that is the one ordering that must be right. _ConversationRow was already
+  // *displaying* `lastMessageAt ?? createdAt`, so the timestamps users read ran
+  // out of order down the list.
+  all.sort(
+    (a, b) => (b.lastMessageAt ?? b.createdAt).compareTo(
+      a.lastMessageAt ?? a.createdAt,
+    ),
+  );
   return all;
 });
 
