@@ -19,6 +19,7 @@ import '../../widgets/tagged_text.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../widgets/post_card.dart' show PostCard;
+import '../home/home_shell.dart';
 
 /// The Friend Profile — section 6 of the social spec. A friend-gated
 /// "safe stalking" view: pseudonym + avatar at the top, an emotional
@@ -113,7 +114,12 @@ class _FriendProfileBody extends StatelessWidget {
           SliverToBoxAdapter(child: _StrangerCallout(profile: profile)),
           if (profile.mutualTribes.isNotEmpty || profile.mutualFriendsCount > 0)
             SliverToBoxAdapter(child: _MutualsSection(profile: profile)),
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          // The profile renders inside the shell, so the floating nav pill
+          // overlays it. 32 left the Mutuals section — the one real trust signal
+          // a stranger gets — sitting under the bar.
+          const SliverToBoxAdapter(
+            child: SizedBox(height: HomeShell.navClearance),
+          ),
         ],
       );
     }
@@ -259,7 +265,7 @@ class _VentsTabState extends ConsumerState<_VentsTab> {
 
     return ListView(
       controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 116),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, HomeShell.navClearance),
       children: [
         if (widget.profile.mostLiked != null ||
             widget.profile.mostCommented != null)
@@ -307,7 +313,7 @@ class _AchievementsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, HomeShell.navClearance),
       children: [
         BadgeShelf(
           userId: profile.userId,
@@ -333,7 +339,7 @@ class _ActivityTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, HomeShell.navClearance),
       children: [
         if (profile.heatmap.isNotEmpty)
           _ActivityHeatmap(days: profile.heatmap)
