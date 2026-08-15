@@ -29,12 +29,38 @@ import '../home/home_shell.dart';
 ///
 /// Strangers see a stripped view that pushes them toward sending a
 /// friend request. Self redirects to /profile.
-class FriendProfileScreen extends ConsumerWidget {
+class FriendProfileScreen extends ConsumerStatefulWidget {
   const FriendProfileScreen({super.key, required this.userId});
   final String userId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FriendProfileScreen> createState() =>
+      _FriendProfileScreenState();
+}
+
+class _FriendProfileScreenState extends ConsumerState<FriendProfileScreen> {
+  /// How far the top scrim has faded in, 0..1.
+  ///
+  /// The app bar is transparent over an extended body so the hero banner can
+  /// run to the top of the screen. That is right at rest and wrong the moment
+  /// the page moves: section text slid under the status bar and behind the
+  /// floating back chip with nothing between them.
+  double _scrim = 0;
+
+  bool _onScroll(ScrollNotification n) {
+    // depth 0 is the profile's own scroll view. The Vents tab has its own
+    // ListView inside it, and its offset says nothing about whether the header
+    // has moved — without this, scrolling a tab faded in a scrim over a hero
+    // still sitting at the top.
+    if (n.depth != 0 || n.metrics.axis != Axis.vertical) return false;
+    final next = (n.metrics.pixels / 80).clamp(0.0, 1.0);
+    if ((next - _scrim).abs() > 0.01) setState(() => _scrim = next);
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final userId = widget.userId;
     final me = ref.watch(sessionProvider);
     if (me != null && me.userId == userId) {
       // Self → bounce to the dedicated /profile screen. Use a
@@ -59,6 +85,36 @@ class FriendProfileScreen extends ConsumerWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
+        // Blur plus a fade to transparent, so the strip reads as depth rather
+        // than as a bar with an edge. Opacity(0) skips painting its child
+        // entirely, so the blur costs nothing while the page is at rest.
+        flexibleSpace: IgnorePointer(
+          child: Opacity(
+            opacity: _scrim,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Theme.of(
+                          context,
+                        ).scaffoldBackgroundColor.withOpacity(0.92),
+                        Theme.of(
+                          context,
+                        ).scaffoldBackgroundColor.withOpacity(0.0),
+                      ],
+                    ),
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ),
+          ),
+        ),
         leading: Padding(
           padding: const EdgeInsets.only(left: 4, top: 4),
           child: IconButton(
@@ -84,12 +140,15 @@ class FriendProfileScreen extends ConsumerWidget {
                 message: "This profile isn't available.",
               );
             }
-            return RefreshIndicator(
-              onRefresh: () async {
-                ref.invalidate(userProfileProvider(userId));
-                await ref.read(userProfileProvider(userId).future);
-              },
-              child: _FriendProfileBody(profile: profile),
+            return NotificationListener<ScrollNotification>(
+              onNotification: _onScroll,
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(userProfileProvider(userId));
+                  await ref.read(userProfileProvider(userId).future);
+                },
+                child: _FriendProfileBody(profile: profile),
+              ),
             );
           },
         ),
@@ -163,6 +222,13 @@ class _FriendProfileBody extends StatelessWidget {
               unselectedLabelColor: context.ink,
               indicatorColor: VentlyColors.berryMagenta,
               indicatorWeight: 3,
+              // Material 3 defaults this to outlineVariant, which drew a hard
+              // near-black rule the full width of a very soft palette. The bar
+              // is pinned and content scrolls under it, so it still needs an
+              // edge — just a quiet one.
+              dividerColor: Theme.of(
+                context,
+              ).colorScheme.primary.withOpacity(0.12),
               labelStyle: const TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 13,
