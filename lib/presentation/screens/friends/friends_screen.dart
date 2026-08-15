@@ -21,6 +21,7 @@ import '../../widgets/vently_premium_background.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/verified_badge.dart';
+import '../home/home_shell.dart';
 
 /// Friends — Image #15.
 ///
@@ -162,7 +163,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 116),
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, HomeShell.navClearance),
                       sliver: SliverList.builder(
                         itemCount: grouped.length,
                         itemBuilder: (ctx, i) {
@@ -172,18 +173,19 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(4, 14, 4, 6),
-                                  child: Text(
-                                    entry.letter,
-                                    style: const TextStyle(
-                                      color: VentlyColors.berryMagenta,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 13,
+                                if (entry.letter.isNotEmpty)
+                                  Padding(
+                                    padding:
+                                        const EdgeInsets.fromLTRB(4, 14, 4, 6),
+                                    child: Text(
+                                      entry.letter,
+                                      style: const TextStyle(
+                                        color: VentlyColors.berryMagenta,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                   ),
-                                ),
                                 for (final f in entry.friends)
                                   RepaintBoundary(
                                     child: _FriendRow(friend: f),
@@ -231,7 +233,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 6, 20, 116),
+                      padding: const EdgeInsets.fromLTRB(20, 6, 20, HomeShell.navClearance),
                       sliver: SliverList.builder(
                         itemCount: recommendationsAsync.valueOrNull!.length,
                         itemBuilder: (context, index) {
@@ -282,6 +284,13 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     });
   }
 
+  /// Below this, an index costs more than it saves.
+  ///
+  /// A–Z headers exist so you can find one person in a long list. With four
+  /// friends they produced three headers for four rows — a letter above almost
+  /// every name, which reads as structure that means something and does not.
+  static const _kAlphabetIndexFrom = 12;
+
   List<_AlphabeticalGroup> _groupAlphabetically(List<FriendSummary> friends) {
     final sorted = [...friends]..sort((a, b) {
         if (_sort == _FriendSort.favorites) {
@@ -290,6 +299,11 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
         }
         return a.pseudonym.toLowerCase().compareTo(b.pseudonym.toLowerCase());
       });
+    if (sorted.length < _kAlphabetIndexFrom) {
+      // One unlabelled group: the sort order above still applies, so favourites
+      // stay on top — the headers were never what put them there.
+      return [_AlphabeticalGroup(letter: '', friends: sorted)];
+    }
     final groups = <String, List<FriendSummary>>{};
     for (final f in sorted) {
       final letter = f.pseudonym.isEmpty ? '#' : f.pseudonym[0].toUpperCase();
@@ -903,113 +917,94 @@ class _FriendsHeader extends StatelessWidget {
 // INSTANT CONNECT
 // =========================================================================
 
+/// The two ways to add someone, as two buttons.
+///
+/// This was a full explainer card — a 64pt QR tile, a heading and two lines of
+/// body copy — stacked above the buttons it described. Together they pushed the
+/// friends list entirely off the first screen: on a 6.7" display you scrolled
+/// past a page of onboarding to reach the four people you came for. The one
+/// sentence worth keeping is the privacy reassurance, which is why it stays as
+/// a caption rather than moving into a sheet nobody opens.
 class _InstantConnectCard extends StatelessWidget {
   const _InstantConnectCard({required this.me});
   final AppUser? me;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: context.glassBorder),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: context.isDark
-                        ? VentlyColors.berryDesat.withOpacity(0.14)
-                        : VentlyColors.roseTint,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  alignment: Alignment.center,
-                  child: const Icon(Icons.qr_code_2_rounded,
-                      color: VentlyColors.roseDeep, size: 31),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Instant connect',
-                        style: TextStyle(
-                          color: context.ink,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 17,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        "Share your profile or scan a friend's code - no numbers, no real names.",
-                        style: TextStyle(
-                          color: context.inkMuted,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                          height: 1.45,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
                 child: SizedBox(
-                  height: 48,
-                  child: FilledButton(
-                    onPressed:
-                        me == null ? null : () => _shareLink(context, me!),
+                  height: 46,
+                  child: FilledButton.icon(
+                    onPressed: me == null
+                        ? null
+                        : () => _shareLink(context, me!),
+                    icon: const Icon(Icons.ios_share_rounded, size: 18),
+                    label: const Text(
+                      'Share link',
+                      maxLines: 1,
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
                     style: FilledButton.styleFrom(
                       backgroundColor: VentlyColors.berryMagenta,
+                      // FilledButton.icon's default horizontal padding wrapped
+                      // "Share link" onto two lines inside a half-width pill on
+                      // a 390pt phone. Caught by the golden, not the simulator,
+                      // which is 12pt wider.
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(18),
                       ),
                       elevation: 0,
                     ),
-                    child: const Text('Share link',
-                        style: TextStyle(fontWeight: FontWeight.w900)),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: SizedBox(
-                  height: 48,
-                  child: FilledButton(
-                    onPressed:
-                        me == null ? null : () => _showMyQr(context, me!),
+                  height: 46,
+                  child: FilledButton.icon(
+                    onPressed: me == null ? null : () => _showMyQr(context, me!),
+                    icon: const Icon(Icons.qr_code_2_rounded, size: 19),
+                    label: const Text(
+                      'My QR',
+                      maxLines: 1,
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
                     style: FilledButton.styleFrom(
                       backgroundColor: VentlyColors.roseTint,
                       foregroundColor: VentlyColors.roseDeep,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(18),
                       ),
                       elevation: 0,
                     ),
-                    child: const Text('My QR',
-                        style: TextStyle(fontWeight: FontWeight.w900)),
                   ),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Text(
+            'No phone numbers, no real names.',
+            style: TextStyle(
+              color: context.inkMuted,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
   }
+
 
   void _shareLink(BuildContext context, AppUser me) {
     final link = 'https://venttly.app/u/${me.anonymousPseudonym}';
@@ -1580,7 +1575,7 @@ class _MyFriendsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

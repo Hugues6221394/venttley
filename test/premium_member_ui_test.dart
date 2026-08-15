@@ -133,7 +133,11 @@ void main() {
     await _pumpScreen(tester, const FriendsScreen());
 
     expect(find.text('Your circle'), findsOneWidget);
-    expect(find.text('Instant connect'), findsOneWidget);
+    // Anchored on the two actions rather than on the "Instant connect" heading
+    // that used to sit above them. The heading was explanatory copy; these are
+    // the affordances, and they are what the assertion is actually about.
+    expect(find.text('Share link'), findsOneWidget);
+    expect(find.text('My QR'), findsOneWidget);
     final exception = tester.takeException();
     expect(exception, isNull);
     await expectLater(
