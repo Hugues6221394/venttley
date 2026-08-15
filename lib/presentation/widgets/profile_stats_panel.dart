@@ -147,9 +147,14 @@ class _JustGettingStarted extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 3),
+                // Phrased as "nothing here yet" rather than "@X has done
+                // nothing". Until 20260816090000 is applied the server sends
+                // these counts only to friends, so on a stranger's profile a
+                // zero means "not disclosed", not "none" — and asserting the
+                // second would be a false statement about a real person.
                 Text(
-                  '@$pseudonym has not picked up reactions, replies or badges '
-                  'yet. Say hi.',
+                  "@$pseudonym's replies, reactions and badges will show up "
+                  'here. Say hi.',
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.35,

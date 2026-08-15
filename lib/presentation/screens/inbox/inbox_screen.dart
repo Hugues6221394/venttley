@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -73,7 +71,6 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
     final tribeChats =
         ref.watch(tribeChatInboxProvider).valueOrNull ??
         const <TribeChatInboxSummary>[];
-    final friends = ref.watch(myFriendsProvider).valueOrNull ?? const [];
     final counts =
         ref.watch(inboxCountsProvider).valueOrNull ?? const <String, int>{};
     final pending = counts['requests'] ?? 0;
@@ -106,8 +103,14 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                     onChanged: (_) => setState(() {}),
                   ),
                 ),
-                if (friends.isNotEmpty)
-                  SliverToBoxAdapter(child: _VibesRail(friends: friends)),
+                // The "Vibes" rail lived here: a story ring per friend plus a
+                // "Your story" compose bubble. Both jobs already exist on Home
+                // as 24h Vent Stories, and this copy was the weaker one — the
+                // gradient ring is the universal sign for "has an unread
+                // story", but these bubbles showed every friend whether or not
+                // they had posted one, and tapping opened a DM. Stories live in
+                // one place now. Starting a new chat is the compose button in
+                // the header above.
                 if (pending > 0)
                   SliverToBoxAdapter(
                     child: _PendingRequestsCard(
@@ -279,6 +282,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
       roomResult = roomResult.where(
         (r) =>
             r.peerPseudonym.toLowerCase().contains(q) ||
+            r.peerDisplayName.toLowerCase().contains(q) ||
             // Group rooms are titled, and searching a group by the name on its
             // own row used to return nothing.
             (r.groupTitle ?? '').toLowerCase().contains(q) ||
@@ -476,73 +480,6 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-// =========================================================================
-// VIBES RAIL — Your Vent + Active friends
-// =========================================================================
-
-class _VibesRail extends StatelessWidget {
-  const _VibesRail({required this.friends});
-  final List<FriendSummary> friends;
-
-  @override
-  Widget build(BuildContext context) {
-    final shown = friends.take(12).toList();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(_kColumn, 0, 8, 6),
-            child: Row(
-              children: [
-                Text(
-                  'Vibes',
-                  style: TextStyle(
-                    color: context.ink,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () => context.push('/friends'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: VentlyColors.berryMagenta,
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                  child: const Text(
-                    'See all',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // 92 -> 76. This rail is a shortcut, not the point of the screen; at
-          // its old height the first actual conversation started below the
-          // midpoint of the display.
-          SizedBox(
-            height: 76,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: _kColumn),
-              itemCount: shown.length + 1,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (ctx, i) {
-                if (i == 0) return const _YourVentBubble();
-                return _VibeBubble(friend: shown[i - 1]);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// A tribe chat rendered with the same anatomy as a direct or group
 /// conversation, because that is what it is.
 ///
@@ -679,197 +616,6 @@ class _TribeConversationRow extends ConsumerWidget {
         ),
       ),
     );
-  }
-}
-
-class _YourVentBubble extends StatelessWidget {
-  const _YourVentBubble();
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 62,
-      child: Column(
-        children: [
-          InkWell(
-            onTap: () => context.push('/compose/story'),
-            customBorder: const CircleBorder(),
-            child: DottedCircle(
-              size: 50,
-              color: VentlyColors.berryMagenta.withOpacity(0.45),
-              child: const Icon(
-                Icons.add_rounded,
-                color: VentlyColors.berryMagenta,
-                size: 22,
-              ),
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            'Your story',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: context.ink,
-              fontWeight: FontWeight.w700,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Thin painted circle of evenly-spaced dots — Snap-style "Add your vent".
-class DottedCircle extends StatelessWidget {
-  const DottedCircle({
-    super.key,
-    required this.size,
-    required this.color,
-    required this.child,
-  });
-  final double size;
-  final Color color;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(
-        painter: _DottedCirclePainter(color: color),
-        child: Center(child: child),
-      ),
-    );
-  }
-}
-
-class _DottedCirclePainter extends CustomPainter {
-  _DottedCirclePainter({required this.color});
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    final radius = size.shortestSide / 2 - 2;
-    final center = Offset(size.width / 2, size.height / 2);
-    const dots = 36;
-    for (var i = 0; i < dots; i++) {
-      final t = (i / dots) * 2 * math.pi;
-      final dx = center.dx + radius * math.cos(t);
-      final dy = center.dy + radius * math.sin(t);
-      canvas.drawCircle(Offset(dx, dy), 1.6, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DottedCirclePainter oldDelegate) =>
-      oldDelegate.color != color;
-}
-
-class _VibeBubble extends ConsumerWidget {
-  const _VibeBubble({required this.friend});
-  final FriendSummary friend;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return SizedBox(
-      width: 62,
-      child: Column(
-        children: [
-          InkWell(
-            onTap: () => _openOrStartDm(context, ref),
-            customBorder: const CircleBorder(),
-            child: Container(
-              width: 50,
-              height: 50,
-              padding: const EdgeInsets.all(2.2),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    VentlyColors.berryMagenta,
-                    VentlyColors.berryMagenta.withOpacity(0.55),
-                    const Color(0xFFFF8FB3),
-                  ],
-                ),
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Theme.of(context).scaffoldBackgroundColor,
-                ),
-                child: ClipOval(
-                  child: ProfileAvatar(
-                    avatarSeed: friend.avatarSeed,
-                    label: friend.pseudonym,
-                    profilePhotoUrl: friend.profilePhotoUrl,
-                    size: 48,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            _prettyName(friend.pseudonym),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: context.ink,
-              fontWeight: FontWeight.w700,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _prettyName(String p) {
-    final s = p.replaceAll('_', ' ').trim();
-    if (s.length <= 9) return s;
-    final firstSpace = s.indexOf(' ');
-    if (firstSpace > 0 && firstSpace <= 9) return s.substring(0, firstSpace);
-    return '${s.substring(0, 8)}…';
-  }
-
-  Future<void> _openOrStartDm(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final router = GoRouter.of(context);
-    final rooms = await ref.read(_allRoomsProvider.future);
-    final existing = rooms
-        .where((r) => r.peerPseudonym.replaceAll('@', '') == friend.pseudonym)
-        .toList();
-    if (existing.isNotEmpty) {
-      router.push('/chat/${existing.first.roomId}');
-      return;
-    }
-    try {
-      final room = await ref
-          .read(repositoryProvider)
-          .sendMessageRequest(
-            peerUserId: friend.userId,
-            peerPseudonym: friend.pseudonym,
-            peerAvatarSeed: friend.avatarSeed,
-            preview: 'Hey',
-          );
-      router.push('/chat/${room.roomId}');
-    } on DmGatingException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Could not start chat: $e')),
-      );
-    }
   }
 }
 
@@ -1095,7 +841,7 @@ class _ConversationRow extends ConsumerWidget {
         : room.peerProfilePhotoUrl;
     final displayName = room.isGroup
         ? (room.groupTitle ?? room.peerPseudonym)
-        : room.peerPseudonym;
+        : room.peerDisplayName;
     return Pressable(
       pressedScale: 0.985,
       onTap: () => isRequest
@@ -1307,7 +1053,7 @@ class _ConversationRow extends ConsumerWidget {
                 children: [
                   ProfileAvatar(
                     avatarSeed: room.peerAvatarSeed,
-                    label: room.peerPseudonym,
+                    label: room.peerDisplayName,
                     profilePhotoUrl: room.peerProfilePhotoUrl,
                     size: 44,
                   ),
@@ -1317,7 +1063,7 @@ class _ConversationRow extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          room.peerPseudonym,
+                          room.peerDisplayName,
                           style: TextStyle(
                             color: context.ink,
                             fontWeight: FontWeight.w900,

@@ -21,7 +21,11 @@ enum ProfileStatKind {
   String get title => switch (this) {
         ProfileStatKind.connections => 'Connections',
         ProfileStatKind.vents => 'Vents',
-        ProfileStatKind.comments => 'Comments',
+        // "Comments" reads as comments *on* their posts, which is what a
+        // reader compares it against when they open a vent and see five
+        // replies. This counts comments they *wrote*. "Replies" says that on
+        // its own and matches the subtitle below.
+        ProfileStatKind.comments => 'Replies',
         ProfileStatKind.reactions => 'Reactions received',
         ProfileStatKind.tribes => 'Tribes',
         ProfileStatKind.badges => 'Badges',

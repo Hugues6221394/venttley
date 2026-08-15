@@ -2745,6 +2745,21 @@ class SupabaseBackend {
 
   UserProfileView _profileFromJson(Map<String, dynamic> j) {
     final user = j['user'] as Map<String, dynamic>;
+    // No `bio` key at all means the deployed user_profile_summary predates
+    // 20260727130805 — the migration that made bio public. Bio then falls back
+    // to the direct users read below, which RLS blocks for other accounts, so
+    // every profile in the app renders without one and nothing reports it.
+    //
+    // Absent-key and present-but-null are different failures: the first is a
+    // migration that was never applied, the second is a user who has not
+    // written a bio. Only one of those is fixable by an engineer, so tell them
+    // apart here instead of guessing from "nobody has a bio".
+    if (!user.containsKey('bio')) {
+      log.warn(
+        'profile.summary_missing_bio_column',
+        props: {'target': user['user_id']},
+      );
+    }
     final stats = (j['stats'] as Map<String, dynamic>?) ?? const {};
     final mutuals = (j['mutuals'] as Map<String, dynamic>?) ?? const {};
     final highlights = (j['highlights'] as Map<String, dynamic>?) ?? const {};
