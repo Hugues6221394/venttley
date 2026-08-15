@@ -7,10 +7,27 @@ import '../theme/colors.dart';
 import 'glass_card.dart';
 import 'post_card.dart' show PostCard;
 
-/// Professional KPI layout for public profiles — tappable glass cards.
+/// The detail half of a public profile's stats — tappable glass cards.
+///
+/// Connections, vents and tribes are deliberately *not* here: they are the
+/// hero's headline band. This panel used to repeat Connections verbatim and put
+/// "Vents" directly under the hero's "Posts" (a different number for the same
+/// idea), so the screen opened with two stat blocks disagreeing with each other.
+///
+/// One card design for all four, in a 2×2 grid. The old layout mixed three large
+/// iconned cards with four cramped chips, which is what made the block read as
+/// ragged — and at four-across the chips truncated "Reactions received" to
+/// "Reactions r…". Two-across leaves every label room to breathe.
 class ProfileStatsPanel extends StatelessWidget {
   const ProfileStatsPanel({super.key, required this.profile});
   final UserProfileView profile;
+
+  static const _kinds = [
+    ProfileStatKind.reactions,
+    ProfileStatKind.comments,
+    ProfileStatKind.streak,
+    ProfileStatKind.badges,
+  ];
 
   void _open(BuildContext context, ProfileStatKind kind) {
     context.push('/user/${profile.userId}/stat/${kind.routeSegment}');
@@ -26,27 +43,33 @@ class ProfileStatsPanel extends StatelessWidget {
         ProfileStatKind.streak => profile.currentStreak ?? 0,
       };
 
+  String? _suffix(ProfileStatKind kind) {
+    if (kind != ProfileStatKind.streak) return null;
+    final best = profile.bestStreak ?? 0;
+    if (best <= (profile.currentStreak ?? 0)) return null;
+    return 'best $best';
+  }
+
   @override
   Widget build(BuildContext context) {
-    const primary = [
-      ProfileStatKind.connections,
-      ProfileStatKind.vents,
-      ProfileStatKind.tribes,
-    ];
-    const secondary = [
-      ProfileStatKind.comments,
-      ProfileStatKind.reactions,
-      ProfileStatKind.badges,
-      ProfileStatKind.streak,
-    ];
+    final values = [for (final k in _kinds) _value(k)];
+
+    Widget cell(int i) => Expanded(
+          child: _StatCard(
+            kind: _kinds[i],
+            value: values[i],
+            suffix: _suffix(_kinds[i]),
+            onTap: () => _open(context, _kinds[i]),
+          ),
+        );
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Overview',
+            'Activity',
             style: TextStyle(
               fontWeight: FontWeight.w900,
               fontSize: 13,
@@ -55,39 +78,86 @@ class ProfileStatsPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              for (var i = 0; i < primary.length; i++) ...[
-                if (i > 0) const SizedBox(width: 10),
-                Expanded(
-                  child: _PrimaryStatCard(
-                    kind: primary[i],
-                    value: _value(primary[i]),
-                    suffix: primary[i] == ProfileStatKind.streak &&
-                            (profile.bestStreak ?? 0) >
-                                (profile.currentStreak ?? 0)
-                        ? 'best ${profile.bestStreak}'
-                        : null,
-                    onTap: () => _open(context, primary[i]),
-                  ),
+          if (values.every((v) => v == 0))
+            _JustGettingStarted(pseudonym: profile.pseudonym)
+          else
+            // IntrinsicHeight so both cards in a row match the taller one — the
+            // streak card grows a line when it carries a "best N" suffix, and
+            // without this its neighbour would sit short beside it.
+            for (var row = 0; row < 2; row++) ...[
+              if (row > 0) const SizedBox(height: 10),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    cell(row * 2),
+                    const SizedBox(width: 10),
+                    cell(row * 2 + 1),
+                  ],
                 ),
-              ],
+              ),
             ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown instead of the grid when every stat in it is zero.
+///
+/// A profile's job here is to answer "is this person worth connecting with",
+/// and four cards reading 0 answer it emphatically in the wrong direction —
+/// a normal new account looks abandoned. The hero band above still carries
+/// their real numbers, so nothing is hidden; this only replaces a block that
+/// would otherwise say nothing four times.
+class _JustGettingStarted extends StatelessWidget {
+  const _JustGettingStarted({required this.pseudonym});
+  final String pseudonym;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      borderRadius: 18,
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: VentlyColors.berryMagenta.withOpacity(0.10),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              size: 17,
+              color: VentlyColors.berryMagenta,
+            ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              for (var i = 0; i < secondary.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
-                Expanded(
-                  child: _SecondaryStatChip(
-                    kind: secondary[i],
-                    value: _value(secondary[i]),
-                    onTap: () => _open(context, secondary[i]),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Just getting started',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                    color: context.ink,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '@$pseudonym has not picked up reactions, replies or badges '
+                  'yet. Say hi.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    color: context.ink.withOpacity(0.6),
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         ],
       ),
@@ -95,8 +165,10 @@ class ProfileStatsPanel extends StatelessWidget {
   }
 }
 
-class _PrimaryStatCard extends StatelessWidget {
-  const _PrimaryStatCard({
+/// One stat. The only card design in this panel — see [ProfileStatsPanel] for
+/// why there used to be two.
+class _StatCard extends StatelessWidget {
+  const _StatCard({
     required this.kind,
     required this.value,
     required this.onTap,
@@ -108,22 +180,35 @@ class _PrimaryStatCard extends StatelessWidget {
   final VoidCallback onTap;
   final String? suffix;
 
+  /// Keyed off [ProfileStatKind.iconName] rather than the enum so the mapping
+  /// stays in one place if the domain layer ever grows a kind this widget has
+  /// not been taught about — it falls through to a neutral glyph instead of
+  /// failing to compile a switch.
   IconData get _icon => switch (kind.iconName) {
         'people' => Icons.people_outline_rounded,
         'edit_note' => Icons.edit_note_rounded,
         'diversity_3' => Icons.diversity_3_rounded,
+        'chat_bubble' => Icons.chat_bubble_outline_rounded,
+        'favorite' => Icons.favorite_outline_rounded,
+        'military_tech' => Icons.military_tech_outlined,
+        'local_fire_department' => Icons.local_fire_department_outlined,
         _ => Icons.insights_outlined,
       };
 
   @override
   Widget build(BuildContext context) {
+    // A single zero among real numbers is honest, but it should not shout as
+    // loudly as them — full-weight ink on a 0 reads as the loudest thing in the
+    // grid precisely when it is the least informative.
+    final zero = value == 0;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: GlassCard(
-          padding: const EdgeInsets.fromLTRB(12, 14, 10, 12),
+          padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
           borderRadius: 18,
           elevated: true,
           child: Column(
@@ -131,97 +216,62 @@ class _PrimaryStatCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(_icon, size: 16, color: VentlyColors.berryMagenta),
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: VentlyColors.berryMagenta
+                          .withOpacity(zero ? 0.06 : 0.10),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _icon,
+                      size: 16,
+                      color: VentlyColors.berryMagenta
+                          .withOpacity(zero ? 0.45 : 1),
+                    ),
+                  ),
                   const Spacer(),
                   Icon(
                     Icons.chevron_right_rounded,
                     size: 18,
-                    color: context.ink.withOpacity(0.35),
+                    color: context.ink.withOpacity(0.30),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Text(
                 PostCard.compactNumber(value),
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 26,
                   height: 1,
-                  color: context.ink,
+                  letterSpacing: -0.5,
+                  color: context.ink.withOpacity(zero ? 0.35 : 1),
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 5),
               Text(
                 kind.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  fontSize: 11,
+                  fontSize: 11.5,
                   color: context.ink.withOpacity(0.62),
                 ),
               ),
               if (suffix != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 2),
+                  padding: const EdgeInsets.only(top: 3),
                   child: Text(
                     suffix!,
                     style: TextStyle(
-                      fontSize: 9,
+                      fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      color: VentlyColors.berryMagenta.withOpacity(0.8),
+                      color: VentlyColors.berryMagenta.withOpacity(0.85),
                     ),
                   ),
                 ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SecondaryStatChip extends StatelessWidget {
-  const _SecondaryStatChip({
-    required this.kind,
-    required this.value,
-    required this.onTap,
-  });
-
-  final ProfileStatKind kind;
-  final int value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: GlassCard(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-          borderRadius: 14,
-          child: Column(
-            children: [
-              Text(
-                PostCard.compactNumber(value),
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 16,
-                  color: context.ink,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                kind.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 9,
-                  color: context.ink.withOpacity(0.55),
-                ),
-              ),
             ],
           ),
         ),

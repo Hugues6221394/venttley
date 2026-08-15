@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
+import '../../../domain/profile/profile_stat_kind.dart';
 import '../../theme/colors.dart';
 import '../../widgets/badge_shelf.dart';
 import '../../widgets/friend_action_button.dart';
@@ -719,11 +720,17 @@ class _HeroAvatar extends StatelessWidget {
         ],
         border: Border.all(color: scheme.primary, width: 3),
       ),
-      child: ProfileAvatar(
-        avatarSeed: profile.avatarSeed,
-        label: profile.pseudonym,
-        profilePhotoUrl: profile.profilePhotoUrl,
-        size: 104,
+      // ClipOval because the ring is circular but the fallback avatar is not:
+      // ProfileAvatar clips uploaded photos to an oval and leaves the anonymous
+      // letter tile as the squircle the feed uses. Unclipped, that tile's
+      // corners pushed past the ring on every profile without a photo.
+      child: ClipOval(
+        child: ProfileAvatar(
+          avatarSeed: profile.avatarSeed,
+          label: profile.pseudonym,
+          profilePhotoUrl: profile.profilePhotoUrl,
+          size: 104,
+        ),
       ),
     );
 
@@ -797,58 +804,97 @@ class _MetaPill extends StatelessWidget {
   }
 }
 
-/// Instagram-style 3-stat banner in the hero: total friends, total posts
-/// (vents + whispers), and total hugs (🫂 reactions received).
+/// The three headline numbers a stranger scans before deciding to add someone:
+/// how much this person shares, who already trusts them, and where they belong.
+/// Activity is what drives the add, so it sits above the fold, in the hero.
+///
+/// Each column is tappable and opens the same detail screen the Activity grid
+/// below opens. They used to be inert — a 20pt number that does nothing, sitting
+/// directly above an identical number that does, is a dead end users tap twice.
+///
+/// Deliberately unfilled, hairlines only: the Activity cards below carry the
+/// elevation. When this was a tinted, bordered box it read as a second card
+/// competing with them rather than as part of the identity block.
+///
+/// It shows Connections/Vents/Tribes and the grid below shows everything else —
+/// no number appears in both places. Previously Connections was in both, and
+/// "Posts" here (vents + whispers) sat above "Vents" there, so the same person
+/// appeared to have two different post counts.
 class _StatsBanner extends StatelessWidget {
   const _StatsBanner({required this.profile});
   final UserProfileView profile;
 
+  static const _kinds = [
+    ProfileStatKind.connections,
+    ProfileStatKind.vents,
+    ProfileStatKind.tribes,
+  ];
+
+  int _value(ProfileStatKind kind) => switch (kind) {
+    ProfileStatKind.connections => profile.connectionsCount,
+    ProfileStatKind.vents => profile.vents,
+    _ => profile.activeTribes,
+  };
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    Widget stat(String value, String label) => Expanded(
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 20,
-              color: scheme.primary,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: scheme.onSurface.withOpacity(0.6),
-            ),
-          ),
-        ],
-      ),
-    );
-    Widget divider() => Container(
-      width: 1,
-      height: 34,
-      color: scheme.primary.withOpacity(0.12),
-    );
+    final hairline = BorderSide(color: scheme.primary.withOpacity(0.12));
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        color: scheme.primary.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.primary.withOpacity(0.12)),
+        border: Border(top: hairline, bottom: hairline),
       ),
-      child: Row(
-        children: [
-          stat(PostCard.compactNumber(profile.connectionsCount), 'Connections'),
-          divider(),
-          stat(PostCard.compactNumber(profile.postsTotal), 'Posts'),
-          divider(),
-          stat(PostCard.compactNumber(profile.hugsReceived), 'Hugs'),
-        ],
+      child: Material(
+        color: Colors.transparent,
+        child: Row(
+          children: [
+            for (var i = 0; i < _kinds.length; i++) ...[
+              if (i > 0)
+                Container(
+                  width: 1,
+                  height: 30,
+                  color: scheme.primary.withOpacity(0.12),
+                ),
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => context.push(
+                    '/user/${profile.userId}/stat/${_kinds[i].routeSegment}',
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Column(
+                      children: [
+                        Text(
+                          PostCard.compactNumber(_value(_kinds[i])),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 22,
+                            height: 1.1,
+                            letterSpacing: -0.5,
+                            color: scheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          _kinds[i].title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface.withOpacity(0.55),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1178,11 +1224,10 @@ class _StrangerCallout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final hidden = profile.vents;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
         decoration: BoxDecoration(
           color: scheme.primary.withOpacity(0.06),
           borderRadius: BorderRadius.circular(18),
@@ -1190,20 +1235,38 @@ class _StrangerCallout extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Icon(Icons.lock_outline, color: scheme.primary),
-            const SizedBox(height: 6),
-            Text(
-              hidden == 0
-                  ? 'No vents to show yet.'
-                  : '$hidden vents · ${profile.activeTribes} tribes',
-              style: const TextStyle(fontWeight: FontWeight.w800),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.lock_outline_rounded,
+                color: scheme.primary,
+                size: 20,
+              ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             Text(
-              'Send a friend request to see streaks, badges, and recent vents.',
+              'The rest is friends-only',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 15,
+                color: scheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 5),
+            // Names what is actually behind the gate. The old copy promised
+            // streaks and badges were hidden while the Activity grid right above
+            // it was already showing both counts.
+            Text(
+              'Send @${profile.pseudonym} a friend request to see their vents, '
+              'whispers and day-to-day activity.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 12.5,
+                height: 1.4,
                 color: scheme.onSurface.withOpacity(0.65),
               ),
             ),
