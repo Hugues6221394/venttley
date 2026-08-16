@@ -255,7 +255,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ? (r.groupTitle ?? r.peerPseudonym)
         : (prefs.peerNickname?.trim().isNotEmpty ?? false)
         ? prefs.peerNickname!.trim()
-        : r.peerPseudonym;
+        : r.peerDisplayName;
     final groupAvatarUrl = r.groupAvatarPath == null
         ? null
         : ref.watch(groupAvatarUrlProvider(r.groupAvatarPath!)).valueOrNull;

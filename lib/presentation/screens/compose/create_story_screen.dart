@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -6,10 +7,15 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/connection.dart';
+import '../../../core/analytics_events.dart';
 import '../../../core/providers.dart';
 import '../../../core/user_friendly_errors.dart';
+import '../../../data/services/music_playback_service.dart';
 import '../../../data/services/outbox.dart';
+import '../../../data/services/analytics_service.dart';
+import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
+import '../../widgets/music_track_card.dart';
 
 /// Create Vent Story screen — Image #9.
 ///
@@ -31,10 +37,19 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
   String _imageContentType = 'image/jpeg';
   bool _friendsOnly = false;
   bool _busy = false;
+  MusicTrack? _selectedMusic;
+  late final MusicPlaybackController _musicPlayback;
   final TextEditingController _caption = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _musicPlayback = ref.read(musicPlaybackProvider);
+  }
+
+  @override
   void dispose() {
+    unawaited(_musicPlayback.stop());
     _caption.dispose();
     super.dispose();
   }
@@ -74,6 +89,18 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
       _mode = _StoryMode.text;
       _imageBytes = null;
     });
+  }
+
+  Future<void> _pickMusic() async {
+    final picked = await showMusicPicker(context, selected: _selectedMusic);
+    if (picked == null || !mounted) return;
+    setState(() => _selectedMusic = picked);
+    unawaited(
+      AnalyticsService.instance.track(
+        Events.musicAttached,
+        props: {'provider': picked.provider},
+      ),
+    );
   }
 
   bool get _canShare {
@@ -117,7 +144,7 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
         imageUrl = upload.url;
         imagePath = upload.path;
       }
-      await repo.createPost(
+      final story = await repo.createPost(
         content: captionText.isEmpty ? 'Shared a moment.' : captionText,
         category: 'late_night',
         mood: 'healing',
@@ -125,8 +152,10 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
         storyAudience: _friendsOnly ? 'friends' : 'everyone',
         imagePath: imagePath,
         imageUrl: imageUrl,
+        musicTrack: _selectedMusic,
         idempotencyKey: operationId,
       );
+      final musicWasDropped = _selectedMusic != null && !story.hasMusic;
       await outbox.discardStagedMedia(stagedMedia?.path);
       ref.invalidate(feedPostsProvider);
       ref.invalidate(homeStatsProvider);
@@ -136,32 +165,34 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
       if (!mounted) return;
       context.go('/feed');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Story posted for 24 hours.')),
+        SnackBar(
+          content: Text(
+            musicWasDropped
+                ? "Story posted, but music isn't available right now."
+                : 'Story posted for 24 hours.',
+          ),
+        ),
       );
     } catch (e) {
       if (!_shouldUploadImage || stagedMedia != null) {
         try {
-          await outbox.enqueue(
-            OutboxKind.post,
-            {
-              'content': captionText.isEmpty ? 'Shared a moment.' : captionText,
-              'category': 'late_night',
-              'mood': 'healing',
-              'isStory': true,
-              'storyAudience': _friendsOnly ? 'friends' : 'everyone',
-              'imagePath': imagePath,
-              'imageUrl': imageUrl,
-              if (stagedMedia != null) ...stagedMedia.toPayload(),
-            },
-            operationId: operationId,
-          );
+          await outbox.enqueue(OutboxKind.post, {
+            'content': captionText.isEmpty ? 'Shared a moment.' : captionText,
+            'category': 'late_night',
+            'mood': 'healing',
+            'isStory': true,
+            'storyAudience': _friendsOnly ? 'friends' : 'everyone',
+            'imagePath': imagePath,
+            'imageUrl': imageUrl,
+            if (stagedMedia != null) ...stagedMedia.toPayload(),
+            if (_selectedMusic != null)
+              'musicTrack': _musicTrackPayload(_selectedMusic!),
+          }, operationId: operationId);
           if (!mounted) return;
           context.go('/feed');
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                'Story queued and will post automatically.',
-              ),
+              content: Text('Story queued and will post automatically.'),
             ),
           );
           return;
@@ -199,6 +230,7 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
                       mode: _mode,
                       imageBytes: _imageBytes,
                       caption: _caption.text,
+                      musicTrack: _selectedMusic,
                     ),
                     const SizedBox(height: 18),
                     if (_mode == _StoryMode.text || _imageBytes != null)
@@ -216,6 +248,31 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
                       onTextOnly: _selectText,
                       onAudioNote: () => context.push('/whispers/new'),
                     ),
+                    if (flagEnabled(ref, 'vent_music', fallback: false)) ...[
+                      const SizedBox(height: 14),
+                      if (_selectedMusic == null)
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _pickMusic,
+                            icon: const Icon(Icons.music_note_rounded),
+                            label: const Text('Add Music'),
+                          ),
+                        )
+                      else
+                        MusicTrackCard(
+                          track: _selectedMusic!,
+                          onChange: _pickMusic,
+                          onRemove: () {
+                            unawaited(
+                              AnalyticsService.instance.track(
+                                Events.musicRemoved,
+                              ),
+                            );
+                            setState(() => _selectedMusic = null);
+                          },
+                        ),
+                    ],
                     const SizedBox(height: 18),
                     _PrivacyDurationCard(
                       friendsOnly: _friendsOnly,
@@ -234,8 +291,8 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
                   onPressed: _canShare ? _share : null,
                   style: FilledButton.styleFrom(
                     backgroundColor: VentlyColors.berryMagenta,
-                    disabledBackgroundColor:
-                        VentlyColors.berryMagenta.withOpacity(0.45),
+                    disabledBackgroundColor: VentlyColors.berryMagenta
+                        .withOpacity(0.45),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(28),
                     ),
@@ -255,7 +312,9 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
                             Text(
                               'Share to Story',
                               style: TextStyle(
-                                  fontWeight: FontWeight.w900, fontSize: 15),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 15,
+                              ),
                             ),
                             SizedBox(width: 6),
                             Icon(Icons.send_rounded, size: 16),
@@ -285,6 +344,22 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
         return 'image/jpeg';
     }
   }
+
+  Map<String, Object?> _musicTrackPayload(MusicTrack track) => {
+    'trackId': track.trackId,
+    'provider': track.provider,
+    'providerTrackId': track.providerTrackId,
+    'title': track.title,
+    'artist': track.artist,
+    'album': track.album,
+    'artworkUrl': track.artworkUrl,
+    'previewUrl': track.previewUrl,
+    'previewDurationMs': track.previewDurationMs,
+    'genre': track.genre,
+    'moodTags': track.moodTags,
+    'licenseCode': track.licenseCode,
+    'attributionText': track.attributionText,
+  };
 }
 
 // =========================================================================
@@ -317,8 +392,10 @@ class _Header extends StatelessWidget {
           ),
           const Spacer(),
           IconButton(
-            icon: Icon(Icons.settings_outlined,
-                color: context.ink.withOpacity(0.78)),
+            icon: Icon(
+              Icons.settings_outlined,
+              color: context.ink.withOpacity(0.78),
+            ),
             tooltip: 'Story settings',
             onPressed: () => context.push('/settings'),
           ),
@@ -337,10 +414,12 @@ class _LivePreview extends StatelessWidget {
     required this.mode,
     required this.imageBytes,
     required this.caption,
+    required this.musicTrack,
   });
   final _StoryMode mode;
   final Uint8List? imageBytes;
   final String caption;
+  final MusicTrack? musicTrack;
 
   @override
   Widget build(BuildContext context) {
@@ -381,8 +460,10 @@ class _LivePreview extends StatelessWidget {
               left: 16,
               top: 16,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.36),
                   borderRadius: BorderRadius.circular(14),
@@ -463,6 +544,16 @@ class _LivePreview extends StatelessWidget {
                     fontSize: 14,
                     height: 1.4,
                   ),
+                ),
+              ),
+            if (musicTrack != null)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 18,
+                child: Material(
+                  color: Colors.transparent,
+                  child: MusicTrackCard(track: musicTrack!, compact: true),
                 ),
               ),
           ],
@@ -672,14 +763,17 @@ class _PrivacyDurationCard extends StatelessWidget {
       child: Column(
         children: [
           ListTile(
-            leading: const Icon(Icons.remove_red_eye_outlined,
-                color: VentlyColors.berryMagenta),
+            leading: const Icon(
+              Icons.remove_red_eye_outlined,
+              color: VentlyColors.berryMagenta,
+            ),
             title: Text(
               'Privacy Settings',
               style: TextStyle(
-                  color: context.ink,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13.5),
+                color: context.ink,
+                fontWeight: FontWeight.w900,
+                fontSize: 13.5,
+              ),
             ),
             subtitle: Text(
               friendsOnly ? 'Friends only' : 'Everyone on Venttly',
@@ -695,19 +789,19 @@ class _PrivacyDurationCard extends StatelessWidget {
               onChanged: onFriendsToggle,
             ),
           ),
-          Divider(
-            color: VentlyColors.softMauve.withOpacity(0.30),
-            height: 1,
-          ),
+          Divider(color: VentlyColors.softMauve.withOpacity(0.30), height: 1),
           ListTile(
-            leading: const Icon(Icons.timer_outlined,
-                color: VentlyColors.berryMagenta),
+            leading: const Icon(
+              Icons.timer_outlined,
+              color: VentlyColors.berryMagenta,
+            ),
             title: Text(
               'Story Duration',
               style: TextStyle(
-                  color: context.ink,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13.5),
+                color: context.ink,
+                fontWeight: FontWeight.w900,
+                fontSize: 13.5,
+              ),
             ),
             trailing: const Text(
               '24 Hours',

@@ -76,7 +76,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   Widget build(BuildContext context) {
     final me = ref.watch(sessionProvider);
     final friendsAsync = ref.watch(myFriendsProvider);
-    final incoming = ref.watch(incomingFriendRequestsProvider).valueOrNull ??
+    final incoming =
+        ref.watch(incomingFriendRequestsProvider).valueOrNull ??
         const <FriendRequest>[];
     final suggestionsAsync = ref.watch(friendSuggestionsProvider);
     final tribeQuery = TribeQuery(
@@ -87,8 +88,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
         ? ref.watch(recommendedTribesProvider(tribeQuery))
         : null;
 
-    final filteredFriends =
-        _applyQuery(friendsAsync.valueOrNull ?? const [], _query.text);
+    final filteredFriends = _applyQuery(
+      friendsAsync.valueOrNull ?? const [],
+      _query.text,
+    );
     final grouped = _groupAlphabetically(filteredFriends);
 
     return Scaffold(
@@ -115,9 +118,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                   ),
                 ),
                 if (_view == _CircleView.friends) ...[
-                  SliverToBoxAdapter(
-                    child: _InstantConnectCard(me: me),
-                  ),
+                  SliverToBoxAdapter(child: _InstantConnectCard(me: me)),
                   if (incoming.isNotEmpty)
                     SliverToBoxAdapter(
                       child: _RequestsSection(incoming: incoming),
@@ -163,7 +164,12 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, HomeShell.navClearance),
+                      padding: const EdgeInsets.fromLTRB(
+                        20,
+                        4,
+                        20,
+                        HomeShell.navClearance,
+                      ),
                       sliver: SliverList.builder(
                         itemCount: grouped.length,
                         itemBuilder: (ctx, i) {
@@ -175,8 +181,12 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                               children: [
                                 if (entry.letter.isNotEmpty)
                                   Padding(
-                                    padding:
-                                        const EdgeInsets.fromLTRB(4, 14, 4, 6),
+                                    padding: const EdgeInsets.fromLTRB(
+                                      4,
+                                      14,
+                                      4,
+                                      6,
+                                    ),
                                     child: Text(
                                       entry.letter,
                                       style: const TextStyle(
@@ -187,9 +197,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                                     ),
                                   ),
                                 for (final f in entry.friends)
-                                  RepaintBoundary(
-                                    child: _FriendRow(friend: f),
-                                  ),
+                                  RepaintBoundary(child: _FriendRow(friend: f)),
                               ],
                             ),
                           );
@@ -233,7 +241,12 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 6, 20, HomeShell.navClearance),
+                      padding: const EdgeInsets.fromLTRB(
+                        20,
+                        6,
+                        20,
+                        HomeShell.navClearance,
+                      ),
                       sliver: SliverList.builder(
                         itemCount: recommendationsAsync.valueOrNull!.length,
                         itemBuilder: (context, index) {
@@ -264,7 +277,11 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     final cleaned = q.trim().toLowerCase();
     if (cleaned.isEmpty) return all;
     return all
-        .where((f) => f.pseudonym.toLowerCase().contains(cleaned))
+        .where(
+          (f) =>
+              f.pseudonym.toLowerCase().contains(cleaned) ||
+              f.displayName.toLowerCase().contains(cleaned),
+        )
         .toList();
   }
 
@@ -292,7 +309,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   static const _kAlphabetIndexFrom = 12;
 
   List<_AlphabeticalGroup> _groupAlphabetically(List<FriendSummary> friends) {
-    final sorted = [...friends]..sort((a, b) {
+    final sorted = [...friends]
+      ..sort((a, b) {
         if (_sort == _FriendSort.favorites) {
           final fav = (b.isFavorite ? 1 : 0) - (a.isFavorite ? 1 : 0);
           if (fav != 0) return fav;
@@ -342,8 +360,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.shield_outlined, color: context.ink),
-                title: const Text('Blocked accounts',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Blocked accounts',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _openBlockedSheet(context);
@@ -352,8 +372,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.outbox_outlined, color: context.ink),
-                title: const Text('Sent requests',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Sent requests',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _openOutgoingSheet(context);
@@ -442,10 +464,7 @@ class _AlphabeticalGroup {
 // =========================================================================
 
 class _CircleViewTabs extends StatelessWidget {
-  const _CircleViewTabs({
-    required this.selected,
-    required this.onSelected,
-  });
+  const _CircleViewTabs({required this.selected, required this.onSelected});
 
   final _CircleView selected;
   final ValueChanged<_CircleView> onSelected;
@@ -660,10 +679,7 @@ class _TribeExploreControls extends StatelessWidget {
 }
 
 class _RecommendedTribeCard extends ConsumerStatefulWidget {
-  const _RecommendedTribeCard({
-    super.key,
-    required this.recommendation,
-  });
+  const _RecommendedTribeCard({super.key, required this.recommendation});
 
   final TribeRecommendation recommendation;
 
@@ -714,9 +730,9 @@ class _RecommendedTribeCardState extends ConsumerState<_RecommendedTribeCard> {
       ref.invalidate(tribesProvider);
       ref.invalidate(recommendedTribesProvider);
       ref.invalidate(tribeBySlugProvider(tribe.slug));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('You joined ${tribe.name}.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('You joined ${tribe.name}.')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -896,10 +912,7 @@ class _FriendsHeader extends StatelessWidget {
             dimension: 46,
             child: IconButton(
               tooltip: 'Notifications',
-              icon: VentlyNotificationBell(
-                color: context.ink,
-                size: 23,
-              ),
+              icon: VentlyNotificationBell(color: context.ink, size: 23),
               style: IconButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.surface,
                 side: const BorderSide(color: VentlyColors.softMauve),
@@ -970,7 +983,9 @@ class _InstantConnectCard extends StatelessWidget {
                 child: SizedBox(
                   height: 46,
                   child: FilledButton.icon(
-                    onPressed: me == null ? null : () => _showMyQr(context, me!),
+                    onPressed: me == null
+                        ? null
+                        : () => _showMyQr(context, me!),
                     icon: const Icon(Icons.qr_code_2_rounded, size: 19),
                     label: const Text(
                       'My QR',
@@ -1004,7 +1019,6 @@ class _InstantConnectCard extends StatelessWidget {
       ),
     );
   }
-
 
   void _shareLink(BuildContext context, AppUser me) {
     final link = 'https://venttly.app/u/${me.anonymousPseudonym}';
@@ -1057,11 +1071,14 @@ class _InstantConnectCard extends StatelessWidget {
               _RealQrCard(handle: me.anonymousPseudonym),
               const SizedBox(height: 14),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
-                  color:
-                      context.isDark ? context.glass() : VentlyColors.cardBlush,
+                  color: context.isDark
+                      ? context.glass()
+                      : VentlyColors.cardBlush,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
@@ -1187,8 +1204,12 @@ class _RequestsSection extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Padding(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    20,
+                                    0,
+                                    20,
+                                    12,
+                                  ),
                                   child: Text(
                                     'Friend requests · ${incoming.length}',
                                     style: TextStyle(
@@ -1207,9 +1228,8 @@ class _RequestsSection extends ConsumerWidget {
                                       24,
                                     ),
                                     itemCount: incoming.length,
-                                    itemBuilder: (_, index) => _RequestCard(
-                                      request: incoming[index],
-                                    ),
+                                    itemBuilder: (_, index) =>
+                                        _RequestCard(request: incoming[index]),
                                   ),
                                 ),
                               ],
@@ -1356,8 +1376,10 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
               child: IconButton(
                 tooltip: 'Ignore',
                 onPressed: () => _decide(accept: false),
-                icon: const Icon(Icons.close_rounded,
-                    color: VentlyColors.roseDeep),
+                icon: const Icon(
+                  Icons.close_rounded,
+                  color: VentlyColors.roseDeep,
+                ),
                 style: IconButton.styleFrom(
                   backgroundColor: VentlyColors.roseTint,
                 ),
@@ -1394,8 +1416,9 @@ class _QuickSuggestionsSection extends StatelessWidget {
               decoration: BoxDecoration(
                 color: context.glass(0.9),
                 borderRadius: BorderRadius.circular(22),
-                border:
-                    Border.all(color: VentlyColors.softMauve.withOpacity(0.3)),
+                border: Border.all(
+                  color: VentlyColors.softMauve.withOpacity(0.3),
+                ),
               ),
             ),
           ),
@@ -1457,9 +1480,9 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
       setState(() => _sent = true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not send: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not send: $e')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1538,7 +1561,9 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
                         width: 14,
                         height: 14,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: VentlyColors.berryMagenta),
+                          strokeWidth: 2,
+                          color: VentlyColors.berryMagenta,
+                        ),
                       )
                     : Text(
                         _sent ? 'PENDING' : 'ADD',
@@ -1617,13 +1642,17 @@ class _MyFriendsHeader extends StatelessWidget {
             decoration: BoxDecoration(
               color: context.glass(0.9),
               borderRadius: BorderRadius.circular(22),
-              border:
-                  Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
+              border: Border.all(
+                color: VentlyColors.softMauve.withOpacity(0.4),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.search_rounded,
-                    size: 18, color: VentlyColors.berryMagenta),
+                const Icon(
+                  Icons.search_rounded,
+                  size: 18,
+                  color: VentlyColors.berryMagenta,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
@@ -1665,15 +1694,13 @@ class _FriendRow extends ConsumerWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 13),
           decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: VentlyColors.softMauve),
-            ),
+            border: Border(bottom: BorderSide(color: VentlyColors.softMauve)),
           ),
           child: Row(
             children: [
               ProfileAvatar(
                 avatarSeed: friend.avatarSeed,
-                label: friend.pseudonym,
+                label: friend.displayName,
                 profilePhotoUrl: friend.profilePhotoUrl,
                 size: 52,
                 showVerifiedBadge: friend.isVerified,
@@ -1688,7 +1715,7 @@ class _FriendRow extends ConsumerWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            friend.pseudonym,
+                            friend.displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1719,8 +1746,11 @@ class _FriendRow extends ConsumerWidget {
               _FavoriteHeart(friend: friend),
               IconButton(
                 visualDensity: VisualDensity.compact,
-                icon: Icon(Icons.more_horiz_rounded,
-                    color: context.inkMuted, size: 20),
+                icon: Icon(
+                  Icons.more_horiz_rounded,
+                  color: context.inkMuted,
+                  size: 20,
+                ),
                 onPressed: () => _showActions(context, ref),
               ),
             ],
@@ -1767,8 +1797,10 @@ class _FriendRow extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.person_outline, color: context.ink),
-                title: const Text('View profile',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'View profile',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(sheetCtx);
                   context.push('/user/${friend.userId}');
@@ -1777,18 +1809,21 @@ class _FriendRow extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.chat_bubble_outline, color: context.ink),
-                title: const Text('Message',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Message',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
                   try {
-                    final room =
-                        await ref.read(repositoryProvider).sendMessageRequest(
-                              peerUserId: friend.userId,
-                              peerPseudonym: friend.pseudonym,
-                              peerAvatarSeed: friend.avatarSeed,
-                              preview: 'Hey',
-                            );
+                    final room = await ref
+                        .read(repositoryProvider)
+                        .sendMessageRequest(
+                          peerUserId: friend.userId,
+                          peerPseudonym: friend.pseudonym,
+                          peerAvatarSeed: friend.avatarSeed,
+                          preview: 'Hey',
+                        );
                     if (context.mounted) {
                       GoRouter.of(context).push('/chat/${room.roomId}');
                     }
@@ -1807,8 +1842,10 @@ class _FriendRow extends ConsumerWidget {
                   color: context.ink,
                   muted: true,
                 ),
-                title: const Text('Mute notifications',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Mute notifications',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(sheetCtx);
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -1821,8 +1858,10 @@ class _FriendRow extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.person_remove_alt_1, color: context.ink),
-                title: const Text('Remove friend',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Remove friend',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
                   await ref.read(repositoryProvider).unfriend(friend.userId);
@@ -1832,8 +1871,10 @@ class _FriendRow extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.block,
-                    color: Theme.of(context).colorScheme.error),
+                leading: Icon(
+                  Icons.block,
+                  color: Theme.of(context).colorScheme.error,
+                ),
                 title: Text(
                   'Block',
                   style: TextStyle(
@@ -1908,7 +1949,8 @@ class _OutgoingSheet extends ConsumerWidget {
   const _OutgoingSheet();
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final outgoing = ref.watch(outgoingFriendRequestsProvider).valueOrNull ??
+    final outgoing =
+        ref.watch(outgoingFriendRequestsProvider).valueOrNull ??
         const <FriendRequest>[];
     return DraggableScrollableSheet(
       initialChildSize: 0.55,
@@ -1947,13 +1989,15 @@ class _OutgoingSheet extends ConsumerWidget {
                           final r = outgoing[i];
                           return Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: context.glass(0.9),
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
-                                  color:
-                                      VentlyColors.softMauve.withOpacity(0.3)),
+                                color: VentlyColors.softMauve.withOpacity(0.3),
+                              ),
                             ),
                             child: Row(
                               children: [
@@ -1992,7 +2036,8 @@ class _OutgoingSheet extends ConsumerWidget {
                                         .read(repositoryProvider)
                                         .declineFriendRequest(r.friendshipId);
                                     ref.invalidate(
-                                        outgoingFriendRequestsProvider);
+                                      outgoingFriendRequestsProvider,
+                                    );
                                   },
                                   child: const Text(
                                     'Cancel',
@@ -2085,8 +2130,9 @@ class _ListSkeleton extends StatelessWidget {
             decoration: BoxDecoration(
               color: context.glass(0.9),
               borderRadius: BorderRadius.circular(18),
-              border:
-                  Border.all(color: VentlyColors.softMauve.withOpacity(0.3)),
+              border: Border.all(
+                color: VentlyColors.softMauve.withOpacity(0.3),
+              ),
             ),
           ),
         ),

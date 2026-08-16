@@ -11,6 +11,7 @@ import '../theme/colors.dart';
 import '../theme/vent_card_style.dart';
 import 'anonymous_avatar.dart';
 import 'mood_chip.dart';
+import 'music_track_card.dart';
 import 'poll_card.dart';
 import 'premium_motion.dart';
 import 'profile_avatar.dart';
@@ -40,10 +41,12 @@ class PostCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final cardBackground = VentCardStyle.parse(post.cardBackgroundColor);
-    final cardText = VentCardStyle.parse(VentCardStyle.readableTextFor(
-      post.cardBackgroundColor,
-      post.cardTextColor,
-    ));
+    final cardText = VentCardStyle.parse(
+      VentCardStyle.readableTextFor(
+        post.cardBackgroundColor,
+        post.cardTextColor,
+      ),
+    );
     final muted = (cardText ?? scheme.onSurface).withOpacity(0.55);
     final dmDisabled = FeedCategories.dmRestricted.contains(post.categoryName);
     final me = ref.watch(sessionProvider);
@@ -106,6 +109,7 @@ class PostCard extends ConsumerWidget {
                         UserProfileLink(
                           userId: post.authorId!,
                           pseudonym: post.authorPseudonym,
+                          displayName: post.authorDisplayName,
                           avatarSeed: post.authorAvatarSeed,
                           profilePhotoUrl: post.authorProfilePhotoUrl,
                           size: 36,
@@ -113,7 +117,7 @@ class PostCard extends ConsumerWidget {
                       else
                         ProfileAvatar(
                           avatarSeed: post.authorAvatarSeed,
-                          label: post.authorPseudonym,
+                          label: post.authorDisplayName,
                           profilePhotoUrl: post.authorProfilePhotoUrl,
                           size: 36,
                         ),
@@ -127,10 +131,11 @@ class PostCard extends ConsumerWidget {
                                 Flexible(
                                   child: post.authorId != null
                                       ? InkWell(
-                                          onTap: () => context
-                                              .push('/user/${post.authorId}'),
+                                          onTap: () => context.push(
+                                            '/user/${post.authorId}',
+                                          ),
                                           child: Text(
-                                            post.authorPseudonym,
+                                            post.authorDisplayName,
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w800,
                                             ),
@@ -138,7 +143,7 @@ class PostCard extends ConsumerWidget {
                                           ),
                                         )
                                       : Text(
-                                          post.authorPseudonym,
+                                          post.authorDisplayName,
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w800,
                                           ),
@@ -151,8 +156,11 @@ class PostCard extends ConsumerWidget {
                                 ],
                                 if (post.authorKarma >= 10) ...[
                                   const SizedBox(width: 4),
-                                  Icon(Icons.auto_awesome,
-                                      size: 11, color: scheme.primary),
+                                  Icon(
+                                    Icons.auto_awesome,
+                                    size: 11,
+                                    color: scheme.primary,
+                                  ),
                                   const SizedBox(width: 2),
                                   Text(
                                     PostCard.compactNumber(post.authorKarma),
@@ -172,7 +180,9 @@ class PostCard extends ConsumerWidget {
                                   const SizedBox(width: 6),
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: VentlyColors.berryMagenta
                                           .withOpacity(0.14),
@@ -181,9 +191,11 @@ class PostCard extends ConsumerWidget {
                                     child: const Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.star,
-                                            size: 10,
-                                            color: VentlyColors.berryMagenta),
+                                        Icon(
+                                          Icons.star,
+                                          size: 10,
+                                          color: VentlyColors.berryMagenta,
+                                        ),
                                         SizedBox(width: 3),
                                         Text(
                                           'KEEPER\'S PICK',
@@ -200,8 +212,11 @@ class PostCard extends ConsumerWidget {
                                 ],
                                 if (post.isLocked) ...[
                                   const SizedBox(width: 6),
-                                  Icon(Icons.lock_outline,
-                                      size: 12, color: muted),
+                                  Icon(
+                                    Icons.lock_outline,
+                                    size: 12,
+                                    color: muted,
+                                  ),
                                 ],
                                 if (post.isEdited) ...[
                                   const SizedBox(width: 4),
@@ -280,15 +295,30 @@ class PostCard extends ConsumerWidget {
                       height: 1.4,
                     ),
                   ),
+                  if (post.musicTrack != null) ...[
+                    const SizedBox(height: 10),
+                    MusicTrackCard(
+                      track: post.musicTrack!,
+                      startMs: post.musicStartMs ?? 0,
+                      durationMs: post.musicDurationMs,
+                      volume: post.musicVolume ?? 0.75,
+                      compact: true,
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   Consumer(
                     builder: (ctx, r, _) {
-                      final poll =
-                          r.watch(pollForPostProvider(post.postId)).valueOrNull;
+                      final poll = r
+                          .watch(pollForPostProvider(post.postId))
+                          .valueOrNull;
                       if (poll == null) return const SizedBox.shrink();
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: PollCard(poll: poll, compact: true),
+                        child: PollCard(
+                          poll: poll,
+                          compact: true,
+                          votingDisabled: isMine,
+                        ),
                       );
                     },
                   ),
@@ -344,7 +374,9 @@ class PostCard extends ConsumerWidget {
                             await ref
                                 .read(repositoryProvider)
                                 .setPostCommentsLock(
-                                    postId: post.postId, locked: v == 'lock');
+                                  postId: post.postId,
+                                  locked: v == 'lock',
+                                );
                             ref.invalidate(postByIdProvider(post.postId));
                             ref.invalidate(feedPostsProvider);
                           } else if (v == 'keeper_pick') {
@@ -383,14 +415,17 @@ class PostCard extends ConsumerWidget {
                               child: Row(
                                 children: [
                                   Icon(
-                                      post.isLocked
-                                          ? Icons.lock_open_outlined
-                                          : Icons.lock_outline,
-                                      size: 16),
+                                    post.isLocked
+                                        ? Icons.lock_open_outlined
+                                        : Icons.lock_outline,
+                                    size: 16,
+                                  ),
                                   const SizedBox(width: 8),
-                                  Text(post.isLocked
-                                      ? 'Unlock comments'
-                                      : 'Lock comments'),
+                                  Text(
+                                    post.isLocked
+                                        ? 'Unlock comments'
+                                        : 'Lock comments',
+                                  ),
                                 ],
                               ),
                             ),
@@ -411,15 +446,18 @@ class PostCard extends ConsumerWidget {
                               child: Row(
                                 children: [
                                   Icon(
-                                      post.isKeeperPick
-                                          ? Icons.star
-                                          : Icons.star_outline,
-                                      size: 16,
-                                      color: VentlyColors.berryMagenta),
+                                    post.isKeeperPick
+                                        ? Icons.star
+                                        : Icons.star_outline,
+                                    size: 16,
+                                    color: VentlyColors.berryMagenta,
+                                  ),
                                   const SizedBox(width: 8),
-                                  Text(post.isKeeperPick
-                                      ? 'Unpick from Plug\'s'
-                                      : 'Mark as Plug\'s Pick'),
+                                  Text(
+                                    post.isKeeperPick
+                                        ? 'Unpick from Plug\'s'
+                                        : 'Mark as Plug\'s Pick',
+                                  ),
                                 ],
                               ),
                             ),
@@ -490,7 +528,10 @@ class PostCard extends ConsumerWidget {
 }
 
 Future<void> openReportPostSheet(
-    BuildContext context, WidgetRef ref, String postId) async {
+  BuildContext context,
+  WidgetRef ref,
+  String postId,
+) async {
   const reasons = <(String, String)>[
     ('self_harm', 'Self-harm or suicide concern'),
     ('hate', 'Hate speech'),
@@ -548,28 +589,23 @@ Future<void> openReportPostSheet(
   );
   if (choice == null) return;
   try {
-    await ref.read(repositoryProvider).reportPost(
-          postId: postId,
-          reason: choice,
-        );
+    await ref
+        .read(repositoryProvider)
+        .reportPost(postId: postId, reason: choice);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Thank you — a moderator will review.')),
     );
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Could not send report: $e')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Could not send report: $e')));
   }
 }
 
 class _PillAction extends StatelessWidget {
-  const _PillAction({
-    required this.icon,
-    required this.label,
-    this.onTap,
-  });
+  const _PillAction({required this.icon, required this.label, this.onTap});
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
@@ -588,7 +624,10 @@ class _PillAction extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-                color: muted, fontWeight: FontWeight.w600, fontSize: 12),
+              color: muted,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
@@ -636,16 +675,21 @@ class PromptCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.help_outline,
-                              size: 14, color: scheme.primary),
+                          Icon(
+                            Icons.help_outline,
+                            size: 14,
+                            color: scheme.primary,
+                          ),
                           const SizedBox(width: 4),
-                          Text('QUESTION OF THE DAY',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: scheme.primary,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.8,
-                              )),
+                          Text(
+                            'QUESTION OF THE DAY',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
                         ],
                       ),
                       Text(
@@ -668,7 +712,9 @@ class PromptCard extends StatelessWidget {
                   painter: _HeartBubbleBgPainter(scheme.primary),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 26, vertical: 24),
+                      horizontal: 26,
+                      vertical: 24,
+                    ),
                     child: Text(
                       '"${prompt.promptText}"',
                       textAlign: TextAlign.center,
@@ -692,8 +738,10 @@ class PromptCard extends StatelessWidget {
                     controller: controller,
                     decoration: const InputDecoration(
                       hintText: 'Answer Anonymously...',
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -778,7 +826,8 @@ class _ReactionButton extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final muted = scheme.onSurface.withOpacity(0.6);
     final r = post.myReaction;
-    final color = r != null ? scheme.primary : muted;
+    final isMine = post.ownedBy(ref.watch(sessionProvider)?.userId);
+    final color = r != null && !isMine ? scheme.primary : muted;
 
     Widget glyph;
     if (r == null) {
@@ -787,41 +836,50 @@ class _ReactionButton extends ConsumerWidget {
       // The default reaction renders as the filled brand heart.
       glyph = Icon(Icons.favorite, size: 18, color: color);
     } else {
-      glyph =
-          Text(PostReactions.emoji(r), style: const TextStyle(fontSize: 16));
+      glyph = Text(
+        PostReactions.emoji(r),
+        style: const TextStyle(fontSize: 16),
+      );
     }
 
-    return GestureDetector(
-      onLongPress: () => _openPicker(context, ref),
-      child: InkWell(
-        onTap: () async {
-          try {
-            await ref.read(repositoryProvider).react(post.postId, r ?? 'hug');
-          } catch (e) {
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Could not react: $e')),
-              );
-            }
-            return;
-          }
-          ref.invalidate(feedPostsProvider);
-          ref.invalidate(postByIdProvider(post.postId));
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Row(
-          children: [
-            glyph,
-            const SizedBox(width: 4),
-            Text(
-              PostCard.compactNumber(post.likesCount),
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
+    return Tooltip(
+      message: isMine ? 'You can’t react to your own Vent' : 'React',
+      child: GestureDetector(
+        onLongPress: isMine ? null : () => _openPicker(context, ref),
+        child: InkWell(
+          onTap: isMine
+              ? null
+              : () async {
+                  try {
+                    await ref
+                        .read(repositoryProvider)
+                        .react(post.postId, r ?? 'hug');
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Could not react: $e')),
+                      );
+                    }
+                    return;
+                  }
+                  ref.invalidate(feedPostsProvider);
+                  ref.invalidate(postByIdProvider(post.postId));
+                },
+          borderRadius: BorderRadius.circular(16),
+          child: Row(
+            children: [
+              glyph,
+              const SizedBox(width: 4),
+              Text(
+                PostCard.compactNumber(post.likesCount),
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -898,8 +956,10 @@ class _ReactionChoice extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(PostReactions.emoji(reactionKey),
-                style: const TextStyle(fontSize: 28)),
+            Text(
+              PostReactions.emoji(reactionKey),
+              style: const TextStyle(fontSize: 28),
+            ),
             const SizedBox(height: 4),
             Text(
               PostReactions.label(reactionKey),
@@ -941,9 +1001,7 @@ Future<void> openEditPostDialog(
         maxLines: 6,
         minLines: 3,
         autofocus: true,
-        decoration: const InputDecoration(
-          hintText: 'Reword your thought…',
-        ),
+        decoration: const InputDecoration(hintText: 'Reword your thought…'),
       ),
       actions: [
         TextButton(
@@ -961,24 +1019,23 @@ Future<void> openEditPostDialog(
   if (saved != true) return;
   if (next.isEmpty && !post.hasImage && !post.hasAudio) return;
   try {
-    final updated = await ref.read(repositoryProvider).editPost(
-          postId: post.postId,
-          newContent: next,
-        );
+    final updated = await ref
+        .read(repositoryProvider)
+        .editPost(postId: post.postId, newContent: next);
     if (!updated) {
       throw StateError('The post update was not accepted.');
     }
     ref.invalidate(postByIdProvider(post.postId));
     ref.invalidate(feedPostsProvider);
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Vent updated.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Vent updated.')));
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(_friendlyError(e))),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
   }
 }
 
@@ -1021,15 +1078,15 @@ Future<bool> confirmDeletePost(
     ref.invalidate(postByIdProvider(post.postId));
     ref.invalidate(feedPostsProvider);
     if (!context.mounted) return true;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Vent deleted.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Vent deleted.')));
     return true;
   } catch (e) {
     if (!context.mounted) return false;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(_friendlyError(e))),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
     return false;
   }
 }

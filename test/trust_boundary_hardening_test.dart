@@ -155,4 +155,73 @@ void main() {
           'SQL-language functions must not reference a relation before it exists',
     );
   });
+
+  test('staging promotion deploys the hardened privileged workers', () {
+    final workflow = File(
+      '.github/workflows/staging-supabase.yml',
+    ).readAsStringSync();
+
+    expect(
+      workflow,
+      contains('supabase functions deploy media-scan --use-api'),
+    );
+    expect(
+      workflow,
+      contains('supabase functions deploy notification-fanout --use-api'),
+    );
+    expect(workflow, contains('--no-verify-jwt'));
+    expect(
+      workflow,
+      contains('supabase/functions/_shared/internal_auth_test.ts'),
+    );
+    expect(
+      workflow,
+      contains('supabase/functions/media-scan/ownership_test.ts'),
+    );
+  });
+
+  test('production worker promotion is protected and revalidated', () {
+    final workflow = File(
+      '.github/workflows/production-supabase-functions.yml',
+    ).readAsStringSync();
+
+    expect(workflow, contains('environment: production'));
+    expect(workflow, contains('DEPLOY HARDENED FUNCTIONS TO PRODUCTION'));
+    expect(workflow, contains('secrets.SUPABASE_PRODUCTION_ACCESS_TOKEN'));
+    expect(
+      workflow,
+      contains('supabase functions deploy media-scan --use-api'),
+    );
+    expect(
+      workflow,
+      contains('supabase functions deploy notification-fanout --use-api'),
+    );
+    expect(workflow, contains('--no-verify-jwt'));
+    expect(
+      workflow,
+      contains('supabase/functions/_shared/internal_auth_test.ts'),
+    );
+    expect(
+      workflow,
+      contains('supabase/functions/media-scan/ownership_test.ts'),
+    );
+  });
+
+  test('internal SECURITY DEFINER helpers are not public RPCs', () {
+    final migration = File(
+      'supabase/migrations/20260816001834_revoke_internal_security_definer_helpers.sql',
+    ).readAsStringSync();
+    final pgTap = File(
+      'supabase/tests/database/0009_internal_helper_acl.test.sql',
+    ).readAsStringSync();
+
+    for (final helper in ['_notify', '_notify_mentions', '_writer_state']) {
+      expect(migration, contains('public.$helper'));
+      expect(pgTap, contains('public.$helper'));
+    }
+    expect(migration, contains('FROM PUBLIC, anon, authenticated'));
+    expect(migration, contains('TO service_role'));
+    expect(pgTap, contains("'authenticated'"));
+    expect(pgTap, contains("'anon'"));
+  });
 }

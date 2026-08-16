@@ -66,8 +66,7 @@ class WhisperCarouselTile extends StatelessWidget {
               top: 10,
               right: 10,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.42),
                   borderRadius: BorderRadius.circular(10),
@@ -115,14 +114,14 @@ class WhisperCarouselTile extends StatelessWidget {
                     children: [
                       ProfileAvatar(
                         avatarSeed: whisper.authorAvatarSeed,
-                        label: whisper.authorPseudonym,
+                        label: whisper.authorDisplayName,
                         profilePhotoUrl: whisper.authorProfilePhotoUrl,
                         size: 22,
                       ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '@${whisper.authorPseudonym}',
+                          whisper.authorDisplayName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -139,7 +138,9 @@ class WhisperCarouselTile extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(8),
@@ -154,8 +155,11 @@ class WhisperCarouselTile extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      Icon(Icons.graphic_eq_rounded,
-                          size: 11, color: Colors.white.withOpacity(0.8)),
+                      Icon(
+                        Icons.graphic_eq_rounded,
+                        size: 11,
+                        color: Colors.white.withOpacity(0.8),
+                      ),
                       const SizedBox(width: 3),
                       Text(
                         _shortCount(whisper.playsCount),

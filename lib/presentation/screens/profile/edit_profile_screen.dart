@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,7 +8,8 @@ import '../../widgets/tagged_text.dart';
 import '../../widgets/profile_avatar.dart';
 
 /// Edit Profile — the single place a member curates their public identity:
-/// username, profile picture, pronouns, public bio and city. Everything here
+/// display name, stable username, profile picture, pronouns, public bio and
+/// city. Everything here
 /// is written straight to the DB via [SessionController.updateProfile]; there
 /// is no local stub state.
 class EditProfileScreen extends ConsumerStatefulWidget {
@@ -21,6 +21,7 @@ class EditProfileScreen extends ConsumerStatefulWidget {
 
 class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   late final TextEditingController _username;
+  late final TextEditingController _displayName;
   late final TextEditingController _bio;
   late final TextEditingController _city;
   late final TextEditingController _customPronouns;
@@ -35,6 +36,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     super.initState();
     final me = ref.read(sessionProvider);
     _username = TextEditingController(text: me?.anonymousPseudonym ?? '');
+    _displayName = TextEditingController(text: me?.displayName ?? '');
     _bio = TextEditingController(text: me?.bio ?? '');
     _city = TextEditingController(text: me?.homeCity ?? '');
     final p = (me?.pronouns ?? '').trim();
@@ -53,6 +55,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   void dispose() {
     _username.dispose();
+    _displayName.dispose();
     _bio.dispose();
     _city.dispose();
     _customPronouns.dispose();
@@ -74,11 +77,11 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     final me = ref.read(sessionProvider);
     if (me == null) return;
 
-    final username = _username.text.trim();
-    if (username.length < 3 || username.length > 24) {
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Username must be 3–24 characters.'),
-      ));
+    final displayName = _displayName.text.trim();
+    if (displayName.isEmpty || displayName.length > 50) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Display name must be 1–50 characters.')),
+      );
       return;
     }
 
@@ -87,8 +90,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
     setState(() => _saving = true);
     try {
-      await ref.read(sessionProvider.notifier).updateProfile(
-            pseudonym: username == me.anonymousPseudonym ? null : username,
+      await ref
+          .read(sessionProvider.notifier)
+          .updateProfile(
+            displayName: displayName == me.displayName ? null : displayName,
             bio: newBio.isEmpty ? null : newBio,
             clearBio: newBio.isEmpty,
             pronouns: newPronouns.isEmpty ? null : newPronouns,
@@ -96,22 +101,28 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             homeCity: _city.text.trim().isEmpty ? null : _city.text.trim(),
           );
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(
-        backgroundColor: scheme.primary,
-        content: const Text('Profile updated.'),
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: scheme.primary,
+          content: const Text('Profile updated.'),
+        ),
+      );
       navigator.maybePop();
     } catch (e) {
       if (!mounted) return;
       // Surface the RPC's friendly message (e.g. "That username is taken.").
       final msg = e.toString().replaceFirst('Exception: ', '');
-      messenger.showSnackBar(SnackBar(
-        content: Text(msg.contains('taken')
-            ? 'That username is taken.'
-            : msg.length > 120
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            msg.contains('taken')
+                ? 'That username is taken.'
+                : msg.length > 120
                 ? 'Could not save profile. Please try again.'
-                : msg),
-      ));
+                : msg,
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -137,7 +148,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Save', style: TextStyle(fontWeight: FontWeight.w800)),
+                : const Text(
+                    'Save',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
           ),
         ],
       ),
@@ -150,7 +164,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               children: [
                 ProfileAvatar(
                   avatarSeed: me.avatarSeed,
-                  label: me.anonymousPseudonym,
+                  label: me.displayName,
                   profilePhotoUrl: me.profilePhotoUrl,
                   size: 96,
                 ),
@@ -165,16 +179,32 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           ),
           const SizedBox(height: 8),
 
-          // --- Username -----------------------------------------------------
+          // --- Public identity ---------------------------------------------
+          _Section(
+            title: 'Display name',
+            subtitle:
+                'Your readable anonymous persona name. It does not need to be unique.',
+            child: TextField(
+              controller: _displayName,
+              maxLength: 50,
+              textCapitalization: TextCapitalization.words,
+              decoration: _dec(scheme, hint: 'Midnight Soul'),
+            ),
+          ),
+
           _Section(
             title: 'Username',
+            subtitle:
+                'Your stable identifier for sign-in, mentions, search and links.',
             child: TextField(
               controller: _username,
-              maxLength: 24,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9_]')),
-              ],
-              decoration: _dec(scheme, prefix: '@', hint: 'yourhandle'),
+              readOnly: true,
+              enableInteractiveSelection: true,
+              decoration: _dec(
+                scheme,
+                prefix: '@',
+                hint: 'yourhandle',
+              ).copyWith(suffixIcon: const Icon(Icons.lock_outline)),
             ),
           ),
 
@@ -208,8 +238,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       setState(() => _selectedPreset = null);
                     }
                   },
-                  decoration:
-                      _dec(scheme, hint: 'Or type your own (e.g. ze/zir)'),
+                  decoration: _dec(
+                    scheme,
+                    hint: 'Or type your own (e.g. ze/zir)',
+                  ),
                 ),
               ],
             ),
@@ -218,16 +250,17 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           // --- Bio ----------------------------------------------------------
           _Section(
             title: 'Bio',
-            subtitle:
-                'A short public intro. Up to 160 characters. Tag with @.',
+            subtitle: 'A short public intro. Up to 160 characters. Tag with @.',
             child: TagAutocomplete(
               controller: _bio,
               child: TextField(
                 controller: _bio,
                 maxLength: 160,
                 maxLines: 3,
-                decoration: _dec(scheme,
-                    hint: 'What do you want people to know?'),
+                decoration: _dec(
+                  scheme,
+                  hint: 'What do you want people to know?',
+                ),
               ),
             ),
           ),
@@ -254,8 +287,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       counterText: '',
       filled: true,
       fillColor: scheme.surface.withOpacity(0.6),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: scheme.primary.withOpacity(0.2)),

@@ -10,9 +10,7 @@ void main() {
 
     expect(
       source,
-      contains(
-        '_mode == _StoryMode.photo && _imageBytes != null',
-      ),
+      contains('_mode == _StoryMode.photo && _imageBytes != null'),
     );
     expect(source, contains('if (_shouldUploadImage)'));
     expect(source, contains('if (!_shouldUploadImage || stagedMedia != null)'));
@@ -116,7 +114,7 @@ void main() {
       contains('CREATE OR REPLACE FUNCTION public.create_post_idempotent_v2'),
       reason: 'Installed clients need a safe rolling-upgrade adapter.',
     );
-    expect(backend, contains("'create_post_idempotent_v3'"));
+    expect(backend, contains("'create_post_idempotent_v4'"));
     expect(backend, contains("'p_is_story': isStory"));
     expect(composer, contains('isStory: true'));
     expect(
@@ -133,10 +131,12 @@ void main() {
 
   test('profile Stories use a dedicated active Story provider', () {
     final providers = File('lib/core/providers.dart').readAsStringSync();
-    final backend =
-        File('lib/data/services/supabase_backend.dart').readAsStringSync();
-    final profile = File('lib/presentation/screens/profile/profile_screen.dart')
-        .readAsStringSync();
+    final backend = File(
+      'lib/data/services/supabase_backend.dart',
+    ).readAsStringSync();
+    final profile = File(
+      'lib/presentation/screens/profile/profile_screen.dart',
+    ).readAsStringSync();
     final expiry = File(
       'supabase/migrations/'
       '20260728171259_enforce_story_expiry_at_database_boundary.sql',

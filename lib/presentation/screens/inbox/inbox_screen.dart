@@ -293,10 +293,8 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
 
     // Tribe chats belong under All and Active. They can never be a friend
     // request, which is the only thing Requests is for.
-    Iterable<TribeChatInboxSummary> tribeResult = filter ==
-            _InboxFilter.requests
-        ? const []
-        : tribes;
+    Iterable<TribeChatInboxSummary> tribeResult =
+        filter == _InboxFilter.requests ? const [] : tribes;
     if (q.isNotEmpty) {
       tribeResult = tribeResult.where(
         (t) =>

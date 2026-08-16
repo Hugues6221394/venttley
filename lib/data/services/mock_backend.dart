@@ -317,6 +317,9 @@ class MockBackend {
   String? react(String postId, String reaction) {
     final i = _posts.indexWhere((p) => p.postId == postId);
     if (i == -1) return null;
+    if (_posts[i].ownedBy(_me?.userId)) {
+      throw StateError('self_interaction_not_allowed');
+    }
     final current = _myReactions[postId];
     String? result;
     if (current == null) {
@@ -1440,6 +1443,10 @@ class MockBackend {
     );
     if (entry == null) return;
     final poll = entry.value;
+    final post = _posts.firstWhereOrNull((p) => p.postId == poll.postId);
+    if (post?.ownedBy(_me?.userId) ?? false) {
+      throw StateError('self_interaction_not_allowed');
+    }
     if (poll.myVoteOptionId != null) return; // one vote per user
     final next = Map<String, int>.from(poll.optionCounts);
     next[optionId] = (next[optionId] ?? 0) + 1;
@@ -2184,6 +2191,9 @@ class MockBackend {
     for (var i = 0; i < siblings.length; i++) {
       final n = siblings[i];
       if (n.commentId == id) {
+        if (n.ownedBy(_me?.userId)) {
+          throw StateError('self_interaction_not_allowed');
+        }
         final next = !n.likedByMe;
         siblings[i] = n.copyWith(
           likedByMe: next,

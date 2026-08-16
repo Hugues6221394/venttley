@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/analytics_events.dart';
 import 'core/constants.dart';
+import 'core/group_invite_links.dart';
 import 'core/logger.dart';
 import 'core/pii_scrubber.dart';
 import 'core/notification_prefs.dart';
@@ -26,6 +27,17 @@ import 'presentation/widgets/vently_premium_background.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   VentlyConfig.validateBackendConfiguration();
+
+  // Firebase background handlers must be registered before runApp. Preparing
+  // is consent-gated and native auto-init remains disabled, so this does not
+  // generate a token for new or opted-out users.
+  try {
+    if (await readNotificationsEnabledPref()) {
+      await PushRegistrationService.instance.prepareForConsentedUser();
+    }
+  } catch (_) {
+    Logger.instance.warn('push.consent_restore_failed');
+  }
 
   // Performance — bump the Flutter image cache from its 100/100MB
   // defaults so the feed + Whispers + Discover surfaces (lots of
@@ -244,10 +256,32 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
     _presenceTimer = null;
   }
 
+  void _handleRemoteNotificationOpen(Map<String, dynamic> data) {
+    final payload = NotificationPayload.fromFcmData(data);
+    if (payload == null) {
+      // Deliberately do not log attacker-controlled payload values.
+      Logger.instance.warn('push.notification_route_rejected');
+      return;
+    }
+    ref.read(pendingNotificationPayloadProvider.notifier).state = payload;
+    handlePendingNotificationNavigation(ref);
+  }
+
+  Future<void> _startPushForSession(String userId) async {
+    if (!await readNotificationsEnabledPref()) return;
+    if (!mounted || ref.read(sessionProvider)?.userId != userId) return;
+    await PushRegistrationService.instance.startForSession(
+      ref.read(repositoryProvider),
+      sessionKey: userId,
+    );
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _startPresenceHeartbeat();
+      final session = ref.read(sessionProvider);
+      if (session != null) unawaited(_startPushForSession(session.userId));
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       _stopPresenceHeartbeat();
@@ -258,6 +292,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   void dispose() {
     _stopPresenceHeartbeat();
     _appLinkSubscription?.cancel();
+    PushRegistrationService.instance.setNotificationOpenedHandler(null);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -266,17 +301,20 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    PushRegistrationService.instance.setNotificationOpenedHandler(
+      _handleRemoteNotificationOpen,
+    );
     _appLinkSubscription = AppLinks().uriLinkStream.listen(
       _handleAppLink,
       onError: (Object error, StackTrace stack) =>
           Logger.instance.warn('app_link.invalid', error: error, stack: stack),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      ref.read(sessionProvider.notifier).restore();
+      await ref.read(sessionProvider.notifier).restore();
       AnalyticsService.instance.track(Events.appOpened);
-      // Init local notifications. OS-level push (FCM/APNs) hooks land
-      // through the registerPushToken RPC once Firebase is wired —
-      // see docs/notifications.md.
+      // Foreground alerts stay on the existing Supabase realtime path. FCM is
+      // used for background delivery and tap routing only, avoiding duplicate
+      // alerts while the app is open.
       await NotificationsService.instance.init(
         onTap: (payload) {
           if (payload == null || payload.isEmpty) return;
@@ -287,7 +325,12 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       final notificationsOn = await readNotificationsEnabledPref();
       NotificationsService.instance.setEnabled(notificationsOn);
       if (notificationsOn) {
-        await NotificationsService.instance.requestPermissions();
+        final session = ref.read(sessionProvider);
+        if (session == null) {
+          await PushRegistrationService.instance.detachSession();
+        } else {
+          await _startPushForSession(session.userId);
+        }
       }
     });
   }
@@ -301,10 +344,11 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       if (next != null) {
         handlePendingNotificationNavigation(ref);
         _flushPendingDeepLink();
-        PushRegistrationService.instance.init(ref.read(repositoryProvider));
+        unawaited(_startPushForSession(next.userId));
         ref.invalidate(tribeChatInboxProvider);
         _startPresenceHeartbeat();
       } else {
+        unawaited(PushRegistrationService.instance.detachSession());
         _stopPresenceHeartbeat();
       }
     });
@@ -339,21 +383,5 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
 /// internal route. Keeping this parser strict prevents arbitrary deep links
 /// from bypassing the router's normal navigation and authentication rules.
 String? groupInvitePathFromUri(Uri uri) {
-  if (uri.scheme.toLowerCase() != 'venttly') return null;
-
-  String? token;
-  if (uri.host.toLowerCase() == 'group-invite' &&
-      uri.pathSegments.length == 1) {
-    token = uri.pathSegments.single;
-  } else if (uri.host.isEmpty &&
-      uri.pathSegments.length == 2 &&
-      uri.pathSegments.first.toLowerCase() == 'group-invite') {
-    token = uri.pathSegments.last;
-  }
-
-  final normalized = token?.trim();
-  if (normalized == null || normalized.isEmpty || normalized.length > 128) {
-    return null;
-  }
-  return '/group-invite/${Uri.encodeComponent(normalized)}';
+  return groupInviteRouteFromUri(uri);
 }

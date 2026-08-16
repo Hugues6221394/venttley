@@ -61,8 +61,10 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   Future<void> _pushRecent(String q) async {
     final clean = q.trim();
     if (clean.length < 2) return;
-    final next =
-        [clean, ..._recent.where((r) => r != clean)].take(_maxRecent).toList();
+    final next = [
+      clean,
+      ..._recent.where((r) => r != clean),
+    ].take(_maxRecent).toList();
     setState(() => _recent = next);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_recentKey, next);
@@ -85,9 +87,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     final me = ref.watch(sessionProvider);
     final query = ref.watch(discoverSearchQueryProvider);
     final searching = query.trim().length >= 2;
@@ -158,8 +158,11 @@ class _DiscoverTopBar extends ConsumerWidget {
               color: VentlyColors.berryMagenta.withOpacity(0.12),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.scatter_plot_rounded,
-                color: VentlyColors.berryMagenta, size: 14),
+            child: const Icon(
+              Icons.scatter_plot_rounded,
+              color: VentlyColors.berryMagenta,
+              size: 14,
+            ),
           ),
           const SizedBox(width: 8),
           const Text(
@@ -186,10 +189,14 @@ class _DiscoverTopBar extends ConsumerWidget {
                   right: 6,
                   top: 6,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    constraints:
-                        const BoxConstraints(minWidth: 16, minHeight: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 1,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
                     decoration: BoxDecoration(
                       color: VentlyColors.berryMagenta,
                       borderRadius: BorderRadius.circular(10),
@@ -253,8 +260,11 @@ class _SearchField extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.search_rounded,
-                size: 18, color: VentlyColors.berryMagenta),
+            const Icon(
+              Icons.search_rounded,
+              size: 18,
+              color: VentlyColors.berryMagenta,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: TextField(
@@ -331,8 +341,11 @@ class _SearchResultsSlivers extends ConsumerWidget {
                       color: Color(0xFFFFE3EC),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.search_off_rounded,
-                        color: VentlyColors.berryMagenta, size: 36),
+                    child: const Icon(
+                      Icons.search_off_rounded,
+                      color: VentlyColors.berryMagenta,
+                      size: 36,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   Text(
@@ -359,6 +372,7 @@ class _SearchResultsSlivers extends ConsumerWidget {
           );
         }
         final tribes = hits.where((h) => h.isTribe).toList();
+        final users = hits.where((h) => h.isUser).toList();
         final posts = hits.where((h) => h.isPost).toList();
         final topics = hits.where((h) => h.isTopic).toList();
 
@@ -366,6 +380,11 @@ class _SearchResultsSlivers extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(20, 6, 20, 116),
           sliver: SliverList(
             delegate: SliverChildListDelegate.fixed([
+              if (users.isNotEmpty) ...[
+                const _ResultsLabel('People'),
+                for (final h in users) _UserResultTile(hit: h),
+                const SizedBox(height: 18),
+              ],
               if (topics.isNotEmpty) ...[
                 const _ResultsLabel('Topics'),
                 Wrap(
@@ -388,6 +407,37 @@ class _SearchResultsSlivers extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _UserResultTile extends StatelessWidget {
+  const _UserResultTile({required this.hit});
+  final SearchHit hit;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+      onTap: () => context.push('/user/${hit.hitId}'),
+      leading: ProfileAvatar(
+        avatarSeed: hit.avatarSeed ?? 'default-orb',
+        label: hit.title,
+        profilePhotoUrl: hit.profilePhotoUrl,
+        size: 44,
+      ),
+      title: Text(
+        hit.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w900),
+      ),
+      subtitle: Text(
+        hit.subtitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: const Icon(Icons.chevron_right_rounded),
     );
   }
 }
@@ -478,8 +528,9 @@ class _TribeResultTile extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
-              border:
-                  Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
+              border: Border.all(
+                color: VentlyColors.softMauve.withOpacity(0.4),
+              ),
             ),
             child: Row(
               children: [
@@ -490,8 +541,11 @@ class _TribeResultTile extends StatelessWidget {
                     color: const Color(0xFFFFE3EC),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Icon(Icons.diversity_3,
-                      color: VentlyColors.berryMagenta, size: 22),
+                  child: const Icon(
+                    Icons.diversity_3,
+                    color: VentlyColors.berryMagenta,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -553,8 +607,9 @@ class _PostResultTile extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
-              border:
-                  Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
+              border: Border.all(
+                color: VentlyColors.softMauve.withOpacity(0.4),
+              ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -596,8 +651,11 @@ class _PostResultTile extends StatelessWidget {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Icon(Icons.favorite_border,
-                              size: 12, color: context.ink.withOpacity(0.6)),
+                          Icon(
+                            Icons.favorite_border,
+                            size: 12,
+                            color: context.ink.withOpacity(0.6),
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             PostCard.compactNumber(hit.likesCount ?? 0),
@@ -608,8 +666,11 @@ class _PostResultTile extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          Icon(Icons.chat_bubble_outline,
-                              size: 12, color: context.ink.withOpacity(0.6)),
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            size: 12,
+                            color: context.ink.withOpacity(0.6),
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             PostCard.compactNumber(hit.commentsCount ?? 0),
@@ -746,13 +807,16 @@ class _TrendingSearchesRow extends StatelessWidget {
                 onTap: () => onTap(s),
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                        color: VentlyColors.softMauve.withOpacity(0.5)),
+                      color: VentlyColors.softMauve.withOpacity(0.5),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -819,8 +883,10 @@ class _RecentRow extends StatelessWidget {
                   onTap: onClear,
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     child: Text(
                       'Clear',
                       style: TextStyle(
@@ -842,19 +908,25 @@ class _RecentRow extends StatelessWidget {
                 onTap: () => onTap(q),
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                        color: VentlyColors.softMauve.withOpacity(0.5)),
+                      color: VentlyColors.softMauve.withOpacity(0.5),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.history_rounded,
-                          size: 13, color: context.ink.withOpacity(0.6)),
+                      Icon(
+                        Icons.history_rounded,
+                        size: 13,
+                        color: context.ink.withOpacity(0.6),
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         q,
@@ -928,8 +1000,10 @@ class _SectionHeader extends StatelessWidget {
                 foregroundColor: VentlyColors.berryMagenta,
                 visualDensity: VisualDensity.compact,
               ),
-              child: Text(action!,
-                  style: const TextStyle(fontWeight: FontWeight.w900)),
+              child: Text(
+                action!,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
             )
           else if (trailingIcon != null)
             IconButton(
@@ -1074,7 +1148,9 @@ class _NoteworthyTribeCard extends StatelessWidget {
               child: Text(
                 tribe.joinedByMe ? 'Open Tribe' : 'Join Tribe',
                 style: const TextStyle(
-                    fontSize: 11.5, fontWeight: FontWeight.w900),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
           ),
@@ -1194,9 +1270,10 @@ class _FeaturedVoiceCard extends ConsumerWidget {
               color: context.isDark ? context.glass() : VentlyColors.cardBlush,
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                  color: context.isDark
-                      ? context.glassBorder
-                      : VentlyColors.softMauve.withOpacity(0.5)),
+                color: context.isDark
+                    ? context.glassBorder
+                    : VentlyColors.softMauve.withOpacity(0.5),
+              ),
             ),
             child: Text(
               '"${voice.topQuote.trim()}"',
@@ -1216,9 +1293,10 @@ class _FeaturedVoiceCard extends ConsumerWidget {
               _SoftTag(label: FeedCategories.label(voice.topCategory)),
               const SizedBox(width: 6),
               _SoftTag(
-                  label: voice.topMood.isEmpty
-                      ? 'Anonymous'
-                      : '${voice.topMood[0].toUpperCase()}${voice.topMood.substring(1)}'),
+                label: voice.topMood.isEmpty
+                    ? 'Anonymous'
+                    : '${voice.topMood[0].toUpperCase()}${voice.topMood.substring(1)}',
+              ),
               const Spacer(),
               _FollowButton(voice: voice, asPlusIcon: true),
             ],
@@ -1238,13 +1316,15 @@ class _MiniVoiceCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final textBlock = Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment:
-          horizontal ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      crossAxisAlignment: horizontal
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
       children: [
         Row(
           mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment:
-              horizontal ? MainAxisAlignment.start : MainAxisAlignment.center,
+          mainAxisAlignment: horizontal
+              ? MainAxisAlignment.start
+              : MainAxisAlignment.center,
           children: [
             Flexible(
               child: Text(
@@ -1349,9 +1429,9 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not send: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not send: $e')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1378,7 +1458,9 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : Icon(
                   _sent ? Icons.check_rounded : Icons.add_rounded,
@@ -1396,23 +1478,24 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
             : VentlyColors.berryMagenta,
         visualDensity: VisualDensity.compact,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       child: _busy
           ? const SizedBox(
               width: 14,
               height: 14,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.white),
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
             )
           : Text(
               _sent ? 'Pending' : 'Follow',
               style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 12),
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 12,
+              ),
             ),
     );
   }
@@ -1473,11 +1556,14 @@ class _RecommendedTile extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: (accent ?? VentlyColors.berryMagenta)
-                          .withOpacity(0.16),
+                      color: (accent ?? VentlyColors.berryMagenta).withOpacity(
+                        0.16,
+                      ),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -1517,13 +1603,17 @@ class _RecommendedTile extends StatelessWidget {
                 children: [
                   Icon(Icons.favorite_border, size: 14, color: context.ink),
                   const SizedBox(width: 5),
-                  Text(PostCard.compactNumber(post.likesCount),
-                      style: _metricStyle(context)),
+                  Text(
+                    PostCard.compactNumber(post.likesCount),
+                    style: _metricStyle(context),
+                  ),
                   const SizedBox(width: 14),
                   Icon(Icons.chat_bubble_outline, size: 13, color: context.ink),
                   const SizedBox(width: 5),
-                  Text(PostCard.compactNumber(post.commentsCount),
-                      style: _metricStyle(context)),
+                  Text(
+                    PostCard.compactNumber(post.commentsCount),
+                    style: _metricStyle(context),
+                  ),
                   const Spacer(),
                   Icon(Icons.bookmark_border, size: 17, color: context.ink),
                 ],
@@ -1535,11 +1625,8 @@ class _RecommendedTile extends StatelessWidget {
     );
   }
 
-  static TextStyle _metricStyle(BuildContext context) => TextStyle(
-        color: context.ink,
-        fontSize: 12,
-        fontWeight: FontWeight.w800,
-      );
+  static TextStyle _metricStyle(BuildContext context) =>
+      TextStyle(color: context.ink, fontSize: 12, fontWeight: FontWeight.w800);
 
   static String _ago(DateTime date) {
     final diff = DateTime.now().difference(date);

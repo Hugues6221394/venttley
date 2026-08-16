@@ -41,37 +41,42 @@ class SettingsScreen extends ConsumerWidget {
             ListTile(
               leading: ProfileAvatar(
                 avatarSeed: me.avatarSeed,
-                label: me.anonymousPseudonym,
+                label: me.displayName,
                 profilePhotoUrl: me.profilePhotoUrl,
                 size: 42,
               ),
               title: Text(
-                me.anonymousPseudonym,
+                me.displayName,
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
-              subtitle: ref.watch(keeperModeProvider).when(
+              subtitle: ref
+                  .watch(keeperModeProvider)
+                  .when(
                     data: (mode) => Text(
                       mode.label,
-                      style:
-                          TextStyle(color: scheme.onSurface.withOpacity(0.6)),
+                      style: TextStyle(
+                        color: scheme.onSurface.withOpacity(0.6),
+                      ),
                     ),
                     loading: () => Text(
                       me.userRole == 'super_admin'
                           ? 'Super Admin'
                           : me.isPlug
-                              ? 'Verified Plug'
-                              : 'Member',
-                      style:
-                          TextStyle(color: scheme.onSurface.withOpacity(0.6)),
+                          ? 'Verified Plug'
+                          : 'Member',
+                      style: TextStyle(
+                        color: scheme.onSurface.withOpacity(0.6),
+                      ),
                     ),
                     error: (_, __) => Text(
                       me.userRole == 'super_admin'
                           ? 'Super Admin'
                           : me.isPlug
-                              ? 'Verified Plug'
-                              : 'Member',
-                      style:
-                          TextStyle(color: scheme.onSurface.withOpacity(0.6)),
+                          ? 'Verified Plug'
+                          : 'Member',
+                      style: TextStyle(
+                        color: scheme.onSurface.withOpacity(0.6),
+                      ),
                     ),
                   ),
             ),
@@ -98,12 +103,17 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const _SectionHeader('Data & network'),
           SwitchListTile(
-            secondary: const Icon(Icons.data_saver_on_rounded,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Data Saver',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            secondary: const Icon(
+              Icons.data_saver_on_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Data Saver',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text(
-                'Lighter images, no whisper autoplay, less prefetch'),
+              'Lighter images, no whisper autoplay, less prefetch',
+            ),
             activeColor: VentlyColors.berryMagenta,
             value: ref.watch(dataSaverProvider),
             onChanged: (v) =>
@@ -111,39 +121,56 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const _SectionHeader('Account'),
           ListTile(
-            leading: const Icon(Icons.face_retouching_natural_rounded,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Avatar builder',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            leading: const Icon(
+              Icons.face_retouching_natural_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Avatar builder',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text('Colors, shape, and glow'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => context.push('/profile/avatar'),
           ),
           ListTile(
-            leading: const Icon(Icons.shield_outlined,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Password & security',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle:
-                const Text('Password, recovery email, 2FA, active sessions'),
+            leading: const Icon(
+              Icons.shield_outlined,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Password & security',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            subtitle: const Text(
+              'Password, recovery email, 2FA, active sessions',
+            ),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => context.push('/profile/password-security'),
           ),
           ListTile(
-            leading: const Icon(Icons.key_outlined,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Recovery phrase',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            leading: const Icon(
+              Icons.key_outlined,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Recovery phrase',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text('View your 12-word backup key'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => showRecoveryPhraseDialog(context, ref),
           ),
           if (me?.isPlug == true)
             ListTile(
-              leading: const Icon(Icons.dashboard_customize_rounded,
-                  color: VentlyColors.berryMagenta),
-              title: const Text('Plug dashboard',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
+              leading: const Icon(
+                Icons.dashboard_customize_rounded,
+                color: VentlyColors.berryMagenta,
+              ),
+              title: const Text(
+                'Plug dashboard',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
               subtitle: const Text('Manage tribes, prompts, and reports'),
               trailing: const Icon(Icons.chevron_right_rounded),
               // Use go(), not push(): the keeper studio lives in the bottom-nav
@@ -188,10 +215,14 @@ class SettingsScreen extends ConsumerWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.block_rounded,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Blocked accounts',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            leading: const Icon(
+              Icons.block_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Blocked accounts',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: Text(
               blocks.isEmpty ? 'No one blocked' : '${blocks.length} blocked',
             ),
@@ -202,10 +233,12 @@ class SettingsScreen extends ConsumerWidget {
             leading: const VentlyNotificationBell(
               color: VentlyColors.berryMagenta,
             ),
-            title: const Text('Notification alerts',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            title: const Text(
+              'Notification alerts',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text(
-              'Messages, friend requests, and reactions while Venttly is open',
+              'Allow message, friend-request, and activity alerts',
             ),
             trailing: Switch.adaptive(
               value: notificationsOn,
@@ -215,37 +248,51 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.inbox_outlined,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Activity inbox',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            leading: const Icon(
+              Icons.inbox_outlined,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Activity inbox',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text('Likes, replies, and friend activity'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => context.push('/notifications'),
           ),
           ListTile(
-            leading: const Icon(Icons.download_rounded,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Download my data',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            leading: const Icon(
+              Icons.download_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Download my data',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text('Export everything you\'ve shared (JSON)'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => _exportMyData(context, ref),
           ),
           const _SectionHeader('Safety'),
           ListTile(
-            leading: const Icon(Icons.favorite_rounded,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Crisis resources',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            leading: const Icon(
+              Icons.favorite_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Crisis resources',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text('Verified support contacts for Rwanda'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => _showCrisisSheet(context),
           ),
           const _SectionHeader('Session'),
           ListTile(
-            leading: Icon(Icons.logout_rounded,
-                color: scheme.error.withOpacity(0.85)),
+            leading: Icon(
+              Icons.logout_rounded,
+              color: scheme.error.withOpacity(0.85),
+            ),
             title: Text(
               'Sign out',
               style: TextStyle(
@@ -254,7 +301,8 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
             onTap: () async {
-              final confirmed = await showDialog<bool>(
+              final confirmed =
+                  await showDialog<bool>(
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('Sign out?'),
@@ -286,10 +334,14 @@ class SettingsScreen extends ConsumerWidget {
           if (me != null) ...[
             const _SectionHeader('Danger zone'),
             ListTile(
-              leading: const Icon(Icons.pause_circle_outline_rounded,
-                  color: VentlyColors.berryMagenta),
-              title: const Text('Deactivate account',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
+              leading: const Icon(
+                Icons.pause_circle_outline_rounded,
+                color: VentlyColors.berryMagenta,
+              ),
+              title: const Text(
+                'Deactivate account',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
               subtitle: const Text(
                 'Hide your profile, vents, and whispers. Reappears when you '
                 'log back in.',
@@ -298,8 +350,10 @@ class SettingsScreen extends ConsumerWidget {
               onTap: () => _confirmDeactivate(context, ref),
             ),
             ListTile(
-              leading: Icon(Icons.delete_forever_rounded,
-                  color: scheme.error.withOpacity(0.9)),
+              leading: Icon(
+                Icons.delete_forever_rounded,
+                color: scheme.error.withOpacity(0.9),
+              ),
               title: Text(
                 'Delete account',
                 style: TextStyle(
@@ -341,7 +395,8 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmDeactivate(BuildContext context, WidgetRef ref) async {
-    final ok = await showDialog<bool>(
+    final ok =
+        await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Deactivate account?'),
@@ -369,16 +424,17 @@ class SettingsScreen extends ConsumerWidget {
       if (context.mounted) context.go('/onboarding');
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not deactivate: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not deactivate: $e')));
       }
     }
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final scheme = Theme.of(context).colorScheme;
-    final ok = await showDialog<bool>(
+    final ok =
+        await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Delete account?'),
@@ -437,10 +493,9 @@ class SettingsScreen extends ConsumerWidget {
           .first;
       final file = File('${dir.path}/venttly-data-$stamp.json');
       await file.writeAsString(json);
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/json')],
-        subject: 'My Venttly data',
-      );
+      await Share.shareXFiles([
+        XFile(file.path, mimeType: 'application/json'),
+      ], subject: 'My Venttly data');
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text('Could not export your data: $e')),
@@ -506,10 +561,9 @@ class SettingsScreen extends ConsumerWidget {
                         Text(
                           r.reach,
                           style: TextStyle(
-                            color: Theme.of(ctx)
-                                .colorScheme
-                                .onSurface
-                                .withOpacity(0.7),
+                            color: Theme.of(
+                              ctx,
+                            ).colorScheme.onSurface.withOpacity(0.7),
                             fontSize: 13,
                           ),
                         ),
@@ -549,8 +603,9 @@ class _AppearanceOption extends StatelessWidget {
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color:
-            selected ? scheme.primary.withOpacity(0.14) : context.glass(0.55),
+        color: selected
+            ? scheme.primary.withOpacity(0.14)
+            : context.glass(0.55),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: selected ? scheme.primary : context.glassBorder,

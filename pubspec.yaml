@@ -68,9 +68,12 @@ dependencies:
   # Local, pre-upload Whisper voice effects. Audio-only LGPL build.
   ffmpeg_kit_flutter_new_audio: 2.4.4
 
-  # Foreground / in-app local notifications. OS-level push via FCM/APNs
-  # is wired through the `push_tokens` table — see docs/notifications.md.
+  # Foreground alerts plus opt-in OS-level push. Firebase auto-init is
+  # disabled natively until the user enables alerts; device tokens are then
+  # bound to the signed-in account through the `push_tokens` RPCs.
   flutter_local_notifications: ^17.2.3
+  firebase_core: ^4.12.1
+  firebase_messaging: ^16.4.3
 
   # Audio capture for Whispers + chat voice-notes
   record: ^5.1.2
@@ -117,3 +120,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/audio/

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,12 +7,14 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
 import '../../../core/user_friendly_errors.dart';
+import '../../../data/services/music_playback_service.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/home/home_discovery.dart';
 import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tagged_text.dart';
+import '../../widgets/music_track_card.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_empty_state.dart';
 import '../../widgets/vently_error_state.dart';
@@ -34,10 +38,12 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
   bool _busy = false;
   bool _paused = false;
   final Set<String> _viewedThisSession = {};
+  late final MusicPlaybackController _musicPlayback;
 
   @override
   void initState() {
     super.initState();
+    _musicPlayback = ref.read(musicPlaybackProvider);
     _progress = AnimationController(vsync: this)
       ..addStatusListener((status) {
         if (status == AnimationStatus.completed) _advance();
@@ -46,6 +52,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
 
   @override
   void dispose() {
+    unawaited(_musicPlayback.stop());
     _progress.dispose();
     _reply.dispose();
     super.dispose();
@@ -56,7 +63,8 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
     final mapped = posts.map((p) => VentStory.fromPost(p, now: now)).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     if (_stories.isNotEmpty) {
-      final unchanged = mapped.length == _stories.length &&
+      final unchanged =
+          mapped.length == _stories.length &&
           List.generate(mapped.length, (index) {
             final next = mapped[index];
             final current = _stories[index];
@@ -140,12 +148,12 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
   }
 
   String _reactionLabel(String reaction) => switch (reaction) {
-        'hug' => 'Hug sent',
-        'felt' => 'Relate sent',
-        'strong' => 'Been there sent',
-        'proud' => 'Spark sent',
-        _ => '${PostReactions.label(reaction)} sent',
-      };
+    'hug' => 'Hug sent',
+    'felt' => 'Relate sent',
+    'strong' => 'Been there sent',
+    'proud' => 'Spark sent',
+    _ => '${PostReactions.label(reaction)} sent',
+  };
 
   Future<void> _react(String reaction) async {
     final story = _stories[_index];
@@ -153,9 +161,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
     try {
       await ref.read(repositoryProvider).reactToStory(story.postId, reaction);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_reactionLabel(reaction))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_reactionLabel(reaction))));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -179,7 +187,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
     setState(() => _busy = true);
     _pause();
     try {
-      final room = await ref.read(repositoryProvider).replyToStory(
+      final room = await ref
+          .read(repositoryProvider)
+          .replyToStory(
             authorId: authorId,
             authorPseudonym: story.authorPseudonym,
             authorAvatarSeed: story.authorAvatarSeed,
@@ -192,17 +202,19 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
       _reply.clear();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(room.roomStatus == 'pending_request'
-              ? 'Reply sent — they\'ll see it in requests.'
-              : 'Reply delivered to Inbox.'),
+          content: Text(
+            room.roomStatus == 'pending_request'
+                ? 'Reply sent — they\'ll see it in requests.'
+                : 'Reply delivered to Inbox.',
+          ),
         ),
       );
       context.push('/chat/${room.roomId}');
     } on DmGatingException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -302,8 +314,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
   Future<void> _showStoryActivity() async {
     final story = _stories[_index];
     try {
-      final reactions =
-          await ref.read(storyReactionsProvider(story.postId).future);
+      final reactions = await ref.read(
+        storyReactionsProvider(story.postId).future,
+      );
       if (!mounted) return;
       await showModalBottomSheet<void>(
         context: context,
@@ -344,19 +357,17 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
                       Icon(
                         Icons.visibility_outlined,
                         size: 18,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withOpacity(0.58),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.58),
                       ),
                       const SizedBox(width: 7),
                       Text(
                         '${story.viewCount} unique ${story.viewCount == 1 ? 'view' : 'views'}',
                         style: TextStyle(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withOpacity(0.62),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.62),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -430,7 +441,8 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
 
   Future<void> _deleteCurrentStory() async {
     final story = _stories[_index];
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Delete this story?'),
@@ -444,8 +456,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
               ),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                style:
-                    FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                ),
                 child: const Text('Delete'),
               ),
             ],
@@ -459,8 +472,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
 
     setState(() => _busy = true);
     try {
-      final deleted =
-          await ref.read(repositoryProvider).deletePost(story.postId);
+      final deleted = await ref
+          .read(repositoryProvider)
+          .deletePost(story.postId);
       if (!deleted) throw StateError('Story was not deleted');
       ref.invalidate(feedPostsProvider);
       ref.invalidate(homeFriendStoriesProvider);
@@ -474,9 +488,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
         }
         _busy = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Story deleted.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Story deleted.')));
       if (_stories.isEmpty) {
         context.go('/feed');
       } else {
@@ -530,18 +544,22 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
           });
           if (_stories.isEmpty) {
             return const Center(
-              child:
-                  CircularProgressIndicator(color: VentlyColors.berryMagenta),
+              child: CircularProgressIndicator(
+                color: VentlyColors.berryMagenta,
+              ),
             );
           }
           final story = _stories[_index];
-          final authenticatedUserId =
-              ref.read(repositoryProvider).authenticatedUserId;
-          final isOwner = story.authorId != null &&
+          final authenticatedUserId = ref
+              .read(repositoryProvider)
+              .authenticatedUserId;
+          final isOwner =
+              story.authorId != null &&
               (story.authorId == me?.userId ||
                   story.authorId == authenticatedUserId);
-          final replyPermission =
-              ref.watch(storyReplyAllowedProvider(story.postId));
+          final replyPermission = ref.watch(
+            storyReplyAllowedProvider(story.postId),
+          );
           final replyAllowed =
               !isOwner && (replyPermission.valueOrNull ?? false);
           final canReply = story.authorId != null && !isOwner && replyAllowed;
@@ -552,7 +570,8 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
             busy: _busy,
             reply: _reply,
             canReply: canReply,
-            repliesDisabled: story.authorId != null &&
+            repliesDisabled:
+                story.authorId != null &&
                 !isOwner &&
                 replyPermission.hasValue &&
                 !replyAllowed,
@@ -710,7 +729,17 @@ class _ViewerBody extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _ReactionTray(onReact: onReact),
+                      if (story.musicTrack != null) ...[
+                        MusicTrackCard(
+                          track: story.musicTrack!,
+                          startMs: story.musicStartMs ?? 0,
+                          durationMs: story.musicDurationMs,
+                          volume: story.musicVolume ?? 0.75,
+                          compact: true,
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      if (!isOwner) _ReactionTray(onReact: onReact),
                       if (isOwner) ...[
                         const SizedBox(height: 10),
                         _StoryActivityButton(
@@ -791,8 +820,11 @@ class _StoryRepliesOff extends StatelessWidget {
       child: const Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.chat_bubble_outline_rounded,
-              color: Colors.white70, size: 18),
+          Icon(
+            Icons.chat_bubble_outline_rounded,
+            color: Colors.white70,
+            size: 18,
+          ),
           SizedBox(width: 8),
           Text(
             'Replies are off for this story',
@@ -834,8 +866,8 @@ class _ProgressSegments extends StatelessWidget {
                     final fill = i < current
                         ? 1.0
                         : i == current
-                            ? controller.value
-                            : 0.0;
+                        ? controller.value
+                        : 0.0;
                     return Stack(
                       children: [
                         Container(color: Colors.white.withOpacity(0.28)),
@@ -876,6 +908,7 @@ class _AuthorHeader extends StatelessWidget {
           UserProfileLink(
             userId: story.authorId!,
             pseudonym: story.authorPseudonym.replaceFirst('@', ''),
+            displayName: story.authorDisplayName,
             avatarSeed: story.authorAvatarSeed,
             profilePhotoUrl: story.authorProfilePhotoUrl,
             size: 38,
@@ -883,7 +916,7 @@ class _AuthorHeader extends StatelessWidget {
         else
           ProfileAvatar(
             avatarSeed: story.authorAvatarSeed,
-            label: story.authorPseudonym,
+            label: story.authorDisplayName,
             profilePhotoUrl: story.authorProfilePhotoUrl,
             size: 38,
           ),
@@ -893,9 +926,7 @@ class _AuthorHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                story.authorPseudonym.startsWith('@')
-                    ? story.authorPseudonym.substring(1)
-                    : story.authorPseudonym,
+                story.authorDisplayName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(

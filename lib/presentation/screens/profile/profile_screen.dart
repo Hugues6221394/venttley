@@ -88,9 +88,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("You don't keep any tribes yet."),
-          ),
+          const SnackBar(content: Text("You don't keep any tribes yet.")),
         );
       });
       return;
@@ -169,9 +167,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           headerSliverBuilder: (ctx, _) => [
             // Only clear the status bar — the transparent app bar is 0-height.
             SliverToBoxAdapter(
-              child: SizedBox(
-                height: MediaQuery.of(ctx).padding.top + 8,
-              ),
+              child: SizedBox(height: MediaQuery.of(ctx).padding.top + 8),
             ),
             SliverToBoxAdapter(
               key: _badgesKey,
@@ -291,10 +287,7 @@ class _ProfileTab {
 }
 
 class _ProfileLoadError extends StatelessWidget {
-  const _ProfileLoadError({
-    required this.label,
-    required this.onRetry,
-  });
+  const _ProfileLoadError({required this.label, required this.onRetry});
 
   final String label;
   final VoidCallback onRetry;
@@ -311,10 +304,7 @@ class _ProfileLoadError extends StatelessWidget {
             size: 34,
           ),
           const SizedBox(height: 12),
-          Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: onRetry,
@@ -332,9 +322,7 @@ class _ProfileLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: CircularProgressIndicator.adaptive(),
-    );
+    return const Center(child: CircularProgressIndicator.adaptive());
   }
 }
 
@@ -345,22 +333,32 @@ class _AboutTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bio =
-        (me.bio?.trim().isNotEmpty ?? false) ? me.bio!.trim() : 'No bio yet.';
+    final bio = (me.bio?.trim().isNotEmpty ?? false)
+        ? me.bio!.trim()
+        : 'No bio yet.';
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Text('About',
-            style: TextStyle(
-                fontWeight: FontWeight.w900, fontSize: 18, color: context.ink)),
+        Text(
+          'About',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 18,
+            color: context.ink,
+          ),
+        ),
         const SizedBox(height: 12),
-        Text(bio,
-            style: TextStyle(
-                fontSize: 14,
-                height: 1.5,
-                color: context.ink.withOpacity(0.8))),
+        Text(
+          bio,
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.5,
+            color: context.ink.withOpacity(0.8),
+          ),
+        ),
         const SizedBox(height: 20),
-        _row(context, 'Pseudonym', '@${me.anonymousPseudonym}'),
+        _row(context, 'Display name', me.displayName),
+        _row(context, 'Username', '@${me.anonymousPseudonym}'),
         _row(context, 'Verified', me.isVerified ? 'Yes' : 'Not yet'),
         _row(context, 'Karma', '${me.karmaPoints}'),
         if ((me.homeCountry ?? '').isNotEmpty)
@@ -370,20 +368,24 @@ class _AboutTab extends StatelessWidget {
   }
 
   Widget _row(BuildContext context, String k, String v) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(k,
-                style: TextStyle(
-                    color: context.ink.withOpacity(0.6),
-                    fontWeight: FontWeight.w600)),
-            Text(v,
-                style:
-                    TextStyle(fontWeight: FontWeight.w800, color: context.ink)),
-          ],
+    padding: const EdgeInsets.symmetric(vertical: 7),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          k,
+          style: TextStyle(
+            color: context.ink.withOpacity(0.6),
+            fontWeight: FontWeight.w600,
+          ),
         ),
-      );
+        Text(
+          v,
+          style: TextStyle(fontWeight: FontWeight.w800, color: context.ink),
+        ),
+      ],
+    ),
+  );
 }
 
 // =========================================================================
@@ -418,10 +420,7 @@ class _PostsTab extends StatelessWidget {
       padding: const EdgeInsets.only(top: 4, bottom: 110),
       children: [
         for (final p in posts)
-          PostCard(
-            post: p,
-            onTap: () => context.push('/post/${p.postId}'),
-          ),
+          PostCard(post: p, onTap: () => context.push('/post/${p.postId}')),
       ],
     );
   }
@@ -440,8 +439,11 @@ class _MyWhispersTab extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.graphic_eq_rounded,
-                  size: 48, color: VentlyColors.berryMagenta.withOpacity(0.45)),
+              Icon(
+                Icons.graphic_eq_rounded,
+                size: 48,
+                color: VentlyColors.berryMagenta.withOpacity(0.45),
+              ),
               const SizedBox(height: 14),
               const Text(
                 "You haven't posted a Whisper yet.",
@@ -472,9 +474,7 @@ class _MyWhispersTab extends ConsumerWidget {
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
-      children: [
-        for (final w in whispers) _MyWhisperTile(whisper: w),
-      ],
+      children: [for (final w in whispers) _MyWhisperTile(whisper: w)],
     );
   }
 }
@@ -507,8 +507,10 @@ class _MyWhisperTile extends ConsumerWidget {
                 : null,
           ),
           child: whisper.backgroundImageUrl == null
-              ? const Icon(Icons.graphic_eq_rounded,
-                  color: VentlyColors.berryMagenta)
+              ? const Icon(
+                  Icons.graphic_eq_rounded,
+                  color: VentlyColors.berryMagenta,
+                )
               : null,
         ),
         title: Text(
@@ -546,8 +548,10 @@ class _MyWhisperTile extends ConsumerWidget {
                     ),
                     TextButton(
                       onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('Delete',
-                          style: TextStyle(color: VentlyColors.berryMagenta)),
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(color: VentlyColors.berryMagenta),
+                      ),
                     ),
                   ],
                 ),
@@ -572,8 +576,10 @@ class _MyWhisperTile extends ConsumerWidget {
             PopupMenuItem(value: 'open', child: Text('Open in feed')),
             PopupMenuItem(
               value: 'delete',
-              child: Text('Delete',
-                  style: TextStyle(color: VentlyColors.berryMagenta)),
+              child: Text(
+                'Delete',
+                style: TextStyle(color: VentlyColors.berryMagenta),
+              ),
             ),
           ],
         ),
@@ -616,10 +622,7 @@ class _SavedTab extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Text(
               'Saved Whispers',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 15,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
             ),
           ),
           for (final w in whispers) _SavedWhisperTile(whisper: w),
@@ -629,17 +632,11 @@ class _SavedTab extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
               'Saved Vents',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 15,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
             ),
           ),
           for (final p in posts)
-            PostCard(
-              post: p,
-              onTap: () => context.push('/post/${p.postId}'),
-            ),
+            PostCard(post: p, onTap: () => context.push('/post/${p.postId}')),
         ],
       ],
     );
@@ -669,8 +666,10 @@ class _SavedWhisperTile extends StatelessWidget {
               : null,
         ),
         child: whisper.backgroundImageUrl == null
-            ? const Icon(Icons.graphic_eq_rounded,
-                color: VentlyColors.berryMagenta)
+            ? const Icon(
+                Icons.graphic_eq_rounded,
+                color: VentlyColors.berryMagenta,
+              )
             : null,
       ),
       title: Text(
@@ -715,7 +714,10 @@ class _TabsHeader extends SliverPersistentHeaderDelegate {
   double get maxExtent => 50;
   @override
   Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     // Container with alignment EXPANDS to the sliver's extent even when the
     // TabBar's intrinsic height is smaller (48 on most devices). Without it,
     // paintExtent < layoutExtent throws "SliverGeometry is not valid" on

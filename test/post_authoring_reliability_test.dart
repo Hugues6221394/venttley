@@ -78,9 +78,7 @@ void main() {
       final backend = File(
         'lib/data/services/supabase_backend.dart',
       ).readAsStringSync();
-      final outbox = File(
-        'lib/data/services/outbox.dart',
-      ).readAsStringSync();
+      final outbox = File('lib/data/services/outbox.dart').readAsStringSync();
 
       expect(styleMigration, contains('posts_card_background_color_check'));
       expect(styleMigration, contains('posts_card_text_color_check'));
@@ -98,7 +96,7 @@ void main() {
         styleVisibilityMigration,
         isNot(contains('u.shadow_banned IS NOT TRUE')),
       );
-      expect(backend, contains("'create_post_idempotent_v3'"));
+      expect(backend, contains("'create_post_idempotent_v4'"));
       expect(backend, contains("'p_card_background_color'"));
       expect(backend, contains("'post.read_after_write_degraded'"));
       expect(
@@ -128,7 +126,8 @@ void main() {
       expect(
         card,
         contains(
-            'if (next.isEmpty && !post.hasImage && !post.hasAudio) return;'),
+          'if (next.isEmpty && !post.hasImage && !post.hasAudio) return;',
+        ),
       );
       expect(
         card,
@@ -173,10 +172,7 @@ void main() {
       expect(find.text('Photo'), findsOneWidget);
       expect(find.text('Poll'), findsOneWidget);
       expect(find.text('Style'), findsOneWidget);
-      await tester.drag(
-        find.byType(ListView).last,
-        const Offset(-300, 0),
-      );
+      await tester.drag(find.byType(ListView).last, const Offset(-300, 0));
       await tester.pumpAndSettle();
       expect(find.text('24h Story'), findsOneWidget);
       expect(tester.takeException(), isNull);

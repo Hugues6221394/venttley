@@ -9,6 +9,8 @@ import '../data/repositories/vently_repository.dart';
 import '../data/services/analytics_service.dart';
 import '../data/services/feature_flags_service.dart';
 import '../data/services/moderation_service.dart';
+import '../data/services/music_playback_service.dart';
+import '../data/services/push_registration_service.dart';
 import '../data/services/whisper_player.dart';
 import '../domain/entities/entities.dart';
 import '../domain/home/home_discovery.dart';
@@ -19,10 +21,25 @@ import '../domain/keeper/keeper_overview.dart';
 import '../domain/keeper/keeper_mode.dart';
 import '../domain/keeper/keeper_studio_v2.dart';
 import 'analytics_events.dart';
+import 'logger.dart';
 
 final repositoryProvider = Provider<VentlyRepository>((ref) {
   return VentlyRepository();
 });
+
+final musicPlaybackProvider = ChangeNotifierProvider<MusicPlaybackController>((
+  ref,
+) => MusicPlaybackController());
+
+final musicCatalogProvider = FutureProvider.autoDispose
+    .family<List<MusicTrack>, ({String query, String? mood})>((
+      ref,
+      request,
+    ) async {
+      return ref
+          .watch(repositoryProvider)
+          .searchMusic(query: request.query, mood: request.mood);
+    });
 
 /// Active staff-managed automod keyword rules (migration 0085). Loaded once
 /// and kept until the app restarts; safe to fail (empty = built-ins only).
@@ -200,6 +217,16 @@ class SessionController extends StateNotifier<AppUser?> {
   Future<void> signOutEverywhere() async {
     AnalyticsService.instance.track(Events.logout);
     try {
+      await PushRegistrationService.instance.unregisterBeforeSignOut(_repo);
+    } catch (_) {
+      log.warn('push.signout_cleanup_failed');
+    }
+    try {
+      await _repo.unregisterAllPushTokens();
+    } catch (_) {
+      log.warn('push.global_signout_cleanup_failed');
+    }
+    try {
       await _repo.signOutEverywhere();
     } finally {
       state = null;
@@ -211,6 +238,7 @@ class SessionController extends StateNotifier<AppUser?> {
   /// state so every screen re-renders with the new username/photo/bio/pronouns.
   Future<void> updateProfile({
     String? pseudonym,
+    String? displayName,
     String? bio,
     String? pronouns,
     String? profilePhotoUrl,
@@ -221,6 +249,7 @@ class SessionController extends StateNotifier<AppUser?> {
   }) async {
     final updated = await _repo.updateMyProfile(
       pseudonym: pseudonym,
+      displayName: displayName,
       bio: bio,
       pronouns: pronouns,
       profilePhotoUrl: profilePhotoUrl,
@@ -305,6 +334,11 @@ class SessionController extends StateNotifier<AppUser?> {
 
   Future<void> logout() async {
     AnalyticsService.instance.track(Events.logout);
+    try {
+      await PushRegistrationService.instance.unregisterBeforeSignOut(_repo);
+    } catch (_) {
+      log.warn('push.signout_cleanup_failed');
+    }
     try {
       await _repo.logout();
     } finally {

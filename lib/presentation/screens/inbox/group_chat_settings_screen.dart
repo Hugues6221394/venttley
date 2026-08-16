@@ -1,9 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
@@ -15,6 +15,7 @@ import '../../widgets/report_reason_sheet.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/vently_premium_background.dart';
+import 'group_invite_screen.dart';
 
 class GroupChatSettingsScreen extends ConsumerStatefulWidget {
   const GroupChatSettingsScreen({super.key, required this.roomId});
@@ -514,12 +515,12 @@ class _GroupSettingsBody extends ConsumerWidget {
                       return ListTile(
                         leading: ProfileAvatar(
                           avatarSeed: friend.avatarSeed,
-                          label: friend.pseudonym,
+                          label: friend.displayName,
                           profilePhotoUrl: friend.profilePhotoUrl,
                           showVerifiedBadge: friend.isVerified,
                         ),
                         title: Text(
-                          '@${friend.pseudonym.replaceFirst('@', '')}',
+                          friend.displayName,
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                         trailing: Icon(
@@ -667,58 +668,24 @@ class _GroupSettingsBody extends ConsumerWidget {
       });
     }
     if (token == null || !context.mounted) return;
-    final link = 'venttly://group-invite/$token';
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 26),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Invite link',
-                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 8),
-              const Text('Anyone with this private link can request access.'),
-              const SizedBox(height: 16),
-              SelectableText(link, maxLines: 2),
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: () => Share.share(
-                  'Join $_title on Venttly: $link',
-                  subject: 'Venttly group invite',
-                ),
-                icon: const Icon(Icons.ios_share_rounded),
-                label: const Text('Share invite'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: link));
-                  showMessage('Invite link copied.');
-                },
-                icon: const Icon(Icons.copy_rounded),
-                label: const Text('Copy link'),
-              ),
-              if (room.isGroupOwner)
-                TextButton(
-                  onPressed: () async {
-                    await ref
-                        .read(repositoryProvider)
-                        .regenerateGroupInvite(room.roomId);
-                    refresh();
-                    if (sheetContext.mounted) Navigator.pop(sheetContext);
-                    showMessage('A new invite link is ready.');
-                  },
-                  child: const Text('Reset link'),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
+    try {
+      await showGroupInviteShareSheet(
+        context,
+        groupTitle: _title,
+        token: token!,
+        onFeedback: showMessage,
+        onReset: room.isGroupOwner
+            ? () async {
+                await ref
+                    .read(repositoryProvider)
+                    .regenerateGroupInvite(room.roomId);
+                refresh();
+              }
+            : null,
+      );
+    } on FormatException {
+      showMessage('This invite link is invalid. Reset it and try again.');
+    }
   }
 
   Future<void> _setNickname(

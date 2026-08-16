@@ -86,6 +86,7 @@ class SupabaseBackend {
 
   // Local mirrors of the calling user's "personalised" state.
   final Map<String, String> _myReactions = {};
+  final Map<String, String> _myWhisperReactions = {};
   final Set<String> _savedPosts = {};
   final Set<String> _joinedTribes = {};
 
@@ -95,7 +96,7 @@ class SupabaseBackend {
   String? get authenticatedUserId => _uid;
 
   static const _userBaseSelect =
-      'user_id, anonymous_pseudonym, avatar_seed, current_mood, '
+      'user_id, anonymous_pseudonym, display_name, avatar_seed, current_mood, '
       'user_role, is_verified, account_status, safety_tier, birth_year, '
       'karma_points, home_city, home_country, home_campus';
   static const _userSelectWithProfilePhoto =
@@ -715,7 +716,7 @@ class SupabaseBackend {
             offset > 0 ||
             category != null ||
             mood != null) {
-          return personalized;
+          return _hydratePosts(personalized);
         }
       } on PostgrestException catch (error) {
         if (!_isMissingRpc(error, 'personal_feed')) rethrow;
@@ -750,12 +751,13 @@ class SupabaseBackend {
     // because PostgREST's `or` filter doesn't cleanly express
     // "is_whisper = false OR created_at > now() - 24h" against a view.
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
-    return rows
+    final posts = rows
         .map<Post>(_postFromRow)
         .where(
           (p) => (!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff),
         )
         .toList();
+    return _hydratePosts(posts);
   }
 
   Future<List<Post>> friendStories({int limit = 24}) async {
@@ -763,7 +765,11 @@ class SupabaseBackend {
       final rows =
           await _client.rpc('friend_stories_for_me', params: {'p_limit': limit})
               as List<dynamic>;
-      return rows.cast<Map<String, dynamic>>().map<Post>(_postFromRow).toList();
+      final posts = rows
+          .cast<Map<String, dynamic>>()
+          .map<Post>(_postFromRow)
+          .toList();
+      return _hydratePosts(posts);
     } on PostgrestException catch (e) {
       if (!_isMissingRpc(e, 'friend_stories_for_me')) rethrow;
       return _clientFilteredFriendStories(limit: limit);
@@ -803,7 +809,9 @@ class SupabaseBackend {
         .select()
         .eq('post_id', postId)
         .maybeSingle();
-    return row == null ? null : _postFromRow(row);
+    if (row == null) return null;
+    final hydrated = await _hydratePosts([_postFromRow(row)]);
+    return hydrated.single;
   }
 
   Future<Post> createPost({
@@ -825,37 +833,69 @@ class SupabaseBackend {
     List<String>? pollOptions,
     String? cardBackgroundColor,
     String? cardTextColor,
+    MusicTrack? musicTrack,
+    int musicStartMs = 0,
+    int musicDurationMs = 15000,
+    double musicVolume = 0.75,
     String? idempotencyKey,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
     final hasImage = imageUrl != null && imageUrl.isNotEmpty;
-    final postId =
-        await _client.rpc(
-              'create_post_idempotent_v3',
-              params: {
-                'p_mutation_id': idempotencyKey ?? const Uuid().v4(),
-                'p_content': content,
-                'p_category_name': category,
-                'p_post_mood': mood,
-                'p_tribe_id': tribeId,
-                'p_space_id': spaceId,
-                'p_persona_id': personaId,
-                'p_is_whisper': isWhisper,
-                'p_is_story': isStory,
-                'p_story_audience': storyAudience,
-                'p_image_path': imagePath,
-                'p_image_url': imageUrl,
-                'p_audio_path': audioPath,
-                'p_audio_url': audioUrl,
-                'p_audio_duration_seconds': audioDurationSeconds,
-                'p_poll_question': pollQuestion,
-                'p_poll_options': pollOptions,
-                'p_card_background_color': cardBackgroundColor,
-                'p_card_text_color': cardTextColor,
-              },
-            )
-            as String;
+    final mutationId = idempotencyKey ?? const Uuid().v4();
+    var attachedMusic = musicTrack;
+    Map<String, dynamic> paramsFor(MusicTrack? track) => {
+      'p_mutation_id': mutationId,
+      'p_content': content,
+      'p_category_name': category,
+      'p_post_mood': mood,
+      'p_tribe_id': tribeId,
+      'p_space_id': spaceId,
+      'p_persona_id': personaId,
+      'p_is_whisper': isWhisper,
+      'p_is_story': isStory,
+      'p_story_audience': storyAudience,
+      'p_image_path': imagePath,
+      'p_image_url': imageUrl,
+      'p_audio_path': audioPath,
+      'p_audio_url': audioUrl,
+      'p_audio_duration_seconds': audioDurationSeconds,
+      'p_poll_question': pollQuestion,
+      'p_poll_options': pollOptions,
+      'p_card_background_color': cardBackgroundColor,
+      'p_card_text_color': cardTextColor,
+      'p_music_track_id': track?.trackId,
+      'p_music_start_ms': musicStartMs,
+      'p_music_duration_ms': musicDurationMs,
+      'p_music_volume': musicVolume,
+    };
+    late final String postId;
+    try {
+      postId =
+          await _client.rpc(
+                'create_post_idempotent_v4',
+                params: paramsFor(attachedMusic),
+              )
+              as String;
+    } on PostgrestException catch (error) {
+      final canPublishWithoutMusic =
+          attachedMusic != null &&
+          (error.message.contains('music_track_unavailable') ||
+              error.message.contains('music_feature_disabled') ||
+              error.message.contains('invalid_music_window'));
+      if (!canPublishWithoutMusic) rethrow;
+      log.warn(
+        'post.music_attachment_degraded',
+        props: {'reason': error.message.split('\n').first},
+      );
+      attachedMusic = null;
+      postId =
+          await _client.rpc(
+                'create_post_idempotent_v4',
+                params: paramsFor(null),
+              )
+              as String;
+    }
     if (hasImage) {
       unawaited(_scanMedia(kind: 'post', id: postId));
     }
@@ -886,6 +926,8 @@ class SupabaseBackend {
         postId: postId,
         authorId: uid,
         authorPseudonym: '@${me?.anonymousPseudonym ?? 'anonymous'}',
+        authorDisplayName: personaId == null ? me?.displayName : null,
+        personaId: personaId,
         authorAvatarSeed: me?.avatarSeed ?? 'default-orb',
         authorProfilePhotoUrl: personaId == null ? me?.profilePhotoUrl : null,
         authorIsVerified: me?.isVerified ?? false,
@@ -906,6 +948,11 @@ class SupabaseBackend {
         imageUrl: imageUrl,
         audioUrl: audioUrl,
         audioDurationSeconds: audioDurationSeconds,
+        musicTrackId: attachedMusic?.trackId,
+        musicTrack: attachedMusic,
+        musicStartMs: attachedMusic == null ? null : musicStartMs,
+        musicDurationMs: attachedMusic == null ? null : musicDurationMs,
+        musicVolume: attachedMusic == null ? null : musicVolume,
         createdAt: DateTime.now(),
         mediaStatus: hasImage ? 'pending' : 'clean',
       );
@@ -1417,7 +1464,7 @@ class SupabaseBackend {
         .from('my_friends')
         .select()
         .order('accepted_at', ascending: false);
-    final friends = (rows as List)
+    var friends = (rows as List)
         .cast<Map<String, dynamic>>()
         .map(
           (r) => FriendSummary(
@@ -1433,6 +1480,23 @@ class SupabaseBackend {
         )
         .toList();
     if (friends.isEmpty) return friends;
+    try {
+      final identities = await _client
+          .from('users')
+          .select('user_id, display_name')
+          .inFilter('user_id', friends.map((friend) => friend.userId).toList());
+      final names = {
+        for (final raw in identities as List)
+          (raw as Map<String, dynamic>)['user_id'] as String:
+              raw['display_name'] as String?,
+      };
+      friends = [
+        for (final friend in friends)
+          friend.copyWith(publicDisplayName: names[friend.userId]),
+      ];
+    } catch (_) {
+      // Keep pseudonym fallbacks while the profile migration rolls out.
+    }
 
     // Fold in the caller's favorites (toggleable heart on the alphabetical
     // list). Defaults to none if the favourites table isn't reachable.
@@ -1780,6 +1844,41 @@ class SupabaseBackend {
 
   Future<List<Whisper>> _whispersWithMyFlags(List<Whisper> base) async {
     try {
+      final authorIds = base
+          .map((whisper) => whisper.authorId)
+          .whereType<String>()
+          .toSet()
+          .toList();
+      if (authorIds.isNotEmpty) {
+        final rows = await _client
+            .from('users')
+            .select('user_id, anonymous_pseudonym, display_name')
+            .inFilter('user_id', authorIds);
+        final identities = {
+          for (final row in rows as List)
+            (row as Map<String, dynamic>)['user_id'] as String: row,
+        };
+        base = [
+          for (final whisper in base)
+            () {
+              final identity = identities[whisper.authorId];
+              if (identity == null) return whisper;
+              final whisperHandle = whisper.authorPseudonym
+                  .replaceFirst('@', '')
+                  .toLowerCase();
+              final accountHandle = (identity['anonymous_pseudonym'] as String)
+                  .toLowerCase();
+              if (whisperHandle != accountHandle) return whisper;
+              return whisper.copyWith(
+                authorDisplayName: identity['display_name'] as String?,
+              );
+            }(),
+        ];
+      }
+    } catch (_) {
+      // Older schemas still render the safe pseudonym fallback.
+    }
+    try {
       final ids = base.map((w) => w.whisperId).toList();
       final saves = await _client
           .from('whisper_saves')
@@ -1813,6 +1912,11 @@ class SupabaseBackend {
                 for (final e in raw.entries) e.key: (e.value as num).toInt(),
               };
               myReaction = row['my_reaction'] as String?;
+            }
+            if (myReaction == null) {
+              _myWhisperReactions.remove(w.whisperId);
+            } else {
+              _myWhisperReactions[w.whisperId] = myReaction;
             }
             return w.copyWith(
               savedByMe: saved.contains(w.whisperId),
@@ -1929,19 +2033,34 @@ class SupabaseBackend {
   }
 
   Future<bool> toggleWhisperLike(String whisperId) async {
+    final current = _myWhisperReactions[whisperId];
+    final desired = current == 'hug' ? null : 'hug';
     final res = await _client.rpc(
-      'toggle_whisper_like',
-      params: {'p_whisper_id': whisperId},
+      'set_whisper_reaction_v2',
+      params: {'p_whisper_id': whisperId, 'p_reaction': desired},
     );
-    return (res as bool?) ?? false;
+    if (res == null) {
+      _myWhisperReactions.remove(whisperId);
+    } else {
+      _myWhisperReactions[whisperId] = res as String;
+    }
+    return res != null;
   }
 
   /// Full reaction palette — returns resulting reaction or null when cleared.
   Future<String?> reactToWhisper(String whisperId, String reaction) async {
+    final desired = _myWhisperReactions[whisperId] == reaction
+        ? null
+        : reaction;
     final res = await _client.rpc(
-      'set_whisper_reaction',
-      params: {'p_whisper_id': whisperId, 'p_reaction': reaction},
+      'set_whisper_reaction_v2',
+      params: {'p_whisper_id': whisperId, 'p_reaction': desired},
     );
+    if (res == null) {
+      _myWhisperReactions.remove(whisperId);
+    } else {
+      _myWhisperReactions[whisperId] = res as String;
+    }
     return res as String?;
   }
 
@@ -1967,6 +2086,29 @@ class SupabaseBackend {
               },
             )
             as List<dynamic>;
+    final authorIds = rows
+        .map((row) => row['author_id'] as String?)
+        .whereType<String>()
+        .toSet()
+        .toList();
+    final displayNames = <String, String>{};
+    if (authorIds.isNotEmpty) {
+      try {
+        final identities = await _client
+            .from('users')
+            .select('user_id, anonymous_pseudonym, display_name')
+            .inFilter('user_id', authorIds);
+        for (final raw in identities as List) {
+          final identity = raw as Map<String, dynamic>;
+          final name = identity['display_name'] as String?;
+          if (name != null) {
+            displayNames[identity['user_id'] as String] = name;
+          }
+        }
+      } catch (_) {
+        // Compatible with a rolling display-name migration.
+      }
+    }
     return rows
         .cast<Map<String, dynamic>>()
         .map(
@@ -1975,6 +2117,7 @@ class SupabaseBackend {
             whisperId: r['whisper_id'] as String,
             authorId: r['author_id'] as String?,
             authorPseudonym: (r['author_pseudonym'] as String?) ?? 'anonymous',
+            authorDisplayName: displayNames[r['author_id']],
             authorAvatarSeed:
                 (r['author_avatar_seed'] as String?) ?? 'default-orb',
             content: r['content'] as String,
@@ -2163,9 +2306,17 @@ class SupabaseBackend {
 
   /// Toggle a like on a whisper comment; returns the resulting state.
   Future<bool> toggleWhisperCommentLike(String commentId) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    final existing = await _client
+        .from('whisper_comment_likes')
+        .select('comment_id')
+        .eq('comment_id', commentId)
+        .eq('user_id', uid)
+        .maybeSingle();
     final res = await _client.rpc(
-      'toggle_whisper_comment_like',
-      params: {'p_comment_id': commentId},
+      'set_whisper_comment_like',
+      params: {'p_comment_id': commentId, 'p_liked': existing == null},
     );
     return (res as bool?) ?? false;
   }
@@ -2661,18 +2812,22 @@ class SupabaseBackend {
     // column (migration 0054). Cheap indexed single-row read, kept out
     // of user_profile_summary so we don't have to rebuild that long RPC.
     int connections = 0;
+    String? displayName;
     String? bio;
     String? pronouns;
     try {
       final row = await _client
           .from('users')
-          .select('connections_count, bio, pronouns, deactivated_at')
+          .select(
+            'connections_count, display_name, bio, pronouns, deactivated_at',
+          )
           .eq('user_id', otherUserId)
           .maybeSingle();
       // A deactivated (or pending-deletion) account is hidden from everyone
       // else until it is reactivated on next login — treat it as unavailable.
       if (row?['deactivated_at'] != null) return null;
       connections = (row?['connections_count'] as int?) ?? 0;
+      displayName = row?['display_name'] as String?;
       bio = row?['bio'] as String?;
       pronouns = row?['pronouns'] as String?;
     } catch (_) {
@@ -2701,6 +2856,7 @@ class SupabaseBackend {
     }
     return view.copyWithConnections(
       connections,
+      displayName: displayName,
       bio: bio,
       pronouns: pronouns,
       postsTotal: postsTotal,
@@ -2862,6 +3018,7 @@ class SupabaseBackend {
       relation: FriendStatus.parse(j['viewer_relation'] as String?),
       userId: user['user_id'] as String,
       pseudonym: user['pseudonym'] as String,
+      displayName: user['display_name'] as String?,
       avatarSeed: (user['avatar_seed'] as String?) ?? 'default-orb',
       profilePhotoUrl: user['profile_photo_url'] as String?,
       bio: user['bio'] as String?,
@@ -2919,9 +3076,10 @@ class SupabaseBackend {
   Future<String?> react(String postId, String reaction) async {
     final uid = _uid;
     if (uid == null) return null;
+    final desired = _myReactions[postId] == reaction ? null : reaction;
     final result = await _client.rpc(
-      'set_reaction',
-      params: {'p_post_id': postId, 'p_reaction': reaction},
+      'set_post_reaction',
+      params: {'p_post_id': postId, 'p_reaction': desired},
     );
     if (result == null) {
       _myReactions.remove(postId);
@@ -3988,18 +4146,11 @@ class SupabaseBackend {
     required String pollId,
     required String optionId,
   }) async {
-    final uid = _uid;
-    if (uid == null) throw StateError('Not signed in');
-    // UNIQUE(poll_id, user_id) — duplicate votes silently no-op.
-    try {
-      await _client.from('poll_votes').insert({
-        'poll_id': pollId,
-        'option_id': optionId,
-        'user_id': uid,
-      });
-    } on PostgrestException catch (e) {
-      if (e.code != '23505') rethrow;
-    }
+    if (_uid == null) throw StateError('Not signed in');
+    await _client.rpc(
+      'cast_poll_vote',
+      params: {'p_poll_id': pollId, 'p_option_id': optionId},
+    );
   }
 
   Future<List<Post>> mySaved() async {
@@ -4082,7 +4233,7 @@ class SupabaseBackend {
       final list = await _client
           .from('users')
           .select(
-            'user_id, anonymous_pseudonym, avatar_seed, profile_photo_url, is_verified',
+            'user_id, anonymous_pseudonym, display_name, avatar_seed, profile_photo_url, is_verified',
           )
           .inFilter('user_id', authorIds);
       for (final r in list) {
@@ -4103,6 +4254,7 @@ class SupabaseBackend {
         authorPseudonym: author == null
             ? '@anonymous'
             : '@${author['anonymous_pseudonym']}',
+        authorDisplayName: author?['display_name'] as String?,
         authorAvatarSeed: author == null
             ? 'default-orb'
             : author['avatar_seed'] as String,
@@ -4166,6 +4318,7 @@ class SupabaseBackend {
           commentId: id,
           parentId: parentId,
           authorPseudonym: '@${me?.anonymousPseudonym ?? 'anonymous'}',
+          authorDisplayName: personaId == null ? me?.displayName : null,
           authorAvatarSeed: me?.avatarSeed ?? 'default-orb',
           authorIsVerified: me?.isVerified ?? false,
           content: content,
@@ -4187,9 +4340,17 @@ class SupabaseBackend {
   }
 
   Future<bool> toggleCommentLike(String commentId) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    final existing = await _client
+        .from('comment_likes')
+        .select('comment_id')
+        .eq('comment_id', commentId)
+        .eq('user_id', uid)
+        .maybeSingle();
     final res = await _client.rpc(
-      'toggle_comment_like',
-      params: {'p_comment_id': commentId},
+      'set_comment_like',
+      params: {'p_comment_id': commentId, 'p_liked': existing == null},
     );
     return (res as bool?) ?? false;
   }
@@ -4605,17 +4766,46 @@ class SupabaseBackend {
         .from('inbox_rooms')
         .select()
         .order('sort_activity_at', ascending: false);
+    final displayNames = <String, String>{};
+    final peerIds = rows
+        .map((row) => row['peer_id'] as String?)
+        .whereType<String>()
+        .toSet()
+        .toList();
+    if (peerIds.isNotEmpty) {
+      try {
+        final identities = await _client
+            .from('users')
+            .select('user_id, display_name')
+            .inFilter('user_id', peerIds);
+        for (final raw in identities as List) {
+          final identity = raw as Map<String, dynamic>;
+          final value = identity['display_name'] as String?;
+          if (value != null) {
+            displayNames[identity['user_id'] as String] = value;
+          }
+        }
+      } catch (_) {}
+    }
     return rows
         .where((r) {
           if (tab == 'requests') return r['room_status'] == 'pending_request';
           if (tab == 'active') return r['room_status'] == 'active';
           return true;
         })
-        .map<ChatRoom>(_chatRoomFromInboxRow)
+        .map<ChatRoom>(
+          (row) => _chatRoomFromInboxRow(
+            row,
+            peerDisplayName: displayNames[row['peer_id']],
+          ),
+        )
         .toList();
   }
 
-  ChatRoom _chatRoomFromInboxRow(Map<String, dynamic> row) {
+  ChatRoom _chatRoomFromInboxRow(
+    Map<String, dynamic> row, {
+    String? peerDisplayName,
+  }) {
     final isGroup = row['is_group'] == true;
     final rawName = row['peer_pseudonym'] as String?;
     return ChatRoom(
@@ -4623,6 +4813,7 @@ class SupabaseBackend {
       peerPseudonym: isGroup
           ? (rawName ?? 'Private group')
           : (rawName == null ? '@anonymous' : '@$rawName'),
+      peerDisplayName: peerDisplayName,
       peerAvatarSeed: (row['peer_avatar_seed'] as String?) ?? 'default-orb',
       peerProfilePhotoUrl: row['peer_profile_photo_url'] as String?,
       peerUserId: row['peer_id'] as String?,
@@ -4697,7 +4888,9 @@ class SupabaseBackend {
     // returned ChatRoom has a pseudonym/avatar for immediate render.
     final peer = await _client
         .from('users')
-        .select('anonymous_pseudonym, avatar_seed, profile_photo_url')
+        .select(
+          'anonymous_pseudonym, display_name, avatar_seed, profile_photo_url',
+        )
         .eq('user_id', peerUserId)
         .maybeSingle();
     return ChatRoom(
@@ -4705,6 +4898,7 @@ class SupabaseBackend {
       peerPseudonym: peer == null
           ? '@anonymous'
           : '@${peer['anonymous_pseudonym']}',
+      peerDisplayName: peer?['display_name'] as String?,
       peerAvatarSeed: (peer?['avatar_seed'] as String?) ?? 'default-orb',
       peerProfilePhotoUrl: peer?['profile_photo_url'] as String?,
       requestPreview: (row['request_preview'] as String?) ?? '',
@@ -4737,12 +4931,32 @@ class SupabaseBackend {
     final rows =
         await _client.rpc('group_chat_members', params: {'p_room_id': roomId})
             as List<dynamic>;
+    final displayNames = <String, String>{};
+    final userIds = rows
+        .map((raw) => (raw as Map<String, dynamic>)['user_id'] as String)
+        .toList();
+    if (userIds.isNotEmpty) {
+      try {
+        final identities = await _client
+            .from('users')
+            .select('user_id, display_name')
+            .inFilter('user_id', userIds);
+        for (final raw in identities as List) {
+          final identity = raw as Map<String, dynamic>;
+          final value = identity['display_name'] as String?;
+          if (value != null) {
+            displayNames[identity['user_id'] as String] = value;
+          }
+        }
+      } catch (_) {}
+    }
     return rows
         .map((raw) {
           final row = raw as Map<String, dynamic>;
           return GroupChatMember(
             userId: row['user_id'] as String,
             pseudonym: row['pseudonym'] as String,
+            publicDisplayName: displayNames[row['user_id']],
             avatarSeed: (row['avatar_seed'] as String?) ?? 'default-orb',
             profilePhotoUrl: row['profile_photo_url'] as String?,
             isVerified: (row['is_verified'] as bool?) ?? false,
@@ -5052,6 +5266,10 @@ class SupabaseBackend {
 
   Future<void> unregisterPushToken(String token) async {
     await _client.rpc('unregister_push_token', params: {'p_token': token});
+  }
+
+  Future<void> unregisterAllPushTokens() async {
+    await _client.rpc('unregister_all_push_tokens');
   }
 
   /// Chat V2 — author edits their own message in-place. RPC enforces
@@ -5915,6 +6133,158 @@ class SupabaseBackend {
   // ===================================================================
   // Helpers
   // ===================================================================
+  Future<List<MusicTrack>> searchMusic({
+    String query = '',
+    String? mood,
+    int limit = 24,
+    int offset = 0,
+  }) async {
+    final rows =
+        await _client.rpc(
+              'search_music',
+              params: {
+                'p_query': query,
+                'p_mood': mood,
+                'p_limit': limit,
+                'p_offset': offset,
+              },
+            )
+            as List<dynamic>;
+    return rows.cast<Map<String, dynamic>>().map(_musicTrackFromRow).toList();
+  }
+
+  Future<void> setPostMusic(
+    String postId, {
+    MusicTrack? track,
+    int startMs = 0,
+    int durationMs = 15000,
+    double volume = 0.75,
+  }) async {
+    await _client.rpc(
+      'set_post_music',
+      params: {
+        'p_post_id': postId,
+        'p_music_track_id': track?.trackId,
+        'p_start_ms': startMs,
+        'p_duration_ms': durationMs,
+        'p_volume': volume,
+      },
+    );
+  }
+
+  Future<List<Post>> _hydratePosts(List<Post> posts) async {
+    if (posts.isEmpty) return posts;
+    var hydrated = posts;
+
+    // Identity hydration is deliberately separate from feed views so older
+    // database views remain compatible during a rolling deploy. Only replace
+    // the label when the feed pseudonym matches the account username: persona
+    // posts must never be joined back to the account's public display name.
+    try {
+      final authorIds = posts
+          .map((post) => post.authorId)
+          .whereType<String>()
+          .toSet()
+          .toList();
+      if (authorIds.isNotEmpty) {
+        final rows = await _client
+            .from('users')
+            .select('user_id, anonymous_pseudonym, display_name')
+            .inFilter('user_id', authorIds);
+        final identities = {
+          for (final row in rows as List)
+            (row as Map<String, dynamic>)['user_id'] as String: row,
+        };
+        hydrated = [
+          for (final post in hydrated)
+            () {
+              final identity = identities[post.authorId];
+              if (identity == null) return post;
+              final postHandle = post.authorPseudonym
+                  .replaceFirst('@', '')
+                  .toLowerCase();
+              final accountHandle = (identity['anonymous_pseudonym'] as String)
+                  .toLowerCase();
+              if (postHandle != accountHandle) return post;
+              return post.copyWith(
+                authorDisplayName: identity['display_name'] as String?,
+              );
+            }(),
+        ];
+      }
+    } catch (_) {
+      // A display name is an enhancement; a rolling migration must not make
+      // the feed unavailable. Entity fallbacks remain readable and anonymous.
+    }
+
+    try {
+      final ids = hydrated.map((post) => post.postId).toList();
+      final attachments = await _client
+          .from('posts')
+          .select(
+            'post_id, music_track_id, music_start_ms, music_duration_ms, music_volume',
+          )
+          .inFilter('post_id', ids);
+      final byPost = {
+        for (final row in attachments as List)
+          (row as Map<String, dynamic>)['post_id'] as String: row,
+      };
+      final trackIds = <String>{
+        for (final row in byPost.values)
+          if (row['music_track_id'] case final String trackId) trackId,
+      }.toList();
+      final tracks = <String, MusicTrack>{};
+      if (trackIds.isNotEmpty) {
+        final rawTracks =
+            await _client.rpc(
+                  'music_tracks_by_ids',
+                  params: {'p_track_ids': trackIds},
+                )
+                as List<dynamic>;
+        for (final row in rawTracks.cast<Map<String, dynamic>>()) {
+          final track = _musicTrackFromRow(row);
+          tracks[track.trackId] = track;
+        }
+      }
+      hydrated = [
+        for (final post in hydrated)
+          () {
+            final row = byPost[post.postId];
+            if (row == null) return post;
+            final trackId = row['music_track_id'] as String?;
+            return post.copyWith(
+              musicTrackId: trackId,
+              musicTrack: trackId == null ? null : tracks[trackId],
+              musicStartMs: row['music_start_ms'] as int?,
+              musicDurationMs: row['music_duration_ms'] as int?,
+              musicVolume: (row['music_volume'] as num?)?.toDouble(),
+            );
+          }(),
+      ];
+    } catch (_) {
+      // Music is optional. A catalog outage never blocks reading a Vent.
+    }
+    return hydrated;
+  }
+
+  MusicTrack _musicTrackFromRow(Map<String, dynamic> row) {
+    return MusicTrack(
+      trackId: row['track_id'] as String,
+      provider: row['provider'] as String,
+      providerTrackId: row['provider_track_id'] as String,
+      title: row['title'] as String,
+      artist: row['artist'] as String,
+      album: row['album'] as String?,
+      artworkUrl: row['artwork_url'] as String?,
+      previewUrl: row['preview_url'] as String,
+      previewDurationMs: (row['duration_ms'] as num).toInt(),
+      genre: row['genre'] as String?,
+      moodTags: (row['mood_tags'] as List?)?.cast<String>() ?? const [],
+      licenseCode: row['license_code'] as String,
+      attributionText: row['attribution_text'] as String?,
+    );
+  }
+
   Future<void> _emitPosts() async {
     try {
       final list = await feed();
@@ -5938,6 +6308,8 @@ class SupabaseBackend {
       postId: r['post_id'] as String,
       authorId: r['author_id'] as String?,
       authorPseudonym: (r['author_pseudonym'] as String?) ?? '@anonymous',
+      authorDisplayName: r['author_display_name'] as String?,
+      personaId: r['persona_id'] as String?,
       authorAvatarSeed: (r['author_avatar_seed'] as String?) ?? 'default-orb',
       authorProfilePhotoUrl: r['author_profile_photo_url'] as String?,
       authorIsVerified: (r['author_is_verified'] as bool?) ?? false,
@@ -5953,6 +6325,10 @@ class SupabaseBackend {
       imageUrl: r['image_url'] as String?,
       audioUrl: r['audio_url'] as String?,
       audioDurationSeconds: r['audio_duration_seconds'] as int?,
+      musicTrackId: r['music_track_id'] as String?,
+      musicStartMs: r['music_start_ms'] as int?,
+      musicDurationMs: r['music_duration_ms'] as int?,
+      musicVolume: (r['music_volume'] as num?)?.toDouble(),
       createdAt: DateTime.parse(r['created_at'] as String),
       editedAt: rawEdited == null ? null : DateTime.parse(rawEdited),
       deletedAt: rawDeleted == null ? null : DateTime.parse(rawDeleted),
@@ -6086,6 +6462,7 @@ class SupabaseBackend {
     return AppUser(
       userId: r['user_id'] as String,
       anonymousPseudonym: r['anonymous_pseudonym'] as String,
+      displayName: r['display_name'] as String?,
       avatarSeed: r['avatar_seed'] as String,
       currentMood: r['current_mood'] as String,
       userRole: r['user_role'] as String,
@@ -6112,6 +6489,7 @@ class SupabaseBackend {
   /// Returns the refreshed [AppUser].
   Future<AppUser> updateMyProfile({
     String? pseudonym,
+    String? displayName,
     String? bio,
     String? pronouns,
     String? profilePhotoUrl,
@@ -6124,6 +6502,7 @@ class SupabaseBackend {
       'update_my_profile',
       params: {
         'p_pseudonym': pseudonym,
+        'p_display_name': displayName,
         'p_bio': bio,
         'p_pronouns': pronouns,
         'p_profile_photo_url': profilePhotoUrl,

@@ -22,7 +22,7 @@ import '../services/telemetry_service.dart';
 /// Internally it forwards to either:
 ///   * [MockBackend]      — when `VentlyConfig.useMockBackend` is true
 ///   * [SupabaseBackend]  — when the live Supabase project is reachable
-class VentlyRepository {
+class VentlyRepository implements MusicProvider {
   VentlyRepository({
     MockBackend? mock,
     IdentityService? identity,
@@ -41,6 +41,25 @@ class VentlyRepository {
   final SupabaseBackend? _live;
   final CacheService _cache = CacheService();
   TelemetryService get _telemetry => TelemetryService.instance;
+
+  Future<T> _trackSelfInteractionRejection<T>(
+    String target,
+    Future<T> Function() mutation,
+  ) async {
+    try {
+      return await mutation();
+    } on PostgrestException catch (error) {
+      if (error.message.contains('self_interaction_not_allowed')) {
+        unawaited(
+          AnalyticsService.instance.track(
+            Events.selfInteractionRejected,
+            props: {'target_type': target},
+          ),
+        );
+      }
+      rethrow;
+    }
+  }
 
   IdentityService get identity => _identity;
   bool get isMockMode => _live == null;
@@ -822,6 +841,10 @@ class VentlyRepository {
     List<String>? pollOptions,
     String? cardBackgroundColor,
     String? cardTextColor,
+    MusicTrack? musicTrack,
+    int musicStartMs = 0,
+    int musicDurationMs = 15000,
+    double musicVolume = 0.75,
     String? idempotencyKey,
   }) async {
     final live = _live;
@@ -846,6 +869,10 @@ class VentlyRepository {
         pollOptions: pollOptions,
         cardBackgroundColor: cardBackgroundColor,
         cardTextColor: cardTextColor,
+        musicTrack: musicTrack,
+        musicStartMs: musicStartMs,
+        musicDurationMs: musicDurationMs,
+        musicVolume: musicVolume,
         idempotencyKey: idempotencyKey,
       );
     } else {
@@ -876,6 +903,8 @@ class VentlyRepository {
         'mood': mood,
         'has_image': imageUrl != null,
         'has_audio': audioUrl != null,
+        'has_music': musicTrack != null,
+        if (musicTrack != null) 'music_provider': musicTrack.provider,
         'has_tribe': tribeId != null,
         'has_persona': personaId != null,
         'has_poll': pollQuestion != null,
@@ -956,6 +985,41 @@ class VentlyRepository {
     final live = _live;
     if (live != null) return live.searchGlobal(query, limit: limit);
     return Future.value(_mock.searchGlobal(query, limit: limit));
+  }
+
+  @override
+  Future<List<MusicTrack>> searchMusic({
+    String query = '',
+    String? mood,
+    int limit = 24,
+    int offset = 0,
+  }) {
+    final live = _live;
+    if (live == null) return Future.value(const <MusicTrack>[]);
+    return live.searchMusic(
+      query: query,
+      mood: mood,
+      limit: limit,
+      offset: offset,
+    );
+  }
+
+  Future<void> setPostMusic(
+    String postId, {
+    MusicTrack? track,
+    int startMs = 0,
+    int durationMs = 15000,
+    double volume = 0.75,
+  }) {
+    final live = _live;
+    if (live == null) return Future.value();
+    return live.setPostMusic(
+      postId,
+      track: track,
+      startMs: startMs,
+      durationMs: durationMs,
+      volume: volume,
+    );
   }
 
   Future<({String path, String url})> uploadPostImage({
@@ -1498,9 +1562,14 @@ class VentlyRepository {
     return Future.value(false);
   }
 
-  Future<String?> reactToWhisper(String whisperId, String reaction) {
+  Future<String?> reactToWhisper(String whisperId, String reaction) async {
     final live = _live;
-    if (live != null) return live.reactToWhisper(whisperId, reaction);
+    if (live != null) {
+      return _trackSelfInteractionRejection(
+        'whisper',
+        () => live.reactToWhisper(whisperId, reaction),
+      );
+    }
     return Future.value(_mock.reactToWhisper(whisperId, reaction));
   }
 
@@ -1550,6 +1619,7 @@ class VentlyRepository {
   /// echoes the current user.
   Future<AppUser?> updateMyProfile({
     String? pseudonym,
+    String? displayName,
     String? bio,
     String? pronouns,
     String? profilePhotoUrl,
@@ -1560,8 +1630,9 @@ class VentlyRepository {
   }) async {
     final live = _live;
     if (live != null) {
-      return live.updateMyProfile(
+      final updated = await live.updateMyProfile(
         pseudonym: pseudonym,
+        displayName: displayName,
         bio: bio,
         pronouns: pronouns,
         profilePhotoUrl: profilePhotoUrl,
@@ -1570,6 +1641,10 @@ class VentlyRepository {
         clearBio: clearBio,
         clearPronouns: clearPronouns,
       );
+      if (displayName != null) {
+        unawaited(AnalyticsService.instance.track(Events.displayNameUpdated));
+      }
+      return updated;
     }
     return _mock.me;
   }
@@ -1662,9 +1737,14 @@ class VentlyRepository {
   }
 
   /// Toggle a like on a whisper comment; returns resulting liked state.
-  Future<bool> toggleWhisperCommentLike(String commentId) {
+  Future<bool> toggleWhisperCommentLike(String commentId) async {
     final live = _live;
-    if (live != null) return live.toggleWhisperCommentLike(commentId);
+    if (live != null) {
+      return _trackSelfInteractionRejection(
+        'whisper_comment',
+        () => live.toggleWhisperCommentLike(commentId),
+      );
+    }
     return Future.value(true);
   }
 
@@ -2003,7 +2083,12 @@ class VentlyRepository {
   /// same reaction off).
   Future<String?> react(String postId, String reaction) async {
     final live = _live;
-    if (live != null) return live.react(postId, reaction);
+    if (live != null) {
+      return _trackSelfInteractionRejection(
+        'post',
+        () => live.react(postId, reaction),
+      );
+    }
     return _mock.react(postId, reaction);
   }
 
@@ -2451,7 +2536,10 @@ class VentlyRepository {
   }) async {
     final live = _live;
     if (live != null) {
-      return live.votePoll(pollId: pollId, optionId: optionId);
+      return _trackSelfInteractionRejection(
+        'poll',
+        () => live.votePoll(pollId: pollId, optionId: optionId),
+      );
     }
     _mock.votePoll(pollId: pollId, optionId: optionId);
   }
@@ -2535,9 +2623,14 @@ class VentlyRepository {
     );
   }
 
-  Future<bool> toggleCommentLike(String commentId) {
+  Future<bool> toggleCommentLike(String commentId) async {
     final live = _live;
-    if (live != null) return live.toggleCommentLike(commentId);
+    if (live != null) {
+      return _trackSelfInteractionRejection(
+        'comment',
+        () => live.toggleCommentLike(commentId),
+      );
+    }
     return _mock.toggleCommentLike(commentId);
   }
 
@@ -3341,6 +3434,12 @@ class VentlyRepository {
     final live = _live;
     if (live == null) return;
     return live.unregisterPushToken(token);
+  }
+
+  Future<void> unregisterAllPushTokens() async {
+    final live = _live;
+    if (live == null) return;
+    return live.unregisterAllPushTokens();
   }
 
   /// Upload an image to the room's chat-media folder. Returns the

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       apply_changes:
-        description: Apply migrations and deploy the moderation function
+        description: Apply migrations and deploy hardened Edge Functions
         required: true
         default: false
         type: boolean
@@ -38,10 +38,20 @@ jobs:
           --level warning --fail-on error
       - run: >-
           deno fmt --check
-          supabase/functions/moderate
           supabase/functions/_shared
-      - run: deno check supabase/functions/moderate/index.ts
-      - run: deno test supabase/functions/moderate/handler_test.ts
+          supabase/functions/media-scan
+          supabase/functions/moderate
+          supabase/functions/notification-fanout
+      - run: >-
+          deno check
+          supabase/functions/media-scan/index.ts
+          supabase/functions/moderate/index.ts
+          supabase/functions/notification-fanout/index.ts
+      - run: >-
+          deno test
+          supabase/functions/_shared/internal_auth_test.ts
+          supabase/functions/media-scan/ownership_test.ts
+          supabase/functions/moderate/handler_test.ts
 
   apply-staging:
     name: Apply only to the protected staging project
@@ -85,7 +95,15 @@ jobs:
         run: >-
           supabase db push --linked --include-all
           --password "$STAGING_DB_PASSWORD"
-      - name: Deploy tested moderation function to staging
+      - name: Deploy tested user-authenticated functions to staging
         run: >-
           supabase functions deploy moderate --use-api
+          --project-ref "$STAGING_PROJECT_REF"
+      - run: >-
+          supabase functions deploy media-scan --use-api
+          --project-ref "$STAGING_PROJECT_REF"
+      - name: Deploy secret-authenticated push worker to staging
+        run: >-
+          supabase functions deploy notification-fanout --use-api
+          --no-verify-jwt
           --project-ref "$STAGING_PROJECT_REF"

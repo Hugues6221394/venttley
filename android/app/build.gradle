@@ -5,6 +5,13 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// Keep local/mock builds usable before Firebase credentials are provisioned.
+// Production builds with android/app/google-services.json apply the official
+// plugin and fail during Firebase initialization if that file is malformed.
+if (file("google-services.json").exists()) {
+    apply plugin: "com.google.gms.google-services"
+}
+
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {

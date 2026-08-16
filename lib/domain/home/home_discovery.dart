@@ -22,15 +22,18 @@ class HomeDiscovery {
   }) {
     final clock = now ?? DateTime.now();
     final livePosts = posts
-        .where((p) =>
-            (!p.isStory && !p.isWhisper) ||
-            p.createdAt.add(const Duration(hours: 24)).isAfter(clock))
+        .where(
+          (p) =>
+              (!p.isStory && !p.isWhisper) ||
+              p.createdAt.add(const Duration(hours: 24)).isAfter(clock),
+        )
         .toList();
-    final stories = livePosts
-        .where((p) => p.isStory)
-        .map((p) => VentStory.fromPost(p, now: clock))
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final stories =
+        livePosts
+            .where((p) => p.isStory)
+            .map((p) => VentStory.fromPost(p, now: clock))
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     final topics = topicStatsFromPosts(livePosts, now: clock);
 
@@ -46,11 +49,15 @@ class HomeDiscovery {
     return HomeDiscovery(
       kpis: [
         HomeKpi(
-            label: 'Live posts',
-            value: _compact(livePosts.length),
-            icon: 'bolt'),
+          label: 'Live posts',
+          value: _compact(livePosts.length),
+          icon: 'bolt',
+        ),
         HomeKpi(
-            label: 'Stories', value: _compact(stories.length), icon: 'story'),
+          label: 'Stories',
+          value: _compact(stories.length),
+          icon: 'story',
+        ),
         HomeKpi(label: 'Replies', value: _compact(comments), icon: 'chat'),
         HomeKpi(label: 'Reactions', value: _compact(reactions), icon: 'spark'),
       ],
@@ -72,8 +79,9 @@ class HomeDiscovery {
     final clock = now ?? DateTime.now();
     final activeCutoff = clock.subtract(const Duration(days: 30));
     final topicScores = <String, _TopicAccumulator>{};
-    for (final post
-        in posts.where((post) => !post.isStory && !post.isWhisper)) {
+    for (final post in posts.where(
+      (post) => !post.isStory && !post.isWhisper,
+    )) {
       final category = post.categoryName.trim();
       if (category.isEmpty) continue;
       final accumulator = topicScores.putIfAbsent(
@@ -88,25 +96,26 @@ class HomeDiscovery {
         accumulator.score += _postTrendScore(post, clock);
       }
     }
-    final topics = topicScores.values
-        .where((accumulator) => accumulator.hasRecentPost)
-        .map(
-          (accumulator) => TrendingTopic(
-            category: accumulator.category,
-            postCount: accumulator.count,
-            reactionCount: accumulator.reactions,
-            commentCount: accumulator.comments,
-            score: accumulator.score,
-          ),
-        )
-        .toList()
-      ..sort((a, b) {
-        final score = b.score.compareTo(a.score);
-        if (score != 0) return score;
-        final replies = b.commentCount.compareTo(a.commentCount);
-        if (replies != 0) return replies;
-        return b.postCount.compareTo(a.postCount);
-      });
+    final topics =
+        topicScores.values
+            .where((accumulator) => accumulator.hasRecentPost)
+            .map(
+              (accumulator) => TrendingTopic(
+                category: accumulator.category,
+                postCount: accumulator.count,
+                reactionCount: accumulator.reactions,
+                commentCount: accumulator.comments,
+                score: accumulator.score,
+              ),
+            )
+            .toList()
+          ..sort((a, b) {
+            final score = b.score.compareTo(a.score);
+            if (score != 0) return score;
+            final replies = b.commentCount.compareTo(a.commentCount);
+            if (replies != 0) return replies;
+            return b.postCount.compareTo(a.postCount);
+          });
     return topics.take(limit.clamp(1, 20)).toList(growable: false);
   }
 
@@ -133,9 +142,11 @@ class HomeDiscovery {
   }) {
     final clock = now ?? DateTime.now();
     return posts
-        .where((p) =>
-            p.isStory &&
-            p.createdAt.add(const Duration(hours: 24)).isAfter(clock))
+        .where(
+          (p) =>
+              p.isStory &&
+              p.createdAt.add(const Duration(hours: 24)).isAfter(clock),
+        )
         .where((p) {
           if (p.authorId == null) return false;
           if (p.authorId == myUserId) return true;
@@ -152,11 +163,7 @@ class HomeKpi {
   final String value;
   final String icon;
 
-  const HomeKpi({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
+  const HomeKpi({required this.label, required this.value, required this.icon});
 }
 
 class TrendingTopic {
@@ -179,6 +186,7 @@ class VentStory {
   final String postId;
   final String? authorId;
   final String authorPseudonym;
+  final String authorDisplayName;
   final String authorAvatarSeed;
   final String? authorProfilePhotoUrl;
   final String content;
@@ -194,10 +202,15 @@ class VentStory {
   final int? audioDurationSeconds;
   final bool authorIsVerified;
   final String? myReaction;
+  final MusicTrack? musicTrack;
+  final int? musicStartMs;
+  final int? musicDurationMs;
+  final double? musicVolume;
 
   const VentStory({
     required this.postId,
     required this.authorPseudonym,
+    required this.authorDisplayName,
     required this.authorAvatarSeed,
     required this.content,
     required this.category,
@@ -214,6 +227,10 @@ class VentStory {
     this.audioDurationSeconds,
     this.authorIsVerified = false,
     this.myReaction,
+    this.musicTrack,
+    this.musicStartMs,
+    this.musicDurationMs,
+    this.musicVolume,
   });
 
   factory VentStory.fromPost(Post post, {DateTime? now}) {
@@ -221,6 +238,7 @@ class VentStory {
       postId: post.postId,
       authorId: post.authorId,
       authorPseudonym: post.authorPseudonym,
+      authorDisplayName: post.authorDisplayName,
       authorAvatarSeed: post.authorAvatarSeed,
       authorProfilePhotoUrl: post.authorProfilePhotoUrl,
       content: post.content,
@@ -236,6 +254,10 @@ class VentStory {
       audioDurationSeconds: post.audioDurationSeconds,
       authorIsVerified: post.authorIsVerified,
       myReaction: post.myReaction,
+      musicTrack: post.musicTrack,
+      musicStartMs: post.musicStartMs,
+      musicDurationMs: post.musicDurationMs,
+      musicVolume: post.musicVolume,
     );
   }
 

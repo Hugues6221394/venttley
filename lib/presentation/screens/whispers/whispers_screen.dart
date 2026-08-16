@@ -198,7 +198,7 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
         ref.read(activeWhisperProvider.notifier).state = ActiveWhisper(
           whisperId: w.whisperId,
           title: (w.title ?? '').trim().isEmpty ? 'Whisper' : w.title!.trim(),
-          author: w.authorPseudonym,
+          author: w.authorDisplayName,
           startedByUser: chosen,
         );
       }
@@ -1246,6 +1246,7 @@ class _CaptionBlock extends StatelessWidget {
               UserProfileLink(
                 userId: whisper.authorId!,
                 pseudonym: whisper.authorPseudonym.replaceFirst('@', ''),
+                displayName: whisper.authorDisplayName,
                 avatarSeed: whisper.authorAvatarSeed,
                 profilePhotoUrl: whisper.authorProfilePhotoUrl,
                 size: 32,
@@ -1253,7 +1254,7 @@ class _CaptionBlock extends StatelessWidget {
             else
               ProfileAvatar(
                 avatarSeed: whisper.authorAvatarSeed,
-                label: whisper.authorPseudonym,
+                label: whisper.authorDisplayName,
                 profilePhotoUrl: whisper.authorProfilePhotoUrl,
                 size: 32,
               ),
@@ -1262,7 +1263,7 @@ class _CaptionBlock extends StatelessWidget {
               InkWell(
                 onTap: () => context.push('/user/${whisper.authorId}'),
                 child: Text(
-                  '@${whisper.authorPseudonym}',
+                  whisper.authorDisplayName,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w900,
@@ -1272,7 +1273,7 @@ class _CaptionBlock extends StatelessWidget {
               )
             else
               Text(
-                '@${whisper.authorPseudonym}',
+                whisper.authorDisplayName,
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w900,
@@ -1502,7 +1503,7 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
           emoji: _myReaction != null ? PostReactions.emoji(_myReaction!) : null,
           label: _short(_totalReactions),
           color: _myReaction != null ? VentlyColors.berryMagenta : Colors.white,
-          onTap: _openReactionPicker,
+          onTap: isMine ? null : _openReactionPicker,
         ),
         const SizedBox(height: 14),
         _RailButton(
@@ -1733,7 +1734,7 @@ class _RailButton extends StatelessWidget {
   final String? emoji;
   final String label;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
     return InkWell(

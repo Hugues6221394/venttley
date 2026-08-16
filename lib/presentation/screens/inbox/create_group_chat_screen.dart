@@ -99,7 +99,9 @@ class _CreateGroupChatScreenState extends ConsumerState<CreateGroupChatScreen> {
         (friend) => friend.userId == widget.friendUserId,
         orElse: () => selected.first,
       );
-      final room = await ref.read(repositoryProvider).createGroupChat(
+      final room = await ref
+          .read(repositoryProvider)
+          .createGroupChat(
             title: title,
             friendUserId: first.userId,
             friendPseudonym: first.pseudonym,
@@ -112,16 +114,17 @@ class _CreateGroupChatScreenState extends ConsumerState<CreateGroupChatScreen> {
       final bytes = _avatarBytes;
       if (bytes != null) {
         try {
-          final path = await ref.read(repositoryProvider).uploadGroupChatAvatar(
+          final path = await ref
+              .read(repositoryProvider)
+              .uploadGroupChatAvatar(
                 roomId: room.roomId,
                 bytes: bytes,
                 extension: _avatarExtension,
                 contentType: _avatarContentType,
               );
-          await ref.read(repositoryProvider).updateGroupChatIdentity(
-                roomId: room.roomId,
-                avatarPath: path,
-              );
+          await ref
+              .read(repositoryProvider)
+              .updateGroupChatIdentity(roomId: room.roomId, avatarPath: path);
         } catch (_) {
           if (mounted) {
             _show('Group created. You can add the photo again in settings.');
@@ -142,9 +145,9 @@ class _CreateGroupChatScreenState extends ConsumerState<CreateGroupChatScreen> {
   }
 
   void _show(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String _friendlyError(Object error) {
@@ -159,12 +162,12 @@ class _CreateGroupChatScreenState extends ConsumerState<CreateGroupChatScreen> {
   }
 
   static String _mimeFor(String extension) => switch (extension) {
-        'png' => 'image/png',
-        'webp' => 'image/webp',
-        'heic' => 'image/heic',
-        'gif' => 'image/gif',
-        _ => 'image/jpeg',
-      };
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    'heic' => 'image/heic',
+    'gif' => 'image/gif',
+    _ => 'image/jpeg',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -172,8 +175,12 @@ class _CreateGroupChatScreenState extends ConsumerState<CreateGroupChatScreen> {
     final friendsAsync = ref.watch(myFriendsProvider);
     final query = _search.text.trim().toLowerCase();
     final friends = (friendsAsync.valueOrNull ?? const <FriendSummary>[])
-        .where((friend) =>
-            query.isEmpty || friend.pseudonym.toLowerCase().contains(query))
+        .where(
+          (friend) =>
+              query.isEmpty ||
+              friend.pseudonym.toLowerCase().contains(query) ||
+              friend.displayName.toLowerCase().contains(query),
+        )
         .toList(growable: false);
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -312,8 +319,9 @@ class _CreateGroupChatScreenState extends ConsumerState<CreateGroupChatScreen> {
                     for (var index = 0; index < friends.length; index++) ...[
                       _FriendChoice(
                         friend: friends[index],
-                        selected:
-                            _selectedUserIds.contains(friends[index].userId),
+                        selected: _selectedUserIds.contains(
+                          friends[index].userId,
+                        ),
                         onTap: () => setState(() {
                           final id = friends[index].userId;
                           if (!_selectedUserIds.add(id)) {
@@ -397,7 +405,7 @@ class _FriendChoice extends StatelessWidget {
           children: [
             ProfileAvatar(
               avatarSeed: friend.avatarSeed,
-              label: friend.pseudonym,
+              label: friend.displayName,
               profilePhotoUrl: friend.profilePhotoUrl,
               showVerifiedBadge: friend.isVerified,
               size: 46,
@@ -405,7 +413,7 @@ class _FriendChoice extends StatelessWidget {
             const SizedBox(width: 13),
             Expanded(
               child: Text(
-                '@${friend.pseudonym.replaceFirst('@', '')}',
+                friend.displayName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(

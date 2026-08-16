@@ -77,6 +77,31 @@ required.
    Transactional email addresses go to Resend only for the email flow the
    member requested.
 
+6. **Public identity has two separate layers.** `users.display_name` is the
+   readable, non-unique persona label. `users.anonymous_pseudonym` remains the
+   unique, normalized username used for sign-in, mentions, search, and deep
+   links. Relationships and ownership continue to use immutable UUIDs. Because
+   username-based accounts currently use a synthetic Auth email derived from
+   the username, username changes are disabled until an atomic Auth-and-profile
+   rename workflow exists. Persona-authored content is never hydrated with the
+   account display name unless its public handle already matches the account.
+
+7. **Engagement integrity is a database invariant.** Table triggers reject
+   self-reactions on Vents, comments, Whispers, Whisper comments, and polls,
+   including writes from modified clients. Desired-state RPCs make retries and
+   duplicate taps converge on one row. These rules do not restrict comment
+   creation or threaded replies, so an author can still participate normally in
+   conversation on their own Vent.
+
+8. **Music is optional, rights-gated enrichment.** Posts reference the bounded
+   `music_tracks` catalog; arbitrary audio URLs and user-uploaded commercial
+   songs are not accepted. Active rows require provider and rights evidence,
+   and the `vent_music` server flag controls deterministic rollout and emergency
+   shutdown. Feed reads batch metadata and tolerate catalog/audio failure. A
+   publish rejected solely because a selected track became unavailable is
+   retried with the same idempotency key without music, preserving the Vent or
+   Story and telling the author what happened.
+
 ---
 
 ## Module layout
@@ -144,7 +169,9 @@ no-op path is the system of record.
 
 ### Firebase Cloud Messaging
 - See `docs/notifications.md` for the full setup. Final steps:
-- [ ] Deploy `supabase functions deploy notification-fanout`
+- [x] Deploy hardened `notification-fanout` worker (production v8)
+- [x] Add opt-in client token lifecycle, refresh, cleanup, and strict tap routing
+- [ ] Add Firebase Android/iOS config files and APNs capability/key
 - [ ] Set `FCM_PROJECT_ID`, `FCM_SERVICE_ACCOUNT_JSON`, and `WEBHOOK_SECRET`
 - [ ] Wire Database Webhooks with `x-webhook-secret`; add a cron drain
 - [ ] Validate generic payloads, retries, invalid tokens, and p95 latency

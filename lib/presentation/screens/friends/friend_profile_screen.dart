@@ -589,7 +589,7 @@ class _Hero extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          '@${profile.pseudonym}',
+                          profile.displayName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.headlineSmall
@@ -604,6 +604,17 @@ class _Hero extends StatelessWidget {
                         Icon(Icons.verified, size: 20, color: scheme.primary),
                       ],
                     ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '@${profile.pseudonym}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: scheme.onSurface.withOpacity(0.60),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   if ((profile.pronouns ?? '').trim().isNotEmpty ||
                       profile.currentMood != null) ...[

@@ -363,7 +363,7 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                   )
                 : ProfileAvatar(
                     avatarSeed: user.avatarSeed,
-                    label: user.anonymousPseudonym,
+                    label: user.displayName,
                     profilePhotoUrl: user.profilePhotoUrl,
                     size: 36,
                   ),
@@ -1023,7 +1023,7 @@ class _VentlyStoryCircle extends StatelessWidget {
               ),
               child: ProfileAvatar(
                 avatarSeed: story.authorAvatarSeed,
-                label: story.authorPseudonym,
+                label: story.authorDisplayName,
                 profilePhotoUrl: story.authorProfilePhotoUrl,
                 size: 48,
               ),
@@ -1031,7 +1031,7 @@ class _VentlyStoryCircle extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           Text(
-            story.authorPseudonym,
+            story.authorDisplayName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -1143,6 +1143,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
                     UserProfileLink(
                       userId: post.authorId!,
                       pseudonym: post.authorPseudonym.replaceFirst('@', ''),
+                      displayName: post.authorDisplayName,
                       avatarSeed: post.authorAvatarSeed,
                       profilePhotoUrl: post.authorProfilePhotoUrl,
                       size: 44,
@@ -1150,7 +1151,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
                   else
                     ProfileAvatar(
                       avatarSeed: post.authorAvatarSeed,
-                      label: post.authorPseudonym,
+                      label: post.authorDisplayName,
                       profilePhotoUrl: post.authorProfilePhotoUrl,
                       size: 44,
                     ),
@@ -1163,7 +1164,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
                           InkWell(
                             onTap: onMessage,
                             child: Text(
-                              post.authorPseudonym,
+                              post.authorDisplayName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -1175,7 +1176,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
                           )
                         else
                           Text(
-                            post.authorPseudonym,
+                            post.authorDisplayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
