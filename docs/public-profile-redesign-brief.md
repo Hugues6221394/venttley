@@ -64,6 +64,58 @@ invited "why is Reactions 15 but Hugs 0?".
   short `_JustGettingStarted` line; a lone zero among real numbers is muted
   rather than set in full-weight ink.
 
+### `e7e451b` — the stats were gated, and wrong (2026-08-16)
+
+Found by reading `user_profile_summary` while chasing a report that
+@GoldenHour's profile said "1 comment" while one of her vents showed 5.
+
+**That report was not a bug.** The profile counts replies the person *wrote*;
+the post counts comments it *received*. Both numbers were right. The label was
+wrong — "Comments" next to a number reads as comments *on* their posts. It is
+"Replies" now, matching the subtitle that was already there, and the detail
+screen says so explicitly (and no longer renders "1 replies given").
+
+Reading the SQL to check that turned up four real defects:
+
+* **Gated.** The RPC returned only `vents` and `active_tribes` to non-friends;
+  comments, reactions, badges and streak sat inside the friends/self branch. So
+  a stranger's Activity grid rendered them as **zero — not "unknown", zero**.
+  Every stranger looked like a dead account no matter how active they were, on
+  the one screen whose job is to make someone worth adding. Counts now go to
+  every viewer; post content, mood distribution and the 90-day heatmap stay
+  friend-gated.
+* `comments` counted rows with no regard for `deleted_at`, while `vents` on the
+  adjacent line filtered it. Migration `0101` had already settled that live
+  means `deleted_at IS NULL`, so the profile was the last place in the app
+  disagreeing with every thread in it.
+* `comments` ignored `whisper_comments` entirely, though the detail screen
+  tells the reader the number covers "vents and whispers".
+* `reactions_received` summed likes on posts only, so a like on a reply someone
+  wrote was support they never got credit for.
+
+Migration: `20260816090000_public_profile_stats_visible_and_live.sql`, applied
+and verified on device — @GlassHeart went from four zeros to Reactions 12 ·
+Replies 2 · Streak 1 · Badges 1.
+
+**This also corrected a false claim shipped in `faeaa04`.** The
+`_JustGettingStarted` empty state asserted "@X has not picked up reactions,
+replies or badges yet" — which for a stranger was the client mistaking
+"withheld" for "none". Reworded to describe the block, not the person.
+
+### Bio — verified, not changed
+
+`user_profile_summary` has returned `bio` to every viewer since
+`20260727130805`; no earlier version of the RPC returned it at all. Neither
+`_profileFromJson` nor `_Hero` gates it on friendship, and `copyWithConnections`
+uses `bio ?? this.bio`, so the RLS-blocked direct users read cannot clobber the
+RPC's value. Confirmed on device: no `profile.summary_missing_bio_column`
+warning fires, so the key is present and the accounts simply have empty bios.
+
+That warning is new (`_profileFromJson`) and exists because an absent `bio` key
+and a present-but-null one look identical from the outside — the first is an
+unapplied migration, the second is a user who has not written a bio, and
+silently rendering nothing for both is how a whole feature disappears.
+
 ### `aee667c` — the top of the page once it scrolls
 
 The app bar is transparent over an extended body so the banner runs to the top
@@ -152,6 +204,14 @@ different claim from an inferred trend.
 * `isRestrictedMinor` in `entities.dart` still has zero call sites, and other
   restrictions the README claims for that tier (no external links) are enforced
   nowhere.
+* **Two of the `20260816090000` fixes cannot be observed at this data size** —
+  the `deleted_at` filter on replies and the inclusion of `whisper_comments`.
+  Same limitation as the whispers already-heard filter: the SQL is applied and
+  correct, but distinguishing it from the old formula needs a user who has
+  deleted a comment or replied to a whisper. Do not record it as verified.
+* `hugsReceived` and `postsTotal` are still fetched by `userProfile` (via
+  `user_profile_extra_stats`) but nothing renders them since `faeaa04`. Either
+  surface them or stop paying for the round trip.
 
 ## Security context (not a to-do)
 

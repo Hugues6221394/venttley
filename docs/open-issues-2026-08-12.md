@@ -160,26 +160,56 @@ safer and better UX.
 
 ---
 
-## 4. Plug Studio needs the same design work
+## 4. Plug Studio — **done** (`c5c4187`, 2026-08-16)
 
-Added to the redesign scope alongside the public profile, inbox and friends
-page. **File:** `lib/presentation/screens/home/keeper_home_screen.dart` (2,199
-lines) — branch 0 of the shell when `isKeeper && !keeperMemberView`.
+**File:** `lib/presentation/screens/home/keeper_home_screen.dart` — branch 0 of
+the shell when `isKeeper && !keeperMemberView`. Now 1,788 lines; it was 2,204.
 
-Observed live: a "Control Center" gradient hero with a prompt nudge and a
-*Manage Tribe* CTA, then "Tribe overview" with a 2×2 stat grid (Members,
-Reports, 24h vents, Tribe health) and a *Member feed* link.
+The brief asked whether "each number means something the team actually
+maintains". Two answers, both acted on.
 
-Already fixed there: the bottom row of stat cards was clipped behind the
-floating nav — it reserved 28px against the pill's ~108 (commit `e371aba`, now
-`HomeShell.navClearance`).
+**The same four numbers were on screen four times.** "Tribe overview" (2x2
+grid), "Today's activity" (three tiles) and an unlabelled KPI row all read the
+same fields — `totalPosts24h` three times, members/reports/new-members twice
+each, in three card styles, every one reading zero. The per-tribe card below
+showed three of them a fourth time. "Tribe overview" now carries them once:
+Members, Reports, 24h vents, New·7d. `_TodaySnapshot`, `_SnapTile`,
+`_OverviewGrid` and `_KpiTile` are deleted, and `_HeroPanel` turned out to be
+dead code and went with them.
 
-Worth carrying in: this is an operator console, not a social feed. Keepers come
-to answer "is my tribe healthy and is anything on fire?" — so reports and
-moderation queues deserve more weight than a health percentage, and the same
-question applies here as to the profile's stat band and the removed mood ring:
-**does each number mean something the team actually maintains?** A "55% Tribe
-health" figure nobody can explain is the mood ring in a different costume.
+**"Tribe health 55% · Growing" was a constant.** `_healthScore` returned
+`engagement + 55 - reportsPenalty` clamped to 40..100, with a comment saying
+the floor existed "so it never looks broken" — so a tribe with no posts and no
+members beyond its keeper scored exactly 55 and was told it was growing. The
+brief called this "the mood ring in a different costume" and it was right.
+Replaced with new members in the last 7 days.
+
+**Three taglines made the same promise** — the top bar's "Manage your tribe.
+Protect your safe space.", the hero's "Everything you need to keep it safe and
+thriving.", and Creator Studio's "Everything you need to grow and protect your
+tribe." The hero also spent an eyebrow and a 23pt headline naming the screen
+the keeper was already on. All replaced by the state itself: `ALL CLEAR ·
+QUIET`, `ALL CLEAR · ACTIVE`, or `NEEDS REVIEW`, with a matching dot.
+
+Three layout defects, each measured with `idb ui describe-all` rather than
+eyeballed:
+
+* Creator Studio tiles bottom-anchored their text behind a `Spacer`, so a tile
+  whose subtitle wrapped to two lines sat its label a line higher than its
+  neighbour. Top-aligned.
+* 130pt of empty space sat between that grid and "Your tribes". The nested
+  `GridView` had a null `padding`, so it inherited the ambient MediaQuery
+  padding — the home-indicator inset — along its scroll axis. With
+  `EdgeInsets.zero` the gap is 18pt, the section padding. **Worth remembering:
+  a nested scrollable with null padding silently reserves safe-area space.**
+* The hero's decorative disc carried the two-bar Venttly mark at its centre,
+  which the shortened panel's callout card crossed exactly, slicing it in half.
+  The disc keeps the glow and drops the mark; the wordmark is in the top bar a
+  few points above. The callout is opaque now too — at 0.72 the disc bled
+  through it and sat under the action button.
+
+Still true from the original note: the bottom row of stat cards used to be
+clipped behind the floating nav (`e371aba`, now `HomeShell.navClearance`).
 
 ---
 

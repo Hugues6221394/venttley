@@ -1,14 +1,18 @@
-# Where we stopped — 2026-08-15
+# Where we stopped — 2026-08-16
 
 Read this first, then `AGENT-COORDINATION.md` (a second agent works security
 hardening in this repo concurrently; uncommitted files under `supabase/` and
 `.github/` are usually theirs).
 
-**Suite: 173 tests, 0 errors, 0 warnings. iOS and Android both build.**
+**Suite: 184 tests, 0 errors, 0 warnings. iOS and Android both build.**
 
-Last worked: the **public profile** (`faeaa04`, `aee667c`) — done and verified
-on device. See `public-profile-redesign-brief.md` for what changed and why.
-Whispers work is complete.
+**All four redesigns are done and verified on device.** Public profile
+(`faeaa04`, `aee667c`, `e7e451b`), inbox (`52f1244`), friends (`4249b07`),
+Plug Studio (`c5c4187`). Whispers work is complete.
+
+The same defect turned up on every one of them, so look for it first on the
+next screen: **the same number rendered two, three or four times in different
+card styles.** It was never a spacing problem. See "The pattern" below.
 
 ---
 
@@ -60,26 +64,50 @@ WHERE room_id = '<friend circle room id>';
 Also seen and unexplained: the chat header says **"2 members"** while Group
 details says **"1 members"** for the same room. Two counts from two sources.
 
-### 2. Redesigns — public profile is **done**; three left
+### 2. Redesigns — all four **done**
 
-`inbox-friends-redesign-brief.md` (messaging hub + friends page) and Plug
-Studio (`open-issues-2026-08-12.md` section 4). Both specified with line
-numbers.
+Briefs are updated to describe what the screens are, not what they were:
+`public-profile-redesign-brief.md`, `inbox-friends-redesign-brief.md`, and
+Plug Studio in `open-issues-2026-08-12.md` section 4.
 
-The public profile is finished and verified on device. Two things it surfaced
-that apply to the others:
-
-* **The screen had two of everything before it had a layout problem.** The real
-  defect was duplicated stats presented twice with no hierarchy, not spacing —
-  every section inset was already 20. Look for duplication before reaching for
-  the grid.
-* **Empty states are a design surface, not a fallback.** A brand-new account
-  rendered four zeros where the profile is supposed to argue for connecting
-  with someone. Check what each new block looks like at zero.
 ### 3. Whispers ranking beyond recency — the user chose recency + already-heard +
    randomised entry, and explicitly rejected engagement weighting. Do not
    reintroduce it without revisiting that reasoning; on this platform it would
    amplify the most distressing content to the accounts least able to handle it.
+
+---
+
+## The pattern behind all four redesigns
+
+Every screen was described in its brief as having a layout or spacing problem.
+None of them did. On each one the section insets were already consistent, and
+the actual defect was **the same number rendered more than once, in more than
+one card style, with no hierarchy between the copies**:
+
+| Screen | Duplication |
+| --- | --- |
+| Public profile | Connections twice; "Posts" (vents + whispers) directly above "Vents" — two different post counts for one person |
+| Inbox | A horizontal rail *of chats* above a list *of chats* |
+| Friends | — (its problem was a screen of onboarding above the list) |
+| Plug Studio | `totalPosts24h` three times; members, reports, new-members twice each; four blocks, all zero |
+
+Deleting the copies is what made each screen fit on one page. Plug Studio lost
+416 lines and gained nothing but clarity.
+
+Three more findings worth carrying:
+
+* **Empty states are a design surface.** A new account rendered four zeros
+  where the profile is supposed to argue for connecting with someone. Check
+  what every new block looks like at zero — and whether zero means "none" or
+  "not disclosed" (see `20260816090000`).
+* **A number nobody maintains is worse than no number.** Plug Studio's "Tribe
+  health 55% · Growing ↗" was `engagement + 55 - penalty` floored at 40 "so it
+  never looks broken" — the same problem that got the profile's mood ring
+  deleted. Ask what a figure would have to do to be wrong; if nothing, cut it.
+* **Measure layout, do not eyeball it.** `idb ui describe-all` returns real
+  frames. A 130pt gap in Plug Studio looked like a padding bug and was a nested
+  `GridView` with null `padding` inheriting the home-indicator inset along its
+  scroll axis. Confirmed 130 → 18 by frame, not by squinting.
 
 ---
 
@@ -138,6 +166,16 @@ The user has since confirmed via SQL that listens are recording again.
   replaced in `listWhispers`.
 - **`isRestrictedMinor`** still has zero call sites; other restrictions the
   README claims for that tier (no external links) are enforced nowhere.
+- **The friends page still does two jobs** — managing people and browsing
+  tribes, which `/tribes` already owns. That conflation is probably why it
+  needs a view switcher at all. Raised with the user; not actioned.
+- **The public profile has no recency signal.** "Joined 5 weeks ago" is all a
+  stranger gets. "Last active" would be the strongest input to the add decision
+  and is exactly the presence data that is sensitive here. Product call first.
+- **Deleted-comment and whisper-comment counting cannot be observed** at this
+  data size — same limitation as the already-heard filter. The SQL in
+  `20260816090000` is applied; verifying it needs a user who has deleted a
+  comment or replied to a whisper.
 
 ---
 
@@ -179,9 +217,14 @@ Logical points; iPhone 17 is 402x874 @3x. Client at
 `~/Library/Python/3.9/bin/idb`, installed under `/usr/bin/python3` (3.9.6)
 because `fb-idb` calls `asyncio.get_event_loop()` and raises on 3.12+.
 
-Member-view nav at y=810: Home 48, Whispers 109, Post 170, Friends 232,
-Inbox 295, Profile 353. Studio drawer (38, 105); "Member feed" (115, 202).
-Whispers refresh button (320, 91).
+Member-view nav at y=798: Home 48, Whispers 109, Post 170, Friends 232,
+Inbox 295, Profile 353. Studio drawer (38, 105); "Member feed" on the Studio
+home at (335, 431). Whispers refresh button (320, 91).
+
+`idb ui describe-all --udid <udid>` dumps the accessibility tree as JSON with
+real frames — use it to measure a suspicious gap instead of estimating from a
+screenshot. `idb ui describe-point --udid <udid> <x> <y>` answers "is anything
+actually here?".
 
 Swipe the whisper PageView from a clear band — roughly y 500 to 150. Lower starts
 land on the transport card, which swallows the drag.

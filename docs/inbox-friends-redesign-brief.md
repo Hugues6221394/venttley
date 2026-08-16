@@ -1,171 +1,95 @@
-# Messaging hub + friends page redesign — handoff brief
+# Messaging hub + friends page — brief and state
 
-> Plug Studio (`keeper_home_screen.dart`) was later added to the redesign scope —
-> see `open-issues-2026-08-12.md` §4. Three user-reported defects live there too,
-> and the inbox one (§1) outranks any redesign work on this screen.
+**Done and verified on device**, 2026-08-16: inbox `52f1244`, friends
+`4249b07`, plus the Vibes consolidation in `e7e451b`.
 
-Companion to `public-profile-redesign-brief.md`. Written from a structural scan,
-not a full read of either file — the class inventory and the counts below are
-verified; the design reading is argued from them and should be checked against
-the running app.
+Files: `lib/presentation/screens/inbox/inbox_screen.dart` and
+`lib/presentation/screens/friends/friends_screen.dart`.
 
-Verified at commit `dcddc88`.
+## What the brief got right, and what it got wrong
 
-## The shared problem: primary content is buried under modules
+The original brief argued from a structural scan that both screens "bury
+primary content under modules". That held: on a 6.7" display the inbox showed
+2.5 conversations and the friends page showed **zero** friends without
+scrolling.
 
-Both screens push the thing you opened them for below a stack of discovery and
-promotion widgets. This is the same fault already diagnosed on the feed, where
-three rows of chrome (title, scope+sort pills, category rail — a hard-coded
-158px `SliverPersistentHeader`) leave ~2.5 posts visible on a 6.7" screen.
+It also claimed the inbox's "left edge never settles" across six different
+insets, and called that "the most probable reason the hub reads as unpolished,
+ahead of any single widget's styling". **That was wrong.** `_kColumn = 16`
+already existed and was already used by the header, the conversations header
+and the list. Only two real stragglers remained (a rail body at 14, the pending
+card at 14), and fixing them changed almost nothing visually. The screens' real
+problems were structural and behavioural, not alignment — the same false lead
+the feed audit produced with `horizontal: 16`.
 
-**`inbox_screen.dart` (1,569 lines).** Before a single conversation row:
-`_ChatHeader` → `_SearchField` → `_VibesRail` → `_TribeChatsRail` →
-`_PendingRequestsCard` → `_ConversationsHeader` → `_FilterChip`. Seven blocks,
-two of them horizontal rails, ahead of `_ConversationRow`. A messaging hub whose
-messages start below the fold is not a messaging hub.
+## What actually landed
 
-**`friends_screen.dart` (2,111 lines).** Before a single friend row:
-`_CircleViewTabs` → `_TribeExploreControls` → `_RecommendedTribeCard` →
-`_FriendsHeader` → `_InstantConnectCard` → `_RealQrCard` → `_RequestsSection` →
-`_QuickSuggestionsSection` → `_MyFriendsHeader`, then `_FriendRow`.
+### Inbox — `52f1244`
 
-`friends_screen` also does **two unrelated jobs**: managing people you know
+* **Ordering was a genuine bug.** `_allRoomsProvider` sorted by `createdAt`
+  while `_ConversationRow` displayed `lastMessageAt ?? createdAt`, so the
+  timestamps ran out of order down the screen and a thread replied to a minute
+  ago stayed wherever its room happened to sit. On real data this hid a 7/27
+  conversation below ones from 7/18 and 7/15.
+* **Tribe chats were a horizontal rail of chats above a list of chats**, and
+  with one tribe it rendered as a single card clipped by the screen edge.
+  `_InboxEntry` now carries either a `ChatRoom` or a `TribeChatInboxSummary`;
+  `_applyFilter` merges and sorts both by the same recency key and keeps tribes
+  out of Requests, which only ever means friend requests. `_TribeChatsRail` and
+  `_TribeChatChip` are gone.
+* **The Vibes rail duplicated Home's 24h Vent Stories** and was the weaker
+  copy: a gradient story ring means "has an unread story", but these bubbles
+  showed every friend regardless and tapping opened a DM. Removed; stories live
+  on Home only (still asserted by the feed test). New chats start from the
+  compose button in the header.
+* Search never looked at `groupTitle`, so searching a group by the name on its
+  own row returned nothing.
+* A room with no messages rendered a delivered/read double-tick beside an empty
+  preview. Gated on `lastMessageAt != null`.
+* "Tap to open chat" → "No messages yet".
+
+Result: 2.5 conversations above the fold → 5, on the same device.
+
+### Friends — `4249b07`
+
+* The `_InstantConnectCard` was a 64pt QR tile plus a heading plus two lines of
+  body copy, stacked above the two buttons it described. Now just the buttons,
+  keeping the one sentence that earns its place on an anonymity-first product
+  ("No phone numbers, no real names"). All four friends render on first paint.
+* Alphabetical headers now start at 12 friends (`_kAlphabetIndexFrom`). Below
+  that they produced three letters for four rows. Favourites still sort to the
+  top — that was always the sort, never the headers.
+* Magic `116` bottom inset folded onto `HomeShell.navClearance`.
+
+**The golden caught a bug the simulator could not**: at 390pt "Share link"
+wrapped to two lines inside its half-width pill; the 402pt simulator had just
+enough room. `FilledButton.icon`'s default horizontal padding is too generous
+for a two-up button.
+
+## Goldens
+
+`premium_chats.png` and `premium_circle.png` were regenerated and eyeballed;
+`premium_circle_tribes.png` was unaffected because the block only renders on
+the Friends tab. `premium_member_ui_test`'s circle assertion moved off the
+removed "Instant connect" heading onto "Share link" / "My QR" — the heading was
+explanatory copy, the buttons are the affordances the test is about.
+
+## Still open
+
+**The friends page does two unrelated jobs**: managing people you know
 (`_FriendRow`, `_RequestsSection`, `_FavoriteHeart`, `_OutgoingSheet`) and
-browsing tribes (`_TribeExploreControls`, `_RecommendedTribeCard`). The `/tribes`
-route already owns a directory screen. That conflation is likely why the page
-needs a `_CircleViewTabs` switcher at all — it is arbitrating between two
-screens crammed into one.
+browsing tribes (`_TribeExploreControls`, `_RecommendedTribeCard`) — and
+`/tribes` already owns a directory screen. That conflation is probably why the
+page needs `_CircleViewTabs` at all: it is arbitrating between two screens
+crammed into one. Raised with the user; deliberately not actioned, because
+splitting it is a product decision, not a styling one.
 
-Worth deciding before any styling: **what is the one job of each screen?** No
-amount of restyling fixes a page that is two pages.
+## Constraints that still hold
 
-## Class inventory
-
-### `inbox_screen.dart`
-
-| Line | Class |
-| --- | --- |
-| 22 / 39 | `InboxScreen` / `_InboxScreenState` |
-| 29 | `_InboxFilter` |
-| 266 | `_ChatHeader` |
-| 336 | `_SearchField` |
-| 401 | `_VibesRail` |
-| 464 / 513 | `_TribeChatsRail` / `_TribeChatChip` |
-| 613 | `_YourVentBubble` |
-| 650 / 674 | `DottedCircle` / `_DottedCirclePainter` |
-| 699 | `_VibeBubble` |
-| 802 | `_PendingRequestsCard` |
-| 895 | `_ConversationsHeader` |
-| 939 | `_FilterChip` |
-| 981 | `_ConversationRow` ← the actual content |
-| 1313 | `_LastMessageLine` |
-| 1370 | `_ReadStateGlyph` |
-| 1409 | `_EmptyConversations` |
-| 1507 | `_LoadingSkeleton` |
-
-`DottedCircle` is the only public class here; check for external users before
-renaming it.
-
-### `friends_screen.dart`
-
-| Line | Class |
-| --- | --- |
-| 34 / 45 | `FriendsScreen` / `_FriendsScreenState` |
-| 41 / 43 | `_FriendSort` / `_CircleView` |
-| 420 | `_AlphabeticalGroup` |
-| 430 / 474 | `_CircleViewTabs` / `_CircleViewTab` |
-| 530 | `_TribeExploreControls` ← belongs on /tribes |
-| 648 / 661 | `_RecommendedTribeCard` / `State` ← belongs on /tribes |
-| 852 | `_FriendsHeader` |
-| 906 | `_InstantConnectCard` |
-| 1103 | `_RealQrCard` |
-| 1140 / 1243 / 1251 | `_RequestsSection` / `_RequestCard` / `State` |
-| 1382 / 1443 / 1450 | `_QuickSuggestionsSection` / `_SuggestionCard` / `State` |
-| 1569 | `_MyFriendsHeader` |
-| 1660 | `_FriendRow` ← the actual content |
-| 1865 / 1872 | `_FavoriteHeart` / `State` |
-| 1912 | `_OutgoingSheet` |
-| 2028 | `_EmptyState` |
-| 2078 | `_ListSkeleton` |
-
-## Constraints
-
-Same as the profile brief, plus:
-
-1. **Neither screen uses `HomeShell.navClearance`.** Both reserve enough bottom
-   space today (inbox ~120, friends ~116, found via mixed patterns — trailing
-   `SizedBox`, `fromLTRB`, `EdgeInsets.only`) but with magic numbers. Fold them
-   onto the constant; that inconsistency is exactly how `keeper_home` drifted to
-   28 and clipped its last row.
-2. **`VentlyTokens`** (4pt scale `s4…s32`) is almost certainly unreferenced here
-   too, as on the feed. Measure before adding spacing.
-3. **Goldens.** `premium_chats.png` covers the inbox and `premium_circle.png` /
-   `premium_circle_tribes.png` cover friends, on the default
-   `LocalFileComparator` — exact pixel match, zero tolerance. Any redesign will
-   break all three; regenerate deliberately and eyeball them, do not
-   `--update-goldens` reflexively.
-4. `_ConversationRow` (inbox) and `_FriendRow` (friends) are the rows users
-   actually scan. Row height and information hierarchy there matter more than
-   anything above them.
-5. **Verify with `flutter build bundle --debug`**, not just `flutter analyze` —
-   analyze has already passed while the CFE rejected the build.
-
-## Method notes
-
-Carried from the profile brief because they cost real time to learn:
-
-- Read each site before editing. A grep-driven pass on the feed produced a false
-  positive — `horizontal: 16` looked like a misaligned section inset but was
-  internal padding of a fixed-width card in a rail, with nothing to align to.
-- Off-grid spacing is often deliberate: of 16 off-scale gaps on the feed, 9 were
-  intentional 2–6px micro-spacing inside components. Snapping those to 4pt
-  doubles them.
-- The shell's `grep` failed mid-session with a "claude native binary not
-  installed" error inside loops, returning silently empty results. Verify with
-  Python if tooling looks wrong.
-
-## Measured: the inbox's left edge never settles
-
-Verified by scanning every horizontal inset in `inbox_screen.dart`. Reading down
-the screen, section content starts at:
-
-| Section | Left inset |
-| --- | --- |
-| `_ChatHeader` | 20 |
-| `_SearchField` | 16 (inner 14) |
-| `_VibesRail` heading / rail body | 16 / **14** |
-| `_TribeChatsRail` heading / rail body | 16 / **14** |
-| `_PendingRequestsCard` | 14 |
-| `_ConversationsHeader` | 16 |
-| conversation list | **12**, plus 10 inside `_ConversationRow` |
-| `_LoadingSkeleton` | 16 |
-
-Six values on one vertical axis, so no two sections share a column. Two are
-outright defects of the kind already fixed on the feed greeting
-(`feed_screen.dart:531`, commit `7853c49`):
-
-- a rail heading at 16 with its chips at 14 — twice, in `_VibesRail` and
-  `_TribeChatsRail`
-- `_ConversationsHeader` at 16 above a list at 12, whose rows then add 10 of
-  their own, so the heading and the avatars beneath it are ~6px apart
-
-This is the most probable reason the hub reads as unpolished, ahead of any
-single widget's styling. Establishing one section inset and applying it to
-headings, card margins and the list — while leaving genuinely internal
-component padding alone — is the highest-value first change.
-
-Which value is a judgement call needing the running app: 16 is the de facto
-standard here (five sections use it), while the feed uses 20 throughout, so
-matching the feed would also make the two main surfaces agree.
-
-**Not applied.** Every candidate change shifts `premium_chats.png` and needs a
-visual pass to confirm the rails still read as aligned with their headings —
-chips carry their own internal padding, so matching numbers is not the same as
-matching optical alignment.
-
-### Verified as *not* problems
-
-- All three rails are correctly conditional: `_VibesRail` guards on
-  `friends.isNotEmpty`, `_PendingRequestsCard` on `pending > 0`, and
-  `_TribeChatsRail` self-hides with `SizedBox.shrink()` on loading, error and
-  empty. It looked unconditional at the call site (line 108); it is not.
+1. `_kColumn = 16` is the inbox's section column. Use it; do not add a literal.
+2. `_ConversationRow` and `_FriendRow` are the rows users scan. Row height and
+   information hierarchy there matter more than anything above them.
+3. Verify with `flutter build bundle --debug`, not just `flutter analyze` —
+   analyze has passed while the CFE rejected the build.
+4. Off-grid spacing is often deliberate: of 16 off-scale gaps on the feed, 9
+   were intentional 2–6px micro-spacing inside components.
