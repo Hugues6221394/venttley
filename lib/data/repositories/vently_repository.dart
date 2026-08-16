@@ -1776,6 +1776,17 @@ class VentlyRepository implements MusicProvider {
     return Future.value((path: 'mock/whisper.m4a', url: 'mock://whisper'));
   }
 
+  /// Mark one of your own goals reached, or un-mark it. No-ops on the mock
+  /// backend. Returns the reached timestamp, or null when cleared.
+  Future<DateTime?> setGoalReached({
+    required String postId,
+    required bool reached,
+  }) async {
+    final live = _live;
+    if (live == null) return reached ? DateTime.now() : null;
+    return live.setGoalReached(postId: postId, reached: reached);
+  }
+
   /// Attach or clear a whisper's background music bed. No-ops on the mock
   /// backend, which has no music catalogue.
   Future<void> setWhisperMusic({

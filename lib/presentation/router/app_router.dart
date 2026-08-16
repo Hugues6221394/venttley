@@ -35,6 +35,7 @@ import '../screens/profile/profile_stat_detail_screen.dart';
 import '../screens/profile/security_screen.dart';
 import '../screens/profile/password_security_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/goals/goals_screen.dart';
 import '../screens/questions/questions_screen.dart';
 import '../screens/share/share_card_screen.dart';
 import '../screens/tribes/create_tribe_screen.dart';
@@ -337,6 +338,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/questions',
                 builder: (_, __) => const QuestionsScreen(),
+              ),
+              GoRoute(
+                path: '/goals',
+                builder: (_, __) => const GoalsScreen(),
               ),
               GoRoute(
                 path: '/user/:userId',

@@ -1030,6 +1030,28 @@ final myStreaksProvider = FutureProvider.autoDispose<List<UserStreak>>(
   (ref) async => ref.watch(repositoryProvider).myStreaks(),
 );
 
+/// The signed-in user's own goals, newest first.
+///
+/// Filtered from myVents rather than fetched separately: goals are posts in the
+/// dreams_goals category, and one round trip that the feed already warms beats
+/// a second query for what is usually a handful of rows.
+final myGoalsProvider = FutureProvider.autoDispose<List<Post>>((ref) async {
+  final mine = await ref.watch(myVentsProvider.future);
+  return mine.where((p) => p.isGoal).toList();
+});
+
+/// Goals other people are working on. Fresh, not hot — a goals wall ranked by
+/// engagement would surface the same few loud posts and bury the person who
+/// posted quietly an hour ago, which is the opposite of what this page is for.
+final communityGoalsProvider = FutureProvider.autoDispose<List<Post>>((
+  ref,
+) async {
+  ref.watch(feedPostsProvider);
+  return ref
+      .watch(repositoryProvider)
+      .feed(category: 'dreams_goals', sort: 'fresh', limit: 30);
+});
+
 final myVentsProvider = FutureProvider.autoDispose<List<Post>>((ref) async {
   ref.watch(feedPostsProvider);
   return ref.watch(repositoryProvider).myVents();

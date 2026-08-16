@@ -549,6 +549,13 @@ class Post {
   final String? tribeSlug;
   final String? spaceId;
   final String categoryName;
+
+  /// When the author marked this goal as reached (migration 20260816140000).
+  /// Only ever set on `dreams_goals` posts, and only by their author.
+  final DateTime? goalReachedAt;
+
+  bool get isGoal => categoryName == 'dreams_goals';
+  bool get isGoalReached => goalReachedAt != null;
   final String postType; // user_post | plug_prompt
   final String content;
   final String postMood;
@@ -620,6 +627,7 @@ class Post {
     String? authorDisplayName,
     required this.authorAvatarSeed,
     required this.categoryName,
+    this.goalReachedAt,
     required this.postType,
     required this.content,
     required this.postMood,
@@ -714,6 +722,7 @@ class Post {
       authorIsVerified: authorIsVerified,
       authorKarma: authorKarma,
       categoryName: categoryName,
+      goalReachedAt: goalReachedAt,
       postType: postType,
       content: content ?? this.content,
       postMood: postMood,

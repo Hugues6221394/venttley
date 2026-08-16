@@ -112,10 +112,11 @@ class _QuickCreateSheet extends ConsumerWidget {
         ref.read(composeInitialCategoryProvider.notifier).state = 'testimonies';
         context.go('/compose');
       case 'goal':
-        ref.read(composeStoryModeProvider.notifier).state = false;
-        ref.read(composeIncludePollProvider.notifier).state = false;
-        ref.read(composeInitialCategoryProvider.notifier).state = 'dreams_goals';
-        context.go('/compose');
+        // Goals land on their own page rather than straight in the composer.
+        // Every other format here is write-and-forget; a goal has a life after
+        // posting — you come back to mark it reached — so the page is the
+        // destination and "Set a goal" is one tap further in.
+        context.push('/goals');
     }
   }
 

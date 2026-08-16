@@ -2027,6 +2027,21 @@ class SupabaseBackend {
     );
   }
 
+  /// Mark one of your own goals reached, or un-mark it. Returns the reached
+  /// timestamp, or null when cleared. Ownership and category are enforced
+  /// server-side.
+  Future<DateTime?> setGoalReached({
+    required String postId,
+    required bool reached,
+  }) async {
+    final res = await _client.rpc(
+      'set_goal_reached',
+      params: {'p_post_id': postId, 'p_reached': reached},
+    );
+    if (res == null) return null;
+    return DateTime.parse(res as String);
+  }
+
   Future<String> createWhisper({
     required String audioPath,
     required String audioUrl,
@@ -6329,6 +6344,11 @@ class SupabaseBackend {
       authorProfilePhotoUrl: r['author_profile_photo_url'] as String?,
       authorIsVerified: (r['author_is_verified'] as bool?) ?? false,
       categoryName: r['category_name'] as String,
+      // Absent until 20260816140000 is applied; a goal without it is simply
+      // still being worked on, which is the correct reading either way.
+      goalReachedAt: r['goal_reached_at'] == null
+          ? null
+          : DateTime.parse(r['goal_reached_at'] as String),
       postType: r['post_type'] as String,
       content: r['content'] as String,
       postMood: r['post_mood'] as String,
