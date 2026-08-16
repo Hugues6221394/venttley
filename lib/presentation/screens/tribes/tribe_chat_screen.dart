@@ -234,6 +234,15 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
             idempotencyKey: operationId,
           );
       await _draftSaver?.clear();
+      // Re-read after a successful write. watchTribeMessages emits once on
+      // subscribe and then relies entirely on Supabase Realtime for updates, so
+      // if the postgres_changes callback does not fire the thread never moves —
+      // and the sender does not see their own message. Observed on device: two
+      // messages persisted and neither appeared until the screen was left and
+      // reopened, which reads as "send is broken" and makes people send again.
+      // Edit and delete below already invalidate for the same reason; the three
+      // send paths were the ones that did not.
+      ref.invalidate(tribeMessagesProvider(tribeId));
       _scrollToBottomSoon();
     } catch (_) {
       if (!mounted) return;
@@ -335,6 +344,8 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
             idempotencyKey: operationId,
           );
       await outbox.discardStagedMedia(stagedMedia.path);
+      // See _send: the stream does not re-emit on our own write.
+      ref.invalidate(tribeMessagesProvider(tribeId));
       _scrollToBottomSoon();
     } catch (_) {
       if (stagedMedia != null) {
@@ -630,6 +641,8 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
               idempotencyKey: operationId,
             );
         await outbox.discardStagedMedia(stagedMedia.path);
+        // See _send: the stream does not re-emit on our own write.
+        ref.invalidate(tribeMessagesProvider(tribeId));
         _scrollToBottomSoon();
       } catch (_) {
         if (stagedMedia != null) {
