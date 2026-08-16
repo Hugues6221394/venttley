@@ -1728,6 +1728,24 @@ class Whisper {
   final bool likedByMe;
   final bool savedByMe;
 
+  /// Background music bed (migration 20260816130000).
+  ///
+  /// A reference, never audio: the recorded whisper is untouched and the bed is
+  /// streamed from the track's authorised preview at playback time.
+  /// [musicVolume] is capped at 0.35 by a database CHECK and clamped again in
+  /// the player, because the voice is the content.
+  final String? musicTrackId;
+  final String? musicPreviewUrl;
+  final String? musicTitle;
+  final String? musicArtist;
+  final int musicStartMs;
+  final double musicVolume;
+
+  bool get hasMusicBed =>
+      musicTrackId != null &&
+      (musicPreviewUrl ?? '').isNotEmpty &&
+      musicVolume > 0;
+
   /// Per-reaction tallies (migration 0061). Keys match [PostReactions.all].
   final Map<String, int> reactionCounts;
 
@@ -1772,6 +1790,12 @@ class Whisper {
     this.reactionCounts = const {},
     this.myReaction,
     this.mediaStatus = 'clean',
+    this.musicTrackId,
+    this.musicPreviewUrl,
+    this.musicTitle,
+    this.musicArtist,
+    this.musicStartMs = 0,
+    this.musicVolume = 0,
   }) : _authorDisplayName = authorDisplayName;
 
   String get authorDisplayName {

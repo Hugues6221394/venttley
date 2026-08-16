@@ -1776,6 +1776,24 @@ class VentlyRepository implements MusicProvider {
     return Future.value((path: 'mock/whisper.m4a', url: 'mock://whisper'));
   }
 
+  /// Attach or clear a whisper's background music bed. No-ops on the mock
+  /// backend, which has no music catalogue.
+  Future<void> setWhisperMusic({
+    required String whisperId,
+    String? trackId,
+    int startMs = 0,
+    double volume = 0.18,
+  }) async {
+    final live = _live;
+    if (live == null) return;
+    await live.setWhisperMusic(
+      whisperId: whisperId,
+      trackId: trackId,
+      startMs: startMs,
+      volume: volume,
+    );
+  }
+
   Future<String> createWhisper({
     required String audioPath,
     required String audioUrl,

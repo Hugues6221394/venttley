@@ -183,6 +183,9 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
         // Re-entry (the bootstrap and deep-link paths) resumes; only a
         // deliberate swipe onto a whisper starts it over.
         restart: byUser,
+        musicUrl: w.hasMusicBed ? w.musicPreviewUrl : null,
+        musicStartMs: w.musicStartMs,
+        musicVolume: w.musicVolume,
       );
       if (mounted) {
         // Re-entering the tab replays the current page with byUser false. That
@@ -546,6 +549,11 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
         await controller.startPlayback(
           whisperId: widget.whisper.whisperId,
           url: widget.whisper.audioUrl,
+          musicUrl: widget.whisper.hasMusicBed
+              ? widget.whisper.musicPreviewUrl
+              : null,
+          musicStartMs: widget.whisper.musicStartMs,
+          musicVolume: widget.whisper.musicVolume,
         );
         return;
       }
@@ -837,6 +845,11 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
         await widget.controller.startPlayback(
           whisperId: widget.whisper.whisperId,
           url: widget.whisper.audioUrl,
+          musicUrl: widget.whisper.hasMusicBed
+              ? widget.whisper.musicPreviewUrl
+              : null,
+          musicStartMs: widget.whisper.musicStartMs,
+          musicVolume: widget.whisper.musicVolume,
         );
       } else {
         await widget.controller.togglePause();

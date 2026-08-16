@@ -1990,9 +1990,40 @@ class SupabaseBackend {
       commentsCount: (r['comments_count'] as int?) ?? 0,
       crisisLevel: r['crisis_level'] as String?,
       mediaStatus: (r['media_status'] as String?) ?? 'clean',
+      // Music bed. Read defensively: these columns and the joined track are
+      // absent until 20260816130000 is applied, and a whisper must render
+      // without them.
+      musicTrackId: r['music_track_id'] as String?,
+      musicPreviewUrl: r['music_preview_url'] as String?,
+      musicTitle: r['music_title'] as String?,
+      musicArtist: r['music_artist'] as String?,
+      musicStartMs: (r['music_start_ms'] as num?)?.toInt() ?? 0,
+      musicVolume: (r['music_volume'] as num?)?.toDouble() ?? 0,
       createdAt: DateTime.parse(r['created_at'] as String),
       editedAt: rawEdited == null ? null : DateTime.parse(rawEdited),
       deletedAt: rawDeleted == null ? null : DateTime.parse(rawDeleted),
+    );
+  }
+
+  /// Attach or clear a whisper's background music bed.
+  ///
+  /// Pass a null track to remove it. The server caps the volume at 0.35 and
+  /// re-checks ownership; this is a thin pass-through so the ceiling has
+  /// exactly one owner.
+  Future<void> setWhisperMusic({
+    required String whisperId,
+    String? trackId,
+    int startMs = 0,
+    double volume = 0.18,
+  }) async {
+    await _client.rpc(
+      'set_whisper_music',
+      params: {
+        'p_whisper_id': whisperId,
+        'p_music_track_id': trackId,
+        'p_start_ms': startMs,
+        'p_volume': volume,
+      },
     );
   }
 

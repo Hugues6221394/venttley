@@ -33,6 +33,19 @@ class WhisperPlayerController {
 
   final AudioPlayer _player;
   final AudioPlayer _preloadPlayer;
+
+  /// Background music playing *under* the voice.
+  ///
+  /// A separate player rather than a mixed-down file: mixing would mean
+  /// downloading a full commercial track to the device, which the licensing
+  /// architecture forbids, and would bake in a choice the author could never
+  /// undo. Two players also means a bed that fails to load costs the listener
+  /// nothing — the whisper still plays.
+  ///
+  /// It deliberately does **not** follow [_speed]. Pitch-shifting a music bed
+  /// with the voice sounds broken, and the two are independent content, so
+  /// drift between them is not something anyone can perceive.
+  final AudioPlayer _bedPlayer = AudioPlayer();
   StreamSubscription<ProcessingState>? _completeSub;
 
   String? _activeId;
@@ -133,10 +146,16 @@ class WhisperPlayerController {
     required String whisperId,
     required String url,
     bool restart = true,
+    String? musicUrl,
+    int musicStartMs = 0,
+    double musicVolume = 0,
   }) async {
     if (_activeId == whisperId && _player.audioSource != null) {
       await VentlyAudioSession.instance.ensurePlayback();
       if (restart) await _player.seek(Duration.zero);
+      if (!_bedPlayer.playing && _bedPlayer.audioSource != null) {
+        unawaited(_bedPlayer.play());
+      }
       // NOT awaited: just_audio's play() future completes when playback
       // *finishes*, not when it starts. Awaiting it left startPlayback pending
       // for the whole whisper, so every follow-up the caller does was deferred
@@ -157,6 +176,7 @@ class WhisperPlayerController {
       await _player.setVolume(1.0);
       await _player.setLoopMode(_loopEnabled ? LoopMode.one : LoopMode.off);
       await _player.seek(Duration.zero);
+      await _startBed(musicUrl, musicStartMs, musicVolume);
       // See above — starting playback must not be awaited. This is why the
       // now-playing handle was never published, the listen was never recorded,
       // and the next track was never preloaded: all of it sat behind a future
@@ -168,17 +188,58 @@ class WhisperPlayerController {
     }
   }
 
+  /// Loads and starts the bed, or clears it when the whisper has no music.
+  ///
+  /// Every failure path here is swallowed on purpose. The bed is decoration on
+  /// top of something someone recorded; a dead preview URL, an expired licence
+  /// or a slow CDN must never stop the voice from playing.
+  Future<void> _startBed(String? url, int startMs, double volume) async {
+    await _stopBed();
+    if (url == null || url.isEmpty || volume <= 0) return;
+    try {
+      await _bedPlayer.setUrl(url).timeout(const Duration(seconds: 10));
+      // Loops because a licensed preview is ~30s and a whisper can run for
+      // minutes. The bed restarts from its window, not from zero.
+      await _bedPlayer.setLoopMode(LoopMode.one);
+      await _bedPlayer.setVolume(_bedVolume(volume));
+      await _bedPlayer.seek(Duration(milliseconds: startMs));
+      unawaited(_bedPlayer.play());
+    } catch (_) {
+      await _stopBed();
+    }
+  }
+
+  /// Second enforcement of the ceiling the database already applies.
+  ///
+  /// `whispers_music_bed_check` caps music_volume at 0.35, but this player also
+  /// serves rows written before that constraint and anything a future caller
+  /// passes by hand. The voice is the content; clamping here means no code path
+  /// can drown it.
+  static const double maxBedVolume = 0.35;
+  double _bedVolume(double requested) => requested.clamp(0.0, maxBedVolume);
+
+  Future<void> _stopBed() async {
+    try {
+      await _bedPlayer.stop();
+    } catch (_) {
+      // Already torn down.
+    }
+  }
+
   Future<void> togglePause() async {
     if (_player.playing) {
       await _player.pause();
+      if (_bedPlayer.playing) await _bedPlayer.pause();
     } else if (_player.audioSource != null) {
       await VentlyAudioSession.instance.ensurePlayback();
       unawaited(_player.play());
+      if (_bedPlayer.audioSource != null) unawaited(_bedPlayer.play());
     }
   }
 
   Future<void> pause() async {
     if (_player.playing) await _player.pause();
+    if (_bedPlayer.playing) await _bedPlayer.pause();
   }
 
   Future<void> seek(Duration position) async {
@@ -209,12 +270,17 @@ class WhisperPlayerController {
 
   Future<void> stop() async {
     await _player.stop();
+    await _stopBed();
     _activeId = null;
   }
 
   Future<void> dispose() async {
     await _completeSub?.cancel();
-    await Future.wait([_player.dispose(), _preloadPlayer.dispose()]);
+    await Future.wait([
+      _player.dispose(),
+      _preloadPlayer.dispose(),
+      _bedPlayer.dispose(),
+    ]);
     _activeId = null;
     _preloadedUrl = null;
   }

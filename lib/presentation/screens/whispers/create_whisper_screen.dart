@@ -16,6 +16,7 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../widgets/whisper_audio_preview.dart';
+import '../../widgets/music_track_card.dart';
 import '../../widgets/whisper_preview_sheet.dart';
 
 /// Create Whisper — record audio + tag category + pick background +
@@ -51,6 +52,18 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
   // Composition
   String _category = 'confessions';
   String _voiceFilter = 'none';
+
+  /// Optional music bed. Not mixed into the recording — stored as a reference
+  /// and streamed under the voice at playback.
+  MusicTrack? _musicBed;
+
+  /// Deliberately low, and capped low. `WhisperPlayerController.maxBedVolume`
+  /// and a database CHECK both hold the same 0.35 ceiling; this slider simply
+  /// cannot ask for more. A whisper is someone's voice — the bed is allowed to
+  /// colour it, never to compete with it.
+  double _musicVolume = 0.18;
+  static const double _musicVolumeMin = 0.05;
+  static const double _musicVolumeMax = 0.35;
   Uint8List? _backgroundBytes;
   String? _backgroundUploadedUrl;
   final _titleCtl = TextEditingController();
@@ -291,6 +304,32 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
         description: _descCtl.text.trim().isEmpty ? null : _descCtl.text.trim(),
         idempotencyKey: _publishMutationId,
       );
+      // After the whisper exists, not as part of creating it:
+      // create_whisper_idempotent is a hardened trust-boundary RPC and adding
+      // an optional field to it is not worth the risk. A failure here loses the
+      // bed, not the whisper — so it is caught separately and reported without
+      // failing the publish.
+      final bed = _musicBed;
+      if (bed != null) {
+        try {
+          await repo.setWhisperMusic(
+            whisperId: whisperId,
+            trackId: bed.trackId,
+            volume: _musicVolume,
+          );
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Whisper published, but the background music could not be '
+                  'attached.',
+                ),
+              ),
+            );
+          }
+        }
+      }
       ref.invalidate(whispersFeedProvider);
       ref.invalidate(myWhispersProvider);
       ref.invalidate(popularWhispersProvider);
@@ -401,6 +440,28 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
                   enabled: !_recording && !_processingVoice,
                   onPick: _selectVoiceFilter,
                 ),
+                if (flagEnabled(ref, 'vent_music', fallback: false)) ...[
+                  const SizedBox(height: 18),
+                  const _SectionLabel(label: 'Background music (optional)'),
+                  const SizedBox(height: 8),
+                  _MusicBedPicker(
+                    track: _musicBed,
+                    volume: _musicVolume,
+                    minVolume: _musicVolumeMin,
+                    maxVolume: _musicVolumeMax,
+                    enabled: !_recording && !_processingVoice && !_busy,
+                    onPick: () async {
+                      final picked = await showMusicPicker(
+                        context,
+                        selected: _musicBed,
+                      );
+                      if (!mounted || picked == null) return;
+                      setState(() => _musicBed = picked);
+                    },
+                    onRemove: () => setState(() => _musicBed = null),
+                    onVolume: (v) => setState(() => _musicVolume = v),
+                  ),
+                ],
                 const SizedBox(height: 18),
                 const _SectionLabel(label: 'Title (optional)'),
                 const SizedBox(height: 8),
@@ -813,6 +874,174 @@ class _VoiceProcessingCard extends StatelessWidget {
                 color: context.ink,
                 fontWeight: FontWeight.w800,
                 fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Pick a background bed and set how far under the voice it sits.
+///
+/// The slider's range is 5%–35%, not 0%–100%. That is the whole point of the
+/// control: on a platform where the recording is often the hardest thing
+/// someone has said out loud, a bed loud enough to compete with it is not a
+/// preference worth offering. The ceiling is enforced three times — here, in
+/// [WhisperPlayerController], and by a database CHECK — so no path can raise it.
+class _MusicBedPicker extends StatelessWidget {
+  const _MusicBedPicker({
+    required this.track,
+    required this.volume,
+    required this.minVolume,
+    required this.maxVolume,
+    required this.enabled,
+    required this.onPick,
+    required this.onRemove,
+    required this.onVolume,
+  });
+
+  final MusicTrack? track;
+  final double volume;
+  final double minVolume;
+  final double maxVolume;
+  final bool enabled;
+  final VoidCallback onPick;
+  final VoidCallback onRemove;
+  final ValueChanged<double> onVolume;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = track;
+    if (selected == null) {
+      return OutlinedButton.icon(
+        onPressed: enabled ? onPick : null,
+        icon: const Icon(Icons.library_music_outlined, size: 18),
+        label: const Text(
+          'Add background music',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(46),
+          foregroundColor: VentlyColors.berryMagenta,
+          side: BorderSide(
+            color: VentlyColors.berryMagenta.withOpacity(0.35),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      );
+    }
+
+    // Percent of the *allowed* range, not of full volume — "60%" here would be
+    // a lie about how loud the bed actually is.
+    final pct = ((volume / maxVolume) * 100).round();
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 6),
+      decoration: BoxDecoration(
+        color: VentlyColors.berryMagenta.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: VentlyColors.berryMagenta.withOpacity(0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.music_note_rounded,
+                size: 18,
+                color: VentlyColors.berryMagenta,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      selected.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13.5,
+                        color: context.ink,
+                      ),
+                    ),
+                    Text(
+                      selected.artist,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11.5,
+                        color: context.ink.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: enabled ? onPick : null,
+                child: const Text(
+                  'Change',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Remove background music',
+                visualDensity: VisualDensity.compact,
+                onPressed: enabled ? onRemove : null,
+                icon: Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: context.ink.withOpacity(0.6),
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Icon(
+                Icons.volume_down_rounded,
+                size: 17,
+                color: context.ink.withOpacity(0.55),
+              ),
+              Expanded(
+                child: Slider(
+                  value: volume.clamp(minVolume, maxVolume),
+                  min: minVolume,
+                  max: maxVolume,
+                  activeColor: VentlyColors.berryMagenta,
+                  onChanged: enabled ? onVolume : null,
+                ),
+              ),
+              SizedBox(
+                width: 34,
+                child: Text(
+                  '$pct%',
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11.5,
+                    color: context.ink.withOpacity(0.7),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 6),
+            child: Text(
+              'Kept quiet on purpose so your voice stays clear.',
+              style: TextStyle(
+                fontSize: 11,
+                color: context.ink.withOpacity(0.55),
               ),
             ),
           ),
