@@ -123,6 +123,7 @@ class AppUser {
 class TribeMemberRow {
   final String userId;
   final String pseudonym;
+  final String? _displayName;
   final String avatarSeed;
   final String? profilePhotoUrl;
   final String role; // member | mod | keeper
@@ -138,12 +139,21 @@ class TribeMemberRow {
     required this.avatarSeed,
     required this.role,
     required this.joinedAt,
+    String? displayName,
     this.profilePhotoUrl,
     this.mutedUntil,
     this.warningCount = 0,
     this.lastWarnedAt,
     this.memberNote,
-  });
+  }) : _displayName = displayName;
+
+  /// Same contract as [AppUser.displayName] — the fallback keeps an older API
+  /// or a cached row renderable while the display-name migration rolls out.
+  String get displayName {
+    final value = _displayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return pseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
 
   bool get isKeeper => role == 'keeper';
   bool get isMod => role == 'mod';

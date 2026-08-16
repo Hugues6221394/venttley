@@ -3,6 +3,7 @@
 class TribeOnlineMember {
   final String userId;
   final String pseudonym;
+  final String? _displayName;
   final String avatarSeed;
   final String? profilePhotoUrl;
   final String role;
@@ -13,16 +14,28 @@ class TribeOnlineMember {
     required this.userId,
     required this.pseudonym,
     required this.avatarSeed,
+    String? displayName,
     this.profilePhotoUrl,
     this.role = 'member',
     this.isOnline = false,
     this.lastSeenAt,
-  });
+  }) : _displayName = displayName;
+
+  /// Same contract as [AppUser.displayName]. `tribe_online_members` does not
+  /// select display_name yet, so this reads it opportunistically and otherwise
+  /// derives a readable name from the handle — which is still closer to the
+  /// rest of the app than rendering "@healing_slow" raw.
+  String get displayName {
+    final value = _displayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return pseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
 
   factory TribeOnlineMember.fromJson(Map<String, dynamic> json) {
     return TribeOnlineMember(
       userId: '${json['user_id']}',
       pseudonym: (json['pseudonym'] as String?) ?? 'member',
+      displayName: json['display_name'] as String?,
       avatarSeed: (json['avatar_seed'] as String?) ?? 'default-orb',
       profilePhotoUrl: json['profile_photo_url'] as String?,
       role: (json['role'] as String?) ?? 'member',

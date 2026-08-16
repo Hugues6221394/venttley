@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -79,6 +81,29 @@ class _HubBody extends ConsumerWidget {
         foregroundColor: context.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
+        // The bar is transparent so the premium gradient shows through, and
+        // `topInset` below starts the content underneath it. That holds at
+        // rest and breaks the moment the list moves: a scheduled-prompt row
+        // and the "Chat settings" heading scrolled straight through the title
+        // and the Info/Media tabs with nothing between them.
+        //
+        // A blur keeps the gradient visible — an opaque bar would flatten it —
+        // while giving moving content something to pass behind. Always on
+        // rather than scroll-driven, because unlike the public profile there
+        // is no full-bleed hero here whose top edge needs protecting.
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).scaffoldBackgroundColor.withOpacity(0.72),
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
         bottom: TabBar(
           labelColor: VentlyColors.berryMagenta,
           unselectedLabelColor: context.ink.withOpacity(0.55),
@@ -480,7 +505,7 @@ class _OnlineRow extends StatelessWidget {
               children: [
                 OnlineAvatarRing(
                   avatarSeed: m.avatarSeed,
-                  label: m.pseudonym,
+                  label: m.displayName,
                   profilePhotoUrl: m.profilePhotoUrl,
                   size: 48,
                   isOnline: m.isOnline,
@@ -489,7 +514,7 @@ class _OnlineRow extends StatelessWidget {
                 SizedBox(
                   width: 56,
                   child: Text(
-                    m.pseudonym,
+                    m.displayName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
@@ -535,14 +560,19 @@ class _MembersList extends ConsumerWidget {
                 profilePhotoUrl: m.profilePhotoUrl,
                 size: 40,
               ),
-              title: Text('@${m.pseudonym}',
+              // Display name leads, handle follows. This roster was the last
+              // list in the app still headed by "@pseudonym" after the
+              // display-name rollout reached the feed, threads, chat and the
+              // friends list — so the same person read as "Healing Slow"
+              // everywhere else and "@HealingSlow" here.
+              title: Text(m.displayName,
                   style: const TextStyle(fontWeight: FontWeight.w800)),
               subtitle: Text(
                 m.role == 'keeper'
-                    ? 'Plug'
+                    ? '@${m.pseudonym} · Plug'
                     : m.role == 'mod'
-                        ? 'Co-mod'
-                        : 'Member',
+                        ? '@${m.pseudonym} · Co-mod'
+                        : '@${m.pseudonym} · Member',
                 style: TextStyle(
                   fontSize: 11,
                   color: VentlyColors.berryMagenta.withOpacity(0.85),

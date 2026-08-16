@@ -3281,7 +3281,8 @@ class SupabaseBackend {
         .from('tribe_members')
         .select(
           'role, joined_at, muted_until, warning_count, last_warned_at, member_note, '
-          'users!inner(user_id, anonymous_pseudonym, avatar_seed, profile_photo_url)',
+          'users!inner(user_id, anonymous_pseudonym, display_name, avatar_seed, '
+          'profile_photo_url)',
         )
         .eq('tribe_id', tribeId)
         .order('joined_at', ascending: true);
@@ -3290,6 +3291,7 @@ class SupabaseBackend {
       return TribeMemberRow(
         userId: u['user_id'] as String,
         pseudonym: u['anonymous_pseudonym'] as String,
+        displayName: u['display_name'] as String?,
         avatarSeed: (u['avatar_seed'] as String?) ?? 'default-orb',
         profilePhotoUrl: u['profile_photo_url'] as String?,
         role: r['role'] as String,
@@ -5986,26 +5988,8 @@ class SupabaseBackend {
         .insert({'prompt_id': promptId, 'author_id': uid, 'answer_text': text})
         .select('answer_id, prompt_id, answer_text, created_at')
         .single();
-    // Best-effort: bump the prompt's answers_count for the home strip.
-    await _client
-        .rpc('increment_prompt_answers', params: {'p_prompt_id': promptId})
-        .then(
-          (_) {},
-          onError: (_) async {
-            // RPC may not exist on older deployments; fall back to a direct update.
-            // Race: another inserter may bump first, but we accept some drift.
-            final p = await _client
-                .from('plug_prompts')
-                .select('answers_count')
-                .eq('prompt_id', promptId)
-                .single();
-            final cur = (p['answers_count'] as int?) ?? 0;
-            await _client
-                .from('plug_prompts')
-                .update({'answers_count': cur + 1})
-                .eq('prompt_id', promptId);
-          },
-        );
+    // answers_count is maintained transactionally by the database trigger.
+    // A separate client-side increment is neither retry-safe nor trustworthy.
     final me = _me;
     return PromptAnswer(
       answerId: row['answer_id'] as String,
