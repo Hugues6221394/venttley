@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants.dart';
+import '../../core/image_metadata_scrubber.dart';
 import '../../core/logger.dart';
 import '../../domain/entities/entities.dart';
 import '../../domain/home/home_discovery.dart';
@@ -977,6 +978,32 @@ class SupabaseBackend {
   /// Upload a JPEG/PNG/WebP into the public `post-media` bucket under
   /// `<uid>/<uuid>.<ext>` and return the storage path + public URL.
   /// The matching post row is inserted afterwards via [createPost].
+  /// Every byte array that leaves this app for storage goes through here.
+  ///
+  /// `image_picker` does not strip EXIF, and `maxWidth`/`imageQuality` do not
+  /// change that: on iOS the plugin reads the original file's metadata and
+  /// copies it back into the rescaled output, and on the PHPicker path
+  /// `requestFullMetadata: false` is never consulted. So without this, an
+  /// uploaded photo carried whatever the camera wrote — including GPS
+  /// coordinates. On an anonymous platform used by minors that is the most
+  /// direct de-anonymisation vector in the product.
+  ///
+  /// Applied at the storage boundary rather than at each picker so a new upload
+  /// path cannot forget it. Non-image payloads (the voice-note m4a) match
+  /// neither JPEG nor PNG and pass through untouched, which is why it is safe
+  /// here for audio too.
+  Uint8List _scrubbedUploadBytes(List<int> bytes) {
+    final input = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+    final scrubbed = scrubImageMetadata(input);
+    if (scrubbed.wasScrubbed) {
+      log.info(
+        'upload.metadata_scrubbed',
+        props: {'segments': scrubbed.removedSegments.join(',')},
+      );
+    }
+    return scrubbed.bytes;
+  }
+
   Future<({String path, String url})> uploadPostImage({
     required List<int> bytes,
     required String extension,
@@ -994,7 +1021,7 @@ class SupabaseBackend {
         .from('post-media')
         .uploadBinary(
           path,
-          Uint8List.fromList(bytes),
+          _scrubbedUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('post-media').getPublicUrl(path);
@@ -1720,7 +1747,7 @@ class SupabaseBackend {
         .from('tribe-chat-media')
         .uploadBinary(
           path,
-          Uint8List.fromList(bytes),
+          _scrubbedUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('tribe-chat-media').getPublicUrl(path);
@@ -2384,7 +2411,7 @@ class SupabaseBackend {
         .from('whispers-media')
         .uploadBinary(
           path,
-          Uint8List.fromList(bytes),
+          _scrubbedUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('whispers-media').getPublicUrl(path);
@@ -2544,7 +2571,7 @@ class SupabaseBackend {
         .from('post-media')
         .uploadBinary(
           path,
-          Uint8List.fromList(bytes),
+          _scrubbedUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: true),
         );
     final url = _client.storage.from('post-media').getPublicUrl(path);
@@ -2563,7 +2590,7 @@ class SupabaseBackend {
         .from('tribe-chat-media')
         .uploadBinary(
           path,
-          Uint8List.fromList(bytes),
+          _scrubbedUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('tribe-chat-media').getPublicUrl(path);
@@ -3290,7 +3317,7 @@ class SupabaseBackend {
         .from('profile-photos')
         .uploadBinary(
           path,
-          Uint8List.fromList(bytes),
+          _scrubbedUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('profile-photos').getPublicUrl(path);
@@ -5682,7 +5709,7 @@ class SupabaseBackend {
         .from('chat-media')
         .uploadBinary(
           path,
-          Uint8List.fromList(bytes),
+          _scrubbedUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     return (path: path, messageId: messageId);
@@ -5704,7 +5731,7 @@ class SupabaseBackend {
         .from('chat-media')
         .uploadBinary(
           path,
-          Uint8List.fromList(bytes),
+          _scrubbedUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     return path;
@@ -5730,7 +5757,7 @@ class SupabaseBackend {
         .from('chat-media')
         .uploadBinary(
           path,
-          Uint8List.fromList(bytes),
+          _scrubbedUploadBytes(bytes),
           fileOptions: const FileOptions(
             contentType: 'audio/mp4',
             upsert: false,
