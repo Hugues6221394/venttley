@@ -89,7 +89,12 @@ void main() {
 
     expect(find.text('Notifications'), findsOneWidget);
     expect(find.text('All'), findsOneWidget);
-    expect(find.text('Unread  2'), findsOneWidget);
+    // The unread count moved out of the label and into a badge when the stock
+    // SegmentedButton was replaced with Venttly pills, so "Unread  2" as one
+    // string no longer exists. Both halves are still asserted — the filter and
+    // the count it carries — which is what this line was ever about.
+    expect(find.text('Unread'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
     expect(find.text('Today'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await expectLater(

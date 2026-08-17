@@ -52,7 +52,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Could not mark notifications as read.')),
+            content: Text('Could not mark notifications as read.'),
+          ),
         );
       }
     } finally {
@@ -171,15 +172,19 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         if (visibleItems.isEmpty)
           const _UnreadEmpty()
         else
-          ..._sectioned(
-            visibleItems,
-            referenceTime: widget.referenceTime,
-          ),
+          ..._sectioned(visibleItems, referenceTime: widget.referenceTime),
       ],
     );
   }
 }
 
+/// Venttly pill chips, not a Material `SegmentedButton`.
+///
+/// The stock component was the single biggest reason this screen read as
+/// unfinished: a wide boxy two-up control with Material's own geometry, sitting
+/// above a list of Venttly cards. The feed's category rail and the inbox's
+/// All/Active/Requests row are both pills, so this is what "consistent with the
+/// app" actually looks like here.
 class _ActivityFilterBar extends StatelessWidget {
   const _ActivityFilterBar({
     required this.value,
@@ -194,42 +199,94 @@ class _ActivityFilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: SegmentedButton<_ActivityFilter>(
-        showSelectedIcon: false,
-        expandedInsets: EdgeInsets.zero,
-        segments: [
-          const ButtonSegment(
-            value: _ActivityFilter.all,
-            label: Text('All'),
+      padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
+      child: Row(
+        children: [
+          _FilterPill(
+            label: 'All',
+            selected: value == _ActivityFilter.all,
+            onTap: () => onChanged(_ActivityFilter.all),
           ),
-          ButtonSegment(
-            value: _ActivityFilter.unread,
-            label: Text(unread > 0 ? 'Unread  $unread' : 'Unread'),
+          const SizedBox(width: 8),
+          _FilterPill(
+            label: 'Unread',
+            count: unread,
+            selected: value == _ActivityFilter.unread,
+            onTap: () => onChanged(_ActivityFilter.unread),
           ),
         ],
-        selected: {value},
-        onSelectionChanged: (selection) => onChanged(selection.first),
-        style: ButtonStyle(
-          minimumSize: const WidgetStatePropertyAll(Size(0, 40)),
-          textStyle: const WidgetStatePropertyAll(
-            TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.count = 0,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? VentlyColors.berryMagenta
+          : Theme.of(context).colorScheme.surface,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected ? Colors.transparent : context.glassBorder,
+            ),
           ),
-          side: WidgetStatePropertyAll(
-            BorderSide(color: context.glassBorder),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: selected ? Colors.white : context.inkMuted,
+                ),
+              ),
+              if (count > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? Colors.white.withOpacity(0.22)
+                        : VentlyColors.berryMagenta,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
-          backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return VentlyColors.roseTint;
-            }
-            return Theme.of(context).colorScheme.surface;
-          }),
-          foregroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return VentlyColors.roseDeep;
-            }
-            return context.inkMuted;
-          }),
         ),
       ),
     );
@@ -314,10 +371,9 @@ class _InviteCardState extends ConsumerState<_InviteCard> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      await ref.read(repositoryProvider).respondToInvite(
-            inviteId: widget.invite.inviteId,
-            accept: accept,
-          );
+      await ref
+          .read(repositoryProvider)
+          .respondToInvite(inviteId: widget.invite.inviteId, accept: accept);
       ref.invalidate(myInvitesProvider);
       ref.invalidate(notificationsProvider);
       if (accept) ref.invalidate(tribesProvider);
@@ -445,8 +501,9 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
       );
       if (destination != null && mounted) {
         final postId = item.payload['post_id'] as String?;
-        final knownPost =
-            postId == null ? null : ref.read(knownFeedPostProvider(postId));
+        final knownPost = postId == null
+            ? null
+            : ref.read(knownFeedPostProvider(postId));
         navigateFromNotificationPayload(
           GoRouter.of(context),
           destination,
@@ -528,10 +585,25 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
     final unread = !item.isRead;
     final accent = _accentFor(item.kind);
     final displayBody = item.displayBody;
-    final hasRequestActions = item.kind == 'friend_request' &&
-        unread &&
-        item.payload['friendship_id'] != null;
-    final hasTransferActions = item.kind == 'tribe_ownership_transfer' &&
+    // Gated on the request still being pending, not on the notification being
+    // unread. Reading a notification does not answer a friend request, so the
+    // old condition meant the single most actionable row on this screen lost its
+    // Accept/Decline the moment you glanced at it, while the request sat
+    // unanswered. incomingFriendRequestsProvider is the same list the Friends
+    // page uses, so the buttons appear exactly when they can still do something
+    // and never on an already-resolved request.
+    final pendingFriendshipIds = ref
+        .watch(incomingFriendRequestsProvider)
+        .valueOrNull
+        ?.map((r) => r.friendshipId)
+        .toSet();
+    final friendshipId = item.payload['friendship_id'] as String?;
+    final hasRequestActions =
+        item.kind == 'friend_request' &&
+        friendshipId != null &&
+        (pendingFriendshipIds?.contains(friendshipId) ?? false);
+    final hasTransferActions =
+        item.kind == 'tribe_ownership_transfer' &&
         unread &&
         item.payload['transfer_id'] != null;
 
@@ -539,108 +611,142 @@ class _NotificationTileState extends ConsumerState<_NotificationTile> {
       button: true,
       label:
           '${item.title}. $displayBody. ${_relativeTime(item.createdAt, now: widget.referenceTime)}',
-      child: Material(
-        color: unread
-            ? VentlyColors.roseTint.withOpacity(context.isDark ? 0.10 : 0.58)
-            : Colors.transparent,
-        child: InkWell(
-          onTap: _open,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(18, 13, 16, 13),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: context.glassBorder),
+      // Inset rounded cards, not edge-to-edge rows.
+      //
+      // Before: an unread row was a full-bleed rose wash with a hard divider
+      // underneath. Three unread in a row merged into one undifferentiated pink
+      // slab, and the divider fought the tint to do the same job twice. A card
+      // per notification, separated by space rather than a rule, gives the list
+      // rhythm and lets the tint mean one thing — this one is new.
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: Material(
+          color: unread
+              ? VentlyColors.roseTint.withOpacity(context.isDark ? 0.14 : 0.52)
+              : Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          child: InkWell(
+            onTap: _open,
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(0, 13, 14, 13),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: unread
+                      ? VentlyColors.berryMagenta.withOpacity(0.18)
+                      : context.glassBorder,
+                ),
               ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _NotificationLeading(item: item, accent: accent),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(
-                              text: item.title,
-                              style: TextStyle(
-                                color: context.ink,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            TextSpan(
-                              text: '  $displayBody',
-                              style: TextStyle(
-                                color: context.inkMuted,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13, height: 1.35),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        _relativeTime(
-                          item.createdAt,
-                          now: widget.referenceTime,
-                        ),
-                        style: TextStyle(
-                          color: context.inkFaint,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (hasRequestActions || hasTransferActions) ...[
-                        const SizedBox(height: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Unread reads as a left accent bar rather than a dot orphaned
+                  // on the right edge, so the eye finds it while scanning names
+                  // instead of after finishing the sentence.
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 3,
+                    height: unread ? 34 : 0,
+                    margin: const EdgeInsets.only(top: 8, right: 11, left: 4),
+                    decoration: BoxDecoration(
+                      color: VentlyColors.berryMagenta,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  if (!unread) const SizedBox(width: 18),
+                  _NotificationLeading(item: item, accent: accent),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              child: _NotificationActionButton(
-                                label: 'Accept',
-                                primary: true,
-                                busy: _responding,
-                                onPressed: _responding
-                                    ? null
-                                    : () => hasTransferActions
-                                        ? _respondToTransfer(true)
-                                        : _respondToRequest(true),
+                              child: Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: item.title,
+                                      style: TextStyle(
+                                        color: context.ink,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: '  $displayBody',
+                                      style: TextStyle(
+                                        color: context.inkMuted,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  height: 1.35,
+                                ),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _NotificationActionButton(
-                                label: 'Decline',
-                                onPressed: _responding
-                                    ? null
-                                    : () => hasTransferActions
-                                        ? _respondToTransfer(false)
-                                        : _respondToRequest(false),
+                            const SizedBox(width: 10),
+                            // Trailing, not on its own line. The timestamp had a
+                            // full line to itself, which made every row three
+                            // lines tall for two lines of content.
+                            Padding(
+                              padding: const EdgeInsets.only(top: 1),
+                              child: Text(
+                                _relativeTime(
+                                  item.createdAt,
+                                  now: widget.referenceTime,
+                                ),
+                                style: TextStyle(
+                                  color: context.inkFaint,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ],
                         ),
+                        if (hasRequestActions || hasTransferActions) ...[
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _NotificationActionButton(
+                                  label: 'Accept',
+                                  primary: true,
+                                  busy: _responding,
+                                  onPressed: _responding
+                                      ? null
+                                      : () => hasTransferActions
+                                            ? _respondToTransfer(true)
+                                            : _respondToRequest(true),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _NotificationActionButton(
+                                  label: 'Decline',
+                                  onPressed: _responding
+                                      ? null
+                                      : () => hasTransferActions
+                                            ? _respondToTransfer(false)
+                                            : _respondToRequest(false),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  width: unread ? 8 : 0,
-                  height: unread ? 8 : 0,
-                  margin: const EdgeInsets.only(top: 6),
-                  decoration: const BoxDecoration(
-                    color: VentlyColors.berryMagenta,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -658,14 +764,19 @@ class _NotificationLeading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!_isSocial(item.kind)) {
+      // Squircle at the radius the avatars use, with a ring in the accent
+      // colour. It was a radius-8 square, which next to the app's softer avatar
+      // tiles read as an unfinished placeholder; a circle would have been the
+      // opposite mistake, since every avatar in this list is a squircle.
       return Container(
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: accent.withOpacity(context.isDark ? 0.18 : 0.11),
-          borderRadius: BorderRadius.circular(8),
+          color: accent.withOpacity(context.isDark ? 0.20 : 0.12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: accent.withOpacity(0.28)),
         ),
-        child: Icon(_iconFor(item.kind), color: accent, size: 23),
+        child: Icon(_iconFor(item.kind), color: accent, size: 22),
       );
     }
 
@@ -694,11 +805,7 @@ class _NotificationLeading extends StatelessWidget {
                   width: 2,
                 ),
               ),
-              child: Icon(
-                _iconFor(item.kind),
-                color: Colors.white,
-                size: 12,
-              ),
+              child: Icon(_iconFor(item.kind), color: Colors.white, size: 12),
             ),
           ),
         ],
