@@ -318,12 +318,23 @@ class _SearchResultsSlivers extends ConsumerWidget {
           child: Center(child: CircularProgressIndicator()),
         ),
       ),
-      error: (e, _) => SliverToBoxAdapter(
+      error: (_, _) => SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
-            'Search failed: $e',
-            style: TextStyle(color: context.ink),
+          child: Column(
+            children: [
+              Text(
+                'Search isn\'t available right now. Please try again.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.ink),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => ref.invalidate(discoverSearchResultsProvider),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
+            ],
           ),
         ),
       ),
@@ -626,8 +637,14 @@ class _PostResultTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // No "@". search_global sends the author's *display name*
+                      // here, so this rendered "@Invisible Ink" — a handle
+                      // sigil glued to a name with a space in it, which is not
+                      // a handle and never was. Every other author label in the
+                      // app (feed, threads, chat, friends) shows the display
+                      // name bare.
                       Text(
-                        '@${hit.subtitle}',
+                        hit.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -753,26 +770,36 @@ class _DefaultDiscoverSlivers {
         ),
       ),
       SliverToBoxAdapter(child: _RisingVoices(voices: voices)),
-      SliverToBoxAdapter(
-        child: _SectionHeader(
-          title: 'Recommended for You',
-          subtitle: 'Based on your recent heartbeats.',
-          trailingIcon: Icons.tune_rounded,
-          onAction: () {},
+      // Header only when there is something under it. It used to render
+      // unconditionally above `posts.take(6)`, so on an account with no
+      // recommendations yet the screen ended with a title, a subtitle and blank
+      // space — which reads as a section that failed to load rather than one
+      // that has nothing to say.
+      //
+      // The tune icon went with it: it was `onAction: () {}`, a control that
+      // invited a tap and did nothing. There is no recommendation-filter surface
+      // to open, so the honest version is no button.
+      if (posts.isNotEmpty) ...[
+        const SliverToBoxAdapter(
+          child: _SectionHeader(
+            title: 'Recommended for You',
+            subtitle: 'Based on your recent heartbeats.',
+          ),
         ),
-      ),
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
-        sliver: SliverList.separated(
-          itemCount: posts.take(6).length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (ctx, i) {
-            final post = posts[i];
-            final accent = _accentForCategory(post.categoryName);
-            return _RecommendedTile(post: post, accent: accent);
-          },
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+          sliver: SliverList.separated(
+            itemCount: posts.take(6).length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (ctx, i) {
+              final post = posts[i];
+              final accent = _accentForCategory(post.categoryName);
+              return _RecommendedTile(post: post, accent: accent);
+            },
+          ),
         ),
-      ),
+      ] else
+        const SliverToBoxAdapter(child: SizedBox(height: 28)),
     ];
   }
 }
@@ -953,13 +980,11 @@ class _SectionHeader extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.action,
-    this.trailingIcon,
     this.onAction,
   });
   final String title;
   final String subtitle;
   final String? action;
-  final IconData? trailingIcon;
   final VoidCallback? onAction;
 
   @override
@@ -1004,11 +1029,6 @@ class _SectionHeader extends StatelessWidget {
                 action!,
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
-            )
-          else if (trailingIcon != null)
-            IconButton(
-              onPressed: onAction,
-              icon: Icon(trailingIcon, size: 18, color: context.ink),
             ),
         ],
       ),
@@ -1064,97 +1084,139 @@ class _NoteworthyTribeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final hash = tribe.slug.hashCode.abs();
     final tint = _tints[hash % _tints.length];
-    return Container(
-      width: 174,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.55)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              height: 84,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [tint[0], tint[1]],
+    // The whole card opens the tribe, not just the button. A card showing a
+    // name, an image and a member count is the most obviously tappable thing on
+    // the screen, and tapping it did nothing.
+    return _TappableCard(
+      onTap: () => context.push('/tribe/${tribe.slug}'),
+      child: Container(
+        width: 174,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.55)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // The artwork flexes, the text does not. The rail is a fixed 212pt,
+            // so the leftover height has to land somewhere: on the image it
+            // reads as a slightly taller card, on the text block it read as a
+            // hole between the name and the button whenever a tribe had no
+            // description.
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [tint[0], tint[1]],
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(8),
+                  alignment: Alignment.topRight,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.32),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${PostCard.compactNumber(tribe.memberCount)} Members',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              padding: const EdgeInsets.all(8),
-              alignment: Alignment.topRight,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.32),
-                  borderRadius: BorderRadius.circular(12),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              tribe.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: context.ink,
+                fontWeight: FontWeight.w900,
+                fontSize: 14,
+              ),
+            ),
+            // Omitted entirely when a tribe has no description. The fallback
+            // was "Fresh conversations for every vibe." — the heading above
+            // already says "Fresh safe-spaces for every vibe.", so an
+            // undescribed tribe printed a near-copy of it, and two of them
+            // printed it twice side by side. A sentence true of every tribe
+            // tells a reader nothing about this one.
+            if ((tribe.description ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 3),
+              Text(
+                tribe.description!.trim(),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.ink.withOpacity(0.62),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
                 ),
+              ),
+            ],
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              height: 30,
+              child: FilledButton(
+                onPressed: () => context.push('/tribe/${tribe.slug}'),
+                style: FilledButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  backgroundColor: VentlyColors.berryMagenta,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                // "View Tribe", not "Join Tribe": this button navigates to the
+                // tribe page, it does not join anything. Joining happens there,
+                // behind its own confirmation.
                 child: Text(
-                  '${PostCard.compactNumber(tribe.memberCount)} Members',
+                  tribe.joinedByMe ? 'Open Tribe' : 'View Tribe',
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9.5,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            tribe.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: context.ink,
-              fontWeight: FontWeight.w900,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Expanded(
-            child: Text(
-              tribe.description?.trim().isNotEmpty == true
-                  ? tribe.description!
-                  : 'Fresh conversations for every vibe.',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: context.ink.withOpacity(0.62),
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          SizedBox(
-            width: double.infinity,
-            height: 30,
-            child: FilledButton(
-              onPressed: () => context.push('/tribe/${tribe.slug}'),
-              style: FilledButton.styleFrom(
-                padding: EdgeInsets.zero,
-                backgroundColor: VentlyColors.berryMagenta,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              child: Text(
-                tribe.joinedByMe ? 'Open Tribe' : 'Join Tribe',
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Card-wide tap target that keeps the child's own decoration intact.
+class _TappableCard extends StatelessWidget {
+  const _TappableCard({required this.child, required this.onTap});
+  final Widget child;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: child,
       ),
     );
   }
@@ -1204,104 +1266,112 @@ class _FeaturedVoiceCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.55)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              ProfileAvatar(
-                avatarSeed: voice.avatarSeed,
-                label: voice.pseudonym,
-                profilePhotoUrl: voice.profilePhotoUrl,
-                size: 40,
-                showVerifiedBadge: voice.isVerified,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            '@${voice.pseudonym}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: context.ink,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 15,
+    // Rising Voices had no tap handler at all — neither card. The section
+    // showed you people worth knowing and then gave you no way to reach them,
+    // which is the one thing a discovery surface has to do.
+    return _TappableCard(
+      onTap: () => context.push('/user/${voice.userId}'),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.55)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ProfileAvatar(
+                  avatarSeed: voice.avatarSeed,
+                  label: voice.pseudonym,
+                  profilePhotoUrl: voice.profilePhotoUrl,
+                  size: 40,
+                  showVerifiedBadge: voice.isVerified,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '@${voice.pseudonym}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: context.ink,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 15,
+                              ),
                             ),
                           ),
-                        ),
-                        if (voice.isVerified) ...[
-                          const SizedBox(width: 4),
-                          const VerifiedBadge(size: 14),
+                          if (voice.isVerified) ...[
+                            const SizedBox(width: 4),
+                            const VerifiedBadge(size: 14),
+                          ],
                         ],
-                      ],
-                    ),
-                    const Text(
-                      'Trending creator',
-                      style: TextStyle(
-                        color: VentlyColors.berryMagenta,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11,
                       ),
-                    ),
-                  ],
+                      const Text(
+                        'Trending creator',
+                        style: TextStyle(
+                          color: VentlyColors.berryMagenta,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: context.isDark
+                    ? context.glass()
+                    : VentlyColors.cardBlush,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: context.isDark
+                      ? context.glassBorder
+                      : VentlyColors.softMauve.withOpacity(0.5),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: context.isDark ? context.glass() : VentlyColors.cardBlush,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: context.isDark
-                    ? context.glassBorder
-                    : VentlyColors.softMauve.withOpacity(0.5),
+              child: Text(
+                '"${voice.topQuote.trim()}"',
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontStyle: FontStyle.italic,
+                  height: 1.45,
+                  color: context.ink,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-            child: Text(
-              '"${voice.topQuote.trim()}"',
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontStyle: FontStyle.italic,
-                height: 1.45,
-                color: context.ink,
-                fontWeight: FontWeight.w700,
-              ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _SoftTag(label: FeedCategories.label(voice.topCategory)),
+                const SizedBox(width: 6),
+                _SoftTag(
+                  label: voice.topMood.isEmpty
+                      ? 'Anonymous'
+                      : '${voice.topMood[0].toUpperCase()}${voice.topMood.substring(1)}',
+                ),
+                const Spacer(),
+                _FollowButton(voice: voice, asPlusIcon: true),
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _SoftTag(label: FeedCategories.label(voice.topCategory)),
-              const SizedBox(width: 6),
-              _SoftTag(
-                label: voice.topMood.isEmpty
-                    ? 'Anonymous'
-                    : '${voice.topMood[0].toUpperCase()}${voice.topMood.substring(1)}',
-              ),
-              const Spacer(),
-              _FollowButton(voice: voice, asPlusIcon: true),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
