@@ -164,12 +164,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(
-                        20,
-                        4,
-                        20,
-                        HomeShell.navClearance,
-                      ),
+                      // Bottom inset drops to 8: the suggestions rail below now
+                      // owns the nav clearance, so keeping it here would leave a
+                      // nav-pill-sized gap in the middle of the page.
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
                       sliver: SliverList.builder(
                         itemCount: grouped.length,
                         itemBuilder: (ctx, i) {
@@ -204,6 +202,23 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                         },
                       ),
                     ),
+                  // Suggestions after the list ends, not only when it is
+                  // empty. friend_suggestions() already ranks mutual-tribe
+                  // people first with a cold-start fallback, but it was gated on
+                  // having zero friends — so the one moment a user is most
+                  // obviously looking for someone new, having just scrolled to
+                  // the bottom of everyone they know, was the one moment the
+                  // screen offered nothing.
+                  if ((friendsAsync.valueOrNull?.isNotEmpty ?? false))
+                    SliverToBoxAdapter(
+                      child: _QuickSuggestionsSection(
+                        async: suggestionsAsync,
+                        heading: 'People you might know',
+                      ),
+                    ),
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: HomeShell.navClearance),
+                  ),
                 ] else ...[
                   SliverToBoxAdapter(
                     child: _TribeExploreControls(
@@ -1397,8 +1412,16 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
 // =========================================================================
 
 class _QuickSuggestionsSection extends StatelessWidget {
-  const _QuickSuggestionsSection({required this.async});
+  const _QuickSuggestionsSection({
+    required this.async,
+    this.heading = 'Quick Suggestions',
+  });
   final AsyncValue<List<FriendSuggestion>> async;
+
+  /// Reads differently depending on where it sits. Above an empty list it is
+  /// the whole point of the screen; below a populated one it is an invitation
+  /// to keep going.
+  final String heading;
   @override
   Widget build(BuildContext context) {
     final list = async.valueOrNull ?? const <FriendSuggestion>[];
@@ -1434,7 +1457,7 @@ class _QuickSuggestionsSection extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
             child: Text(
-              'Quick Suggestions',
+              heading,
               style: TextStyle(
                 color: context.ink,
                 fontWeight: FontWeight.w900,

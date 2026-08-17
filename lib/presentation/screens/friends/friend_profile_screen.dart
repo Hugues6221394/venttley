@@ -915,62 +915,147 @@ class _StatsBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final hairline = BorderSide(color: scheme.primary.withOpacity(0.12));
+    return Row(
+      children: [
+        for (var i = 0; i < _kinds.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: _Kpi3DTile(
+              value: PostCard.compactNumber(_value(_kinds[i])),
+              label: _kinds[i].title,
+              onTap: () => context.push(
+                '/user/${profile.userId}/stat/${_kinds[i].routeSegment}',
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
 
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(top: hairline, bottom: hairline),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: Row(
-          children: [
-            for (var i = 0; i < _kinds.length; i++) ...[
-              if (i > 0)
-                Container(
-                  width: 1,
-                  height: 30,
-                  color: scheme.primary.withOpacity(0.12),
-                ),
-              Expanded(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => context.push(
-                    '/user/${profile.userId}/stat/${_kinds[i].routeSegment}',
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Column(
-                      children: [
-                        Text(
-                          PostCard.compactNumber(_value(_kinds[i])),
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 22,
-                            height: 1.1,
-                            letterSpacing: -0.5,
-                            color: scheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          _kinds[i].title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onSurface.withOpacity(0.55),
-                          ),
-                        ),
-                      ],
+/// A KPI that looks like the raised, painted-on button it actually is.
+///
+/// These were flat columns separated by hairlines. They have always been
+/// tappable — each one opens a stat detail screen — but nothing about them said
+/// so, and a 22pt number that navigates while looking like a label is a control
+/// people do not find.
+///
+/// The raised read comes from four things stacked, not from one big shadow:
+///
+/// * a vertical gradient that is lightest at the top, so the surface reads as
+///   catching light from above;
+/// * a bright hairline on the top edge and a darker one on the bottom, which is
+///   what actually sells "moulded" rather than "floating";
+/// * a soft coloured drop shadow offset downward, tight enough to look moulded
+///   into the card rather than hovering over it;
+/// * a press state that flattens all of the above and shrinks slightly, so the
+///   depth is something you can push. A 3D button that does not move when
+///   pressed reads as a picture of a button.
+class _Kpi3DTile extends StatefulWidget {
+  const _Kpi3DTile({
+    required this.value,
+    required this.label,
+    required this.onTap,
+  });
+
+  final String value;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  State<_Kpi3DTile> createState() => _Kpi3DTileState();
+}
+
+class _Kpi3DTileState extends State<_Kpi3DTile> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Lightest at the top. Inverted in dark mode, where light still comes from
+    // above but the surface it lands on is dark.
+    final gradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: isDark
+          ? [Colors.white.withOpacity(0.10), Colors.white.withOpacity(0.03)]
+          : [Colors.white, const Color(0xFFFDF2F6)],
+    );
+
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _down = true),
+      onTapUp: (_) => setState(() => _down = false),
+      onTapCancel: () => setState(() => _down = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 110),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            gradient: gradient,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: scheme.primary.withOpacity(isDark ? 0.16 : 0.12),
+            ),
+            boxShadow: _down
+                // Pressed: the tile sits down into the card.
+                ? [
+                    BoxShadow(
+                      color: scheme.primary.withOpacity(isDark ? 0.10 : 0.08),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
                     ),
-                  ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: scheme.primary.withOpacity(isDark ? 0.22 : 0.16),
+                      blurRadius: 10,
+                      spreadRadius: -2,
+                      offset: const Offset(0, 4),
+                    ),
+                    // A second, tighter shadow directly under the bottom edge.
+                    // One large blur reads as floating; two — one tight, one
+                    // soft — read as moulded.
+                    BoxShadow(
+                      color: scheme.primary.withOpacity(isDark ? 0.14 : 0.10),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+          ),
+          child: Column(
+            children: [
+              Text(
+                widget.value,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 21,
+                  height: 1.1,
+                  letterSpacing: -0.5,
+                  color: scheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                widget.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.1,
+                  color: scheme.onSurface.withOpacity(0.58),
                 ),
               ),
             ],
-          ],
+          ),
         ),
       ),
     );
