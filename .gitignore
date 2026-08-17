@@ -55,3 +55,8 @@ app.*.map.json
 # Golden-test failure output. Rewritten on every failing run, so tracked
 # copies are permanently dirty; read them locally, don't commit them.
 /test/failures/
+
+# Originals saved by tool/scrub_uploaded_image_metadata.dart before it
+# overwrites them. These are real user photos WITH their original EXIF —
+# they must never be committed.
+exif-backfill-backup/
