@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/user_friendly_errors.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_chat_hub.dart';
 import '../../theme/colors.dart';
@@ -111,6 +112,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                 // they had posted one, and tapping opened a DM. Stories live in
                 // one place now. Starting a new chat is the compose button in
                 // the header above.
+                const SliverToBoxAdapter(child: _AroundNowStrip()),
                 if (pending > 0)
                   SliverToBoxAdapter(
                     child: _PendingRequestsCard(
@@ -1457,4 +1459,192 @@ String _smartInboxTimestamp(DateTime timestamp) {
     return days[timestamp.weekday - 1];
   }
   return '${timestamp.month}/${timestamp.day}';
+}
+
+// =========================================================================
+// AROUND RIGHT NOW — friends you could message this second
+// =========================================================================
+
+/// A strip at the top of the inbox whose whole job is to turn "I should message
+/// someone" into one tap.
+///
+/// The heading changes with who is actually there, because a static "Friends
+/// online" label is the kind of thing people stop reading after a week. One
+/// person gets named; several get counted; nobody gets nothing — the strip
+/// removes itself rather than sitting there saying the room is empty, which
+/// would be a discouraging thing to open a messaging app to.
+///
+/// Everyone here has opted into last-seen. `online_friends` omits users who
+/// turned it off rather than blanking their timestamp, so being on this strip is
+/// itself something the person allowed.
+class _AroundNowStrip extends ConsumerWidget {
+  const _AroundNowStrip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final friends =
+        ref.watch(onlineFriendsProvider).valueOrNull ?? const <OnlineFriend>[];
+    if (friends.isEmpty) return const SizedBox.shrink();
+
+    final online = friends.where((f) => f.isOnline).toList();
+    final heading = switch ((online.length, friends.length)) {
+      (0, 1) => '${friends.first.displayName} was just here',
+      (0, _) => '${friends.length} friends were just here',
+      (1, _) => '${online.first.displayName} is around — say hi',
+      (final n, _) => '$n friends are around right now',
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(_kColumn, 2, _kColumn, 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: online.isEmpty
+                        ? context.inkFaint
+                        : VentlyColors.successGreen,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    heading,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.ink,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      letterSpacing: -0.1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 78,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: _kColumn),
+              itemCount: friends.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (ctx, i) => _AroundNowFace(friend: friends[i]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One face. Tapping opens the DM directly rather than the profile — the strip
+/// exists to start conversations, and making someone route through a profile to
+/// find the message button is the friction this is meant to remove.
+class _AroundNowFace extends ConsumerStatefulWidget {
+  const _AroundNowFace({required this.friend});
+  final OnlineFriend friend;
+
+  @override
+  ConsumerState<_AroundNowFace> createState() => _AroundNowFaceState();
+}
+
+class _AroundNowFaceState extends ConsumerState<_AroundNowFace> {
+  bool _busy = false;
+
+  Future<void> _message() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final room = await ref
+          .read(repositoryProvider)
+          .sendMessageRequest(
+            peerUserId: widget.friend.userId,
+            peerPseudonym: '@${widget.friend.pseudonym}',
+            peerAvatarSeed: widget.friend.avatarSeed,
+            preview: '', // friends-only DM: nothing to gate
+          );
+      if (!mounted) return;
+      context.push('/chat/${room.roomId}');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: "Couldn't open that chat."),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final f = widget.friend;
+    return SizedBox(
+      width: 62,
+      child: InkWell(
+        onTap: _busy ? null : _message,
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                ProfileAvatar(
+                  avatarSeed: f.avatarSeed,
+                  label: f.displayName,
+                  profilePhotoUrl: f.profilePhotoUrl,
+                  size: 50,
+                ),
+                // Green for online, muted for "was just here". The ring is the
+                // only thing distinguishing the two states, so it carries the
+                // meaning rather than decorating it.
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: f.isOnline
+                          ? VentlyColors.successGreen
+                          : context.inkFaint,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.surface,
+                        width: 2.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              f.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.ink,
+                fontWeight: FontWeight.w700,
+                fontSize: 10.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

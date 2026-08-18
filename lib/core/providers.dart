@@ -1282,6 +1282,19 @@ final tribeMessagesProvider = StreamProvider.autoDispose
           ref.watch(repositoryProvider).watchTribeMessages(tribeId),
     );
 
+/// Friends who are around right now, re-polled while the inbox is watching.
+///
+/// 45s rather than the presence window's 70s: polling exactly at the boundary
+/// would let someone flicker out of the list a moment before their next
+/// heartbeat lands.
+final onlineFriendsProvider = FutureProvider.autoDispose<List<OnlineFriend>>((
+  ref,
+) async {
+  final timer = Timer(const Duration(seconds: 45), () => ref.invalidateSelf());
+  ref.onDispose(timer.cancel);
+  return ref.watch(repositoryProvider).onlineFriends();
+});
+
 /// Snapshot of how many tribe members are present (proxy: total members
 /// until presence channel ships).
 final tribeChatPresenceProvider = FutureProvider.autoDispose

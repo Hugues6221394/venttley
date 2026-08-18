@@ -3314,6 +3314,18 @@ class SupabaseBackend {
   /// scrubber at the storage boundary, so a banner cannot leak GPS either.
   /// The RPC returns the path it replaced so the old object is deleted instead
   /// of orphaned in a bucket the project pays for.
+  /// Friends who are around right now. One round trip, not one per friend.
+  Future<List<OnlineFriend>> onlineFriends({int limit = 12}) async {
+    final rows =
+        await _client.rpc('online_friends', params: {'p_limit': limit})
+            as List<dynamic>;
+    return rows
+        .map<OnlineFriend>(
+          (r) => OnlineFriend.fromJson(Map<String, dynamic>.from(r as Map)),
+        )
+        .toList();
+  }
+
   Future<AppUser> uploadMyProfileBanner({
     required List<int> bytes,
     required String extension,

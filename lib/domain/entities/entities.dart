@@ -2553,3 +2553,56 @@ class TrendingVoice {
     this.profilePhotoUrl,
   });
 }
+
+/// A friend who is around right now (RPC `online_friends`, migration
+/// 20260817110000).
+///
+/// Only ever contains people who opted into last-seen: the RPC omits everyone
+/// else rather than blanking their timestamp, because appearing in a
+/// "who is around" list is presence information on its own.
+class OnlineFriend {
+  const OnlineFriend({
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.state,
+    String? displayName,
+    this.profilePhotoUrl,
+    this.isVerified = false,
+    this.lastSeenAt,
+  }) : _displayName = displayName;
+
+  final String userId;
+  final String pseudonym;
+  final String? _displayName;
+  final String avatarSeed;
+  final String? profilePhotoUrl;
+  final bool isVerified;
+
+  /// 'online' (last 70s) or 'recent' (last 5 minutes). Same thresholds as
+  /// peer_presence so the two can never disagree about the same person.
+  final String state;
+  final DateTime? lastSeenAt;
+
+  bool get isOnline => state == 'online';
+
+  String get displayName {
+    final value = _displayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return pseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
+
+  factory OnlineFriend.fromJson(Map<String, dynamic> json) {
+    final seen = json['last_seen_at'] as String?;
+    return OnlineFriend(
+      userId: '${json['user_id']}',
+      pseudonym: (json['pseudonym'] as String?) ?? 'anonymous',
+      displayName: json['display_name'] as String?,
+      avatarSeed: (json['avatar_seed'] as String?) ?? 'default-orb',
+      profilePhotoUrl: json['profile_photo_url'] as String?,
+      isVerified: json['is_verified'] == true,
+      state: (json['state'] as String?) ?? 'recent',
+      lastSeenAt: seen == null ? null : DateTime.parse(seen),
+    );
+  }
+}

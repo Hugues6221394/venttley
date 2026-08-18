@@ -669,6 +669,14 @@ class VentlyRepository implements MusicProvider {
     return Future.value(_mock.updateMyAvatar(seed));
   }
 
+  /// Friends who are around right now. Empty on the mock backend, which has no
+  /// presence.
+  Future<List<OnlineFriend>> onlineFriends({int limit = 12}) {
+    final live = _live;
+    if (live == null) return Future.value(const <OnlineFriend>[]);
+    return live.onlineFriends(limit: limit);
+  }
+
   /// Profile background image. Falls back to the current session on the mock
   /// backend, which has no storage.
   Future<AppUser> uploadMyProfileBanner({
