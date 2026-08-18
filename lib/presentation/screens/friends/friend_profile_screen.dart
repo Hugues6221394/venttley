@@ -575,7 +575,10 @@ class _Hero extends StatelessWidget {
               clipBehavior: Clip.none,
               alignment: Alignment.bottomCenter,
               children: [
-                _HeroBanner(photoUrl: (profile.profilePhotoUrl ?? '').trim()),
+                _HeroBanner(
+                  photoUrl: (profile.profilePhotoUrl ?? '').trim(),
+                  bannerUrl: (profile.profileBannerUrl ?? '').trim(),
+                ),
                 Positioned(bottom: -52, child: _HeroAvatar(profile: profile)),
               ],
             ),
@@ -702,12 +705,22 @@ class _Hero extends StatelessWidget {
 /// lower edge fades into the card surface so the overlapping avatar sits on a
 /// seamless backdrop.
 class _HeroBanner extends StatelessWidget {
-  const _HeroBanner({required this.photoUrl});
+  const _HeroBanner({required this.photoUrl, this.bannerUrl = ''});
+
   final String photoUrl;
+
+  /// A background the person actually chose (migration 20260817100000).
+  ///
+  /// When absent this falls back to the old behaviour — the profile photo,
+  /// blurred — which was never really a banner: it was the same picture twice,
+  /// once sharp and once out of focus. A chosen banner renders sharp and
+  /// cropped, because the point of picking one is that it is seen.
+  final String bannerUrl;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final hasBanner = bannerUrl.isNotEmpty;
     final hasPhoto = photoUrl.isNotEmpty;
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -717,7 +730,15 @@ class _HeroBanner extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (hasPhoto)
+            if (hasBanner)
+              // Sharp and cropped: a chosen background is meant to be seen.
+              CachedNetworkImage(
+                imageUrl: bannerUrl,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => const _BrandBanner(),
+                errorWidget: (_, __, ___) => const _BrandBanner(),
+              )
+            else if (hasPhoto)
               ImageFiltered(
                 imageFilter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
                 child: CachedNetworkImage(
@@ -735,7 +756,9 @@ class _HeroBanner extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(hasPhoto ? 0.12 : 0.0),
+                    Colors.black.withOpacity(
+                      hasBanner ? 0.22 : (hasPhoto ? 0.12 : 0.0),
+                    ),
                     scheme.surface.withOpacity(0.0),
                     scheme.surface,
                   ],

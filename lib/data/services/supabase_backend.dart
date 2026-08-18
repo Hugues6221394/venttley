@@ -101,7 +101,7 @@ class SupabaseBackend {
       'user_role, is_verified, account_status, safety_tier, birth_year, '
       'karma_points, home_city, home_country, home_campus';
   static const _userSelectWithProfilePhoto =
-      '$_userBaseSelect, profile_photo_url, bio, pronouns';
+      '$_userBaseSelect, profile_photo_url, profile_banner_url, bio, pronouns';
 
   // ----- realtime fan-out used by the repository to stream the UI -----
   final _postsController = StreamController<List<Post>>.broadcast();
@@ -499,7 +499,11 @@ class SupabaseBackend {
           .maybeSingle();
     } on PostgrestException catch (e) {
       final missingProfilePhoto =
-          e.message.contains('profile_photo_url') &&
+          (e.message.contains('profile_photo_url') ||
+              // 20260817100000 adds profile_banner_url. Same treatment: a
+              // missing column must degrade to the base select, not break
+              // sign-in.
+              e.message.contains('profile_banner_url')) &&
           (e.code == '42703' ||
               e.message.contains('42703') ||
               e.message.contains('does not exist'));
@@ -3094,6 +3098,9 @@ class SupabaseBackend {
       displayName: user['display_name'] as String?,
       avatarSeed: (user['avatar_seed'] as String?) ?? 'default-orb',
       profilePhotoUrl: user['profile_photo_url'] as String?,
+      // Absent until 20260817100000 is applied; a profile renders on the
+      // blurred-photo fallback without it.
+      profileBannerUrl: user['profile_banner_url'] as String?,
       bio: user['bio'] as String?,
       pronouns: user['pronouns'] as String?,
       karma: (user['karma'] as num?)?.toInt() ?? 0,
@@ -3296,6 +3303,58 @@ class SupabaseBackend {
   /// the AppUser so the session in memory reflects the new look.
   Future<AppUser> updateMyAvatar(String seed) async {
     await _client.rpc('update_user_avatar', params: {'p_seed': seed});
+    final refreshed = await restore();
+    return refreshed!;
+  }
+
+  /// Upload a profile background image.
+  ///
+  /// Reuses the profile-photos bucket under a `banner-` prefix rather than
+  /// adding a sixth: same RLS, same limits, and already covered by the EXIF
+  /// scrubber at the storage boundary, so a banner cannot leak GPS either.
+  /// The RPC returns the path it replaced so the old object is deleted instead
+  /// of orphaned in a bucket the project pays for.
+  Future<AppUser> uploadMyProfileBanner({
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    final safeExt = extension
+        .replaceAll('.', '')
+        .toLowerCase()
+        .replaceAll(RegExp('[^a-z0-9]'), '');
+    final path =
+        '$uid/banner-${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
+    await _client.storage
+        .from('profile-photos')
+        .uploadBinary(
+          path,
+          _scrubbedUploadBytes(bytes),
+          fileOptions: FileOptions(contentType: contentType, upsert: false),
+        );
+    final url = _client.storage.from('profile-photos').getPublicUrl(path);
+    final oldPath =
+        await _client.rpc(
+              'set_user_profile_banner',
+              params: {'p_path': path, 'p_url': url},
+            )
+            as String?;
+    if (oldPath != null && oldPath.isNotEmpty && oldPath != path) {
+      unawaited(_client.storage.from('profile-photos').remove([oldPath]));
+    }
+    final refreshed = await restore();
+    return refreshed!;
+  }
+
+  Future<AppUser> removeMyProfileBanner() async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    final oldPath = await _client.rpc('clear_user_profile_banner') as String?;
+    if (oldPath != null && oldPath.isNotEmpty) {
+      unawaited(_client.storage.from('profile-photos').remove([oldPath]));
+    }
     final refreshed = await restore();
     return refreshed!;
   }
@@ -6537,6 +6596,7 @@ class SupabaseBackend {
       homeCountry: r['home_country'] as String?,
       homeCampus: r['home_campus'] as String?,
       profilePhotoUrl: r['profile_photo_url'] as String?,
+      profileBannerUrl: r['profile_banner_url'] as String?,
       // Present only in the richer profile select; null in the base select.
       bio: r['bio'] as String?,
       pronouns: r['pronouns'] as String?,

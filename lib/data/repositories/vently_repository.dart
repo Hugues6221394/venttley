@@ -669,6 +669,31 @@ class VentlyRepository implements MusicProvider {
     return Future.value(_mock.updateMyAvatar(seed));
   }
 
+  /// Profile background image. Falls back to the current session on the mock
+  /// backend, which has no storage.
+  Future<AppUser> uploadMyProfileBanner({
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.uploadMyProfileBanner(
+        bytes: bytes,
+        extension: extension,
+        contentType: contentType,
+      );
+    }
+    // The mock backend has no storage; the banner is a no-op there.
+    return Future.value(_mock.removeMyProfilePhoto());
+  }
+
+  Future<AppUser> removeMyProfileBanner() {
+    final live = _live;
+    if (live != null) return live.removeMyProfileBanner();
+    return Future.value(_mock.removeMyProfilePhoto());
+  }
+
   Future<AppUser> uploadMyProfilePhoto({
     required List<int> bytes,
     required String extension,

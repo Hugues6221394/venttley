@@ -21,6 +21,9 @@ class AppUser {
   final String? homeCampus;
   final String? profilePhotoUrl;
 
+  /// Chosen profile background image (migration 20260817100000).
+  final String? profileBannerUrl;
+
   /// Public, user-authored profile copy. Both optional and shown on the
   /// public profile when set. `pronouns` is a free short string (e.g. "she/her",
   /// "he/him", "they/them") the user picks in Edit Profile.
@@ -49,6 +52,7 @@ class AppUser {
     this.homeCountry,
     this.homeCampus,
     this.profilePhotoUrl,
+    this.profileBannerUrl,
     this.bio,
     this.pronouns,
     this.emailVerified = false,
@@ -110,6 +114,10 @@ class AppUser {
       profilePhotoUrl: profilePhotoUrl == _unset
           ? this.profilePhotoUrl
           : profilePhotoUrl as String?,
+      // Not exposed as a copyWith parameter: the banner only ever changes via
+      // the upload/clear RPCs, which return a freshly restored AppUser. Adding
+      // a setter here would invite a second, divergent way to change it.
+      profileBannerUrl: profileBannerUrl,
       bio: bio == _unset ? this.bio : bio as String?,
       pronouns: pronouns == _unset ? this.pronouns : pronouns as String?,
       emailVerified: emailVerified ?? this.emailVerified,
@@ -2255,6 +2263,10 @@ class UserProfileView {
   final String? _displayName;
   final String avatarSeed;
   final String? profilePhotoUrl;
+
+  /// Chosen background image for the profile hero (migration 20260817100000).
+  /// Public like the bio — something the person decided to publish.
+  final String? profileBannerUrl;
   final int karma;
   final bool isVerified;
   final DateTime joinedAt;
@@ -2306,6 +2318,7 @@ class UserProfileView {
     String? displayName,
     required this.avatarSeed,
     this.profilePhotoUrl,
+    this.profileBannerUrl,
     required this.karma,
     required this.isVerified,
     required this.joinedAt,
@@ -2364,6 +2377,7 @@ class UserProfileView {
       displayName: displayName ?? this.displayName,
       avatarSeed: avatarSeed,
       profilePhotoUrl: profilePhotoUrl,
+      profileBannerUrl: profileBannerUrl,
       karma: karma,
       isVerified: isVerified,
       joinedAt: joinedAt,

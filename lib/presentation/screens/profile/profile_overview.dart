@@ -334,6 +334,8 @@ class _GlowAvatar extends ConsumerWidget {
   Future<void> _showPhotoSheet(BuildContext context, WidgetRef ref) async {
     final hasPhoto =
         me.profilePhotoUrl != null && me.profilePhotoUrl!.isNotEmpty;
+    final hasBanner =
+        me.profileBannerUrl != null && me.profileBannerUrl!.isNotEmpty;
     final action = await showModalBottomSheet<String>(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -378,6 +380,34 @@ class _GlowAvatar extends ConsumerWidget {
                 ),
                 onTap: () => Navigator.pop(ctx, 'remove'),
               ),
+            const Divider(height: 8),
+            // The background lives in the same sheet as the avatar rather than
+            // behind a second hidden control: both are "the pictures on my
+            // profile", and a separate entry point for one of them is how an
+            // affordance goes unfound.
+            ListTile(
+              leading: const Icon(
+                Icons.wallpaper_rounded,
+                color: VentlyColors.berryMagenta,
+              ),
+              title: Text(
+                hasBanner ? 'Change background image' : 'Add background image',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              onTap: () => Navigator.pop(ctx, 'banner'),
+            ),
+            if (hasBanner)
+              ListTile(
+                leading: const Icon(
+                  Icons.hide_image_outlined,
+                  color: VentlyColors.dangerRed,
+                ),
+                title: const Text(
+                  'Remove background image',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                onTap: () => Navigator.pop(ctx, 'banner-remove'),
+              ),
             const SizedBox(height: 8),
           ],
         ),
@@ -389,6 +419,28 @@ class _GlowAvatar extends ConsumerWidget {
     try {
       if (action == 'remove') {
         await ref.read(repositoryProvider).removeMyProfilePhoto();
+      } else if (action == 'banner-remove') {
+        await ref.read(repositoryProvider).removeMyProfileBanner();
+      } else if (action == 'banner') {
+        // Wider and lower quality than the avatar on purpose: this is a
+        // full-bleed strip behind other content, so detail matters less than
+        // the bytes a user on a slow connection has to send.
+        final picked = await ImagePicker().pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1600,
+          maxHeight: 900,
+          imageQuality: 80,
+        );
+        if (picked == null) return;
+        final bytes = await picked.readAsBytes();
+        final ext = picked.path.split('.').last.toLowerCase();
+        await ref
+            .read(repositoryProvider)
+            .uploadMyProfileBanner(
+              bytes: bytes,
+              extension: ext.isEmpty ? 'jpg' : ext,
+              contentType: ext == 'png' ? 'image/png' : 'image/jpeg',
+            );
       } else {
         final picked = await ImagePicker().pickImage(
           source: action == 'camera' ? ImageSource.camera : ImageSource.gallery,
@@ -410,9 +462,12 @@ class _GlowAvatar extends ConsumerWidget {
       await ref.read(sessionProvider.notifier).restore();
       messenger.showSnackBar(
         SnackBar(
-          content: Text(
-            action == 'remove' ? 'Photo removed.' : 'Photo updated.',
-          ),
+          content: Text(switch (action) {
+            'remove' => 'Photo removed.',
+            'banner' => 'Background updated.',
+            'banner-remove' => 'Background removed.',
+            _ => 'Photo updated.',
+          }),
         ),
       );
     } catch (e) {
