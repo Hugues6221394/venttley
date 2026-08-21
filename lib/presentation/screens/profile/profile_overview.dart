@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -126,122 +127,190 @@ class _HeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final banner = me.profileBannerUrl?.trim() ?? '';
     return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Stack(
+      // Zero here so the banner can run to the card's edges; the old all-16
+      // padding moved onto the content below it. GlassCard already clips to its
+      // radius, so a full-bleed image keeps the rounded corners.
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _GlowAvatar(me: me),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
+          // Your own background, on your own profile.
+          //
+          // The public profile renders this in _HeroBanner, but self-viewing
+          // redirects to /profile — so without this the person who chose the
+          // image was the one person in the app who could never see it, which
+          // reads as an upload that silently failed.
+          if (banner.isNotEmpty)
+            // Presentational only. Editing lives in the avatar's sheet, which
+            // already carries the background options — a second entry point
+            // here would be a third way to reach one action.
+            _OwnProfileBanner(url: banner),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Stack(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                me.displayName,
+                        _GlowAvatar(me: me),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      me.displayName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 21,
+                                        color: context.ink,
+                                      ),
+                                    ),
+                                  ),
+                                  if (me.isVerified) ...[
+                                    const SizedBox(width: 6),
+                                    const Icon(
+                                      Icons.verified_rounded,
+                                      color: VentlyColors.berryMagenta,
+                                      size: 20,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              Text(
+                                '@${me.anonymousPseudonym}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 21,
-                                  color: context.ink,
+                                  color: context.ink.withOpacity(0.58),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            ),
-                            if (me.isVerified) ...[
-                              const SizedBox(width: 6),
-                              const Icon(
-                                Icons.verified_rounded,
-                                color: VentlyColors.berryMagenta,
-                                size: 20,
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: [
+                                  const _Pill(
+                                    icon: Icons.shield_outlined,
+                                    label: 'Verified Anonymous',
+                                  ),
+                                  _Pill(
+                                    icon: Icons.bar_chart_rounded,
+                                    label: 'Level $level Listener',
+                                  ),
+                                  if (!me.isVerified) _VerificationPill(),
+                                ],
                               ),
                             ],
-                          ],
-                        ),
-                        Text(
-                          '@${me.anonymousPseudonym}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: context.ink.withOpacity(0.58),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: [
-                            const _Pill(
-                              icon: Icons.shield_outlined,
-                              label: 'Verified Anonymous',
-                            ),
-                            _Pill(
-                              icon: Icons.bar_chart_rounded,
-                              label: 'Level $level Listener',
-                            ),
-                            if (!me.isVerified) _VerificationPill(),
-                          ],
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Row(
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Flexible(
-                          child: TaggedText(
-                            (me.bio?.trim().isNotEmpty ?? false)
-                                ? me.bio!.trim()
-                                : 'Here to listen, never to judge.',
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              height: 1.4,
-                              fontWeight: FontWeight.w600,
-                              color: context.ink.withOpacity(0.78),
-                            ),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: TaggedText(
+                                  (me.bio?.trim().isNotEmpty ?? false)
+                                      ? me.bio!.trim()
+                                      : 'Here to listen, never to judge.',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    height: 1.4,
+                                    fontWeight: FontWeight.w600,
+                                    color: context.ink.withOpacity(0.78),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.monitor_heart_outlined,
+                                size: 16,
+                                color: VentlyColors.berryMagenta.withOpacity(
+                                  0.7,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Icon(
-                          Icons.monitor_heart_outlined,
-                          size: 16,
-                          color: VentlyColors.berryMagenta.withOpacity(0.7),
-                        ),
+                        const SizedBox(width: 8),
+                        _EditButton(),
                       ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  _EditButton(),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _StatsPanel(
-                posts: posts,
-                connections: connections,
-                hugs: hugs,
-                trust: trust,
-              ),
-            ],
+                    const SizedBox(height: 16),
+                    _StatsPanel(
+                      posts: posts,
+                      connections: connections,
+                      hugs: hugs,
+                      trust: trust,
+                    ),
+                  ],
+                ),
+                // Settings gear floats in the card's top-right corner so it
+                // never squeezes the username row.
+                Positioned(top: 0, right: 0, child: _HeroSettingsButton()),
+              ],
+            ),
           ),
-          // Settings gear floats in the card's top-right corner so it never
-          // squeezes the username row.
-          Positioned(top: 0, right: 0, child: _HeroSettingsButton()),
+        ],
+      ),
+    );
+  }
+}
+
+/// The chosen background, shown on your own profile card.
+class _OwnProfileBanner extends StatelessWidget {
+  const _OwnProfileBanner({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 104,
+      width: double.infinity,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CachedNetworkImage(
+            imageUrl: url,
+            fit: BoxFit.cover,
+            placeholder: (_, __) =>
+                const ColoredBox(color: VentlyColors.roseTint),
+            errorWidget: (_, __, ___) =>
+                const ColoredBox(color: VentlyColors.roseTint),
+          ),
+          // Fades into the card so the avatar below sits on a seamless
+          // surface rather than against a hard photo edge.
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(0.10),
+                  Colors.transparent,
+                  Theme.of(context).colorScheme.surface.withOpacity(0.55),
+                ],
+                stops: const [0.0, 0.55, 1.0],
+              ),
+            ),
+          ),
         ],
       ),
     );
