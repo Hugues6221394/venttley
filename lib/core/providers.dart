@@ -21,6 +21,8 @@ import '../domain/keeper/keeper_overview.dart';
 import '../domain/keeper/keeper_mode.dart';
 import '../domain/keeper/keeper_studio_v2.dart';
 import 'analytics_events.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'logger.dart';
 
 final repositoryProvider = Provider<VentlyRepository>((ref) {
@@ -1292,7 +1294,24 @@ final onlineFriendsProvider = FutureProvider.autoDispose<List<OnlineFriend>>((
 ) async {
   final timer = Timer(const Duration(seconds: 45), () => ref.invalidateSelf());
   ref.onDispose(timer.cancel);
-  return ref.watch(repositoryProvider).onlineFriends();
+  try {
+    final list = await ref.watch(repositoryProvider).onlineFriends();
+    log.info('inbox.online_friends', props: {'count': '${list.length}'});
+    return list;
+  } catch (e) {
+    // The strip renders nothing on failure, which is right for a decorative
+    // surface — but it makes a broken RPC look exactly like a quiet night.
+    // Logging the difference is the only way to tell them apart from outside.
+    // Log the structured code, not the message: the PII scrubber redacts long
+    // free text, and a redacted blob tells an engineer nothing. A Postgrest
+    // code (42703, 42883, PGRST202…) names the fault precisely and carries
+    // nothing about any user.
+    log.warn('inbox.online_friends_failed', props: {
+      'type': e.runtimeType.toString(),
+      'code': e is PostgrestException ? (e.code ?? 'none') : 'n/a',
+    });
+    rethrow;
+  }
 });
 
 /// Snapshot of how many tribe members are present (proxy: total members
