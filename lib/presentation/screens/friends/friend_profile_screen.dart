@@ -725,7 +725,12 @@ class _HeroBanner extends StatelessWidget {
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       child: SizedBox(
-        height: 116,
+        // Taller when there is a real background to show. At 116 a chosen photo
+        // is a sliver with an avatar sitting on most of it — enough to prove
+        // the upload worked, not enough to be worth choosing. The blurred-photo
+        // and brand-gradient fallbacks stay at 116, because neither is an image
+        // anyone picked and giving them more room just pushes the name down.
+        height: hasBanner ? 168 : 116,
         width: double.infinity,
         child: Stack(
           fit: StackFit.expand,

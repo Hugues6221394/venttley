@@ -63,6 +63,11 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
     ref.invalidate(inboxStreamProvider);
     ref.invalidate(inboxCountsProvider);
     ref.invalidate(myFriendsProvider);
+    // The around-now strip too. It self-polls every 45s, but a pull-to-refresh
+    // is someone explicitly asking for the current state of this screen, and
+    // leaving the one time-sensitive thing on it untouched is the kind of gap
+    // that reads as "refresh does nothing".
+    ref.invalidate(onlineFriendsProvider);
   }
 
   @override
