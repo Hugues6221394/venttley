@@ -39,5 +39,45 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    # permission_handler compiles each iOS permission behind a macro. Any
+    # permission whose macro is not set to 1 is stripped from the binary and its
+    # request returns `denied` unconditionally — no prompt, no way for the user
+    # to grant it. Without this block Permission.microphone.request() could
+    # never succeed, which is why recording a voice vent failed with a
+    # permission error even though NSMicrophoneUsageDescription is present in
+    # Info.plist.
+    #
+    # The unused ones are pinned to 0 rather than left undefined. That is the
+    # privacy-correct default for this app: the shipped binary then physically
+    # cannot ask for location, contacts, calendars or the photo library through
+    # permission_handler, so a future accidental call fails closed instead of
+    # prompting a user of an anonymity-first product for their address book.
+    #
+    # Camera and notifications are 0 on purpose too — image_picker and
+    # flutter_local_notifications/firebase_messaging request those through their
+    # own plugins and Info.plist keys, not through permission_handler.
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] += [
+        'PERMISSION_MICROPHONE=1',
+
+        'PERMISSION_EVENTS=0',
+        'PERMISSION_EVENTS_FULL_ACCESS=0',
+        'PERMISSION_REMINDERS=0',
+        'PERMISSION_CONTACTS=0',
+        'PERMISSION_CAMERA=0',
+        'PERMISSION_SPEECH_RECOGNIZER=0',
+        'PERMISSION_PHOTOS=0',
+        'PERMISSION_NOTIFICATIONS=0',
+        'PERMISSION_MEDIA_LIBRARY=0',
+        'PERMISSION_SENSORS=0',
+        'PERMISSION_BLUETOOTH=0',
+        'PERMISSION_APP_TRACKING_TRANSPARENCY=0',
+        'PERMISSION_CRITICAL_ALERTS=0',
+        'PERMISSION_ASSISTANT=0',
+        'PERMISSION_LOCATION=0',
+      ]
+    end
   end
 end
