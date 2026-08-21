@@ -1021,6 +1021,7 @@ class ThreadedComment {
     DateTime? editedAt,
     DateTime? deletedAt,
     DateTime? pinnedAt,
+    List<ThreadedComment>? children,
   }) {
     return ThreadedComment(
       commentId: commentId,
@@ -1041,7 +1042,7 @@ class ThreadedComment {
       deletedAt: deletedAt ?? this.deletedAt,
       pinnedAt: pinnedAt ?? this.pinnedAt,
       createdAt: createdAt,
-      children: children,
+      children: children ?? this.children,
     );
   }
 }

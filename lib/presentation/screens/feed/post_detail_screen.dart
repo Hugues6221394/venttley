@@ -108,6 +108,31 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     return [...pinned, ...regular];
   }
 
+  /// Drops deleted comments that have nothing live underneath them.
+  ///
+  /// A deleted comment used to render as "Comment removed by author" wherever it
+  /// sat, so a thread of four replies could be mostly grey tombstones — rows
+  /// that take up space, carry a name and a timestamp, and say nothing. Nobody
+  /// reading a thread needs to know that something they never saw is gone.
+  ///
+  /// A tombstone survives in exactly one case: when the deleted comment still
+  /// has live replies under it. Removing it there would orphan those replies or
+  /// silently reparent them, which is a worse lie than the tombstone. So the
+  /// marker only appears where it is structurally load-bearing.
+  List<ThreadedComment> _withoutDeadTombstones(List<ThreadedComment> nodes) {
+    final kept = <ThreadedComment>[];
+    for (final node in nodes) {
+      final children = _withoutDeadTombstones(node.children);
+      if (node.isDeleted && children.isEmpty) continue;
+      kept.add(
+        children.length == node.children.length
+            ? node
+            : node.copyWith(children: children),
+      );
+    }
+    return kept;
+  }
+
   int _countComments(List<ThreadedComment> comments) {
     var count = comments.length;
     for (final comment in comments) {
@@ -320,7 +345,9 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       );
     }
     final commentsAsync = ref.watch(commentsProvider(widget.postId));
-    final comments = commentsAsync.valueOrNull ?? const <ThreadedComment>[];
+    final comments = _withoutDeadTombstones(
+      commentsAsync.valueOrNull ?? const <ThreadedComment>[],
+    );
     final orderedComments = _orderedComments(comments);
     final visibleCommentCount = commentsAsync.valueOrNull == null
         ? post.commentsCount
