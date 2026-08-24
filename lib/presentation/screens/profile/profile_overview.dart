@@ -303,8 +303,16 @@ class _OwnProfileBanner extends ConsumerWidget {
             // provably gone the column gets cleared, so the card stops
             // claiming a background exists and Edit Profile offers "Add"
             // instead of a "Replace / Move / Remove" that acts on nothing.
-            onGivenUp: () =>
-                ref.read(repositoryProvider).healMyProfileBannerIfMissing(),
+            onGivenUp: () async {
+              final healed = await ref
+                  .read(repositoryProvider)
+                  .healMyProfileBannerIfMissing();
+              // The backend refreshing its own copy of the user is not enough:
+              // this card reads the session, so without this the column is
+              // clear and the strip is still sitting there claiming otherwise
+              // until the next launch.
+              if (healed) await ref.read(sessionProvider.notifier).restore();
+            },
           ),
           // Fades into the card so the avatar below sits on a seamless
           // surface rather than against a hard photo edge.
