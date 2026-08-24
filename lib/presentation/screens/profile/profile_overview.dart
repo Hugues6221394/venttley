@@ -295,6 +295,10 @@ class _OwnProfileBanner extends StatelessWidget {
           CachedNetworkImage(
             imageUrl: url,
             fit: BoxFit.cover,
+            // Without this the strip is centred whatever the owner chose, and
+            // this card is 104pt against the public profile's 168 — the frame
+            // where a fixed crop diverges most from what they approved.
+            alignment: Alignment(0, offset * 2 - 1),
             placeholder: (_, __) =>
                 const ColoredBox(color: VentlyColors.roseTint),
             errorWidget: (_, __, ___) =>
