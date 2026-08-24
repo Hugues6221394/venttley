@@ -1,6 +1,7 @@
 import 'dart:ui' show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -746,12 +747,9 @@ class _HeroBanner extends StatelessWidget {
           children: [
             if (hasBanner)
               // Sharp and cropped: a chosen background is meant to be seen.
-              CachedNetworkImage(
-                imageUrl: bannerUrl,
-                fit: BoxFit.cover,
+              _RemoteBanner(
+                url: bannerUrl,
                 alignment: Alignment(0, bannerOffset * 2 - 1),
-                placeholder: (_, __) => const _BrandBanner(),
-                errorWidget: (_, __, ___) => const _BrandBanner(),
               )
             else if (hasPhoto)
               ImageFiltered(
@@ -784,6 +782,110 @@ class _HeroBanner extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A background image that can tell "still arriving" apart from "not set".
+///
+/// The brand gradient used to be the placeholder, the error state *and* the
+/// empty state, so all three looked identical. The same profile could show a
+/// pink gradient one second and a photograph the next, which reads as some
+/// people having a background and others not — when in fact everyone's is
+/// there and only the pixels were late.
+///
+/// A failed fetch also retries a couple of times before falling back, because
+/// on a phone the usual cause is a cold cache on a bad connection, not a
+/// missing object — and CachedNetworkImage will not try again on its own once
+/// the error widget is up.
+class _RemoteBanner extends StatefulWidget {
+  const _RemoteBanner({required this.url, required this.alignment});
+
+  final String url;
+  final Alignment alignment;
+
+  @override
+  State<_RemoteBanner> createState() => _RemoteBannerState();
+}
+
+class _RemoteBannerState extends State<_RemoteBanner> {
+  static const _maxAttempts = 3;
+
+  int _attempt = 0;
+  bool _retryPending = false;
+  bool _logged = false;
+
+  bool get _exhausted => _attempt >= _maxAttempts - 1;
+
+  void _scheduleRetry() {
+    // errorWidget builds during layout, so the setState has to wait for the
+    // frame to finish. The guard matters because the error widget can be built
+    // several times for one failure.
+    if (_retryPending || _exhausted) return;
+    _retryPending = true;
+    Future.delayed(Duration(milliseconds: 400 * (_attempt + 1)), () {
+      if (!mounted) return;
+      setState(() {
+        _retryPending = false;
+        _attempt++;
+      });
+    });
+  }
+
+  @override
+  void didUpdateWidget(_RemoteBanner old) {
+    super.didUpdateWidget(old);
+    if (old.url != widget.url) {
+      _attempt = 0;
+      _retryPending = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CachedNetworkImage(
+      // Part of the key so a retry actually refetches rather than replaying
+      // the cached failure.
+      key: ValueKey('${widget.url}#$_attempt'),
+      imageUrl: widget.url,
+      fit: BoxFit.cover,
+      alignment: widget.alignment,
+      placeholder: (_, __) => const _BannerLoading(),
+      errorWidget: (_, __, error) {
+        // Log it. A background that silently degrades to the brand gradient is
+        // indistinguishable from one that was never set, which is precisely how
+        // a broken URL went unnoticed.
+        if (!_logged) {
+          _logged = true;
+          debugPrint('[WARN] banner.image_failed url=${widget.url} err=$error');
+        }
+        _scheduleRetry();
+        // Keep showing "loading" while there are attempts left — the gradient
+        // is a statement that there is nothing to show, and that is not yet
+        // known to be true.
+        return _exhausted ? const _BrandBanner() : const _BannerLoading();
+      },
+    );
+  }
+}
+
+/// The waiting state for a background that exists but has not arrived. Muted
+/// and shimmering rather than branded, so it cannot be mistaken for a profile
+/// that simply has no background.
+class _BannerLoading extends StatelessWidget {
+  const _BannerLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Shimmer.fromColors(
+      baseColor: isDark
+          ? Theme.of(context).colorScheme.surface.withOpacity(0.75)
+          : VentlyColors.softMauve.withOpacity(0.28),
+      highlightColor: isDark
+          ? Theme.of(context).scaffoldBackgroundColor.withOpacity(0.45)
+          : Colors.white.withOpacity(0.85),
+      child: const ColoredBox(color: Colors.white),
     );
   }
 }
