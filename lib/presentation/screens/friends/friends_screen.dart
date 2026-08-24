@@ -8,6 +8,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/user_friendly_errors.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_recommendations.dart';
 import '../../theme/colors.dart';
@@ -1492,20 +1493,75 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
   bool _sent = false;
   bool _busy = false;
 
+  /// Kept from the send so the request can be withdrawn again. Adding someone
+  /// on a hunch has to be undoable — otherwise a mis-tap on a stranger is
+  /// permanent, and on an app where people are here to be vulnerable that is
+  /// not a small thing.
+  String? _friendshipId;
+
   Future<void> _add() async {
-    if (_busy || _sent) return;
+    if (_busy) return;
     setState(() => _busy = true);
     try {
-      await ref.read(repositoryProvider).sendFriendRequest(widget.s.userId);
+      final id = await ref
+          .read(repositoryProvider)
+          .sendFriendRequest(widget.s.userId);
       ref.invalidate(outgoingFriendRequestsProvider);
-      ref.invalidate(friendSuggestionsProvider);
+      // Deliberately NOT invalidating friendSuggestionsProvider here: it would
+      // drop this person out of the rail the instant you added them, taking the
+      // undo with it.
       if (!mounted) return;
-      setState(() => _sent = true);
+      setState(() {
+        _sent = true;
+        _friendshipId = id;
+      });
     } catch (e) {
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              e,
+              fallback: "Couldn't send that request.",
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Withdraw a request you just sent. decline_friend_request takes either side
+  /// of a pending row — the recipient declining and the sender withdrawing are
+  /// the same delete — so there is nothing new needed on the server.
+  Future<void> _withdraw() async {
+    final id = _friendshipId;
+    if (_busy || id == null) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(repositoryProvider).declineFriendRequest(id);
+      ref.invalidate(outgoingFriendRequestsProvider);
+      if (!mounted) return;
+      setState(() {
+        _sent = false;
+        _friendshipId = null;
+      });
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Could not send: $e')));
+      ).showSnackBar(const SnackBar(content: Text('Request withdrawn.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              e,
+              fallback: "Couldn't withdraw that request.",
+            ),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1517,88 +1573,111 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
       padding: const EdgeInsets.fromLTRB(10, 12, 10, 10),
       margin: EdgeInsets.zero,
       borderRadius: 22,
-      child: SizedBox(
-        width: 132,
-        child: Column(
-          children: [
-            ProfileAvatar(
-              avatarSeed: widget.s.avatarSeed,
-              label: widget.s.pseudonym,
-              profilePhotoUrl: widget.s.profilePhotoUrl,
-              size: 58,
-              showVerifiedBadge: widget.s.isVerified,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    widget.s.pseudonym,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: context.ink,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
+      // The whole card opens the public profile. Deciding whether to add a
+      // stranger from a name and a one-line rationale is asking a lot; the
+      // profile is where that decision can actually be made. The button keeps
+      // its own taps, so ADD still adds.
+      child: InkWell(
+        onTap: () => context.push('/user/${widget.s.userId}'),
+        borderRadius: BorderRadius.circular(22),
+        child: SizedBox(
+          width: 132,
+          child: Column(
+            children: [
+              ProfileAvatar(
+                avatarSeed: widget.s.avatarSeed,
+                label: widget.s.pseudonym,
+                profilePhotoUrl: widget.s.profilePhotoUrl,
+                size: 58,
+                showVerifiedBadge: widget.s.isVerified,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      widget.s.pseudonym,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: context.ink,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
-                ),
-                if (widget.s.isVerified) ...[
-                  const SizedBox(width: 3),
-                  const VerifiedBadge(size: 13),
+                  if (widget.s.isVerified) ...[
+                    const SizedBox(width: 3),
+                    const VerifiedBadge(size: 13),
+                  ],
                 ],
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              widget.s.rationale,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: context.ink.withOpacity(0.6),
-                fontSize: 10.5,
-                fontWeight: FontWeight.w800,
               ),
-            ),
-            const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              height: 30,
-              child: FilledButton(
-                onPressed: _add,
-                style: FilledButton.styleFrom(
-                  backgroundColor: _sent
-                      ? VentlyColors.softMauve.withOpacity(0.4)
-                      : const Color(0xFFFFE3EC),
-                  foregroundColor: VentlyColors.berryMagenta,
-                  padding: EdgeInsets.zero,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
+              const SizedBox(height: 2),
+              Text(
+                widget.s.rationale,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.ink.withOpacity(0.6),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
                 ),
-                child: _busy
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: VentlyColors.berryMagenta,
-                        ),
-                      )
-                    : Text(
-                        _sent ? 'PENDING' : 'ADD',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 11,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
               ),
-            ),
-          ],
+              const Spacer(),
+              SizedBox(
+                width: double.infinity,
+                height: 30,
+                child: FilledButton(
+                  // Once sent, this is the undo. It used to be a dead label that
+                  // called _add and returned immediately, so a request could be
+                  // started and never taken back.
+                  onPressed: _sent ? _withdraw : _add,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _sent
+                        ? VentlyColors.softMauve.withOpacity(0.4)
+                        : const Color(0xFFFFE3EC),
+                    foregroundColor: VentlyColors.berryMagenta,
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: _busy
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: VentlyColors.berryMagenta,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (_sent) ...[
+                              const Icon(Icons.close_rounded, size: 12),
+                              const SizedBox(width: 3),
+                            ],
+                            Text(
+                              // "PENDING" alone says what happened, not what a
+                              // tap will do. The cross is what makes it read as
+                              // undoable.
+                              _sent ? 'PENDING' : 'ADD',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 11,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ).animate().fadeIn(duration: 220.ms);
