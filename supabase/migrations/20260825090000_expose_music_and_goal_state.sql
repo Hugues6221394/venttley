@@ -10,7 +10,9 @@
 -- returns no key at all — which reads exactly like a null.
 --
 -- CREATE OR REPLACE VIEW can only append, never reorder, so every new column
--- goes on the end of each list. That is also why feed_hot picks up
+-- goes on the end of each list. whispers_feed also joins music_tracks: the
+-- whisper player reads the track's title, artist and preview straight off the
+-- row, unlike posts which hydrate those through music_tracks_by_ids. That is also why feed_hot picks up
 -- media_status and the two card colours here: it has been missing them since
 -- 20260727133836, so hot-sorted posts lost their chosen card colours while the
 -- same post kept them under any other sort.
@@ -144,14 +146,24 @@ SELECT
     w.created_at,
     w.deleted_at,
     w.media_status,
+    -- No music_duration_ms here on purpose: 20260816130000 leaves it off
+    -- because a bed loops for however long the whisper runs, so a duration
+    -- would be meaningless. Selecting it would fail — the column does not exist.
     w.music_track_id,
     w.music_start_ms,
-    w.music_duration_ms,
-    w.music_volume
+    w.music_volume,
+    -- The client renders and streams the bed straight off the whisper row, so
+    -- the three track fields it needs are joined here. Without them a whisper
+    -- knows it has music and has no way to name it or play it.
+    mt.preview_url AS music_preview_url,
+    mt.title       AS music_title,
+    mt.artist      AS music_artist
 FROM public.whispers w
 LEFT JOIN public.users    u  ON u.user_id     = w.author_id
 LEFT JOIN public.personas pr ON pr.persona_id = w.persona_id
-                            AND pr.deleted_at IS NULL;
+                            AND pr.deleted_at IS NULL
+LEFT JOIN public.music_tracks mt ON mt.track_id = w.music_track_id
+                                AND mt.is_active;
 
 -- personal_feed enumerates its own RETURNS TABLE rather than returning SETOF
 -- feed_posts, so widening the view is not enough. Changing a function's return
