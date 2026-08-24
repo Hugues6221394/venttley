@@ -5097,10 +5097,25 @@ class SupabaseBackend {
         .toList();
   }
 
+  /// Warned once that inbox_rooms predates the peer-photo column.
+  bool _warnedInboxMissingPeerPhoto = false;
+
   ChatRoom _chatRoomFromInboxRow(
     Map<String, dynamic> row, {
     String? peerDisplayName,
   }) {
+    // A PostgREST row is a plain map, so selecting a view that predates a
+    // column yields no key at all and row[...] is null — indistinguishable from
+    // "this person has no photo". Every DM fell back to a letter avatar and
+    // nothing anywhere said why. An unapplied migration has to be loud.
+    if (!_warnedInboxMissingPeerPhoto &&
+        !row.containsKey('peer_profile_photo_url')) {
+      _warnedInboxMissingPeerPhoto = true;
+      log.warn(
+        'inbox.view_missing_peer_photo_column',
+        props: {'migration': '20260721195535_inbox_peer_profile_photos'},
+      );
+    }
     final isGroup = row['is_group'] == true;
     final rawName = row['peer_pseudonym'] as String?;
     return ChatRoom(
@@ -5890,8 +5905,8 @@ class SupabaseBackend {
   /// carries a single dispatcher and fans out here, because handlers must be
   /// attached before subscribe() and the channel may have been created by a
   /// keystroke before anyone was watching.
-  final Map<String, Set<void Function(Map<String, dynamic>)>>
-  _typingListeners = {};
+  final Map<String, Set<void Function(Map<String, dynamic>)>> _typingListeners =
+      {};
 
   RealtimeChannel _typingChannel(String scope) {
     return _typingChannels.putIfAbsent(scope, () {
@@ -5900,7 +5915,9 @@ class SupabaseBackend {
           event: 'typing',
           callback: (payload) {
             // Copy: a listener may cancel itself while we are iterating.
-            for (final listener in List.of(_typingListeners[scope] ?? const {})) {
+            for (final listener in List.of(
+              _typingListeners[scope] ?? const {},
+            )) {
               listener(payload);
             }
           },
