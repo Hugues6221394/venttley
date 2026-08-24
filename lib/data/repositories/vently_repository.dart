@@ -711,6 +711,15 @@ class VentlyRepository implements MusicProvider {
     return Future.value(_mock.removeMyProfilePhoto());
   }
 
+  /// Clears my banner only when the object behind it is provably gone. See
+  /// [SupabaseBackend.healMyProfileBannerIfMissing] for why it is that strict.
+  /// Returns true when the row changed.
+  Future<bool> healMyProfileBannerIfMissing() {
+    final live = _live;
+    if (live == null) return Future.value(false);
+    return live.healMyProfileBannerIfMissing();
+  }
+
   Future<AppUser> uploadMyProfilePhoto({
     required List<int> bytes,
     required String extension,

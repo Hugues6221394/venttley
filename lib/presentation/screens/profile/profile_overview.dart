@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +11,7 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/profile_banner_image.dart';
 import '../../widgets/profile_banner_editor.dart';
 import '../../widgets/tagged_text.dart';
 
@@ -277,7 +277,7 @@ class _HeroCard extends StatelessWidget {
 }
 
 /// The chosen background, shown on your own profile card.
-class _OwnProfileBanner extends StatelessWidget {
+class _OwnProfileBanner extends ConsumerWidget {
   const _OwnProfileBanner({required this.url, required this.offset});
   final String url;
 
@@ -285,24 +285,26 @@ class _OwnProfileBanner extends StatelessWidget {
   final double offset;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SizedBox(
       height: 104,
       width: double.infinity,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          CachedNetworkImage(
-            imageUrl: url,
-            fit: BoxFit.cover,
+          ProfileBannerImage(
+            url: url,
             // Without this the strip is centred whatever the owner chose, and
             // this card is 104pt against the public profile's 168 — the frame
             // where a fixed crop diverges most from what they approved.
             alignment: Alignment(0, offset * 2 - 1),
-            placeholder: (_, __) =>
-                const ColoredBox(color: VentlyColors.roseTint),
-            errorWidget: (_, __, ___) =>
-                const ColoredBox(color: VentlyColors.roseTint),
+            fallback: const ColoredBox(color: VentlyColors.roseTint),
+            // Your own row is the only one you may repair. If the object is
+            // provably gone the column gets cleared, so the card stops
+            // claiming a background exists and Edit Profile offers "Add"
+            // instead of a "Replace / Move / Remove" that acts on nothing.
+            onGivenUp: () =>
+                ref.read(repositoryProvider).healMyProfileBannerIfMissing(),
           ),
           // Fades into the card so the avatar below sits on a seamless
           // surface rather than against a hard photo edge.

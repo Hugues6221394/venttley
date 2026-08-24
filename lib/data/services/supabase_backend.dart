@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
@@ -511,11 +513,8 @@ class SupabaseBackend {
     // fallback meant a database missing only the crop anchor also stopped
     // returning the banner, the profile photo and the bio — a feature that
     // works disappearing because of a column it does not need.
-    Future<Map<String, dynamic>?> select(String columns) => _client
-        .from('users')
-        .select(columns)
-        .eq('user_id', uid)
-        .maybeSingle();
+    Future<Map<String, dynamic>?> select(String columns) =>
+        _client.from('users').select(columns).eq('user_id', uid).maybeSingle();
 
     try {
       return await select(_userSelectWithProfilePhoto);
@@ -3426,6 +3425,85 @@ class SupabaseBackend {
     }
     final refreshed = await restore();
     return refreshed!;
+  }
+
+  /// URLs already checked this session, so a profile you keep reopening does
+  /// not keep re-probing storage.
+  final Set<String> _bannerProbed = {};
+
+  /// Clear my own banner if — and only if — the object behind it is genuinely
+  /// gone.
+  ///
+  /// Nothing clears profile_banner_url when its storage object disappears out
+  /// of band, and a dangling URL is invisible: the image fails, the UI shows
+  /// its fallback, and the row keeps claiming a background exists. The owner is
+  /// the only person who can fix that, and the only person allowed to.
+  ///
+  /// The strictness is the whole point. A widget-level image error cannot tell
+  /// 404 from 403 from a dead connection, so this re-requests the object itself
+  /// and reads the body: Supabase answers a missing key with HTTP 400 and
+  /// `{"error":"not_found","code":"NoSuchKey"}`. Only that exact shape, or a
+  /// literal 404, counts. A 403, a 5xx, a timeout or a socket error means "no
+  /// idea" — and "no idea" must never delete someone's background.
+  ///
+  /// Returns true when the row was cleared.
+  Future<bool> healMyProfileBannerIfMissing() async {
+    final url = _me?.profileBannerUrl?.trim() ?? '';
+    if (url.isEmpty) return false;
+    if (!_bannerProbed.add(url)) return false;
+
+    final http.Response probe;
+    try {
+      probe = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 8));
+    } catch (e) {
+      // Offline, DNS, TLS, timeout — all of them mean we learned nothing.
+      log.warn(
+        'banner.probe_inconclusive',
+        props: {'reason': e.runtimeType.toString()},
+      );
+      _bannerProbed.remove(url);
+      return false;
+    }
+
+    if (!isMissingStorageObject(probe.statusCode, probe.body)) {
+      if (probe.statusCode != 200) {
+        log.warn(
+          'banner.probe_inconclusive',
+          props: {'status': probe.statusCode},
+        );
+        // Might succeed later; allow another look next session.
+        _bannerProbed.remove(url);
+      }
+      return false;
+    }
+
+    log.warn(
+      'banner.cleared_dangling_url',
+      props: {'status': probe.statusCode},
+    );
+    final oldPath = await _client.rpc('clear_user_profile_banner') as String?;
+    // Deliberately not removing from storage: we just established there is
+    // nothing there.
+    if (oldPath == null) return false;
+    await restore();
+    return true;
+  }
+
+  /// True only for the responses that *prove* the object is not there.
+  ///
+  /// Supabase answers a missing key with HTTP 400 and a body of
+  /// `{"statusCode":"404","error":"not_found","code":"NoSuchKey"}`, so the
+  /// status alone is not enough — a plain 400 could be anything. Everything
+  /// else, and 403 and 5xx especially, means "we do not know", and not knowing
+  /// must never delete somebody's background.
+  @visibleForTesting
+  static bool isMissingStorageObject(int status, String body) {
+    if (status == 404) return true;
+    if (status != 400) return false;
+    final b = body.toLowerCase();
+    return b.contains('nosuchkey') || b.contains('not_found');
   }
 
   Future<AppUser> removeMyProfileBanner() async {
