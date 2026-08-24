@@ -391,16 +391,15 @@ class _BackgroundRowState extends ConsumerState<_BackgroundRow> {
       await ref.read(sessionProvider.notifier).restore();
       messenger.showSnackBar(SnackBar(content: Text(done)));
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            UserFriendlyErrors.message(
+      // A StateError from the backend is ours and already written for a person
+      // to read — passing it through says *why* instead of shrugging.
+      final text = e is StateError
+          ? e.message
+          : UserFriendlyErrors.message(
               e,
               fallback: "Couldn't update your background.",
-            ),
-          ),
-        ),
-      );
+            );
+      messenger.showSnackBar(SnackBar(content: Text(text)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

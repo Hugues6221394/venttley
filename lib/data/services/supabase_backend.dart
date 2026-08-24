@@ -104,6 +104,12 @@ class SupabaseBackend {
       '$_userBaseSelect, profile_photo_url, profile_banner_url, '
       'profile_banner_offset, bio, pronouns';
 
+  /// The shape before 20260822100000 added the crop anchor. Kept as a real
+  /// rung on the ladder so a database that is one migration behind loses the
+  /// anchor only — not the banner, the photo and the bio along with it.
+  static const _userSelectWithoutBannerOffset =
+      '$_userBaseSelect, profile_photo_url, profile_banner_url, bio, pronouns';
+
   // ----- realtime fan-out used by the repository to stream the UI -----
   final _postsController = StreamController<List<Post>>.broadcast();
   final _roomsController = StreamController<List<ChatRoom>>.broadcast();
@@ -491,31 +497,53 @@ class SupabaseBackend {
     return _me;
   }
 
+  /// True when this error is Postgres telling us a column in the select list
+  /// does not exist yet — the shape of a database that is behind the build.
+  static bool _isMissingColumn(PostgrestException e, String column) =>
+      e.message.contains(column) &&
+      (e.code == '42703' ||
+          e.message.contains('42703') ||
+          e.message.contains('does not exist'));
+
   Future<Map<String, dynamic>?> _selectUserById(String uid) async {
+    // Migrations are applied by hand here, so degrade one rung at a time
+    // rather than in one jump to the base columns. The old all-or-nothing
+    // fallback meant a database missing only the crop anchor also stopped
+    // returning the banner, the profile photo and the bio — a feature that
+    // works disappearing because of a column it does not need.
+    Future<Map<String, dynamic>?> select(String columns) => _client
+        .from('users')
+        .select(columns)
+        .eq('user_id', uid)
+        .maybeSingle();
+
     try {
-      return await _client
-          .from('users')
-          .select(_userSelectWithProfilePhoto)
-          .eq('user_id', uid)
-          .maybeSingle();
+      return await select(_userSelectWithProfilePhoto);
     } on PostgrestException catch (e) {
-      final missingProfilePhoto =
-          (e.message.contains('profile_photo_url') ||
-              // 20260817100000 adds profile_banner_url. Same treatment: a
-              // missing column must degrade to the base select, not break
-              // sign-in.
-              e.message.contains('profile_banner_url') ||
-              e.message.contains('profile_banner_offset')) &&
-          (e.code == '42703' ||
-              e.message.contains('42703') ||
-              e.message.contains('does not exist'));
-      if (!missingProfilePhoto) rethrow;
-      return await _client
-          .from('users')
-          .select(_userBaseSelect)
-          .eq('user_id', uid)
-          .maybeSingle();
+      if (!_isMissingColumn(e, 'profile_banner_offset')) {
+        return _selectUserWithoutBanner(select, e);
+      }
     }
+    try {
+      return await select(_userSelectWithoutBannerOffset);
+    } on PostgrestException catch (e) {
+      return _selectUserWithoutBanner(select, e);
+    }
+  }
+
+  /// Last rung: 20260817100000's banner columns or even the profile photo are
+  /// missing, so fall back to what has always been there. Anything else is a
+  /// real error and must not be swallowed.
+  Future<Map<String, dynamic>?> _selectUserWithoutBanner(
+    Future<Map<String, dynamic>?> Function(String columns) select,
+    PostgrestException e,
+  ) {
+    final degradable =
+        _isMissingColumn(e, 'profile_photo_url') ||
+        _isMissingColumn(e, 'profile_banner_url') ||
+        _isMissingColumn(e, 'profile_banner_offset');
+    if (!degradable) throw e;
+    return select(_userBaseSelect);
   }
 
   Future<void> logout() async {
@@ -6688,12 +6716,10 @@ class SupabaseBackend {
         'p_clear_pronouns': clearPronouns,
       },
     );
-    final row = await _client
-        .from('users')
-        .select(_userSelectWithProfilePhoto)
-        .eq('user_id', _uid as Object)
-        .single();
-    _me = _userFromRow(row);
+    // Through the same ladder as sign-in, so saving your profile does not fail
+    // on a column the save never touched.
+    final row = await _selectUserById(_uid as String);
+    _me = _userFromRow(row!);
     return _me!;
   }
 

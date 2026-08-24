@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/user_friendly_errors.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
@@ -581,15 +582,28 @@ class _GlowAvatar extends ConsumerWidget {
           content: Text(switch (action) {
             'remove' => 'Photo removed.',
             'banner' => 'Background updated.',
+            'banner-move' => 'Position saved.',
             'banner-remove' => 'Background removed.',
             _ => 'Photo updated.',
           }),
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Could not update photo: $e')),
-      );
+      // Interpolating the raw exception put Postgrest internals on screen. A
+      // StateError from the backend is ours and already readable; anything else
+      // goes through the translator.
+      final text = e is StateError
+          ? e.message
+          : UserFriendlyErrors.message(
+              e,
+              fallback: switch (action) {
+                'banner' ||
+                'banner-move' ||
+                'banner-remove' => "Couldn't update your background.",
+                _ => "Couldn't update your photo.",
+              },
+            );
+      messenger.showSnackBar(SnackBar(content: Text(text)));
     }
   }
 }
