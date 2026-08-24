@@ -3352,12 +3352,27 @@ class SupabaseBackend {
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('profile-photos').getPublicUrl(path);
-    final oldPath =
-        await _client.rpc(
-              'set_user_profile_banner',
-              params: {'p_path': path, 'p_url': url, 'p_offset': offset},
-            )
-            as String?;
+    // Migrations here are applied by hand, so a build can be ahead of the
+    // database. Losing the anchor is survivable; losing the upload the user
+    // just waited for is not — so fall back to the one-argument signature when
+    // p_offset is not there yet (PGRST202 = no function matching that shape).
+    String? oldPath;
+    try {
+      oldPath =
+          await _client.rpc(
+                'set_user_profile_banner',
+                params: {'p_path': path, 'p_url': url, 'p_offset': offset},
+              )
+              as String?;
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202') rethrow;
+      oldPath =
+          await _client.rpc(
+                'set_user_profile_banner',
+                params: {'p_path': path, 'p_url': url},
+              )
+              as String?;
+    }
     if (oldPath != null && oldPath.isNotEmpty && oldPath != path) {
       unawaited(_client.storage.from('profile-photos').remove([oldPath]));
     }
@@ -3368,10 +3383,19 @@ class SupabaseBackend {
   /// Re-anchor an existing banner without re-uploading it. Dragging the crop is
   /// a single UPDATE, not another trip through storage and the EXIF scrubber.
   Future<AppUser> setMyProfileBannerOffset(double offset) async {
-    await _client.rpc(
-      'set_user_profile_banner_offset',
-      params: {'p_offset': offset},
-    );
+    try {
+      await _client.rpc(
+        'set_user_profile_banner_offset',
+        params: {'p_offset': offset},
+      );
+    } on PostgrestException catch (e) {
+      // Same hand-applied-migration window as the upload path above. Here there
+      // is nothing to salvage, so say what is actually wrong.
+      if (e.code == 'PGRST202') {
+        throw StateError('Repositioning is not available yet on this server.');
+      }
+      rethrow;
+    }
     final refreshed = await restore();
     return refreshed!;
   }

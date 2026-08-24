@@ -26,9 +26,16 @@ ALTER TABLE public.users
 
 GRANT SELECT (profile_banner_offset) ON public.users TO anon, authenticated;
 
--- Replaces the two-argument version from 20260817100000. The offset is
--- optional so an existing caller that only knows about path + url still
--- compiles, and defaults to centre, which is what BoxFit.cover did before.
+-- Supersedes the two-argument version from 20260817100000, and the old one has
+-- to go rather than linger. Adding a third argument with a DEFAULT creates an
+-- overload, not a replacement, and then a two-argument call matches both
+-- candidates — PostgREST cannot choose and every banner upload from an older
+-- build fails with an ambiguity error instead of quietly centring. One function
+-- of this name, always.
+DROP FUNCTION IF EXISTS public.set_user_profile_banner(TEXT, TEXT);
+
+-- The offset is optional and defaults to centre, which is exactly what
+-- BoxFit.cover did before, so a caller that predates the anchor is unchanged.
 CREATE OR REPLACE FUNCTION public.set_user_profile_banner(
   p_path TEXT,
   p_url TEXT,
