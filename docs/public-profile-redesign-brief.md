@@ -105,7 +105,7 @@ replies or badges yet" — which for a stranger was the client mistaking
 ### Bio — verified, not changed
 
 `user_profile_summary` has returned `bio` to every viewer since
-`20260727130805`; no earlier version of the RPC returned it at all. Neither
+`20260727131446`; no earlier version of the RPC returned it at all. Neither
 `_profileFromJson` nor `_Hero` gates it on friendship, and `copyWithConnections`
 uses `bio ?? this.bio`, so the RLS-blocked direct users read cannot clobber the
 RPC's value. Confirmed on device: no `profile.summary_missing_bio_column`

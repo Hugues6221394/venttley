@@ -90,7 +90,7 @@ SELECT ok(
   'a user with no memberships receives public tribe recommendations'
 );
 SELECT is(
-  (SELECT count(*) FROM public.my_friends()),
+  (SELECT count(*) FROM public.my_friends),
   0::BIGINT,
   'cold-start recommendations do not fabricate friendships'
 );

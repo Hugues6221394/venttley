@@ -76,7 +76,10 @@ CREATE POLICY "audit read staff" ON public.audit_log FOR SELECT
       EXISTS (
         SELECT 1 FROM public.users u
          WHERE u.user_id = auth.uid()
-           AND u.user_role IN ('super_admin','admin','read_only_auditor')
+           -- Compare through text because this migration adds these enum
+           -- labels earlier in the same transaction. PostgreSQL forbids
+           -- using a newly-added enum value as an enum constant until commit.
+           AND u.user_role::text IN ('super_admin','admin','read_only_auditor')
       )
     );
 
@@ -120,7 +123,7 @@ CREATE POLICY "broadcasts staff full read" ON public.broadcasts FOR SELECT
       EXISTS (
         SELECT 1 FROM public.users u
          WHERE u.user_id = auth.uid()
-           AND u.user_role IN ('super_admin','admin','moderator','read_only_auditor')
+           AND u.user_role::text IN ('super_admin','admin','moderator','read_only_auditor')
       )
     );
 

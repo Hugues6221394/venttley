@@ -147,7 +147,8 @@ DELETE FROM public.chat_messages
 DELETE FROM public.chat_rooms
  WHERE request_preview LIKE 'demo:%';
 
-DELETE FROM public.whisper_likes
+-- 0061 replaced the legacy whisper_likes table with typed reactions.
+DELETE FROM public.whisper_reactions
  WHERE whisper_id IN (
     SELECT w.whisper_id FROM public.whispers w
      JOIN public.users u ON u.user_id = w.author_id

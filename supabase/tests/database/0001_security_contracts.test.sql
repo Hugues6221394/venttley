@@ -90,7 +90,7 @@ SELECT ok(
 SELECT ok(
   has_function_privilege(
     'authenticated',
-    'public.create_post_idempotent(uuid,text,text,text,uuid,uuid,uuid,boolean,text,text,text,text,integer)',
+    'public.create_post_idempotent(uuid,text,text,text,uuid,uuid,uuid,boolean,text,text,text,text,integer,text,text[])',
     'EXECUTE'
   ),
   'authenticated clients can use the idempotent post RPC'
@@ -98,7 +98,7 @@ SELECT ok(
 SELECT ok(
   NOT has_function_privilege(
     'anon',
-    'public.create_post_idempotent(uuid,text,text,text,uuid,uuid,uuid,boolean,text,text,text,text,integer)',
+    'public.create_post_idempotent(uuid,text,text,text,uuid,uuid,uuid,boolean,text,text,text,text,integer,text,text[])',
     'EXECUTE'
   ),
   'anon cannot create posts through the idempotent RPC'

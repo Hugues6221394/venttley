@@ -115,6 +115,8 @@ CREATE TEMP TABLE phase2_results (
   resource_id UUID NOT NULL
 ) ON COMMIT DROP;
 
+GRANT SELECT, INSERT ON phase2_results TO authenticated;
+
 SET LOCAL ROLE authenticated;
 SET LOCAL "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
 SET LOCAL "request.jwt.claims" =

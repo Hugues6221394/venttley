@@ -24,7 +24,7 @@
 -- `reactions_received` likewise only summed likes on posts, so a like on a
 -- reply someone wrote was support they never got credit for.
 --
--- The bio is unchanged and stays where 20260727130805 put it: in `v_user`,
+-- The bio is unchanged and stays where 20260727131446 put it: in `v_user`,
 -- returned to every viewer. It has to come from this SECURITY DEFINER function
 -- because a direct users-table read is RLS-constrained and returns nothing for
 -- another account.

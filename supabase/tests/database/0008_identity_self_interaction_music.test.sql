@@ -4,12 +4,12 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 SELECT plan(44);
 
-SELECT ok(
-  has_column('public', 'users', 'display_name'),
+SELECT has_column(
+  'public', 'users', 'display_name',
   'canonical users table has a distinct display name'
 );
-SELECT ok(
-  has_column('public', 'users', 'username_normalized'),
+SELECT has_column(
+  'public', 'users', 'username_normalized',
   'canonical users table has a normalized stable username'
 );
 SELECT ok(
@@ -242,8 +242,8 @@ SELECT throws_ok(
     'a8200000-0000-4000-8000-000000000001',
     'a8100000-0000-4000-8000-000000000001', 'hug'
   )$$,
-  'P0001', 'self_interaction_not_allowed',
-  'direct writes cannot bypass the own-Vent reaction guard'
+  '42501', NULL,
+  'direct writes cannot bypass the desired-state reaction RPC'
 );
 SELECT is(
   public.set_post_reaction(
