@@ -242,7 +242,7 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
       // reopened, which reads as "send is broken" and makes people send again.
       // Edit and delete below already invalidate for the same reason; the three
       // send paths were the ones that did not.
-      ref.invalidate(tribeMessagesProvider(tribeId));
+      unawaited(ref.read(repositoryProvider).refreshTribeMessages(tribeId));
       _scrollToBottomSoon();
     } catch (_) {
       if (!mounted) return;
@@ -345,7 +345,7 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
           );
       await outbox.discardStagedMedia(stagedMedia.path);
       // See _send: the stream does not re-emit on our own write.
-      ref.invalidate(tribeMessagesProvider(tribeId));
+      unawaited(ref.read(repositoryProvider).refreshTribeMessages(tribeId));
       _scrollToBottomSoon();
     } catch (_) {
       if (stagedMedia != null) {
@@ -642,7 +642,7 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
             );
         await outbox.discardStagedMedia(stagedMedia.path);
         // See _send: the stream does not re-emit on our own write.
-        ref.invalidate(tribeMessagesProvider(tribeId));
+        unawaited(ref.read(repositoryProvider).refreshTribeMessages(tribeId));
         _scrollToBottomSoon();
       } catch (_) {
         if (stagedMedia != null) {
@@ -1464,7 +1464,8 @@ class _MessageBubble extends ConsumerWidget {
       final ok = await ref
           .read(repositoryProvider)
           .deleteTribeMessage(message.messageId);
-      if (ok) ref.invalidate(tribeMessagesProvider(tribeId));
+      if (ok)
+        unawaited(ref.read(repositoryProvider).refreshTribeMessages(tribeId));
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -1479,7 +1480,8 @@ class _MessageBubble extends ConsumerWidget {
       final ok = await ref
           .read(repositoryProvider)
           .hideTribeMessage(message.messageId);
-      if (ok) ref.invalidate(tribeMessagesProvider(tribeId));
+      if (ok)
+        unawaited(ref.read(repositoryProvider).refreshTribeMessages(tribeId));
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -1520,7 +1522,8 @@ class _MessageBubble extends ConsumerWidget {
       final ok = await ref
           .read(repositoryProvider)
           .editTribeMessage(messageId: message.messageId, newContent: updated);
-      if (ok) ref.invalidate(tribeMessagesProvider(tribeId));
+      if (ok)
+        unawaited(ref.read(repositoryProvider).refreshTribeMessages(tribeId));
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(

@@ -1682,6 +1682,8 @@ class SupabaseBackend {
       } catch (_) {}
     }
 
+    _tribeMessageRefreshers[tribeId] = emit;
+
     final channel = _client.channel('tribe_chat_$tribeId')
       ..onPostgresChanges(
         event: PostgresChangeEvent.all,
@@ -1698,6 +1700,7 @@ class SupabaseBackend {
     emit();
 
     controller.onCancel = () async {
+      _tribeMessageRefreshers.remove(tribeId);
       await channel.unsubscribe();
       await controller.close();
     };
@@ -2733,7 +2736,7 @@ class SupabaseBackend {
   void broadcastTribeTyping(String tribeId, {required String pseudonym}) {
     final uid = _uid;
     if (uid == null) return;
-    _typingChannel('tribe:$tribeId').sendBroadcastMessage(
+    _typingChannel('tribe=$tribeId').sendBroadcastMessage(
       event: 'typing',
       payload: {
         'user_id': uid,
@@ -2754,34 +2757,34 @@ class SupabaseBackend {
       ]);
     }
 
-    final channel = _client
-        .channel('typing:tribe=$tribeId:listen')
-        .onBroadcast(
-          event: 'typing',
-          callback: (payload) {
-            final from = payload['user_id'] as String?;
-            if (from == null || from == _uid) return;
-            final pseudonym = (payload['pseudonym'] as String?) ?? 'someone';
-            active[from]?.timer.cancel();
-            active[from] = (
-              pseudonym: pseudonym,
-              timer: Timer(const Duration(seconds: 3), () {
-                active.remove(from);
-                emit();
-              }),
-            );
-            emit();
-          },
-        )
-        .subscribe();
+    // Same topic the broadcast goes out on. It used to listen on
+    // `typing:tribe=<id>:listen` while broadcastTribeTyping sent to
+    // `typing:room=tribe:<id>` — two mismatches at once, so nobody ever saw a
+    // tribemate typing.
+    final scope = 'tribe=$tribeId';
+    void onTyping(Map<String, dynamic> payload) {
+      final from = payload['user_id'] as String?;
+      if (from == null || from == _uid) return;
+      final pseudonym = (payload['pseudonym'] as String?) ?? 'someone';
+      active[from]?.timer.cancel();
+      active[from] = (
+        pseudonym: pseudonym,
+        timer: Timer(const Duration(seconds: 3), () {
+          active.remove(from);
+          emit();
+        }),
+      );
+      emit();
+    }
 
+    _addTypingListener(scope, onTyping);
     controller.onListen = () => controller.add(const []);
     controller.onCancel = () {
       for (final e in active.values) {
         e.timer.cancel();
       }
       active.clear();
-      channel.unsubscribe();
+      _removeTypingListener(scope, onTyping);
     };
     return controller.stream;
   }
@@ -5811,6 +5814,25 @@ class SupabaseBackend {
 
   /// Realtime stream of messages for a single room. Re-fetches on every
   /// Postgres change so the listener sees both inserts and edits.
+  /// Live refresh hooks for the message streams, keyed by room / tribe id.
+  ///
+  /// The UI used to call ref.invalidate() after every send, which disposes the
+  /// StreamProvider and rebuilds it: the provider drops to AsyncLoading with no
+  /// value, the list renders empty for a frame or two, and the whole history is
+  /// refetched. That is the blink people see when they hit send. Pushing a fresh
+  /// emit into the *existing* stream keeps the previous list on screen and
+  /// swaps it in place.
+  final Map<String, Future<void> Function()> _messageRefreshers = {};
+  final Map<String, Future<void> Function()> _tribeMessageRefreshers = {};
+
+  /// Re-read a conversation without collapsing its stream. A no-op when nothing
+  /// is watching, because then there is nothing on screen to keep.
+  Future<void> refreshMessages(String roomId) async =>
+      _messageRefreshers[roomId]?.call();
+
+  Future<void> refreshTribeMessages(String tribeId) async =>
+      _tribeMessageRefreshers[tribeId]?.call();
+
   Stream<List<ChatMessage>> watchMessages(String roomId) {
     final controller = StreamController<List<ChatMessage>>();
     Future<void> emit() async {
@@ -5820,6 +5842,8 @@ class SupabaseBackend {
         /* listener retries on next event */
       }
     }
+
+    _messageRefreshers[roomId] = emit;
 
     final channel = _client
         .channel('public:chat_messages:room=$roomId')
@@ -5843,22 +5867,69 @@ class SupabaseBackend {
         .subscribe();
 
     controller.onListen = emit;
-    controller.onCancel = () => channel.unsubscribe();
+    controller.onCancel = () {
+      _messageRefreshers.remove(roomId);
+      channel.unsubscribe();
+    };
     return controller.stream;
   }
 
   // ──────────────────── Typing indicators (broadcast) ────────────────────
 
-  /// Per-room Realtime broadcast channel. Cached so we don't
-  /// resubscribe on every keystroke. Closed when the chat screen exits.
+  /// One Realtime channel per conversation, shared by the sender and the
+  /// listener.
+  ///
+  /// It has to be one channel, because a broadcast only reaches subscribers of
+  /// the *same topic*. Sending on `typing:room=X` while listening on
+  /// `typing:room=X:listen` is two topics, and the message went nowhere — which
+  /// is why typing indicators never appeared in DMs or tribes. Keyed by a
+  /// scope string (`room=<id>` / `tribe=<id>`) so the two kinds cannot collide.
   final Map<String, RealtimeChannel> _typingChannels = {};
 
-  RealtimeChannel _typingChannel(String roomId) {
-    return _typingChannels.putIfAbsent(roomId, () {
-      final c = _client.channel('typing:room=$roomId');
-      c.subscribe();
-      return c;
+  /// Callbacks registered by [watchTyping] / [watchTribeTyping]. The channel
+  /// carries a single dispatcher and fans out here, because handlers must be
+  /// attached before subscribe() and the channel may have been created by a
+  /// keystroke before anyone was watching.
+  final Map<String, Set<void Function(Map<String, dynamic>)>>
+  _typingListeners = {};
+
+  RealtimeChannel _typingChannel(String scope) {
+    return _typingChannels.putIfAbsent(scope, () {
+      final channel = _client.channel('typing:$scope')
+        ..onBroadcast(
+          event: 'typing',
+          callback: (payload) {
+            // Copy: a listener may cancel itself while we are iterating.
+            for (final listener in List.of(_typingListeners[scope] ?? const {})) {
+              listener(payload);
+            }
+          },
+        );
+      channel.subscribe();
+      return channel;
     });
+  }
+
+  void _addTypingListener(
+    String scope,
+    void Function(Map<String, dynamic>) listener,
+  ) {
+    _typingChannel(scope);
+    (_typingListeners[scope] ??= {}).add(listener);
+  }
+
+  void _removeTypingListener(
+    String scope,
+    void Function(Map<String, dynamic>) listener,
+  ) {
+    final listeners = _typingListeners[scope];
+    if (listeners == null) return;
+    listeners.remove(listener);
+    if (listeners.isNotEmpty) return;
+    _typingListeners.remove(scope);
+    // Keep the channel while this device might still broadcast into it; drop it
+    // only once nobody is listening either.
+    unawaited(_typingChannels.remove(scope)?.unsubscribe() ?? Future.value());
   }
 
   /// Tell the room you're typing. UI should debounce this to ~once per
@@ -5866,7 +5937,7 @@ class SupabaseBackend {
   void broadcastTyping(String roomId) {
     final uid = _uid;
     if (uid == null) return;
-    _typingChannel(roomId).sendBroadcastMessage(
+    _typingChannel('room=$roomId').sendBroadcastMessage(
       event: 'typing',
       payload: {'user_id': uid, 'at': DateTime.now().toUtc().toIso8601String()},
     );
@@ -5876,6 +5947,7 @@ class SupabaseBackend {
   /// `true` immediately on a typing broadcast from a non-self user,
   /// and `false` ~3 seconds after the most recent broadcast goes quiet.
   Stream<bool> watchTyping(String roomId) {
+    final scope = 'room=$roomId';
     final controller = StreamController<bool>();
     Timer? idle;
     void clearIdle() {
@@ -5885,22 +5957,17 @@ class SupabaseBackend {
       });
     }
 
-    final channel = _client
-        .channel('typing:room=$roomId:listen')
-        .onBroadcast(
-          event: 'typing',
-          callback: (payload) {
-            final from = payload['user_id'] as String?;
-            if (from == null || from == _uid) return;
-            if (!controller.isClosed) controller.add(true);
-            clearIdle();
-          },
-        )
-        .subscribe();
+    void onTyping(Map<String, dynamic> payload) {
+      final from = payload['user_id'] as String?;
+      if (from == null || from == _uid) return;
+      if (!controller.isClosed) controller.add(true);
+      clearIdle();
+    }
 
+    _addTypingListener(scope, onTyping);
     controller.onCancel = () {
       idle?.cancel();
-      channel.unsubscribe();
+      _removeTypingListener(scope, onTyping);
     };
     // Seed with false so consumers don't see a null in tab switches.
     controller.onListen = () => controller.add(false);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -98,7 +99,9 @@ Future<void> showTribeMessageActions(
                   await ref
                       .read(repositoryProvider)
                       .toggleTribeMessageHug(message.messageId);
-                  ref.invalidate(tribeMessagesProvider(tribeId));
+                  unawaited(
+                    ref.read(repositoryProvider).refreshTribeMessages(tribeId),
+                  );
                 },
               ),
               Padding(
@@ -137,7 +140,11 @@ Future<void> showTribeMessageActions(
                             messageId: message.messageId,
                           );
                     }
-                    ref.invalidate(tribeMessagesProvider(tribeId));
+                    unawaited(
+                      ref
+                          .read(repositoryProvider)
+                          .refreshTribeMessages(tribeId),
+                    );
                     ref.invalidate(tribeBySlugProvider(tribeSlug));
                   },
                 ),

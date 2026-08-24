@@ -107,13 +107,18 @@ class _TribeMemberSheetBody extends ConsumerWidget {
                         context.push('/tribe/$tribeSlug/chat/hub');
                       },
                       icon: const Icon(Icons.info_outline, size: 18),
-                      label: const Text('Full tribe info',
-                          style: TextStyle(fontWeight: FontWeight.w900)),
+                      label: const Text(
+                        'Full tribe info',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
                     );
                   }
                   final m = members[i];
                   return _MemberTile(
-                      member: m, canManage: canManage, tribeId: tribeId);
+                    member: m,
+                    canManage: canManage,
+                    tribeId: tribeId,
+                  );
                 },
               );
             },
@@ -185,8 +190,10 @@ class _MemberTile extends ConsumerWidget {
               ),
               if (member.role == 'keeper' || member.role == 'mod')
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: VentlyColors.berryMagenta.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(8),
@@ -203,9 +210,11 @@ class _MemberTile extends ConsumerWidget {
               if (canManage && member.role != 'keeper')
                 IconButton(
                   tooltip: 'Enforce rules',
-                  icon: Icon(Icons.gavel_rounded,
-                      size: 18,
-                      color: VentlyColors.dangerRed.withOpacity(0.8)),
+                  icon: Icon(
+                    Icons.gavel_rounded,
+                    size: 18,
+                    color: VentlyColors.dangerRed.withOpacity(0.8),
+                  ),
                   onPressed: () => _showEnforceDialog(context, ref),
                 ),
             ],
@@ -251,19 +260,26 @@ class _MemberTile extends ConsumerWidget {
             onPressed: () async {
               Navigator.pop(ctx);
               try {
-                await ref.read(repositoryProvider).kickMember(
-                    tribeId: tribeId,
-                    userId: member.userId,
-                    reason: reason.text.trim());
+                await ref
+                    .read(repositoryProvider)
+                    .kickMember(
+                      tribeId: tribeId,
+                      userId: member.userId,
+                      reason: reason.text.trim(),
+                    );
                 ref.invalidate(tribeOnlineMembersProvider(tribeId));
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('@${member.pseudonym} was removed.')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('@${member.pseudonym} was removed.'),
+                    ),
+                  );
                 }
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Could not remove: $e')));
+                    SnackBar(content: Text('Could not remove: $e')),
+                  );
                 }
               }
             },
@@ -271,24 +287,33 @@ class _MemberTile extends ConsumerWidget {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: VentlyColors.dangerRed),
+              backgroundColor: VentlyColors.dangerRed,
+            ),
             onPressed: () async {
               Navigator.pop(ctx);
               try {
-                await ref.read(repositoryProvider).banMember(
-                    tribeId: tribeId,
-                    userId: member.userId,
-                    reason: reason.text.trim());
+                await ref
+                    .read(repositoryProvider)
+                    .banMember(
+                      tribeId: tribeId,
+                      userId: member.userId,
+                      reason: reason.text.trim(),
+                    );
                 ref.invalidate(tribeOnlineMembersProvider(tribeId));
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
                       content: Text(
-                          '@${member.pseudonym} was removed and banned.')));
+                        '@${member.pseudonym} was removed and banned.',
+                      ),
+                    ),
+                  );
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Could not ban: $e')));
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Could not ban: $e')));
                 }
               }
             },

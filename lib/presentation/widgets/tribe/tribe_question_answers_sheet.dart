@@ -99,9 +99,11 @@ class _QuestionAnswersSheet extends ConsumerWidget {
                   error: (e, _) => Center(child: Text('Error: $e')),
                   data: (all) {
                     final replies = all
-                        .where((m) =>
-                            m.replyToMessageId == questionMessage.messageId &&
-                            !m.isDeleted)
+                        .where(
+                          (m) =>
+                              m.replyToMessageId == questionMessage.messageId &&
+                              !m.isDeleted,
+                        )
                         .toList();
                     if (replies.isEmpty) {
                       return Center(
@@ -111,10 +113,9 @@ class _QuestionAnswersSheet extends ConsumerWidget {
                             'No answers yet — be the first to share.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withOpacity(0.6),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withOpacity(0.6),
                               fontWeight: FontWeight.w700,
                             ),
                           ),

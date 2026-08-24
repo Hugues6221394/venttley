@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -88,19 +89,22 @@ class _TribeChatCardSheetState extends ConsumerState<_TribeChatCardSheet> {
 
     setState(() => _busy = true);
     try {
-      await ref.read(repositoryProvider).sendTribeMessage(
-            tribeId: widget.tribeId,
-            metadata: metadata,
-          );
-      ref.invalidate(tribeMessagesProvider(widget.tribeId));
+      await ref
+          .read(repositoryProvider)
+          .sendTribeMessage(tribeId: widget.tribeId, metadata: metadata);
+      unawaited(
+        ref.read(repositoryProvider).refreshTribeMessages(widget.tribeId),
+      );
       VentlyHaptics.light();
       if (mounted) Navigator.pop(context);
     } catch (e) {
       // Surface the failure instead of silently doing nothing.
       if (mounted) setState(() => _busy = false);
-      _toast(_isPoll
-          ? 'Couldn\'t post the poll: ${_friendly(e)}'
-          : 'Couldn\'t post the question: ${_friendly(e)}');
+      _toast(
+        _isPoll
+            ? 'Couldn\'t post the poll: ${_friendly(e)}'
+            : 'Couldn\'t post the question: ${_friendly(e)}',
+      );
     }
   }
 
@@ -168,14 +172,18 @@ class _TribeChatCardSheetState extends ConsumerState<_TribeChatCardSheet> {
                       controller: _options[i],
                       maxLength: 60,
                       decoration: InputDecoration(
-                        labelText: i < 2 ? 'Option ${i + 1} *' : 'Option ${i + 1}',
+                        labelText: i < 2
+                            ? 'Option ${i + 1} *'
+                            : 'Option ${i + 1}',
                       ),
                     ),
                   ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Anonymous votes',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  title: const Text(
+                    'Anonymous votes',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
                   subtitle: const Text('Hide who voted — counts only'),
                   value: _anonymousVotes,
                   onChanged: (v) => setState(() => _anonymousVotes = v),

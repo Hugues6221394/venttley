@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -40,9 +41,11 @@ class TribeChatPollCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.poll_outlined,
-                  size: 14,
-                  color: lightOnDark ? Colors.white : scheme.primary),
+              Icon(
+                Icons.poll_outlined,
+                size: 14,
+                color: lightOnDark ? Colors.white : scheme.primary,
+              ),
               const SizedBox(width: 6),
               Text(
                 poll.isClosed ? 'POLL · CLOSED' : 'POLL',
@@ -104,11 +107,17 @@ class TribeChatPollCard extends ConsumerWidget {
                 onTap: showResults
                     ? null
                     : () async {
-                        await ref.read(repositoryProvider).voteTribeChatPoll(
+                        await ref
+                            .read(repositoryProvider)
+                            .voteTribeChatPoll(
                               messageId: poll.messageId,
                               optionId: o.id,
                             );
-                        ref.invalidate(tribeMessagesProvider(tribeId));
+                        unawaited(
+                          ref
+                              .read(repositoryProvider)
+                              .refreshTribeMessages(tribeId),
+                        );
                       },
               ),
             ),
@@ -120,7 +129,9 @@ class TribeChatPollCard extends ConsumerWidget {
                   await ref
                       .read(repositoryProvider)
                       .closeTribeChatPoll(poll.messageId);
-                  ref.invalidate(tribeMessagesProvider(tribeId));
+                  unawaited(
+                    ref.read(repositoryProvider).refreshTribeMessages(tribeId),
+                  );
                 },
                 child: Text(
                   'Close poll',
@@ -265,9 +276,11 @@ class TribeChatQuestionCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(Icons.help_outline_rounded,
-                      size: 14,
-                      color: lightOnDark ? Colors.white : scheme.primary),
+                  Icon(
+                    Icons.help_outline_rounded,
+                    size: 14,
+                    color: lightOnDark ? Colors.white : scheme.primary,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     question.autoCheckin ? 'DAILY CHECK-IN' : 'QUESTION',
@@ -282,7 +295,9 @@ class TribeChatQuestionCard extends StatelessWidget {
                   if (answerCount > 0)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: scheme.primary.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(10),

@@ -1223,6 +1223,21 @@ class VentlyRepository implements MusicProvider {
     return _mock.declineFriendRequest(friendshipId);
   }
 
+  /// Re-read a conversation in place. Prefer this to invalidating the stream
+  /// provider after a send: invalidating disposes the stream, which blanks the
+  /// list for a frame and refetches from scratch.
+  Future<void> refreshMessages(String roomId) {
+    final live = _live;
+    if (live == null) return Future.value();
+    return live.refreshMessages(roomId);
+  }
+
+  Future<void> refreshTribeMessages(String tribeId) {
+    final live = _live;
+    if (live == null) return Future.value();
+    return live.refreshTribeMessages(tribeId);
+  }
+
   Future<void> unfriend(String otherUserId) {
     final live = _live;
     if (live != null) return live.unfriend(otherUserId);

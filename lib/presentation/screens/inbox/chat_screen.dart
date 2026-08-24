@@ -41,6 +41,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Timer? _typingDebounce;
   DateTime _lastTypingSent = DateTime.fromMillisecondsSinceEpoch(0);
 
+  /// Last composer text we saw, so a listener callback can tell a real edit
+  /// from the app rewriting the field.
+  String _lastComposerText = '';
+  bool _suppressTypingBroadcast = false;
+
   /// Bytes of an image the user picked but hasn't sent yet, plus its
   /// extension. Cleared on send or on the discard button.
   Uint8List? _pendingImageBytes;
@@ -138,7 +143,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               idempotencyKey: operationId,
             );
         await outbox.discardStagedMedia(stagedMedia.path);
-        ref.invalidate(messagesProvider(widget.roomId));
+        unawaited(ref.read(repositoryProvider).refreshMessages(widget.roomId));
       } catch (_) {
         if (stagedMedia != null) {
           await outbox.enqueue(OutboxKind.dm, {
@@ -201,13 +206,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         draftKey: 'chat.${widget.roomId}',
         controller: _controller,
       );
-      if (_draftSaver!.restore()) setState(() {});
+      // Restoring a draft is not typing.
+      _withoutTypingBroadcast(() {
+        if (_draftSaver!.restore()) setState(() {});
+      });
     });
   }
 
   DraftSaver? _draftSaver;
 
   void _handleTyping() {
+    // A TextEditingController listener fires on *any* mutation, including the
+    // ones the app makes itself: clear() after a send, and restoring a saved
+    // draft when the screen opens. Both told the peer "typing…" when nobody had
+    // touched the keyboard — so only a real, non-empty change counts.
+    final text = _controller.text;
+    final changed = text != _lastComposerText;
+    _lastComposerText = text;
+    if (_suppressTypingBroadcast || !changed || text.isEmpty) return;
+
     // Throttle: emit at most once every 1.5 seconds while typing.
     final now = DateTime.now();
     if (now.difference(_lastTypingSent).inMilliseconds < 1500) return;
@@ -215,6 +232,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ref.read(repositoryProvider).broadcastTyping(widget.roomId);
     _typingDebounce?.cancel();
     _typingDebounce = Timer(const Duration(milliseconds: 1500), () {});
+  }
+
+  /// Runs [mutate] without telling the peer you are typing. For text the app
+  /// puts in the composer on the user's behalf.
+  void _withoutTypingBroadcast(void Function() mutate) {
+    _suppressTypingBroadcast = true;
+    try {
+      mutate();
+    } finally {
+      _lastComposerText = _controller.text;
+      _suppressTypingBroadcast = false;
+    }
   }
 
   @override
@@ -525,7 +554,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       setState(() {
                         _editingMessage = m;
                         _replyingTo = null;
-                        _controller.text = m.plaintext;
+                        // Loading a message in to edit it is not typing either.
+                        _withoutTypingBroadcast(
+                          () => _controller.text = m.plaintext,
+                        );
                         _controller.selection = TextSelection.collapsed(
                           offset: _controller.text.length,
                         );
@@ -536,7 +568,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         await ref
                             .read(repositoryProvider)
                             .deleteChatMessage(m.messageId);
-                        ref.invalidate(messagesProvider(widget.roomId));
+                        unawaited(
+                          ref
+                              .read(repositoryProvider)
+                              .refreshMessages(widget.roomId),
+                        );
                       } catch (e) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -549,7 +585,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         await ref
                             .read(repositoryProvider)
                             .hideChatMessage(m.messageId);
-                        ref.invalidate(messagesProvider(widget.roomId));
+                        unawaited(
+                          ref
+                              .read(repositoryProvider)
+                              .refreshMessages(widget.roomId),
+                        );
                       } catch (e) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -621,7 +661,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     if (!mounted) return;
                     _controller.clear();
                     setState(() => _editingMessage = null);
-                    ref.invalidate(messagesProvider(widget.roomId));
+                    unawaited(
+                      ref
+                          .read(repositoryProvider)
+                          .refreshMessages(widget.roomId),
+                    );
                     if (moderation.surfaceCrisisHelpline && mounted) {
                       unawaited(
                         ref
@@ -756,7 +800,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     _replyingTo = null;
                   });
                 }
-                ref.invalidate(messagesProvider(widget.roomId));
+                unawaited(
+                  ref.read(repositoryProvider).refreshMessages(widget.roomId),
+                );
                 _scrollToLatest();
                 // Reuse the advisory pre-submit verdict to surface help quickly.
                 // PostgreSQL separately scans the server-readable body at
@@ -893,7 +939,7 @@ class _Bubble extends ConsumerWidget {
       await ref
           .read(repositoryProvider)
           .setMessageReaction(message.messageId, picked);
-      ref.invalidate(messagesProvider(message.roomId));
+      unawaited(ref.read(repositoryProvider).refreshMessages(message.roomId));
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(

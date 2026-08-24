@@ -82,7 +82,9 @@ class KeeperControlStrip extends ConsumerWidget {
             ),
             _Chip(
               icon: Icons.speed_outlined,
-              label: slowOn ? 'Slow ${tribe.chatSettings.slowModeSeconds}s' : 'Slow mode',
+              label: slowOn
+                  ? 'Slow ${tribe.chatSettings.slowModeSeconds}s'
+                  : 'Slow mode',
               active: slowOn,
               onTap: () {
                 VentlyHaptics.selection();
@@ -143,20 +145,18 @@ class _Chip extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon,
-                      size: 16,
-                      color: active
-                          ? VentlyColors.berryMagenta
-                          : context.ink),
+                  Icon(
+                    icon,
+                    size: 16,
+                    color: active ? VentlyColors.berryMagenta : context.ink,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     label,
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 11.5,
-                      color: active
-                          ? VentlyColors.berryMagenta
-                          : context.ink,
+                      color: active ? VentlyColors.berryMagenta : context.ink,
                     ),
                   ),
                 ],

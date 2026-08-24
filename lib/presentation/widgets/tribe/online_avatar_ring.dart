@@ -31,10 +31,7 @@ class OnlineAvatarRing extends StatelessWidget {
       padding: const EdgeInsets.all(2.2),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(
-          color: ring,
-          width: isOnline ? 2.2 : 0,
-        ),
+        border: Border.all(color: ring, width: isOnline ? 2.2 : 0),
         boxShadow: isOnline
             ? [
                 BoxShadow(
