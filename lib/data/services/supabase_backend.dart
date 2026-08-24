@@ -101,7 +101,8 @@ class SupabaseBackend {
       'user_role, is_verified, account_status, safety_tier, birth_year, '
       'karma_points, home_city, home_country, home_campus';
   static const _userSelectWithProfilePhoto =
-      '$_userBaseSelect, profile_photo_url, profile_banner_url, bio, pronouns';
+      '$_userBaseSelect, profile_photo_url, profile_banner_url, '
+      'profile_banner_offset, bio, pronouns';
 
   // ----- realtime fan-out used by the repository to stream the UI -----
   final _postsController = StreamController<List<Post>>.broadcast();
@@ -503,7 +504,8 @@ class SupabaseBackend {
               // 20260817100000 adds profile_banner_url. Same treatment: a
               // missing column must degrade to the base select, not break
               // sign-in.
-              e.message.contains('profile_banner_url')) &&
+              e.message.contains('profile_banner_url') ||
+              e.message.contains('profile_banner_offset')) &&
           (e.code == '42703' ||
               e.message.contains('42703') ||
               e.message.contains('does not exist'));
@@ -3101,6 +3103,8 @@ class SupabaseBackend {
       // Absent until 20260817100000 is applied; a profile renders on the
       // blurred-photo fallback without it.
       profileBannerUrl: user['profile_banner_url'] as String?,
+      profileBannerOffset:
+          (user['profile_banner_offset'] as num?)?.toDouble() ?? 0.5,
       bio: user['bio'] as String?,
       pronouns: user['pronouns'] as String?,
       karma: (user['karma'] as num?)?.toInt() ?? 0,
@@ -3330,6 +3334,7 @@ class SupabaseBackend {
     required List<int> bytes,
     required String extension,
     String contentType = 'image/jpeg',
+    double offset = 0.5,
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
@@ -3350,12 +3355,23 @@ class SupabaseBackend {
     final oldPath =
         await _client.rpc(
               'set_user_profile_banner',
-              params: {'p_path': path, 'p_url': url},
+              params: {'p_path': path, 'p_url': url, 'p_offset': offset},
             )
             as String?;
     if (oldPath != null && oldPath.isNotEmpty && oldPath != path) {
       unawaited(_client.storage.from('profile-photos').remove([oldPath]));
     }
+    final refreshed = await restore();
+    return refreshed!;
+  }
+
+  /// Re-anchor an existing banner without re-uploading it. Dragging the crop is
+  /// a single UPDATE, not another trip through storage and the EXIF scrubber.
+  Future<AppUser> setMyProfileBannerOffset(double offset) async {
+    await _client.rpc(
+      'set_user_profile_banner_offset',
+      params: {'p_offset': offset},
+    );
     final refreshed = await restore();
     return refreshed!;
   }
@@ -6609,6 +6625,8 @@ class SupabaseBackend {
       homeCampus: r['home_campus'] as String?,
       profilePhotoUrl: r['profile_photo_url'] as String?,
       profileBannerUrl: r['profile_banner_url'] as String?,
+      profileBannerOffset:
+          (r['profile_banner_offset'] as num?)?.toDouble() ?? 0.5,
       // Present only in the richer profile select; null in the base select.
       bio: r['bio'] as String?,
       pronouns: r['pronouns'] as String?,

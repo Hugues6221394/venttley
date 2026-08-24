@@ -683,6 +683,7 @@ class VentlyRepository implements MusicProvider {
     required List<int> bytes,
     required String extension,
     String contentType = 'image/jpeg',
+    double offset = 0.5,
   }) {
     final live = _live;
     if (live != null) {
@@ -690,10 +691,18 @@ class VentlyRepository implements MusicProvider {
         bytes: bytes,
         extension: extension,
         contentType: contentType,
+        offset: offset,
       );
     }
     // The mock backend has no storage; the banner is a no-op there.
     return Future.value(_mock.removeMyProfilePhoto());
+  }
+
+  /// Re-anchor the banner crop. No-ops on the mock backend.
+  Future<AppUser> setMyProfileBannerOffset(double offset) {
+    final live = _live;
+    if (live == null) return Future.value(_mock.removeMyProfilePhoto());
+    return live.setMyProfileBannerOffset(offset);
   }
 
   Future<AppUser> removeMyProfileBanner() {

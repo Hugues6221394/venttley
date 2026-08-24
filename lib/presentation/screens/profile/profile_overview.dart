@@ -11,6 +11,7 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/profile_banner_editor.dart';
 import '../../widgets/tagged_text.dart';
 
 /// Redesigned public-profile overview (hero + quick actions + friends/personas
@@ -146,7 +147,7 @@ class _HeroCard extends StatelessWidget {
             // Presentational only. Editing lives in the avatar's sheet, which
             // already carries the background options — a second entry point
             // here would be a third way to reach one action.
-            _OwnProfileBanner(url: banner),
+            _OwnProfileBanner(url: banner, offset: me.profileBannerOffset),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Stack(
@@ -276,8 +277,11 @@ class _HeroCard extends StatelessWidget {
 
 /// The chosen background, shown on your own profile card.
 class _OwnProfileBanner extends StatelessWidget {
-  const _OwnProfileBanner({required this.url});
+  const _OwnProfileBanner({required this.url, required this.offset});
   final String url;
+
+  /// The anchor its owner chose, 0 = top … 1 = bottom.
+  final double offset;
 
   @override
   Widget build(BuildContext context) {
@@ -468,6 +472,18 @@ class _GlowAvatar extends ConsumerWidget {
             if (hasBanner)
               ListTile(
                 leading: const Icon(
+                  Icons.open_with_rounded,
+                  color: VentlyColors.berryMagenta,
+                ),
+                title: const Text(
+                  'Reposition background',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                onTap: () => Navigator.pop(ctx, 'banner-move'),
+              ),
+            if (hasBanner)
+              ListTile(
+                leading: const Icon(
                   Icons.hide_image_outlined,
                   color: VentlyColors.dangerRed,
                 ),
@@ -490,6 +506,22 @@ class _GlowAvatar extends ConsumerWidget {
         await ref.read(repositoryProvider).removeMyProfilePhoto();
       } else if (action == 'banner-remove') {
         await ref.read(repositoryProvider).removeMyProfileBanner();
+      } else if (action == 'banner-move') {
+        // Re-anchor only. No picker, no upload — the file is already there, so
+        // moving the crop is a single UPDATE.
+        final result = await showProfileBannerEditor(
+          context,
+          imageUrl: me.profileBannerUrl,
+          initialOffset: me.profileBannerOffset,
+          avatarSeed: me.avatarSeed,
+          avatarLabel: me.displayName,
+          avatarPhotoUrl: me.profilePhotoUrl,
+          saveLabel: 'Save position',
+        );
+        if (result == null) return;
+        await ref
+            .read(repositoryProvider)
+            .setMyProfileBannerOffset(result.offset);
       } else if (action == 'banner') {
         // Wider and lower quality than the avatar on purpose: this is a
         // full-bleed strip behind other content, so detail matters less than
@@ -502,6 +534,20 @@ class _GlowAvatar extends ConsumerWidget {
         );
         if (picked == null) return;
         final bytes = await picked.readAsBytes();
+        if (!context.mounted) return;
+        // Preview before anything is uploaded. Cancelling here uploads nothing,
+        // which is the point: the old flow committed a crop the user had never
+        // seen and left them to discover it on their own profile.
+        final framed = await showProfileBannerEditor(
+          context,
+          bytes: bytes,
+          initialOffset: 0.5,
+          avatarSeed: me.avatarSeed,
+          avatarLabel: me.displayName,
+          avatarPhotoUrl: me.profilePhotoUrl,
+          saveLabel: 'Use this',
+        );
+        if (framed == null) return;
         final ext = picked.path.split('.').last.toLowerCase();
         await ref
             .read(repositoryProvider)
@@ -509,6 +555,7 @@ class _GlowAvatar extends ConsumerWidget {
               bytes: bytes,
               extension: ext.isEmpty ? 'jpg' : ext,
               contentType: ext == 'png' ? 'image/png' : 'image/jpeg',
+              offset: framed.offset,
             );
       } else {
         final picked = await ImagePicker().pickImage(

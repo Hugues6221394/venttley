@@ -24,6 +24,11 @@ class AppUser {
   /// Chosen profile background image (migration 20260817100000).
   final String? profileBannerUrl;
 
+  /// Vertical crop anchor for that image, 0 = top … 1 = bottom
+  /// (migration 20260822100000). Lives on the row rather than baked into the
+  /// file so re-anchoring never means re-uploading.
+  final double profileBannerOffset;
+
   /// Public, user-authored profile copy. Both optional and shown on the
   /// public profile when set. `pronouns` is a free short string (e.g. "she/her",
   /// "he/him", "they/them") the user picks in Edit Profile.
@@ -53,6 +58,7 @@ class AppUser {
     this.homeCampus,
     this.profilePhotoUrl,
     this.profileBannerUrl,
+    this.profileBannerOffset = 0.5,
     this.bio,
     this.pronouns,
     this.emailVerified = false,
@@ -118,6 +124,7 @@ class AppUser {
       // the upload/clear RPCs, which return a freshly restored AppUser. Adding
       // a setter here would invite a second, divergent way to change it.
       profileBannerUrl: profileBannerUrl,
+      profileBannerOffset: profileBannerOffset,
       bio: bio == _unset ? this.bio : bio as String?,
       pronouns: pronouns == _unset ? this.pronouns : pronouns as String?,
       emailVerified: emailVerified ?? this.emailVerified,
@@ -2268,6 +2275,10 @@ class UserProfileView {
   /// Chosen background image for the profile hero (migration 20260817100000).
   /// Public like the bio — something the person decided to publish.
   final String? profileBannerUrl;
+
+  /// The crop anchor its owner chose, 0 = top … 1 = bottom. Returned to every
+  /// viewer so a stranger sees the framing the author picked.
+  final double profileBannerOffset;
   final int karma;
   final bool isVerified;
   final DateTime joinedAt;
@@ -2320,6 +2331,7 @@ class UserProfileView {
     required this.avatarSeed,
     this.profilePhotoUrl,
     this.profileBannerUrl,
+    this.profileBannerOffset = 0.5,
     required this.karma,
     required this.isVerified,
     required this.joinedAt,
@@ -2379,6 +2391,7 @@ class UserProfileView {
       avatarSeed: avatarSeed,
       profilePhotoUrl: profilePhotoUrl,
       profileBannerUrl: profileBannerUrl,
+      profileBannerOffset: profileBannerOffset,
       karma: karma,
       isVerified: isVerified,
       joinedAt: joinedAt,

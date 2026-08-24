@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
+import '../../../core/user_friendly_errors.dart';
+import '../../widgets/profile_banner_editor.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/tagged_text.dart';
+import '../../../domain/entities/entities.dart';
+import '../../theme/colors.dart';
 import '../../widgets/profile_avatar.dart';
 
 /// Edit Profile — the single place a member curates their public identity:
@@ -179,6 +185,19 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           ),
           const SizedBox(height: 8),
 
+          // --- Background image --------------------------------------------
+          // Here as well as in the avatar sheet, because this is where someone
+          // goes when they want to change how their profile looks. An option
+          // that only exists behind a long-press on the avatar is an option
+          // most people never find.
+          _Section(
+            title: 'Background image',
+            subtitle:
+                'The strip behind your avatar on your public profile. Visible '
+                'to everyone who opens it.',
+            child: _BackgroundRow(me: me),
+          ),
+
           // --- Public identity ---------------------------------------------
           _Section(
             title: 'Display name',
@@ -342,6 +361,196 @@ class _Section extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Background image control on the Edit Profile form.
+///
+/// Shows the current background as a live thumbnail rather than a text row, so
+/// the state of the setting is the setting: you can see at a glance whether you
+/// have one and how it is framed. Tapping opens the same editor the avatar sheet
+/// uses — one implementation, two doors.
+class _BackgroundRow extends ConsumerStatefulWidget {
+  const _BackgroundRow({required this.me});
+  final AppUser me;
+
+  @override
+  ConsumerState<_BackgroundRow> createState() => _BackgroundRowState();
+}
+
+class _BackgroundRowState extends ConsumerState<_BackgroundRow> {
+  bool _busy = false;
+
+  Future<void> _run(Future<void> Function() action, String done) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await action();
+      await ref.read(sessionProvider.notifier).restore();
+      messenger.showSnackBar(SnackBar(content: Text(done)));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              e,
+              fallback: "Couldn't update your background.",
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pick() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      maxHeight: 900,
+      imageQuality: 80,
+    );
+    if (picked == null || !mounted) return;
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
+    final framed = await showProfileBannerEditor(
+      context,
+      bytes: bytes,
+      initialOffset: 0.5,
+      avatarSeed: widget.me.avatarSeed,
+      avatarLabel: widget.me.displayName,
+      avatarPhotoUrl: widget.me.profilePhotoUrl,
+      saveLabel: 'Use this',
+    );
+    if (framed == null) return;
+    final ext = picked.path.split('.').last.toLowerCase();
+    await _run(
+      () => ref
+          .read(repositoryProvider)
+          .uploadMyProfileBanner(
+            bytes: bytes,
+            extension: ext.isEmpty ? 'jpg' : ext,
+            contentType: ext == 'png' ? 'image/png' : 'image/jpeg',
+            offset: framed.offset,
+          ),
+      'Background updated.',
+    );
+  }
+
+  Future<void> _reposition() async {
+    final result = await showProfileBannerEditor(
+      context,
+      imageUrl: widget.me.profileBannerUrl,
+      initialOffset: widget.me.profileBannerOffset,
+      avatarSeed: widget.me.avatarSeed,
+      avatarLabel: widget.me.displayName,
+      avatarPhotoUrl: widget.me.profilePhotoUrl,
+      saveLabel: 'Save position',
+    );
+    if (result == null) return;
+    await _run(
+      () =>
+          ref.read(repositoryProvider).setMyProfileBannerOffset(result.offset),
+      'Position saved.',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url = widget.me.profileBannerUrl?.trim() ?? '';
+    final has = url.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            height: 96,
+            child: has
+                ? CachedNetworkImage(
+                    imageUrl: url,
+                    fit: BoxFit.cover,
+                    alignment: Alignment(
+                      0,
+                      widget.me.profileBannerOffset * 2 - 1,
+                    ),
+                    placeholder: (_, __) =>
+                        const ColoredBox(color: VentlyColors.roseTint),
+                    errorWidget: (_, __, ___) =>
+                        const ColoredBox(color: VentlyColors.roseTint),
+                  )
+                : DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: VentlyColors.roseTint.withOpacity(0.6),
+                      border: Border.all(
+                        color: VentlyColors.berryMagenta.withOpacity(0.18),
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'No background yet',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12.5,
+                          color: context.ink.withOpacity(0.55),
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _busy ? null : _pick,
+                icon: const Icon(Icons.image_outlined, size: 17),
+                label: Text(has ? 'Replace' : 'Add'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+            ),
+            if (has) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _reposition,
+                  icon: const Icon(Icons.open_with_rounded, size: 17),
+                  label: const Text('Move'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () => _run(
+                          () => ref
+                              .read(repositoryProvider)
+                              .removeMyProfileBanner(),
+                          'Background removed.',
+                        ),
+                  icon: const Icon(Icons.delete_outline_rounded, size: 17),
+                  label: const Text('Remove'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: VentlyColors.dangerRed,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
     );
   }
 }

@@ -578,6 +578,7 @@ class _Hero extends StatelessWidget {
                 _HeroBanner(
                   photoUrl: (profile.profilePhotoUrl ?? '').trim(),
                   bannerUrl: (profile.profileBannerUrl ?? '').trim(),
+                  bannerOffset: profile.profileBannerOffset,
                 ),
                 Positioned(bottom: -52, child: _HeroAvatar(profile: profile)),
               ],
@@ -705,7 +706,11 @@ class _Hero extends StatelessWidget {
 /// lower edge fades into the card surface so the overlapping avatar sits on a
 /// seamless backdrop.
 class _HeroBanner extends StatelessWidget {
-  const _HeroBanner({required this.photoUrl, this.bannerUrl = ''});
+  const _HeroBanner({
+    required this.photoUrl,
+    this.bannerUrl = '',
+    this.bannerOffset = 0.5,
+  });
 
   final String photoUrl;
 
@@ -716,6 +721,10 @@ class _HeroBanner extends StatelessWidget {
   /// once sharp and once out of focus. A chosen banner renders sharp and
   /// cropped, because the point of picking one is that it is seen.
   final String bannerUrl;
+
+  /// The crop anchor its owner chose. Honoured here so a visitor sees the
+  /// framing the author picked rather than whatever BoxFit.cover lands on.
+  final double bannerOffset;
 
   @override
   Widget build(BuildContext context) {
@@ -740,6 +749,7 @@ class _HeroBanner extends StatelessWidget {
               CachedNetworkImage(
                 imageUrl: bannerUrl,
                 fit: BoxFit.cover,
+                alignment: Alignment(0, bannerOffset * 2 - 1),
                 placeholder: (_, __) => const _BrandBanner(),
                 errorWidget: (_, __, ___) => const _BrandBanner(),
               )
