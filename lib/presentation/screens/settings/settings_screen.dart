@@ -16,6 +16,7 @@ import '../../widgets/blocked_accounts_sheet.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/recovery_phrase_dialog.dart';
 import '../../widgets/vently_notification_bell.dart';
+import '../home/adaptive_shell_tabs.dart';
 
 /// Account, appearance, privacy, and safety settings.
 class SettingsScreen extends ConsumerWidget {
@@ -80,11 +81,18 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                   ),
               // Your own face and name at the top of Settings reads as the way
-              // to your profile, so make it one. Push rather than go: Settings
-              // is itself a pushed page and jumping to the tab would throw
-              // away the stack the person is standing in.
+              // to your profile, so make it one.
+              //
+              // Which route depends on what the profile tab actually holds. For
+              // a keeper it holds the Studio analytics, so the profile has to
+              // be pushed as a page. For everyone else the tab *is* the
+              // profile, and pushing a copy sent them profile → Settings →
+              // profile; go() switches to the tab they already have, which is
+              // exactly what tapping the footer's profile icon would do.
               trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => context.push('/profile/me'),
+              onTap: () => showsStudioSurfaces(ref)
+                  ? context.push('/profile/me')
+                  : context.go('/profile'),
             ),
           ],
           const _SectionHeader('Appearance'),
