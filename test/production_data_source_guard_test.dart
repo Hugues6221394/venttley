@@ -59,8 +59,11 @@ void main() {
       }
     }
 
-    expect(offenders, isEmpty,
-        reason: 'UI code must obtain all content through repositories.');
+    expect(
+      offenders,
+      isEmpty,
+      reason: 'UI code must obtain all content through repositories.',
+    );
   });
 
   test('production presentation has no bundled demo identities or tribes', () {
@@ -113,8 +116,11 @@ void main() {
       }
     }
 
-    expect(offenders, isEmpty,
-        reason: 'Synthetic database identities belong only in test fixtures.');
+    expect(
+      offenders,
+      isEmpty,
+      reason: 'Synthetic database identities belong only in test fixtures.',
+    );
   });
 
   test('historical showcase migration cannot seed runtime tables', () {
@@ -129,7 +135,7 @@ void main() {
 
   test('friends directory views expose authoritative profile photos', () {
     final source = File(
-      'supabase/migrations/20260727202000_friend_directory_profile_photos.sql',
+      'supabase/migrations/20260727182524_friend_directory_profile_photos.sql',
     ).readAsStringSync();
 
     expect(source, contains('friend_profile_photo_url'));

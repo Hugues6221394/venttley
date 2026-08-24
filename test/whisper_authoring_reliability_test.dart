@@ -14,7 +14,7 @@ void main() {
       'lib/data/services/whisper_voice_processor.dart',
     ).readAsStringSync();
     final migration = File(
-      'supabase/migrations/20260727150500_whisper_recording_lifecycle.sql',
+      'supabase/migrations/20260727154818_whisper_recording_lifecycle.sql',
     ).readAsStringSync();
 
     expect(screen, contains('Duration(minutes: 10)'));

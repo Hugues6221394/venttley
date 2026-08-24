@@ -24,10 +24,10 @@ void main() {
         'supabase/migrations/20260716212500_post_authoring_reliability.sql',
       ).readAsStringSync();
       styleMigration = File(
-        'supabase/migrations/20260727132714_post_card_colors.sql',
+        'supabase/migrations/20260727133836_post_card_colors.sql',
       ).readAsStringSync();
       styleVisibilityMigration = File(
-        'supabase/migrations/20260727142156_post_card_colors_visibility_repair.sql',
+        'supabase/migrations/20260727142459_post_card_colors_visibility_repair.sql',
       ).readAsStringSync();
     });
 

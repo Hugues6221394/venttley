@@ -26,7 +26,7 @@ void main() {
       'lib/data/services/supabase_backend.dart',
     ).readAsStringSync();
     final migration = File(
-      'supabase/migrations/20260722010000_post_media_owner_cleanup.sql',
+      'supabase/migrations/20260722205115_post_media_owner_cleanup.sql',
     ).readAsStringSync();
 
     expect(viewer, contains("story.authorId == authenticatedUserId"));
@@ -41,7 +41,7 @@ void main() {
   test('Story reply privacy is persisted and enforced by an atomic RPC', () {
     final migration = File(
       'supabase/migrations/'
-      '20260727165500_story_reply_privacy_and_activity.sql',
+      '20260727165257_story_reply_privacy_and_activity.sql',
     ).readAsStringSync();
     final settings = File(
       'lib/presentation/screens/settings/settings_screen.dart',
@@ -62,7 +62,7 @@ void main() {
   test('Story owners can see real reaction totals and reactor profiles', () {
     final migration = File(
       'supabase/migrations/'
-      '20260727165500_story_reply_privacy_and_activity.sql',
+      '20260727165257_story_reply_privacy_and_activity.sql',
     ).readAsStringSync();
     final viewer = File(
       'lib/presentation/screens/feed/story_viewer_screen.dart',
@@ -79,7 +79,7 @@ void main() {
   test('distinct Story activity RPCs authorize is_story rows', () {
     final migration = File(
       'supabase/migrations/'
-      '20260727225500_restore_distinct_story_activity_contract.sql',
+      '20260727230148_restore_distinct_story_activity_contract.sql',
     ).readAsStringSync();
 
     expect(migration, contains('p.is_story = TRUE'));
@@ -92,7 +92,7 @@ void main() {
   test('Stories have a distinct server type and enforced audience', () {
     final migration = File(
       'supabase/migrations/'
-      '20260727184849_distinct_stories_and_audience.sql',
+      '20260727190030_distinct_stories_and_audience.sql',
     ).readAsStringSync();
     final backend = File(
       'lib/data/services/supabase_backend.dart',

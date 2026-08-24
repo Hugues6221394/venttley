@@ -53,12 +53,13 @@ class TribeManageScreen extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.lock_outline,
-                    size: 40,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withOpacity(0.4)),
+                Icon(
+                  Icons.lock_outline,
+                  size: 40,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.4),
+                ),
                 const SizedBox(height: 12),
                 const Text(
                   'Only the Plug of this Tribe can open the dashboard.',
@@ -76,8 +77,9 @@ class TribeManageScreen extends ConsumerWidget {
     final posts = postsAsync.valueOrNull ?? const <Post>[];
     final statsAsync = ref.watch(tribeStudioStatsProvider(tribe.tribeId));
     final stats = statsAsync.valueOrNull;
-    final unanswered =
-        posts.where((p) => p.commentsCount < 2 && !p.isDeleted).length;
+    final unanswered = posts
+        .where((p) => p.commentsCount < 2 && !p.isDeleted)
+        .length;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -151,7 +153,9 @@ class TribeManageScreen extends ConsumerWidget {
                 ),
               )
             else
-              ...posts.take(5).map(
+              ...posts
+                  .take(5)
+                  .map(
                     (p) => PostCard(
                       post: p,
                       onTap: () => context.push('/post/${p.postId}'),
@@ -170,11 +174,7 @@ class TribeManageScreen extends ConsumerWidget {
 // =========================================================================
 
 class _HeaderCard extends StatelessWidget {
-  const _HeaderCard({
-    required this.tribe,
-    required this.posts,
-    this.stats,
-  });
+  const _HeaderCard({required this.tribe, required this.posts, this.stats});
   final Tribe tribe;
   final List<Post> posts;
   final TribeStudioStats? stats;
@@ -204,10 +204,7 @@ class _HeaderCard extends StatelessWidget {
                   scheme.primary.withOpacity(0.22),
                   Theme.of(context).colorScheme.surface,
                 ]
-              : [
-                  scheme.primary.withOpacity(0.12),
-                  VentlyColors.cardBlush,
-                ],
+              : [scheme.primary.withOpacity(0.12), VentlyColors.cardBlush],
         ),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.30 : 0.22),
@@ -370,8 +367,9 @@ class _LivePulseState extends State<_LivePulse>
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final live = widget.value > 0;
-    final color =
-        live ? VentlyColors.successGreen : scheme.onSurface.withOpacity(0.4);
+    final color = live
+        ? VentlyColors.successGreen
+        : scheme.onSurface.withOpacity(0.4);
     return Row(
       children: [
         AnimatedBuilder(
@@ -432,7 +430,8 @@ class _AnalyticsGrid extends StatelessWidget {
     final inLast7 = posts.where((p) => p.createdAt.isAfter(last7)).toList();
     final inPrior = posts
         .where(
-            (p) => p.createdAt.isAfter(prior7) && p.createdAt.isBefore(last7))
+          (p) => p.createdAt.isAfter(prior7) && p.createdAt.isBefore(last7),
+        )
         .toList();
 
     int sum(Iterable<Post> ps, int Function(Post) f) =>
@@ -442,8 +441,9 @@ class _AnalyticsGrid extends StatelessWidget {
     final repliesPrev = sum(inPrior, (p) => p.commentsCount);
     final likes7 = sum(inLast7, (p) => p.likesCount);
     final likesPrev = sum(inPrior, (p) => p.likesCount);
-    final engage7 =
-        inLast7.isEmpty ? 0 : (((likes7 + replies7) / inLast7.length).round());
+    final engage7 = inLast7.isEmpty
+        ? 0
+        : (((likes7 + replies7) / inLast7.length).round());
     final engagePrev = inPrior.isEmpty
         ? 0
         : (((likesPrev + repliesPrev) / inPrior.length).round());
@@ -597,8 +597,8 @@ class _DeltaBadge extends StatelessWidget {
     final fg = flat
         ? const Color(0xFF8B5566)
         : up
-            ? const Color(0xFF21C76A)
-            : const Color(0xFFD93D5C);
+        ? const Color(0xFF21C76A)
+        : const Color(0xFFD93D5C);
     final bg = fg.withOpacity(0.14);
     final shown = percent.abs().clamp(0, 999);
     final label = flat
@@ -799,8 +799,11 @@ class _ActivityCard extends StatelessWidget {
     final buckets = List<int>.filled(7, 0);
     final labels = <String>[];
     for (var i = 6; i >= 0; i--) {
-      final day =
-          DateTime(now.year, now.month, now.day).subtract(Duration(days: i));
+      final day = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: i));
       final next = day.add(const Duration(days: 1));
       buckets[6 - i] = posts
           .where((p) => p.createdAt.isAfter(day) && p.createdAt.isBefore(next))
@@ -901,73 +904,76 @@ class _QuickActions extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: SizedBox(
-        height: 92,
+        height: 100,
         child: ListView(
           scrollDirection: Axis.horizontal,
-          children: [
-            _ActionTile(
-              icon: Icons.edit_note_rounded,
-              label: 'Post to tribe',
-              onTap: () {
-                if (activeTribe == null) return;
-                ref.read(composeTargetTribeProvider.notifier).state =
-                    activeTribe;
-                context.go('/compose');
-              },
-            ),
-            _ActionTile(
-              icon: Icons.help_outline_rounded,
-              label: 'Create prompt',
-              onTap: () async {
-                if (activeTribe == null) return;
-                await _showCreatePromptSheet(
-                  context,
-                  ref,
-                  activeTribe.tribeId,
-                );
-              },
-            ),
-            _ActionTile(
-              icon: Icons.group_add_outlined,
-              label: 'Invite',
-              onTap: () async {
-                if (activeTribe == null) return;
-                await _showInviteSheet(context, ref, activeTribe);
-              },
-            ),
-            _ActionTile(
-              icon: Icons.flag_outlined,
-              label: 'Reports',
-              onTap: () {
-                if (tribeSlug == null) return;
-                context.push('/tribe/$tribeSlug/manage/reports');
-              },
-            ),
-            _ActionTile(
-              icon: Icons.shield_outlined,
-              label: 'Moderation',
-              onTap: () {
-                if (tribeSlug == null) return;
-                context.push('/tribe/$tribeSlug/manage/moderation');
-              },
-            ),
-            _ActionTile(
-              icon: Icons.tune_rounded,
-              label: 'Settings',
-              onTap: () {
-                if (tribeSlug == null) return;
-                context.push('/tribe/$tribeSlug/manage/settings');
-              },
-            ),
-            const SizedBox(width: 4),
-          ]
-              .map((w) => w is SizedBox
-                  ? w
-                  : Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: w,
-                    ))
-              .toList(),
+          children:
+              [
+                    _ActionTile(
+                      icon: Icons.edit_note_rounded,
+                      label: 'Post to tribe',
+                      onTap: () {
+                        if (activeTribe == null) return;
+                        ref.read(composeTargetTribeProvider.notifier).state =
+                            activeTribe;
+                        context.go('/compose');
+                      },
+                    ),
+                    _ActionTile(
+                      icon: Icons.help_outline_rounded,
+                      label: 'Create prompt',
+                      onTap: () async {
+                        if (activeTribe == null) return;
+                        await _showCreatePromptSheet(
+                          context,
+                          ref,
+                          activeTribe.tribeId,
+                        );
+                      },
+                    ),
+                    _ActionTile(
+                      icon: Icons.group_add_outlined,
+                      label: 'Invite',
+                      onTap: () async {
+                        if (activeTribe == null) return;
+                        await _showInviteSheet(context, ref, activeTribe);
+                      },
+                    ),
+                    _ActionTile(
+                      icon: Icons.flag_outlined,
+                      label: 'Reports',
+                      onTap: () {
+                        if (tribeSlug == null) return;
+                        context.push('/tribe/$tribeSlug/manage/reports');
+                      },
+                    ),
+                    _ActionTile(
+                      icon: Icons.shield_outlined,
+                      label: 'Moderation',
+                      onTap: () {
+                        if (tribeSlug == null) return;
+                        context.push('/tribe/$tribeSlug/manage/moderation');
+                      },
+                    ),
+                    _ActionTile(
+                      icon: Icons.tune_rounded,
+                      label: 'Settings',
+                      onTap: () {
+                        if (tribeSlug == null) return;
+                        context.push('/tribe/$tribeSlug/manage/settings');
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                  ]
+                  .map(
+                    (w) => w is SizedBox
+                        ? w
+                        : Padding(
+                            padding: const EdgeInsets.only(right: 10),
+                            child: w,
+                          ),
+                  )
+                  .toList(),
         ),
       ),
     );
@@ -1021,10 +1027,7 @@ class _ActionTile extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 11,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
             ),
           ],
         ),
@@ -1037,11 +1040,15 @@ class _ActionTile extends StatelessWidget {
 /// kept separate so refreshing the manage dashboard doesn't disturb the
 /// public detail screen's cache.
 final _tribeManagePostsProvider = FutureProvider.autoDispose
-    .family<List<Post>, String>((ref, slug) async =>
-        ref.watch(repositoryProvider).feed(tribeSlug: slug));
+    .family<List<Post>, String>(
+      (ref, slug) async => ref.watch(repositoryProvider).feed(tribeSlug: slug),
+    );
 
 Future<void> _showCreatePromptSheet(
-    BuildContext context, WidgetRef ref, String tribeId) async {
+  BuildContext context,
+  WidgetRef ref,
+  String tribeId,
+) async {
   final saved = await showModalBottomSheet<bool>(
     context: context,
     useRootNavigator: true,
@@ -1134,14 +1141,17 @@ Future<void> _showCreatePromptSheet(
   );
   if (saved == true && context.mounted) {
     ref.invalidate(promptsProvider);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Your question is live.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Your question is live.')));
   }
 }
 
 Future<void> _showInviteSheet(
-    BuildContext context, WidgetRef ref, Tribe tribe) async {
+  BuildContext context,
+  WidgetRef ref,
+  Tribe tribe,
+) async {
   ({String userId, String pseudonym, String avatarSeed})? found;
   var busy = false;
   String? error;
@@ -1189,7 +1199,9 @@ Future<void> _showInviteSheet(
               if (found == null) return;
               setState(() => busy = true);
               try {
-                await ref.read(repositoryProvider).inviteToTribe(
+                await ref
+                    .read(repositoryProvider)
+                    .inviteToTribe(
                       tribeId: tribe.tribeId,
                       invitedUserId: found!.userId,
                       message: message.text.trim().isEmpty
@@ -1200,7 +1212,8 @@ Future<void> _showInviteSheet(
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                        content: Text('Invite sent to @${found!.pseudonym}.')),
+                      content: Text('Invite sent to @${found!.pseudonym}.'),
+                    ),
                   );
                 }
               } catch (e) {
@@ -1234,7 +1247,9 @@ Future<void> _showInviteSheet(
                   Text(
                     'Invite to ${tribe.name}',
                     style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 18),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -1274,9 +1289,7 @@ Future<void> _showInviteSheet(
                         Expanded(
                           child: Text(
                             '@${found!.pseudonym}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
                         ),
                       ],
@@ -1362,8 +1375,10 @@ class _MembersCard extends ConsumerWidget {
               const Spacer(),
               if (modCount > 0)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: scheme.primary.withOpacity(0.14),
                     borderRadius: BorderRadius.circular(12),
@@ -1405,11 +1420,10 @@ class _MembersCard extends ConsumerWidget {
               ),
             )
           else
-            ...members.map((m) => _MemberRow(
-                  tribe: tribe,
-                  member: m,
-                  isMe: m.userId == meId,
-                )),
+            ...members.map(
+              (m) =>
+                  _MemberRow(tribe: tribe, member: m, isMe: m.userId == meId),
+            ),
         ],
       ),
     );
@@ -1499,8 +1513,11 @@ class _MemberRow extends ConsumerWidget {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        Icon(_roleIcon(member.role),
-                            size: 12, color: roleColor),
+                        Icon(
+                          _roleIcon(member.role),
+                          size: 12,
+                          color: roleColor,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           _roleLabel(member.role),
@@ -1526,46 +1543,62 @@ class _MemberRow extends ConsumerWidget {
               if (!isMe && !isKeeper)
                 PopupMenuButton<String>(
                   tooltip: 'Manage member',
-                  icon: Icon(Icons.more_vert,
-                      size: 18, color: scheme.onSurface.withOpacity(0.6)),
+                  icon: Icon(
+                    Icons.more_vert,
+                    size: 18,
+                    color: scheme.onSurface.withOpacity(0.6),
+                  ),
                   onSelected: (action) => _handleAction(context, ref, action),
                   itemBuilder: (_) => [
                     if (!isMod)
                       const PopupMenuItem(
                         value: 'promote',
-                        child: Row(children: [
-                          Icon(Icons.arrow_upward_rounded, size: 16),
-                          SizedBox(width: 8),
-                          Text('Promote to mod'),
-                        ]),
+                        child: Row(
+                          children: [
+                            Icon(Icons.arrow_upward_rounded, size: 16),
+                            SizedBox(width: 8),
+                            Text('Promote to mod'),
+                          ],
+                        ),
                       ),
                     if (isMod)
                       const PopupMenuItem(
                         value: 'demote',
-                        child: Row(children: [
-                          Icon(Icons.arrow_downward_rounded, size: 16),
-                          SizedBox(width: 8),
-                          Text('Demote to member'),
-                        ]),
+                        child: Row(
+                          children: [
+                            Icon(Icons.arrow_downward_rounded, size: 16),
+                            SizedBox(width: 8),
+                            Text('Demote to member'),
+                          ],
+                        ),
                       ),
                     const PopupMenuItem(
                       value: 'kick',
-                      child: Row(children: [
-                        Icon(Icons.person_remove_outlined,
-                            size: 16, color: Colors.red),
-                        SizedBox(width: 8),
-                        Text('Remove from tribe',
-                            style: TextStyle(color: Colors.red)),
-                      ]),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.person_remove_outlined,
+                            size: 16,
+                            color: Colors.red,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Remove from tribe',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ],
+                      ),
                     ),
                     if (isMod)
                       const PopupMenuItem(
                         value: 'transfer',
-                        child: Row(children: [
-                          Icon(Icons.workspace_premium_rounded, size: 16),
-                          SizedBox(width: 8),
-                          Text('Transfer keepership'),
-                        ]),
+                        child: Row(
+                          children: [
+                            Icon(Icons.workspace_premium_rounded, size: 16),
+                            SizedBox(width: 8),
+                            Text('Transfer keepership'),
+                          ],
+                        ),
                       ),
                   ],
                 ),
@@ -1577,7 +1610,10 @@ class _MemberRow extends ConsumerWidget {
   }
 
   Future<void> _handleAction(
-      BuildContext context, WidgetRef ref, String action) async {
+    BuildContext context,
+    WidgetRef ref,
+    String action,
+  ) async {
     final repo = ref.read(repositoryProvider);
     void invalidate() {
       ref.invalidate(tribeMembersProvider(tribe.tribeId));
@@ -1588,13 +1624,17 @@ class _MemberRow extends ConsumerWidget {
       switch (action) {
         case 'promote':
           await repo.promoteToMod(
-              tribeId: tribe.tribeId, userId: member.userId);
+            tribeId: tribe.tribeId,
+            userId: member.userId,
+          );
           _snack(context, '@${member.pseudonym} is now a mod.');
           invalidate();
           break;
         case 'demote':
           await repo.demoteToMember(
-              tribeId: tribe.tribeId, userId: member.userId);
+            tribeId: tribe.tribeId,
+            userId: member.userId,
+          );
           _snack(context, '@${member.pseudonym} is back to member.');
           invalidate();
           break;
@@ -1623,7 +1663,9 @@ class _MemberRow extends ConsumerWidget {
           );
           if (ok != true) return;
           await repo.transferKeeper(
-              tribeId: tribe.tribeId, toUserId: member.userId);
+            tribeId: tribe.tribeId,
+            toUserId: member.userId,
+          );
           _snack(context, 'Plug role transferred to @${member.pseudonym}.');
           invalidate();
           break;
@@ -1681,8 +1723,9 @@ class _BrandingCard extends ConsumerStatefulWidget {
 }
 
 class _BrandingCardState extends ConsumerState<_BrandingCard> {
-  late final _welcome =
-      TextEditingController(text: widget.tribe.welcomeMessage ?? '');
+  late final _welcome = TextEditingController(
+    text: widget.tribe.welcomeMessage ?? '',
+  );
   late String? _color = widget.tribe.themeColor;
   bool _saving = false;
   bool _dirty = false;
@@ -1706,24 +1749,27 @@ class _BrandingCardState extends ConsumerState<_BrandingCard> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await ref.read(repositoryProvider).setTribeBranding(
+      await ref
+          .read(repositoryProvider)
+          .setTribeBranding(
             tribeId: widget.tribe.tribeId,
-            welcomeMessage:
-                _welcome.text.trim().isEmpty ? null : _welcome.text.trim(),
+            welcomeMessage: _welcome.text.trim().isEmpty
+                ? null
+                : _welcome.text.trim(),
             themeColor: _color,
           );
       ref.invalidate(tribeBySlugProvider(widget.tribe.slug));
       if (mounted) {
         _dirty = false;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Branding saved.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Branding saved.')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not save: $e')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1806,7 +1852,9 @@ class _BrandingCardState extends ConsumerState<_BrandingCard> {
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : const Text('Save branding'),
             ),
@@ -1850,8 +1898,9 @@ class _PinnedPostsCard extends ConsumerWidget {
               child: Text(
                 'Nothing pinned yet. Tap "Pin from feed" to curate.',
                 style: TextStyle(
-                  color:
-                      Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.6),
                   fontSize: 13,
                 ),
               ),
@@ -1874,10 +1923,8 @@ class _PinnedPostsCard extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => _PinPickerSheet(
-        tribeId: tribe.tribeId,
-        tribePosts: tribePosts,
-      ),
+      builder: (_) =>
+          _PinPickerSheet(tribeId: tribe.tribeId, tribePosts: tribePosts),
     );
   }
 }
@@ -1894,8 +1941,11 @@ class _PinnedRow extends ConsumerWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.push_pin,
-              size: 16, color: Theme.of(context).colorScheme.primary),
+          Icon(
+            Icons.push_pin,
+            size: 16,
+            color: Theme.of(context).colorScheme.primary,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: GestureDetector(
@@ -1914,10 +1964,9 @@ class _PinnedRow extends ConsumerWidget {
                     '${post.authorPseudonym} · ♡ ${post.likesCount} · 💬 ${post.commentsCount}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withOpacity(0.55),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.55),
                     ),
                   ),
                 ],
@@ -1950,8 +1999,9 @@ class _PinPickerSheet extends ConsumerWidget {
     final pinned =
         ref.watch(tribePinnedPostsProvider(tribeId)).valueOrNull ?? const [];
     final pinnedIds = pinned.map((p) => p.postId).toSet();
-    final candidates =
-        tribePosts.where((p) => !pinnedIds.contains(p.postId)).toList();
+    final candidates = tribePosts
+        .where((p) => !pinnedIds.contains(p.postId))
+        .toList();
     return SafeArea(
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -1973,8 +2023,10 @@ class _PinPickerSheet extends ConsumerWidget {
               padding: EdgeInsets.fromLTRB(20, 12, 20, 6),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Pick a post to pin',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                child: Text(
+                  'Pick a post to pin',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
               ),
             ),
             const Divider(height: 1),
@@ -1984,9 +2036,10 @@ class _PinPickerSheet extends ConsumerWidget {
                       child: Padding(
                         padding: EdgeInsets.all(20),
                         child: Text(
-                            'No more posts to pin. Reload after a member vents.',
-                            style: TextStyle(color: Colors.black54),
-                            textAlign: TextAlign.center),
+                          'No more posts to pin. Reload after a member vents.',
+                          style: TextStyle(color: Colors.black54),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                     )
                   : ListView.separated(
@@ -2005,8 +2058,10 @@ class _PinPickerSheet extends ConsumerWidget {
                             '${p.authorPseudonym} · ♡ ${p.likesCount} · 💬 ${p.commentsCount}',
                             style: const TextStyle(fontSize: 11),
                           ),
-                          trailing:
-                              const Icon(Icons.push_pin_outlined, size: 18),
+                          trailing: const Icon(
+                            Icons.push_pin_outlined,
+                            size: 18,
+                          ),
                           onTap: () async {
                             await ref
                                 .read(repositoryProvider)
@@ -2057,17 +2112,16 @@ class _ScheduledPromptsCard extends ConsumerWidget {
               child: Text(
                 'No prompts yet. Try "What\'s been on your mind this week?"',
                 style: TextStyle(
-                  color:
-                      Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.6),
                   fontSize: 13,
                 ),
               ),
             );
           }
           return Column(
-            children: [
-              for (final p in list) _PromptRow(prompt: p),
-            ],
+            children: [for (final p in list) _PromptRow(prompt: p)],
           );
         },
       ),
@@ -2120,7 +2174,9 @@ class _PromptRow extends ConsumerWidget {
     );
     if (updated == null || updated.length < 4) return;
     try {
-      await ref.read(repositoryProvider).updatePrompt(
+      await ref
+          .read(repositoryProvider)
+          .updatePrompt(
             tribeId: prompt.tribeId,
             promptId: prompt.promptId,
             text: updated,
@@ -2187,15 +2243,17 @@ class _PromptRow extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(prompt.text,
-                    style: const TextStyle(fontSize: 13, height: 1.35)),
+                Text(
+                  prompt.text,
+                  style: const TextStyle(fontSize: 13, height: 1.35),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   scheduled == null
                       ? (prompt.isLive ? 'Posted now' : 'Draft')
                       : prompt.isLive
-                          ? 'Live · ${DateFormat('MMM d').format(scheduled)}'
-                          : 'Scheduled · ${DateFormat('MMM d · HH:mm').format(scheduled)}',
+                      ? 'Live · ${DateFormat('MMM d').format(scheduled)}'
+                      : 'Scheduled · ${DateFormat('MMM d · HH:mm').format(scheduled)}',
                   style: TextStyle(
                     fontSize: 11,
                     color: scheme.onSurface.withOpacity(0.55),
@@ -2222,8 +2280,11 @@ class _PromptRow extends ConsumerWidget {
           ),
           IconButton(
             tooltip: 'Delete',
-            icon: const Icon(Icons.delete_outline,
-                size: 16, color: Colors.redAccent),
+            icon: const Icon(
+              Icons.delete_outline,
+              size: 16,
+              color: Colors.redAccent,
+            ),
             onPressed: () => _deletePrompt(context, ref),
           ),
         ],
@@ -2261,8 +2322,15 @@ class _PromptComposerSheetState extends ConsumerState<_PromptComposerSheet> {
       initialTime: const TimeOfDay(hour: 9, minute: 0),
     );
     if (time == null) return;
-    setState(() => _when =
-        DateTime(date.year, date.month, date.day, time.hour, time.minute));
+    setState(
+      () => _when = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      ),
+    );
   }
 
   Future<void> _submit() async {
@@ -2270,7 +2338,9 @@ class _PromptComposerSheetState extends ConsumerState<_PromptComposerSheet> {
     if (text.length < 4) return;
     setState(() => _busy = true);
     try {
-      await ref.read(repositoryProvider).schedulePrompt(
+      await ref
+          .read(repositoryProvider)
+          .schedulePrompt(
             tribeId: widget.tribeId,
             text: text,
             scheduledFor: _when,
@@ -2279,9 +2349,9 @@ class _PromptComposerSheetState extends ConsumerState<_PromptComposerSheet> {
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not schedule: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not schedule: $e')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2297,8 +2367,9 @@ class _PromptComposerSheetState extends ConsumerState<_PromptComposerSheet> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final whenLabel =
-        _when == null ? 'Post now' : DateFormat('MMM d · HH:mm').format(_when!);
+    final whenLabel = _when == null
+        ? 'Post now'
+        : DateFormat('MMM d · HH:mm').format(_when!);
     return Padding(
       padding: EdgeInsets.only(
         left: 20,
@@ -2322,8 +2393,10 @@ class _PromptComposerSheetState extends ConsumerState<_PromptComposerSheet> {
               ),
             ),
           ),
-          const Text('New prompt',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          const Text(
+            'New prompt',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
           const SizedBox(height: 12),
           TextField(
             controller: _ctrl,
@@ -2353,7 +2426,9 @@ class _PromptComposerSheetState extends ConsumerState<_PromptComposerSheet> {
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : Text(_when == null ? 'Post now' : 'Schedule'),
           ),
@@ -2404,7 +2479,9 @@ class _StudioCard extends StatelessWidget {
                       Text(
                         title,
                         style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w800),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       Text(
                         subtitle,
@@ -2453,7 +2530,9 @@ class _SpotlightCard extends ConsumerWidget {
           : null,
       child: hasSpotlight
           ? _SpotlightRow(
-              tribe: tribe, onChange: () => _showPicker(context, ref))
+              tribe: tribe,
+              onChange: () => _showPicker(context, ref),
+            )
           : OutlinedButton.icon(
               icon: const Icon(Icons.star_outline, size: 16),
               label: const Text('Set spotlight'),
@@ -2483,11 +2562,9 @@ class _SpotlightCard extends ConsumerWidget {
       ),
     );
     if (ok != true) return;
-    await ref.read(repositoryProvider).spotlightMember(
-          tribeId: tribe.tribeId,
-          userId: null,
-          note: null,
-        );
+    await ref
+        .read(repositoryProvider)
+        .spotlightMember(tribeId: tribe.tribeId, userId: null, note: null);
     ref.invalidate(tribeBySlugProvider(tribe.slug));
   }
 
@@ -2526,8 +2603,10 @@ class _SpotlightRow extends StatelessWidget {
             children: [
               Text(
                 '@${tribe.spotlightPseudonym}',
-                style:
-                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                ),
               ),
               if (tribe.spotlightNote != null &&
                   tribe.spotlightNote!.isNotEmpty)
@@ -2556,10 +2635,7 @@ class _SpotlightRow extends StatelessWidget {
             ],
           ),
         ),
-        TextButton(
-          onPressed: onChange,
-          child: const Text('Change'),
-        ),
+        TextButton(onPressed: onChange, child: const Text('Change')),
       ],
     );
   }
@@ -2610,7 +2686,9 @@ class _SpotlightPickerSheetState extends ConsumerState<_SpotlightPickerSheet> {
     if (_selectedId == null || _busy) return;
     setState(() => _busy = true);
     try {
-      await ref.read(repositoryProvider).spotlightMember(
+      await ref
+          .read(repositoryProvider)
+          .spotlightMember(
             tribeId: widget.tribe.tribeId,
             userId: _selectedId,
             note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
@@ -2619,9 +2697,9 @@ class _SpotlightPickerSheetState extends ConsumerState<_SpotlightPickerSheet> {
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not save: $e')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2651,15 +2729,18 @@ class _SpotlightPickerSheetState extends ConsumerState<_SpotlightPickerSheet> {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color:
-                      Theme.of(context).colorScheme.onSurface.withOpacity(0.15),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
             const SizedBox(height: 12),
-            const Text('Spotlight a member',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            const Text(
+              'Spotlight a member',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+            ),
             const SizedBox(height: 4),
             Text(
               'Pick one member to celebrate. Add a short note about why — it shows above the tribe feed.',
@@ -2699,8 +2780,9 @@ class _SpotlightPickerSheetState extends ConsumerState<_SpotlightPickerSheet> {
                         title: Text(
                           '@${m.pseudonym}',
                           style: TextStyle(
-                            fontWeight:
-                                selected ? FontWeight.w800 : FontWeight.w600,
+                            fontWeight: selected
+                                ? FontWeight.w800
+                                : FontWeight.w600,
                           ),
                         ),
                         subtitle: Text(
@@ -2712,8 +2794,10 @@ class _SpotlightPickerSheetState extends ConsumerState<_SpotlightPickerSheet> {
                                 Icons.check_circle,
                                 color: Theme.of(context).colorScheme.primary,
                               )
-                            : const Icon(Icons.radio_button_unchecked,
-                                color: Colors.black26),
+                            : const Icon(
+                                Icons.radio_button_unchecked,
+                                color: Colors.black26,
+                              ),
                         onTap: () => setState(() {
                           _selectedId = m.userId;
                           _selectedPseudonym = m.pseudonym;
@@ -2745,7 +2829,9 @@ class _SpotlightPickerSheetState extends ConsumerState<_SpotlightPickerSheet> {
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : const Text('Spotlight'),
             ),
@@ -2795,8 +2881,10 @@ class _TopPostsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text('Best this week',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+              const Text(
+                'Best this week',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+              ),
               const Spacer(),
               Text(
                 'Top ${top.length} by engagement',
@@ -2871,9 +2959,11 @@ class _TopPostRow extends StatelessWidget {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(Icons.favorite_border,
-                            size: 12,
-                            color: scheme.onSurface.withOpacity(0.55)),
+                        Icon(
+                          Icons.favorite_border,
+                          size: 12,
+                          color: scheme.onSurface.withOpacity(0.55),
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           PostCard.compactNumber(post.likesCount),
@@ -2884,9 +2974,11 @@ class _TopPostRow extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        Icon(Icons.chat_bubble_outline,
-                            size: 12,
-                            color: scheme.onSurface.withOpacity(0.55)),
+                        Icon(
+                          Icons.chat_bubble_outline,
+                          size: 12,
+                          color: scheme.onSurface.withOpacity(0.55),
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           PostCard.compactNumber(post.commentsCount),
@@ -2973,8 +3065,10 @@ class _TopContributorsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text('Top contributors',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+              const Text(
+                'Top contributors',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+              ),
               const Spacer(),
               Text(
                 'Last 7 days',
@@ -3040,7 +3134,10 @@ class _ContributorRow extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           AnonymousAvatar(
-              seed: stat.avatarSeed, label: stat.pseudonym, size: 32),
+            seed: stat.avatarSeed,
+            label: stat.pseudonym,
+            size: 32,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -3052,7 +3149,9 @@ class _ContributorRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      fontWeight: FontWeight.w800, fontSize: 13),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
                 ),
                 Text(
                   '${stat.postCount} post${stat.postCount == 1 ? '' : 's'} · '

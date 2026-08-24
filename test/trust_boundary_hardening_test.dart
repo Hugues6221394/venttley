@@ -209,7 +209,7 @@ void main() {
 
   test('internal SECURITY DEFINER helpers are not public RPCs', () {
     final migration = File(
-      'supabase/migrations/20260816001834_revoke_internal_security_definer_helpers.sql',
+      'supabase/migrations/20260816020114_revoke_internal_security_definer_helpers.sql',
     ).readAsStringSync();
     final pgTap = File(
       'supabase/tests/database/0009_internal_helper_acl.test.sql',

@@ -5,10 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('public profile RPC owns public bio and pronouns', () {
     final migration = File(
-      'supabase/migrations/20260727130805_public_profile_bio_authority.sql',
+      'supabase/migrations/20260727131446_public_profile_bio_authority.sql',
     ).readAsStringSync();
-    final backend =
-        File('lib/data/services/supabase_backend.dart').readAsStringSync();
+    final backend = File(
+      'lib/data/services/supabase_backend.dart',
+    ).readAsStringSync();
 
     expect(migration, contains("'bio',               u.bio"));
     expect(migration, contains("'pronouns',          u.pronouns"));

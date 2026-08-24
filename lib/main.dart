@@ -244,11 +244,21 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   void _startPresenceHeartbeat() {
     _presenceTimer?.cancel();
     if (ref.read(sessionProvider) == null) return;
-    ref.read(repositoryProvider).touchLastSeen();
+    unawaited(_touchLastSeenSafely());
     _presenceTimer = Timer.periodic(
       const Duration(seconds: 60),
-      (_) => ref.read(repositoryProvider).touchLastSeen(),
+      (_) => unawaited(_touchLastSeenSafely()),
     );
+  }
+
+  Future<void> _touchLastSeenSafely() async {
+    try {
+      await ref.read(repositoryProvider).touchLastSeen();
+    } catch (_) {
+      // Presence is best-effort. Offline transitions, expired sessions, and
+      // temporary clock skew must never become uncaught app exceptions.
+      Logger.instance.warn('presence.heartbeat_failed');
+    }
   }
 
   void _stopPresenceHeartbeat() {

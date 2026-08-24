@@ -203,9 +203,12 @@ void navigateFromNotificationPayload(
     router.push(route, extra: extra);
   }
 
+  final destination = path
+      .split('/')
+      .firstWhere((segment) => segment.isNotEmpty, orElse: () => 'root');
   AnalyticsService.instance.track(
     Events.notificationTapped,
-    props: {'payload': payload, 'route': route},
+    props: {'destination': destination},
   );
 }
 
