@@ -722,8 +722,16 @@ ALTER TABLE public.dm_room_prefs
   ADD COLUMN IF NOT EXISTS font_style TEXT NOT NULL DEFAULT 'default'
   CHECK (font_style IN ('default', 'serif', 'mono'));
 
+-- Both signatures, because this migration has to survive being re-run.
+-- Dropping only the six-argument version from 0098 left the seven-argument
+-- one this file creates in place, and the bare CREATE below then failed with
+-- 42723 "function already exists with same argument types" — a partially
+-- applied run could never be finished.
 DROP FUNCTION IF EXISTS public.set_dm_room_pref(
   UUID, BOOLEAN, TEXT, BOOLEAN, INT, TEXT
+);
+DROP FUNCTION IF EXISTS public.set_dm_room_pref(
+  UUID, BOOLEAN, TEXT, BOOLEAN, INT, TEXT, TEXT
 );
 CREATE FUNCTION public.set_dm_room_pref(
   p_room_id UUID,
