@@ -131,8 +131,16 @@ GRANT SELECT (display_name) ON public.users TO anon, authenticated;
 -- Replace the profile mutation with one atomic contract. Username changes are
 -- intentionally disabled: the username is also the synthetic Supabase Auth
 -- login handle, and changing only public.users would strand the account.
+-- Both signatures, because this migration has to survive being re-run.
+-- Dropping only 0073's eight-argument version left the nine-argument one this
+-- file creates (it adds p_display_name) in place, so a run that got this far
+-- and stopped later could never be finished: every retry died on the bare
+-- CREATE below with 42723 "function already exists with same argument types".
 DROP FUNCTION IF EXISTS public.update_my_profile(
   TEXT, TEXT, TEXT, TEXT, TEXT, BOOLEAN, BOOLEAN, BOOLEAN
+);
+DROP FUNCTION IF EXISTS public.update_my_profile(
+  TEXT, TEXT, TEXT, TEXT, TEXT, BOOLEAN, BOOLEAN, BOOLEAN, TEXT
 );
 
 CREATE FUNCTION public.update_my_profile(
