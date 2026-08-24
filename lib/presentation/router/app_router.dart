@@ -31,6 +31,7 @@ import '../screens/onboarding/welcome_screen.dart';
 import '../screens/plugz/plug_profile_screen.dart';
 import '../screens/profile/avatar_builder_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
+import '../screens/profile/profile_screen.dart';
 import '../screens/profile/profile_stat_detail_screen.dart';
 import '../screens/profile/security_screen.dart';
 import '../screens/profile/password_security_screen.dart';
@@ -209,6 +210,18 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (ctx, st) => PlugProfileScreen(
                   displayName: Uri.decodeComponent(st.pathParameters['name']!),
                 ),
+              ),
+              // A keeper's own member profile.
+              //
+              // /profile is a shell branch whose builder swaps in the Studio
+              // analytics for keepers, so a keeper had no route to their own
+              // profile at all — the avatar in the Studio header sent them to
+              // Analytics. This lives in the Home branch alongside the other
+              // Studio pushes: footer nav stays visible, and it is a page
+              // rather than a tab because the tab slot is already spoken for.
+              GoRoute(
+                path: '/profile/me',
+                builder: (_, __) => const ProfileScreen(showBackButton: true),
               ),
               GoRoute(
                 path: '/keeper/moderation',

@@ -10,7 +10,13 @@ import '../../widgets/post_card.dart';
 import 'profile_overview.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, this.showBackButton = false});
+
+  /// True when this screen was pushed rather than reached as the bottom-nav
+  /// tab. Keepers get the Studio analytics in that tab slot, so their own
+  /// profile is a pushed page and needs a way back — the tab has no chrome at
+  /// all on purpose, and without this there is no exit but a system swipe.
+  final bool showBackButton;
 
   @override
   ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
@@ -160,14 +166,37 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        toolbarHeight: 0,
+        // Zero height when this is the tab: the hero card is the header. When
+        // pushed, just enough bar to float a back chip over the banner, the
+        // same shape the public profile uses.
+        toolbarHeight: widget.showBackButton ? null : 0,
+        leading: widget.showBackButton
+            ? Padding(
+                padding: const EdgeInsets.only(left: 4, top: 4),
+                child: IconButton(
+                  tooltip: 'Back',
+                  style: IconButton.styleFrom(
+                    backgroundColor: scheme.surface.withOpacity(0.82),
+                  ),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => context.pop(),
+                ),
+              )
+            : null,
       ),
       body: VentlyPremiumBackground(
         child: NestedScrollView(
           headerSliverBuilder: (ctx, _) => [
             // Only clear the status bar — the transparent app bar is 0-height.
+            // When pushed the bar is a real height and already clears it, so
+            // adding this again would leave a band of dead space the tab
+            // version does not have.
             SliverToBoxAdapter(
-              child: SizedBox(height: MediaQuery.of(ctx).padding.top + 8),
+              child: SizedBox(
+                height: widget.showBackButton
+                    ? 8
+                    : MediaQuery.of(ctx).padding.top + 8,
+              ),
             ),
             SliverToBoxAdapter(
               key: _badgesKey,

@@ -505,7 +505,10 @@ class _TopBar extends StatelessWidget {
           _BellButton(),
           const SizedBox(width: 4),
           GestureDetector(
-            onTap: () => context.go('/profile'),
+            // /profile resolves to the Studio analytics for a keeper, so this
+            // avatar used to send them to Analytics — the one place it could
+            // not plausibly mean. Push the real profile instead.
+            onTap: () => context.push('/profile/me'),
             child: me == null
                 ? const CircleAvatar(
                     radius: 18,
@@ -1566,42 +1569,55 @@ class _KeeperDrawer extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-              child: Row(
-                children: [
-                  if (me != null)
-                    ProfileAvatar(
-                      avatarSeed: me!.avatarSeed,
-                      label: me!.anonymousPseudonym,
-                      profilePhotoUrl: me!.profilePhotoUrl,
-                      size: 44,
-                    ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Plug Studio',
-                          style: TextStyle(
-                            color: context.ink,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 16,
+            // Tappable, because a drawer header showing your own face reads as
+            // the way to your own profile whether or not it is wired up. It
+            // used to be inert, which is worse than not being there.
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/profile/me');
+              },
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+                child: Row(
+                  children: [
+                    if (me != null)
+                      ProfileAvatar(
+                        avatarSeed: me!.avatarSeed,
+                        label: me!.anonymousPseudonym,
+                        profilePhotoUrl: me!.profilePhotoUrl,
+                        size: 44,
+                      ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Plug Studio',
+                            style: TextStyle(
+                              color: context.ink,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                            ),
                           ),
-                        ),
-                        const Text(
-                          'Tribe Control Center',
-                          style: TextStyle(
-                            color: VentlyColors.berryMagenta,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11.5,
+                          const Text(
+                            'Tribe Control Center',
+                            style: TextStyle(
+                              color: VentlyColors.berryMagenta,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11.5,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: context.ink.withOpacity(0.35),
+                    ),
+                  ],
+                ),
               ),
             ),
             const Divider(height: 1, color: Color(0xFFEEDCE3)),
@@ -1694,6 +1710,17 @@ class _KeeperDrawer extends ConsumerWidget {
                     },
                   ),
                   const _DrawerSection('Account'),
+                  // A keeper is a member too, and the bottom-nav slot where
+                  // everyone else finds their profile holds the Studio
+                  // analytics here. Without this row there is no route to it.
+                  _DrawerTile(
+                    icon: Icons.person_rounded,
+                    label: 'My profile',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/profile/me');
+                    },
+                  ),
                   _DrawerTile(
                     icon: Icons.settings_rounded,
                     label: 'Settings',

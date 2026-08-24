@@ -183,12 +183,11 @@ class KeeperAnalyticsScreen extends ConsumerWidget {
                         icon: const Icon(Icons.insights_outlined),
                         label: const Text('Open tribe studio'),
                       ),
+                    // This used to clear member view and go('/profile'),
+                    // which for a keeper resolves right back to this screen —
+                    // a button that navigated to where you already were.
                     TextButton(
-                      onPressed: () {
-                        ref.read(keeperMemberViewProvider.notifier).state =
-                            false;
-                        context.go('/profile');
-                      },
+                      onPressed: () => context.push('/profile/me'),
                       child: const Text('Personal profile & settings'),
                     ),
                   ],
