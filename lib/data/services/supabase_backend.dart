@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/constants.dart';
 import '../../core/image_metadata_scrubber.dart';
 import '../../core/logger.dart';
+import 'row_shape_guard.dart';
 import '../../domain/entities/entities.dart';
 import '../../domain/home/home_discovery.dart';
 import '../../domain/keeper/keeper_mode.dart';
@@ -2032,6 +2033,11 @@ class SupabaseBackend {
   }
 
   Whisper _whisperFromRow(Map<String, dynamic> r) {
+    expectColumns('whispers', r, const {
+      'music_track_id': '20260815224342_identity_self_interaction_music',
+      'music_start_ms': '20260815224342_identity_self_interaction_music',
+      'music_volume': '20260815224342_identity_self_interaction_music',
+    });
     final rawEdited = r['edited_at'] as String?;
     final rawDeleted = r['deleted_at'] as String?;
     return Whisper(
@@ -3010,6 +3016,13 @@ class SupabaseBackend {
 
   UserProfileView _profileFromJson(Map<String, dynamic> j) {
     final user = j['user'] as Map<String, dynamic>;
+    // The banner fields live inside the RPC's `user` object, not at the top
+    // level, so check the map they would actually appear in.
+    expectColumns('user_profile_summary.user', user, const {
+      'profile_banner_url': '20260817100000_profile_banner_image',
+      'profile_banner_offset': '20260822100000_profile_banner_offset',
+      'bio': '20260727131446_public_profile_bio_authority',
+    });
     // No `bio` key at all means the deployed user_profile_summary predates
     // 20260727130805 — the migration that made bio public. Bio then falls back
     // to the direct users read below, which RLS blocks for other accounts, so
@@ -4732,6 +4745,12 @@ class SupabaseBackend {
   // ===================================================================
 
   Space _spaceFromRow(Map<String, dynamic> r) {
+    expectColumns('tribe_spaces', r, const {
+      'icon_name': '20260716175655_tribe_lifecycle_management',
+      'posting_permission': '20260716175655_tribe_lifecycle_management',
+      'activates_at': '20260716175655_tribe_lifecycle_management',
+      'deactivates_at': '20260716175655_tribe_lifecycle_management',
+    });
     final archivedAtRaw = r['archived_at'] as String?;
     final lastVentRaw = r['last_vent_at'] as String?;
     return Space(
@@ -5097,9 +5116,6 @@ class SupabaseBackend {
         .toList();
   }
 
-  /// Warned once that inbox_rooms predates the peer-photo column.
-  bool _warnedInboxMissingPeerPhoto = false;
-
   ChatRoom _chatRoomFromInboxRow(
     Map<String, dynamic> row, {
     String? peerDisplayName,
@@ -5108,25 +5124,16 @@ class SupabaseBackend {
     // column yields no key at all and row[...] is null — indistinguishable from
     // "this person has no photo". Every DM fell back to a letter avatar and
     // nothing anywhere said why. An unapplied migration has to be loud.
-    if (!_warnedInboxMissingPeerPhoto) {
-      const expected = [
-        'peer_profile_photo_url',
-        'group_avatar_path',
-        'group_invite_token',
-        'group_invite_enabled',
-        'group_allow_member_invites',
-        'is_group_owner',
-        'member_count',
-      ];
-      final missing = expected.where((k) => !row.containsKey(k)).toList();
-      _warnedInboxMissingPeerPhoto = true;
-      if (missing.isNotEmpty) {
-        log.warn(
-          'inbox.view_missing_columns',
-          props: {'missing': missing.join(',')},
-        );
-      }
-    }
+    expectColumns('inbox_rooms', row, const {
+      'peer_profile_photo_url': '20260721195535_inbox_peer_profile_photos',
+      'group_avatar_path': '20260719000932_group_chat_membership_and_settings',
+      'group_invite_token': '20260719000932_group_chat_membership_and_settings',
+      'group_invite_enabled':
+          '20260719000932_group_chat_membership_and_settings',
+      'group_allow_member_invites':
+          '20260719000932_group_chat_membership_and_settings',
+      'is_group_owner': '20260719000932_group_chat_membership_and_settings',
+    });
     final isGroup = row['is_group'] == true;
     final rawName = row['peer_pseudonym'] as String?;
     return ChatRoom(
@@ -6637,6 +6644,12 @@ class SupabaseBackend {
   }
 
   MusicTrack _musicTrackFromRow(Map<String, dynamic> row) {
+    expectColumns('music_tracks', row, const {
+      'track_id': '20260815224342_identity_self_interaction_music',
+      'provider_track_id': '20260815224342_identity_self_interaction_music',
+      'license_code': '20260815224342_identity_self_interaction_music',
+      'attribution_text': '20260815224342_identity_self_interaction_music',
+    });
     return MusicTrack(
       trackId: row['track_id'] as String,
       provider: row['provider'] as String,
@@ -6671,6 +6684,16 @@ class SupabaseBackend {
   }
 
   Post _postFromRow(Map<String, dynamic> r) {
+    expectColumns('posts', r, const {
+      'card_background_color': '20260727133836_post_card_colors',
+      'card_text_color': '20260727133836_post_card_colors',
+      'is_story': '20260727190030_distinct_stories_and_audience',
+      'story_audience': '20260727190030_distinct_stories_and_audience',
+      'music_track_id': '20260815224342_identity_self_interaction_music',
+      'music_start_ms': '20260815224342_identity_self_interaction_music',
+      'music_volume': '20260815224342_identity_self_interaction_music',
+      'goal_reached_at': '20260816140000_goal_reached',
+    });
     final rawEdited = r['edited_at'] as String?;
     final rawDeleted = r['deleted_at'] as String?;
     return Post(
@@ -6741,6 +6764,15 @@ class SupabaseBackend {
   }
 
   Tribe _tribeFromRow(Map<String, dynamic> r) {
+    expectColumns('tribes', r, const {
+      'lifecycle_status': '20260716175655_tribe_lifecycle_management',
+      'lifecycle_reason': '20260716175655_tribe_lifecycle_management',
+      'paused_at': '20260716175655_tribe_lifecycle_management',
+      'deletion_purge_at': '20260716175655_tribe_lifecycle_management',
+      'tags': '20260716175655_tribe_lifecycle_management',
+      'keeper_profile_photo_url':
+          '20260716001150_home_topic_stats_and_tribe_profiles',
+    });
     // The studio fields (welcome_message, theme_color, spotlight_*) may
     // not be present in older callers' SELECT lists. tribeBySlug fetches
     // them explicitly; the directory and feed views don't.
@@ -6833,6 +6865,10 @@ class SupabaseBackend {
   }
 
   AppUser _userFromRow(Map<String, dynamic> r) {
+    expectColumns('users', r, const {
+      'profile_banner_url': '20260817100000_profile_banner_image',
+      'profile_banner_offset': '20260822100000_profile_banner_offset',
+    });
     return AppUser(
       userId: r['user_id'] as String,
       anonymousPseudonym: r['anonymous_pseudonym'] as String,
