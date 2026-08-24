@@ -79,6 +79,12 @@ class SettingsScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
+              // Your own face and name at the top of Settings reads as the way
+              // to your profile, so make it one. Push rather than go: Settings
+              // is itself a pushed page and jumping to the tab would throw
+              // away the stack the person is standing in.
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => context.push('/profile/me'),
             ),
           ],
           const _SectionHeader('Appearance'),
