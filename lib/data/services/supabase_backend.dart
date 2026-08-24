@@ -5108,13 +5108,24 @@ class SupabaseBackend {
     // column yields no key at all and row[...] is null — indistinguishable from
     // "this person has no photo". Every DM fell back to a letter avatar and
     // nothing anywhere said why. An unapplied migration has to be loud.
-    if (!_warnedInboxMissingPeerPhoto &&
-        !row.containsKey('peer_profile_photo_url')) {
+    if (!_warnedInboxMissingPeerPhoto) {
+      const expected = [
+        'peer_profile_photo_url',
+        'group_avatar_path',
+        'group_invite_token',
+        'group_invite_enabled',
+        'group_allow_member_invites',
+        'is_group_owner',
+        'member_count',
+      ];
+      final missing = expected.where((k) => !row.containsKey(k)).toList();
       _warnedInboxMissingPeerPhoto = true;
-      log.warn(
-        'inbox.view_missing_peer_photo_column',
-        props: {'migration': '20260721195535_inbox_peer_profile_photos'},
-      );
+      if (missing.isNotEmpty) {
+        log.warn(
+          'inbox.view_missing_columns',
+          props: {'missing': missing.join(',')},
+        );
+      }
     }
     final isGroup = row['is_group'] == true;
     final rawName = row['peer_pseudonym'] as String?;
