@@ -4030,10 +4030,12 @@ class SupabaseBackend {
         ((r as Map<String, dynamic>)['post_id'] as String): _postFromRow(r),
     };
     // Preserve pinned order
-    return [
+    // Hydrated like the feed: the raw view rows carry neither the attached
+    // track nor the persona-safe display name.
+    return _hydratePosts([
       for (final id in ids)
         if (byId[id] != null) byId[id]!,
-    ];
+    ]);
   }
 
   Future<void> pinPost(String tribeId, String postId) async {
@@ -4582,13 +4584,16 @@ class SupabaseBackend {
         .from('post_saves')
         .select('feed_posts(*)')
         .eq('user_id', uid);
-    return rows
+    final saved = rows
         .map<Post?>((r) {
           final fp = r['feed_posts'];
           return fp == null ? null : _postFromRow(fp);
         })
         .whereType<Post>()
         .toList();
+    // Hydrated like the feed: the raw view rows carry neither the attached
+    // track nor the persona-safe display name.
+    return _hydratePosts(saved);
   }
 
   Future<List<Post>> myVents() async {
@@ -4609,12 +4614,17 @@ class SupabaseBackend {
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
-    return rows
-        .map<Post>(_postFromRow)
-        .where(
-          (p) => (!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff),
-        )
-        .toList();
+    // Through _hydratePosts like the feed: without it these rows carry the
+    // raw view columns only, so an attached track and a persona-safe display
+    // name both go missing on the way to the screen.
+    return _hydratePosts(
+      rows
+          .map<Post>(_postFromRow)
+          .where(
+            (p) => (!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff),
+          )
+          .toList(),
+    );
   }
 
   Future<List<Post>> activeStoriesByAuthor(
@@ -4630,10 +4640,14 @@ class SupabaseBackend {
         .gte('created_at', cutoff.toUtc().toIso8601String())
         .order('created_at', ascending: false)
         .limit(limit.clamp(1, 100));
-    return rows
-        .map<Post>(_postFromRow)
-        .where((post) => post.isStory && post.createdAt.isAfter(cutoff))
-        .toList();
+    // Hydrated like the feed: the raw view rows carry neither the attached
+    // track nor the persona-safe display name.
+    return _hydratePosts(
+      rows
+          .map<Post>(_postFromRow)
+          .where((post) => post.isStory && post.createdAt.isAfter(cutoff))
+          .toList(),
+    );
   }
 
   // ===================================================================
@@ -4846,12 +4860,16 @@ class SupabaseBackend {
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
-    return rows
-        .map<Post>(_postFromRow)
-        .where(
-          (p) => (!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff),
-        )
-        .toList();
+    // Hydrated like the feed: the raw view rows carry neither the attached
+    // track nor the persona-safe display name.
+    return _hydratePosts(
+      rows
+          .map<Post>(_postFromRow)
+          .where(
+            (p) => (!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff),
+          )
+          .toList(),
+    );
   }
 
   // ===================================================================
@@ -4951,9 +4969,11 @@ class SupabaseBackend {
         break;
     }
     final rows = await ordered.limit(limit) as List<dynamic>;
-    return rows
-        .map<Post>((r) => _postFromRow(r as Map<String, dynamic>))
-        .toList();
+    // Hydrated like the feed: the raw view rows carry neither the attached
+    // track nor the persona-safe display name.
+    return _hydratePosts(
+      rows.map<Post>((r) => _postFromRow(r as Map<String, dynamic>)).toList(),
+    );
   }
 
   Future<String> createSpace({
