@@ -17,6 +17,7 @@ import 'core/notification_routing.dart';
 import 'core/providers.dart';
 import 'data/services/analytics_service.dart';
 import 'data/services/push_registration_service.dart';
+import 'data/services/schema_ledger_check.dart';
 import 'data/services/notifications_service.dart';
 import 'data/services/telemetry_service.dart';
 import 'presentation/router/app_router.dart';
@@ -322,6 +323,12 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await ref.read(sessionProvider.notifier).restore();
       AnalyticsService.instance.track(Events.appOpened);
+      // Ask the database what it has actually run. Advisory and unawaited: a
+      // database behind the build degrades features, and blocking startup on it
+      // would turn a cosmetic gap into an outage.
+      unawaited(
+        SchemaLedgerCheck(Supabase.instance.client).report().catchError((_) {}),
+      );
       // Foreground alerts stay on the existing Supabase realtime path. FCM is
       // used for background delivery and tap routing only, avoiding duplicate
       // alerts while the app is open.
