@@ -1858,7 +1858,23 @@ class SupabaseBackend {
       // The migration may not be applied yet — this project applies them by
       // hand. Degrade to the unfiltered view rather than showing no whispers at
       // all; the user still gets a feed, just without the already-heard filter.
-      log.warn('whispers.unheard_rpc_unavailable', props: {'error': '$e'});
+      // Structured, and split: the scrubber replaces any single value over 120
+      // characters with a length placeholder, which is how this failure spent
+      // its first appearance saying nothing at all.
+      log.warn(
+        'whispers.unheard_rpc_unavailable',
+        props: {
+          if (e is PostgrestException) ...{
+            'code': e.code,
+            'msg': e.message.length > 100
+                ? e.message.substring(0, 100)
+                : e.message,
+            'details': e.details?.toString(),
+            'hint': e.hint,
+          } else
+            'error': e.runtimeType.toString(),
+        },
+      );
       return _listWhispersFromView(
         limit: limit,
         category: category,
@@ -1906,7 +1922,55 @@ class SupabaseBackend {
     return _whispersWithMyFlags(base);
   }
 
+  /// Fill in a whisper's track details from its music_track_id.
+  ///
+  /// whispers_feed carries the reference only. Joining music_tracks into the
+  /// view instead makes every whisper read evaluate that table's RLS — a
+  /// per-row feature-flag check on a hot feed, which also broke
+  /// list_unheard_whispers with 42501. music_tracks_by_ids is SECURITY DEFINER
+  /// and batched, which is why posts already resolve their track this way.
+  Future<List<Whisper>> _hydrateWhisperMusic(List<Whisper> whispers) async {
+    final trackIds = <String>{
+      for (final w in whispers)
+        if (w.musicTrackId case final String id) id,
+    }.toList();
+    if (trackIds.isEmpty) return whispers;
+    try {
+      final rows =
+          await _client.rpc(
+                'music_tracks_by_ids',
+                params: {'p_track_ids': trackIds},
+              )
+              as List<dynamic>;
+      final byId = <String, MusicTrack>{};
+      for (final row in rows.cast<Map<String, dynamic>>()) {
+        final track = _musicTrackFromRow(row);
+        byId[track.trackId] = track;
+      }
+      return [
+        for (final w in whispers)
+          if (byId[w.musicTrackId] case final MusicTrack track)
+            w.copyWith(
+              musicPreviewUrl: track.previewUrl,
+              musicTitle: track.title,
+              musicArtist: track.artist,
+            )
+          else
+            w,
+      ];
+    } catch (e) {
+      // A whisper without its bed is still a whisper. Losing the voice because
+      // the music lookup failed would be the worse trade by far.
+      log.warn(
+        'whispers.music_hydration_failed',
+        props: {'reason': e.runtimeType.toString()},
+      );
+      return whispers;
+    }
+  }
+
   Future<List<Whisper>> _whispersWithMyFlags(List<Whisper> base) async {
+    base = await _hydrateWhisperMusic(base);
     try {
       final authorIds = base
           .map((whisper) => whisper.authorId)

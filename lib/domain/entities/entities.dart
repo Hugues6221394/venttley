@@ -1846,6 +1846,9 @@ class Whisper {
     String? description,
     DateTime? editedAt,
     DateTime? deletedAt,
+    String? musicPreviewUrl,
+    String? musicTitle,
+    String? musicArtist,
   }) => Whisper(
     whisperId: whisperId,
     authorId: authorId,
@@ -1873,6 +1876,16 @@ class Whisper {
     reactionCounts: reactionCounts ?? this.reactionCounts,
     myReaction: myReaction == _unset ? this.myReaction : myReaction as String?,
     mediaStatus: mediaStatus,
+    // These used to be omitted, which meant every copyWith silently erased the
+    // music bed — and _whispersWithMyFlags copies every whisper on the way to
+    // the screen, so a whisper could never keep its music no matter what the
+    // database returned.
+    musicTrackId: musicTrackId,
+    musicPreviewUrl: musicPreviewUrl ?? this.musicPreviewUrl,
+    musicTitle: musicTitle ?? this.musicTitle,
+    musicArtist: musicArtist ?? this.musicArtist,
+    musicStartMs: musicStartMs,
+    musicVolume: musicVolume,
   );
 }
 
