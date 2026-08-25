@@ -2973,9 +2973,10 @@ class SupabaseBackend {
       log.warn('profile.summary_null', props: {'target': otherUserId});
       return null;
     }
-    late final UserProfileView view;
+    UserProfileView view;
+    final payload = result as Map<String, dynamic>;
     try {
-      view = _profileFromJson(result as Map<String, dynamic>);
+      view = _profileFromJson(payload);
     } catch (e, st) {
       // A malformed / partial payload must surface as the visible error state,
       // not throw past `async.when` into an empty frame.
@@ -2987,6 +2988,15 @@ class SupabaseBackend {
       );
       rethrow;
     }
+    // Seven migrations define user_profile_summary and only the newest two
+    // return the banner, so re-running an older one by hand strips it from the
+    // payload while the column still holds a value. When that happens the
+    // owner's own profile keeps its background — that reads public.users
+    // directly — and every viewer sees the brand gradient instead. Ask the
+    // single-purpose RPC rather than let a migration ordering mistake blank
+    // everyone's banner.
+    view = await _bannerFallbackIfMissing(view, payload, otherUserId);
+
     // Connections count lives on the denormalized users.connections_count
     // column (migration 0054). Cheap indexed single-row read, kept out
     // of user_profile_summary so we don't have to rebuild that long RPC.
@@ -3076,6 +3086,46 @@ class SupabaseBackend {
     return rows
         .map<Tribe>((r) => _tribeFromRow(Map<String, dynamic>.from(r as Map)))
         .toList();
+  }
+
+  /// Recover the banner when the summary payload does not carry it.
+  ///
+  /// Only runs when the keys are absent — a present-but-null means the person
+  /// simply has no background, and asking again would be a wasted round trip on
+  /// every profile open.
+  Future<UserProfileView> _bannerFallbackIfMissing(
+    UserProfileView view,
+    Map<String, dynamic> payload,
+    String targetUserId,
+  ) async {
+    final user = payload['user'];
+    if (user is Map && user.containsKey('profile_banner_url')) return view;
+    try {
+      final rows =
+          await _client.rpc(
+                'user_profile_banner',
+                params: {'p_target': targetUserId},
+              )
+              as List<dynamic>;
+      if (rows.isEmpty) return view;
+      final row = (rows.first as Map).cast<String, dynamic>();
+      return view.copyWithConnections(
+        view.connectionsCount,
+        profileBannerUrl: row['profile_banner_url'] as String?,
+        profileBannerOffset:
+            (row['profile_banner_offset'] as num?)?.toDouble() ?? 0.5,
+      );
+    } catch (e) {
+      // Older database without the fallback RPC either. Nothing more to try,
+      // and a profile without a background is still a profile.
+      log.warn(
+        'profile.banner_fallback_unavailable',
+        props: {
+          'reason': e is PostgrestException ? e.code : e.runtimeType.toString(),
+        },
+      );
+      return view;
+    }
   }
 
   UserProfileView _profileFromJson(Map<String, dynamic> j) {
@@ -6701,8 +6751,22 @@ class SupabaseBackend {
             );
           }(),
       ];
-    } catch (_) {
-      // Music is optional. A catalog outage never blocks reading a Vent.
+    } catch (e) {
+      // Music is optional and a catalog outage must never block reading a Vent
+      // — but it must not fail in silence either. Swallowing this is how a vent
+      // could post with has_music:true and read back with no music at all.
+      log.warn(
+        'posts.music_hydration_failed',
+        props: {
+          if (e is PostgrestException) ...{
+            'code': e.code,
+            'msg': e.message.length > 100
+                ? e.message.substring(0, 100)
+                : e.message,
+          } else
+            'reason': e.runtimeType.toString(),
+        },
+      );
     }
     return hydrated;
   }

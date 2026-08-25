@@ -2393,6 +2393,8 @@ class UserProfileView {
     String? pronouns,
     int? postsTotal,
     int? hugsReceived,
+    String? profileBannerUrl,
+    double? profileBannerOffset,
   }) {
     return UserProfileView(
       postsTotal: postsTotal ?? this.postsTotal,
@@ -2403,8 +2405,8 @@ class UserProfileView {
       displayName: displayName ?? this.displayName,
       avatarSeed: avatarSeed,
       profilePhotoUrl: profilePhotoUrl,
-      profileBannerUrl: profileBannerUrl,
-      profileBannerOffset: profileBannerOffset,
+      profileBannerUrl: profileBannerUrl ?? this.profileBannerUrl,
+      profileBannerOffset: profileBannerOffset ?? this.profileBannerOffset,
       karma: karma,
       isVerified: isVerified,
       joinedAt: joinedAt,
