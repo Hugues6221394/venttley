@@ -16,8 +16,16 @@ library;
 /// has.
 const String kLedgerVersion = '20260826100000';
 
-/// Versions the app requires, newest last. Add a migration here when you add it
-/// to supabase/migrations — the manifest test fails until you do.
-const List<String> kExpectedMigrations = <String>[
-  '20260826100000', // schema_migrations_ledger
-];
+/// Versions the app requires, mapped to their names.
+///
+/// The name is carried because the version cannot be reported on its own: a
+/// 14-digit timestamp matches the PII scrubber's phone-number pattern, so a
+/// warning listing versions arrives as `[<scrubbed:phone>]` — it tells you
+/// something is missing and not which thing. The name is digit-free, survives
+/// intact, and is what you would search the migrations directory for anyway.
+///
+/// Add a migration here when you add it to supabase/migrations — the manifest
+/// test fails until you do.
+const Map<String, String> kExpectedMigrations = <String, String>{
+  '20260826100000': 'schema_migrations_ledger',
+};

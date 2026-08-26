@@ -19,7 +19,10 @@ class SchemaLedgerCheck {
 
   final SupabaseClient _client;
 
-  /// Versions the build wants that the database does not have.
+  /// Names of the migrations the build wants that the database does not have.
+  ///
+  /// Names rather than versions: a 14-digit version is scrubbed as a phone
+  /// number on the way to the log, so reporting versions names nothing.
   ///
   /// Empty when the database is current, when the ledger has not been created
   /// yet (nothing can be concluded), or when the check could not run.
@@ -62,10 +65,10 @@ class SchemaLedgerCheck {
     // Nothing older than the ledger can be judged: those migrations predate it
     // and left no trace, so their absence from the table means nothing.
     return [
-      for (final version in kExpectedMigrations)
-        if (version.compareTo(kLedgerVersion) >= 0 &&
-            !applied.contains(version))
-          version,
+      for (final entry in kExpectedMigrations.entries)
+        if (entry.key.compareTo(kLedgerVersion) >= 0 &&
+            !applied.contains(entry.key))
+          entry.value,
     ];
   }
 
@@ -73,13 +76,12 @@ class SchemaLedgerCheck {
   Future<void> report() async {
     final missing = await missingMigrations();
     if (missing.isEmpty) return;
-    // A list, not a joined string: the PII scrubber replaces any single value
-    // over 120 characters with a length placeholder, which is how an earlier
-    // diagnostic managed to report that something was wrong without saying
-    // what.
+    // A list, not a joined string: the scrubber replaces any single value over
+    // 120 characters with a length placeholder, which is another way a
+    // diagnostic ends up reporting that something is wrong without saying what.
     log.warn(
       'schema.migrations_missing',
-      props: {'count': missing.length, 'versions': missing},
+      props: {'count': missing.length, 'migrations': missing},
     );
   }
 }

@@ -34,9 +34,11 @@ void main() {
   });
 
   test('every migration at or after the ledger is in the manifest', () {
-    final onDisk = migrationsFrom(kLedgerVersion).map((m) => m.version).toList();
+    final onDisk = migrationsFrom(
+      kLedgerVersion,
+    ).map((m) => m.version).toList();
     final undeclared = onDisk
-        .where((v) => !kExpectedMigrations.contains(v))
+        .where((v) => !kExpectedMigrations.containsKey(v))
         .toList();
     expect(
       undeclared,
@@ -49,7 +51,7 @@ void main() {
 
   test('the manifest does not claim migrations that do not exist', () {
     final onDisk = migrationsFrom(kLedgerVersion).map((m) => m.version).toSet();
-    final phantom = kExpectedMigrations
+    final phantom = kExpectedMigrations.keys
         .where((v) => v.compareTo(kLedgerVersion) >= 0 && !onDisk.contains(v))
         .toList();
     expect(
@@ -59,14 +61,24 @@ void main() {
     );
   });
 
-  test('the manifest is ordered and free of duplicates', () {
-    final sorted = [...kExpectedMigrations]..sort();
-    expect(kExpectedMigrations, sorted, reason: 'keep it oldest-first');
-    expect(
-      kExpectedMigrations.toSet(),
-      hasLength(kExpectedMigrations.length),
-      reason: 'a duplicated version would mask a missing one',
-    );
+  test('the manifest is ordered', () {
+    final keys = kExpectedMigrations.keys.toList();
+    expect(keys, [...keys]..sort(), reason: 'keep it oldest-first');
+  });
+
+  test('the manifest names match the files on disk', () {
+    // The name is what the warning prints, so a wrong one sends you looking for
+    // a file that does not exist.
+    final byVersion = {
+      for (final m in migrationsFrom(kLedgerVersion)) m.version: m.name,
+    };
+    for (final entry in kExpectedMigrations.entries) {
+      expect(
+        entry.value,
+        byVersion[entry.key],
+        reason: 'manifest name for ${entry.key} does not match its file',
+      );
+    }
   });
 
   test('every migration at or after the ledger records itself', () {
