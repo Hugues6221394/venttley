@@ -159,6 +159,11 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   Future<void> _openPhotoSourceSheet() async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
+      // Above the floating nav. HomeShell paints its pill in a Stack over the
+      // branch, so a sheet opened on the branch navigator sits underneath it —
+      // which put this sheet's own action row behind the nav and made Publish
+      // unreachable except at its bottom few pixels.
+      useRootNavigator: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -205,6 +210,11 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      // Above the floating nav. HomeShell paints its pill in a Stack over the
+      // branch, so a sheet opened on the branch navigator sits underneath it —
+      // which put this sheet's own action row behind the nav and made Publish
+      // unreachable except at its bottom few pixels.
+      useRootNavigator: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -353,6 +363,12 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
+      // Above the floating nav. HomeShell paints its pill in a Stack over the
+      // branch, so a sheet opened on the branch navigator sits underneath it —
+      // which put this sheet's own action row behind the nav and made Publish
+      // unreachable except at its bottom few pixels.
+      useRootNavigator: true,
+
       builder: (sheetContext) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
         child: Column(
@@ -1411,6 +1427,11 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   ) {
     showModalBottomSheet(
       context: context,
+      // Above the floating nav. HomeShell paints its pill in a Stack over the
+      // branch, so a sheet opened on the branch navigator sits underneath it —
+      // which put this sheet's own action row behind the nav and made Publish
+      // unreachable except at its bottom few pixels.
+      useRootNavigator: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
