@@ -97,6 +97,8 @@ class GoalsScreen extends ConsumerWidget {
                   ),
                 ),
                 ...communityAsync.when(
+                  // Never swap content we still have for a skeleton; first load only.
+                  skipLoadingOnReload: true,
                   loading: () => const [
                     SliverToBoxAdapter(
                       child: Padding(

@@ -224,6 +224,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               switch (t.label) {
                 case 'Whispers':
                   return myWhispersAsync.when(
+                    // Never swap content we still have for a skeleton; first load only.
+                    skipLoadingOnReload: true,
                     data: (whispers) => _MyWhispersTab(whispers: whispers),
                     loading: () => const _ProfileLoading(),
                     error: (_, __) => _ProfileLoadError(
@@ -274,6 +276,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   );
                 case 'Media':
                   return myVentsAsync.when(
+                    // Never swap content we still have for a skeleton; first load only.
+                    skipLoadingOnReload: true,
                     data: (posts) => _PostsTab(
                       posts: posts.where((post) => post.hasImage).toList(),
                       emptyText: 'Photos you post will show here.',
@@ -286,6 +290,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   );
                 case 'Vents':
                   return myVentsAsync.when(
+                    // Never swap content we still have for a skeleton; first load only.
+                    skipLoadingOnReload: true,
                     data: (posts) => _PostsTab(
                       posts: posts
                           .where((post) => !post.isWhisper && !post.isStory)

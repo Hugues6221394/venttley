@@ -75,6 +75,8 @@ class FeedScreen extends ConsumerWidget {
               ref.invalidate(popularWhispersProvider);
             },
             child: feed.when(
+              // Never swap content we still have for a skeleton; first load only.
+              skipLoadingOnReload: true,
               loading: () => const PostSkeletonList(),
               error: (e, _) => VentlyErrorState(
                 error: e,
@@ -125,6 +127,8 @@ class FeedScreen extends ConsumerWidget {
                     const SliverToBoxAdapter(child: EmailVerificationBanner()),
                     SliverToBoxAdapter(
                       child: storiesAsync.when(
+                        // Never swap content we still have for a skeleton; first load only.
+                        skipLoadingOnReload: true,
                         loading: () => _StoriesLoadingRail(me: me),
                         error: (_, __) => _StoriesUnavailableRail(me: me),
                         data: (_) => FadeSlideIn(
@@ -147,6 +151,8 @@ class FeedScreen extends ConsumerWidget {
                       ),
                     SliverToBoxAdapter(
                       child: topicStatsAsync.when(
+                        // Never swap content we still have for a skeleton; first load only.
+                        skipLoadingOnReload: true,
                         loading: () => const _TrendingTopicsLoading(),
                         error: (_, __) => _TrendingTopicsUnavailable(
                           onRetry: () =>

@@ -133,6 +133,16 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                   ),
                 ),
                 ...allRoomsAsync.when(
+                  // The skeleton is for the first load only.
+                  //
+                  // _allRoomsProvider watches inboxStreamProvider, so every
+                  // arriving message *reloads* it. when() routes to `loading`
+                  // whenever isLoading is true even though the previous rooms
+                  // are still in hand, and skipLoadingOnRefresh does not cover a
+                  // reload — so the whole populated list flashed to skeletons on
+                  // each incoming message. With fifty conversations open that is
+                  // the list blanking every few seconds.
+                  skipLoadingOnReload: true,
                   loading: () => [
                     const SliverFillRemaining(
                       hasScrollBody: false,

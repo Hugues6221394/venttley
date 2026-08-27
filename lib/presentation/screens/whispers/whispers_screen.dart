@@ -272,6 +272,8 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
       body: Stack(
         children: [
           feedAsync.when(
+            // Never swap content we still have for a skeleton; first load only.
+            skipLoadingOnReload: true,
             loading: () => const WhisperFeedSkeleton(),
             error: (e, _) => _WhispersError(
               error: e,
