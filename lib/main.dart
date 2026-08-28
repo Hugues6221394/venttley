@@ -242,6 +242,40 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
     ref.read(routerProvider).go(path);
   }
 
+  /// Restore the session without letting a transport failure end the launch.
+  ///
+  /// restore() rethrows anything that is not a recognised missing column, and
+  /// this call was awaited bare at startup — so a 401 took the app down before
+  /// it drew a frame. Seen for real: a simulator whose clock had drifted
+  /// answered PGRST303 "JWT issued at future" and the process died with "Lost
+  /// connection to device". A launch crash is the worst failure this app can
+  /// have; someone opening it to write something hard does not get a second
+  /// attempt at reaching for help.
+  ///
+  /// One retry, because the causes are overwhelmingly transient — clock skew,
+  /// a token refreshing, a network still coming up — and they clear in
+  /// seconds. If it fails twice the session stays unset and the router sends
+  /// them to sign-in, which is a truthful outcome rather than a dead app.
+  Future<void> _restoreSessionSafely() async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await ref.read(sessionProvider.notifier).restore();
+        return;
+      } catch (error, stack) {
+        final lastTry = attempt == 1;
+        Logger.instance.warn(
+          'session.restore_failed',
+          props: {'attempt': attempt + 1, 'giving_up': lastTry},
+          error: error,
+          stack: lastTry ? stack : null,
+        );
+        if (lastTry) return;
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        if (!mounted) return;
+      }
+    }
+  }
+
   void _startPresenceHeartbeat() {
     _presenceTimer?.cancel();
     if (ref.read(sessionProvider) == null) return;
@@ -293,9 +327,15 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       _startPresenceHeartbeat();
       final session = ref.read(sessionProvider);
       if (session != null) unawaited(_startPushForSession(session.userId));
-    } else if (state == AppLifecycleState.paused ||
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       _stopPresenceHeartbeat();
+      // Audio previews are foreground-only. This also covers an interrupted
+      // story transition and prevents a clip continuing behind another app.
+      unawaited(ref.read(musicPlaybackProvider).stop());
+      unawaited(AnalyticsService.instance.track(Events.appBackgrounded));
     }
   }
 
@@ -321,14 +361,18 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
           Logger.instance.warn('app_link.invalid', error: error, stack: stack),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await ref.read(sessionProvider.notifier).restore();
+      await _restoreSessionSafely();
       AnalyticsService.instance.track(Events.appOpened);
       // Ask the database what it has actually run. Advisory and unawaited: a
       // database behind the build degrades features, and blocking startup on it
       // would turn a cosmetic gap into an outage.
-      unawaited(
-        SchemaLedgerCheck(Supabase.instance.client).report().catchError((_) {}),
-      );
+      if (!VentlyConfig.useMockBackend) {
+        unawaited(
+          SchemaLedgerCheck(
+            Supabase.instance.client,
+          ).report().catchError((_) {}),
+        );
+      }
       // Foreground alerts stay on the existing Supabase realtime path. FCM is
       // used for background delivery and tap routing only, avoiding duplicate
       // alerts while the app is open.
