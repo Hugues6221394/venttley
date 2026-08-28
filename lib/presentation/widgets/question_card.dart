@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
 import 'anonymous_avatar.dart';
 import 'post_card.dart' show PostCard;
+import 'profile_avatar.dart';
 
 /// Refreshes every surface a question appears on after a mutation.
 void _refreshQuestions(WidgetRef ref, PlugPrompt prompt) {
@@ -87,11 +88,12 @@ class _QuestionCardState extends ConsumerState<QuestionCard> {
     final reason = await _pickReportReason(context);
     if (reason == null || !mounted) return;
     try {
-      await ref.read(repositoryProvider).reportQuestion(
-            promptId: widget.prompt.promptId,
-            reason: reason,
-          );
-    } catch (_) {/* fail-soft; still thank the user */}
+      await ref
+          .read(repositoryProvider)
+          .reportQuestion(promptId: widget.prompt.promptId, reason: reason);
+    } catch (_) {
+      /* fail-soft; still thank the user */
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Thanks — our team will review this.')),
@@ -127,15 +129,18 @@ class _QuestionCardState extends ConsumerState<QuestionCard> {
     if (newText == null || newText.isEmpty || !mounted) return;
     if (newText == widget.prompt.promptText) return;
     try {
-      final moderation =
-          await ref.read(moderationServiceProvider).review(newText);
+      final moderation = await ref
+          .read(moderationServiceProvider)
+          .review(newText);
       if (!mounted) return;
       if (moderation.isBlocked) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(moderation.reasons.isEmpty
-                ? 'Held back by safety.'
-                : moderation.reasons.first),
+            content: Text(
+              moderation.reasons.isEmpty
+                  ? 'Held back by safety.'
+                  : moderation.reasons.first,
+            ),
           ),
         );
         return;
@@ -145,12 +150,14 @@ class _QuestionCardState extends ConsumerState<QuestionCard> {
           .updateUserQuestion(promptId: widget.prompt.promptId, text: newText);
       _refreshQuestions(ref, widget.prompt);
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Question updated.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Question updated.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Could not update: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not update: $e')));
     }
   }
 
@@ -184,12 +191,14 @@ class _QuestionCardState extends ConsumerState<QuestionCard> {
           .deleteUserQuestion(widget.prompt.promptId);
       _refreshQuestions(ref, widget.prompt);
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Question deleted.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Question deleted.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Could not delete: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not delete: $e')));
     }
   }
 
@@ -243,7 +252,9 @@ class _QuestionCardState extends ConsumerState<QuestionCard> {
                           const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1),
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: scheme.primary.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(8),
@@ -260,9 +271,11 @@ class _QuestionCardState extends ConsumerState<QuestionCard> {
                         ],
                         if (widget.prompt.audience == 'friends') ...[
                           const SizedBox(width: 6),
-                          Icon(Icons.people_alt_rounded,
-                              size: 12,
-                              color: scheme.onSurface.withOpacity(0.45)),
+                          Icon(
+                            Icons.people_alt_rounded,
+                            size: 12,
+                            color: scheme.onSurface.withOpacity(0.45),
+                          ),
                         ],
                       ],
                     ),
@@ -308,8 +321,10 @@ class _QuestionCardState extends ConsumerState<QuestionCard> {
               const Spacer(),
               TextButton(
                 onPressed: () => showQuestionAnswers(context, widget.prompt),
-                child: const Text('Answer',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                child: const Text(
+                  'Answer',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
               ),
             ],
           ),
@@ -349,7 +364,10 @@ class _ActionChip extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                  fontSize: 12.5, fontWeight: FontWeight.w700, color: color),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
           ],
         ),
@@ -374,8 +392,10 @@ class _OverflowMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      icon: Icon(Icons.more_horiz_rounded,
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
+      icon: Icon(
+        Icons.more_horiz_rounded,
+        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+      ),
       onSelected: (v) {
         switch (v) {
           case 'edit':
@@ -440,9 +460,10 @@ Future<String?> _pickReportReason(BuildContext context) {
             padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text('Report this question',
-                  style:
-                      TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+              child: Text(
+                'Report this question',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+              ),
             ),
           ),
           for (final entry in reasons.entries)
@@ -487,24 +508,26 @@ class _AnswerThreadSheetState extends ConsumerState<_AnswerThreadSheet> {
       if (moderation.isBlocked) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(moderation.reasons.isEmpty
-                ? 'Held back by safety.'
-                : moderation.reasons.first),
+            content: Text(
+              moderation.reasons.isEmpty
+                  ? 'Held back by safety.'
+                  : moderation.reasons.first,
+            ),
           ),
         );
         return;
       }
-      await ref.read(repositoryProvider).addPromptAnswer(
-            promptId: widget.prompt.promptId,
-            text: t,
-          );
+      await ref
+          .read(repositoryProvider)
+          .addPromptAnswer(promptId: widget.prompt.promptId, text: t);
       _controller.clear();
       ref.invalidate(promptAnswersProvider(widget.prompt.promptId));
       _refreshQuestions(ref, widget.prompt);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Could not post: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not post: $e')));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -568,25 +591,24 @@ class _AnswerThreadSheetState extends ConsumerState<_AnswerThreadSheet> {
                 child: async.isLoading && answers.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : answers.isEmpty
-                        ? Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 24),
-                            child: Center(
-                              child: Text(
-                                'Be the first to answer.',
-                                style: TextStyle(
-                                  color: scheme.onSurface.withOpacity(0.55),
-                                ),
-                              ),
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Text(
+                            'Be the first to answer.',
+                            style: TextStyle(
+                              color: scheme.onSurface.withOpacity(0.55),
                             ),
-                          )
-                        : ListView.separated(
-                            controller: scrollController,
-                            itemCount: answers.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 8),
-                            itemBuilder: (_, i) =>
-                                _AnswerBubble(answer: answers[i]),
                           ),
+                        ),
+                      )
+                    : ListView.separated(
+                        controller: scrollController,
+                        itemCount: answers.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) =>
+                            _AnswerBubble(answer: answers[i]),
+                      ),
               ),
               const SizedBox(height: 8),
               Row(
@@ -652,16 +674,22 @@ class _AnswerBubble extends StatelessWidget {
         children: [
           Row(
             children: [
-              AnonymousAvatar(
-                seed: answer.authorAvatarSeed,
-                label: answer.authorPseudonym,
+              ProfileAvatar(
+                avatarSeed: answer.authorAvatarSeed,
+                label: answer.displayName,
+                profilePhotoUrl: answer.authorProfilePhotoUrl,
                 size: 22,
               ),
               const SizedBox(width: 6),
-              Text(
-                answer.authorPseudonym,
-                style:
-                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+              Flexible(
+                child: Text(
+                  answer.displayName,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
               const Spacer(),
               Text(

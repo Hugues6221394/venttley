@@ -138,7 +138,7 @@ class _QuestionAnswersSheet extends ConsumerWidget {
                               children: [
                                 ProfileAvatar(
                                   avatarSeed: m.senderAvatarSeed,
-                                  label: m.senderPseudonym,
+                                  label: m.displayName,
                                   profilePhotoUrl: m.senderProfilePhotoUrl,
                                   size: 32,
                                 ),
@@ -149,7 +149,7 @@ class _QuestionAnswersSheet extends ConsumerWidget {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        '@${m.senderPseudonym}',
+                                        m.displayName,
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w900,
                                           fontSize: 11,

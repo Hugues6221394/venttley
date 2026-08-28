@@ -156,7 +156,7 @@ class _MemberTile extends ConsumerWidget {
             children: [
               OnlineAvatarRing(
                 avatarSeed: member.avatarSeed,
-                label: member.pseudonym,
+                label: member.displayName,
                 profilePhotoUrl: member.profilePhotoUrl,
                 size: 38,
                 isOnline: member.isOnline,
@@ -167,7 +167,7 @@ class _MemberTile extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '@${member.pseudonym}',
+                      member.displayName,
                       style: const TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 13,

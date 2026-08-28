@@ -29,18 +29,29 @@ final repositoryProvider = Provider<VentlyRepository>((ref) {
   return VentlyRepository();
 });
 
-final musicPlaybackProvider = ChangeNotifierProvider<MusicPlaybackController>((
-  ref,
-) => MusicPlaybackController());
+final musicPlaybackProvider = ChangeNotifierProvider<MusicPlaybackController>(
+  (ref) => MusicPlaybackController(),
+);
 
 final musicCatalogProvider = FutureProvider.autoDispose
     .family<List<MusicTrack>, ({String query, String? mood})>((
       ref,
       request,
     ) async {
+      final keepAlive = ref.keepAlive();
+      final timer = Timer(const Duration(minutes: 10), keepAlive.close);
+      ref.onDispose(timer.cancel);
       return ref
           .watch(repositoryProvider)
           .searchMusic(query: request.query, mood: request.mood);
+    });
+
+final musicCatalogSectionProvider = FutureProvider.autoDispose
+    .family<List<MusicTrack>, String>((ref, section) async {
+      final keepAlive = ref.keepAlive();
+      final timer = Timer(const Duration(minutes: 10), keepAlive.close);
+      ref.onDispose(timer.cancel);
+      return ref.watch(repositoryProvider).musicCatalogSection(section);
     });
 
 /// Active staff-managed automod keyword rules (migration 0085). Loaded once
@@ -1306,10 +1317,13 @@ final onlineFriendsProvider = FutureProvider.autoDispose<List<OnlineFriend>>((
     // free text, and a redacted blob tells an engineer nothing. A Postgrest
     // code (42703, 42883, PGRST202…) names the fault precisely and carries
     // nothing about any user.
-    log.warn('inbox.online_friends_failed', props: {
-      'type': e.runtimeType.toString(),
-      'code': e is PostgrestException ? (e.code ?? 'none') : 'n/a',
-    });
+    log.warn(
+      'inbox.online_friends_failed',
+      props: {
+        'type': e.runtimeType.toString(),
+        'code': e is PostgrestException ? (e.code ?? 'none') : 'n/a',
+      },
+    );
     rethrow;
   }
 });

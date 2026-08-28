@@ -497,6 +497,10 @@ class OutboxService extends ChangeNotifier {
           cardBackgroundColor: payload['cardBackgroundColor'] as String?,
           cardTextColor: payload['cardTextColor'] as String?,
           musicTrack: _musicTrackFromPayload(payload['musicTrack']),
+          musicStartMs: (payload['musicStartMs'] as num?)?.toInt() ?? 0,
+          musicDurationMs:
+              (payload['musicDurationMs'] as num?)?.toInt() ?? 15000,
+          musicVolume: (payload['musicVolume'] as num?)?.toDouble() ?? 0.75,
           idempotencyKey: operation.id,
         );
       case OutboxKind.comment:
@@ -562,6 +566,7 @@ class OutboxService extends ChangeNotifier {
       moodTags: (value['moodTags'] as List?)?.cast<String>() ?? const [],
       licenseCode: (value['licenseCode'] as String?) ?? 'UNKNOWN',
       attributionText: value['attributionText'] as String?,
+      cacheAllowed: (value['cacheAllowed'] as bool?) ?? false,
     );
   }
 

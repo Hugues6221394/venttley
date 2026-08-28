@@ -944,6 +944,10 @@ class VentlyRepository implements MusicProvider {
         pollOptions: pollOptions,
         cardBackgroundColor: cardBackgroundColor,
         cardTextColor: cardTextColor,
+        musicTrack: musicTrack,
+        musicStartMs: musicStartMs,
+        musicDurationMs: musicDurationMs,
+        musicVolume: musicVolume,
       );
     }
     // PII rule: never ship `content` — only its dimensions.
@@ -1046,13 +1050,33 @@ class VentlyRepository implements MusicProvider {
     int offset = 0,
   }) {
     final live = _live;
-    if (live == null) return Future.value(const <MusicTrack>[]);
+    if (live == null) {
+      return Future.value(
+        _mock.searchMusic(
+          query: query,
+          mood: mood,
+          limit: limit,
+          offset: offset,
+        ),
+      );
+    }
     return live.searchMusic(
       query: query,
       mood: mood,
       limit: limit,
       offset: offset,
     );
+  }
+
+  Future<List<MusicTrack>> musicCatalogSection(
+    String section, {
+    int limit = 12,
+  }) {
+    final live = _live;
+    if (live == null) {
+      return Future.value(_mock.musicCatalogSection(section, limit: limit));
+    }
+    return live.musicCatalogSection(section, limit: limit);
   }
 
   Future<void> setPostMusic(
@@ -1063,7 +1087,16 @@ class VentlyRepository implements MusicProvider {
     double volume = 0.75,
   }) {
     final live = _live;
-    if (live == null) return Future.value();
+    if (live == null) {
+      _mock.setPostMusic(
+        postId,
+        track: track,
+        startMs: startMs,
+        durationMs: durationMs,
+        volume: volume,
+      );
+      return Future.value();
+    }
     return live.setPostMusic(
       postId,
       track: track,
@@ -1226,6 +1259,13 @@ class VentlyRepository implements MusicProvider {
   /// Re-read a conversation in place. Prefer this to invalidating the stream
   /// provider after a send: invalidating disposes the stream, which blanks the
   /// list for a frame and refetches from scratch.
+  /// Fresh media_status for whispers whose background is still being scanned.
+  Future<Map<String, String>> whisperMediaStatuses(List<String> ids) {
+    final live = _live;
+    if (live == null) return Future.value(const {});
+    return live.whisperMediaStatuses(ids);
+  }
+
   Future<void> refreshMessages(String roomId) {
     final live = _live;
     if (live == null) return Future.value();
@@ -1771,14 +1811,14 @@ class VentlyRepository implements MusicProvider {
   Future<Map<String, bool>> myFeatureFlags() {
     final live = _live;
     if (live != null) return live.myFeatureFlags();
-    return Future.value(const <String, bool>{});
+    return Future.value(const <String, bool>{'vent_music': true});
   }
 
   /// Live flag map — refetches when any flag row changes.
   Stream<Map<String, bool>> watchFeatureFlags() {
     final live = _live;
     if (live != null) return live.watchFeatureFlags();
-    return Stream.value(const <String, bool>{});
+    return Stream.value(const <String, bool>{'vent_music': true});
   }
 
   /// Typo-tolerant search typeahead.

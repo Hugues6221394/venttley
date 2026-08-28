@@ -452,6 +452,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     'moodTags': track.moodTags,
     'licenseCode': track.licenseCode,
     'attributionText': track.attributionText,
+    'cacheAllowed': track.cacheAllowed,
   };
 
   Future<void> _submit() async {
@@ -534,6 +535,11 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         ),
         if (_selectedMusic != null)
           'musicTrack': _musicTrackPayload(_selectedMusic!),
+        if (_selectedMusic != null) ...{
+          'musicStartMs': 0,
+          'musicDurationMs': 15000,
+          'musicVolume': 0.75,
+        },
         if (stagedMedia != null) ...stagedMedia.toPayload(),
       }, operationId: operationId);
       await _draftSaver?.clear();

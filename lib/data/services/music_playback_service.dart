@@ -4,12 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../domain/entities/entities.dart';
+import 'music_preview_cache.dart';
 
 /// One bounded, user-initiated music preview player shared by the feed.
 /// Starting another preview always stops the previous one; leaving a story can
 /// call [stop] so audio never continues unexpectedly in the background.
 class MusicPlaybackController extends ChangeNotifier {
-  MusicPlaybackController() {
+  MusicPlaybackController({MusicPreviewCache? cache})
+    : _cache = cache ?? MusicPreviewCache(),
+      _ownsCache = cache == null {
     _playerStateSub = _player.playerStateStream.listen((state) {
       if (_disposed) return;
       _playing = state.playing;
@@ -21,6 +24,8 @@ class MusicPlaybackController extends ChangeNotifier {
   }
 
   final AudioPlayer _player = AudioPlayer();
+  final MusicPreviewCache _cache;
+  final bool _ownsCache;
   StreamSubscription<PlayerState>? _playerStateSub;
   String? _trackId;
   bool _playing = false;
@@ -66,7 +71,12 @@ class MusicPlaybackController extends ChangeNotifier {
         if (parsed == null || parsed.scheme != 'https') {
           throw const FormatException('Unsupported music preview URL');
         }
-        await _player.setUrl(uri);
+        final cachedPath = await _cache.resolve(track);
+        if (cachedPath != null) {
+          await _player.setFilePath(cachedPath);
+        } else {
+          await _player.setUrl(uri);
+        }
       }
       final safeStart = Duration(milliseconds: startMs.clamp(0, 60000));
       final requested = durationMs ?? track.previewDurationMs;
@@ -99,6 +109,7 @@ class MusicPlaybackController extends ChangeNotifier {
     _disposed = true;
     _playerStateSub?.cancel();
     _player.dispose();
+    if (_ownsCache) _cache.dispose();
     super.dispose();
   }
 }

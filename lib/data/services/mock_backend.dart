@@ -45,6 +45,7 @@ class MockBackend {
   final Map<String, List<GroupChatMember>> _groupMembers = {};
   final List<PlugPrompt> _prompts = [];
   final List<NotificationItem> _notifications = [];
+  final Map<String, int> _musicUsage = {};
   final Map<String, List<TribeRuleItem>> _managementRules = {};
   final List<TribeJoinRequest> _managementJoinRequests = [];
   final List<TribeAuditEvent> _managementAudit = [];
@@ -66,6 +67,24 @@ class MockBackend {
       _notificationsController.stream;
 
   AppUser? get me => _me;
+
+  static const List<MusicTrack> _authorizedMusicTracks = [
+    MusicTrack(
+      trackId: 'a7100000-0000-4000-8000-000000000001',
+      provider: 'venttly_original',
+      providerTrackId: 'afterglow-v1',
+      title: 'Afterglow',
+      artist: 'Venttly Originals',
+      album: 'Quiet Rooms',
+      previewUrl: 'asset:///assets/audio/afterglow.wav',
+      previewDurationMs: 30000,
+      genre: 'ambient',
+      moodTags: ['healing', 'late_night', 'peaceful', 'heartbreak'],
+      licenseCode: 'VENTTLY_ORIGINAL',
+      attributionText: 'Afterglow — Venttly Originals',
+      cacheAllowed: true,
+    ),
+  ];
 
   void registerSession(AppUser user) {
     _me = user;
@@ -231,6 +250,10 @@ class MockBackend {
     List<String>? pollOptions,
     String? cardBackgroundColor,
     String? cardTextColor,
+    MusicTrack? musicTrack,
+    int musicStartMs = 0,
+    int musicDurationMs = 15000,
+    double musicVolume = 0.75,
   }) async {
     final me = _me;
     if (me == null) throw StateError('No active session');
@@ -242,12 +265,30 @@ class MockBackend {
         : _personasByUser[me.userId]?.firstWhereOrNull(
             (p) => p.personaId == personaId,
           );
+    final canonicalTrack = musicTrack == null
+        ? null
+        : _authorizedMusicTracks.firstWhereOrNull(
+            (track) => track.trackId == musicTrack.trackId,
+          );
+    if (musicTrack != null && canonicalTrack == null) {
+      throw StateError('music_track_unavailable');
+    }
+    if (canonicalTrack != null &&
+        (musicStartMs < 0 ||
+            musicDurationMs < 5000 ||
+            musicDurationMs > 30000 ||
+            musicStartMs + musicDurationMs > canonicalTrack.previewDurationMs ||
+            musicVolume < 0 ||
+            musicVolume > 1)) {
+      throw StateError('invalid_music_window');
+    }
     final post = Post(
       postId: _uuid.v4(),
       authorId: me.userId,
       authorPseudonym: persona == null
           ? '@${me.anonymousPseudonym}'
           : '@${persona.pseudonym}',
+      authorDisplayName: persona == null ? me.displayName : null,
       authorAvatarSeed: persona?.avatarSeed ?? me.avatarSeed,
       authorProfilePhotoUrl: persona == null ? me.profilePhotoUrl : null,
       authorIsVerified: me.isVerified,
@@ -270,7 +311,19 @@ class MockBackend {
       imageUrl: imageUrl,
       audioUrl: audioUrl,
       audioDurationSeconds: audioDurationSeconds,
+      musicTrackId: canonicalTrack?.trackId,
+      musicTrack: canonicalTrack,
+      musicStartMs: canonicalTrack == null ? null : musicStartMs,
+      musicDurationMs: canonicalTrack == null ? null : musicDurationMs,
+      musicVolume: canonicalTrack == null ? null : musicVolume,
     );
+    if (canonicalTrack != null) {
+      _musicUsage.update(
+        canonicalTrack.trackId,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
     _posts.insert(0, post);
     if (pollQuestion != null && pollOptions != null) {
       createPoll(
@@ -281,6 +334,112 @@ class MockBackend {
     }
     _emitPosts();
     return post;
+  }
+
+  List<MusicTrack> searchMusic({
+    String query = '',
+    String? mood,
+    int limit = 24,
+    int offset = 0,
+  }) {
+    final normalized = query.trim().toLowerCase();
+    final filtered = _authorizedMusicTracks
+        .where((track) {
+          final matchesMood = mood == null || track.moodTags.contains(mood);
+          final haystack = [
+            track.title,
+            track.artist,
+            track.album ?? '',
+            track.genre ?? '',
+            ...track.moodTags,
+          ].join(' ').toLowerCase();
+          return matchesMood &&
+              (normalized.isEmpty || haystack.contains(normalized));
+        })
+        .toList(growable: false);
+    final safeOffset = offset.clamp(0, filtered.length);
+    final end = (safeOffset + limit.clamp(1, 50)).clamp(
+      safeOffset,
+      filtered.length,
+    );
+    return filtered.sublist(safeOffset, end);
+  }
+
+  List<MusicTrack> musicCatalogSection(String section, {int limit = 12}) {
+    if (!const {'recent', 'for_you', 'trending'}.contains(section)) {
+      throw StateError('unsupported catalog section');
+    }
+    final tracks = List<MusicTrack>.from(_authorizedMusicTracks);
+    if (section == 'recent') {
+      tracks.sort(
+        (a, b) => (_musicUsage[b.trackId] ?? 0).compareTo(
+          _musicUsage[a.trackId] ?? 0,
+        ),
+      );
+      tracks.removeWhere((track) => !_musicUsage.containsKey(track.trackId));
+    } else if (section == 'for_you' && _me != null) {
+      final mood = _me!.currentMood;
+      tracks.sort(
+        (a, b) => (b.moodTags.contains(mood) ? 1 : 0).compareTo(
+          a.moodTags.contains(mood) ? 1 : 0,
+        ),
+      );
+    } else {
+      tracks.sort(
+        (a, b) => (_musicUsage[b.trackId] ?? 0).compareTo(
+          _musicUsage[a.trackId] ?? 0,
+        ),
+      );
+    }
+    return tracks.take(limit.clamp(1, 50)).toList(growable: false);
+  }
+
+  void setPostMusic(
+    String postId, {
+    MusicTrack? track,
+    int startMs = 0,
+    int durationMs = 15000,
+    double volume = 0.75,
+  }) {
+    final index = _posts.indexWhere((post) => post.postId == postId);
+    if (index < 0) throw StateError('post not found');
+    if (!_posts[index].ownedBy(_me?.userId)) {
+      throw StateError('not your post');
+    }
+    final canonical = track == null
+        ? null
+        : _authorizedMusicTracks.firstWhereOrNull(
+            (item) => item.trackId == track.trackId,
+          );
+    if (track != null && canonical == null) {
+      throw StateError('music_track_unavailable');
+    }
+    if (canonical != null &&
+        (startMs < 0 ||
+            durationMs < 5000 ||
+            durationMs > 30000 ||
+            startMs + durationMs > canonical.previewDurationMs ||
+            volume < 0 ||
+            volume > 1)) {
+      throw StateError('invalid_music_window');
+    }
+    final current = _posts[index];
+    final sameTrack = current.musicTrackId == canonical?.trackId;
+    _posts[index] = current.copyWith(
+      musicTrackId: canonical?.trackId,
+      musicTrack: canonical,
+      musicStartMs: canonical == null ? null : startMs,
+      musicDurationMs: canonical == null ? null : durationMs,
+      musicVolume: canonical == null ? null : volume,
+    );
+    if (canonical != null && !sameTrack) {
+      _musicUsage.update(
+        canonical.trackId,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    _emitPosts();
   }
 
   bool editPost({required String postId, required String newContent}) {
@@ -2992,6 +3151,7 @@ class MockBackend {
           postId: p.postId,
           content: p.content,
           authorPseudonym: p.authorPseudonym,
+          authorDisplayName: p.authorDisplayName,
           authorAvatarSeed: p.authorAvatarSeed,
           category: p.categoryName,
           mood: p.postMood,
@@ -3054,8 +3214,11 @@ class MockBackend {
     final a = PromptAnswer(
       answerId: _uuid.v4(),
       promptId: promptId,
+      authorId: me?.userId,
       authorPseudonym: '@${me?.anonymousPseudonym ?? 'anonymous'}',
+      authorDisplayName: me?.displayName,
       authorAvatarSeed: me?.avatarSeed ?? 'default-orb',
+      authorProfilePhotoUrl: me?.profilePhotoUrl,
       text: text,
       createdAt: DateTime.now(),
     );

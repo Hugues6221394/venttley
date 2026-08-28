@@ -48,8 +48,18 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
   List<Whisper> _whispers = const [];
   StreamSubscription<ProcessingState>? _completeSub;
 
+  /// Polls media_status while a loaded whisper is still being scanned.
+  ///
+  /// The scan happens server-side after upload and the row starts `pending`,
+  /// which the UI renders as "Checking this image…". Nothing ever re-read it,
+  /// so that message was permanent — the image was fine, the client just never
+  /// asked again. Runs only while something is actually pending and stops
+  /// itself, so a settled feed costs nothing.
+  Timer? _mediaStatusPoll;
+
   @override
   void dispose() {
+    _mediaStatusPoll?.cancel();
     _completeSub?.cancel();
     _pageController.dispose();
     super.dispose();
@@ -92,6 +102,61 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
   /// Re-enters the feed from the top. `_bootstrapped` is cleared so the existing
   /// autoplay path re-arms on the new first page, and the page controller is sent
   /// home — otherwise the PageView would keep the old index and land mid-list.
+  /// Start or stop the pending-media poll to match what is loaded.
+  void _syncMediaStatusPoll() {
+    final pending = _whispers
+        .where((w) => w.mediaStatus == 'pending')
+        .map((w) => w.whisperId)
+        .toList();
+    if (pending.isEmpty) {
+      _mediaStatusPoll?.cancel();
+      _mediaStatusPoll = null;
+      return;
+    }
+    if (_mediaStatusPoll != null) return;
+    // 2.5s is fast enough to feel immediate on a scan that takes a few seconds,
+    // and slow enough that a stuck scan is not a hot loop against the API.
+    _mediaStatusPoll = Timer.periodic(
+      const Duration(milliseconds: 2500),
+      (_) => _pollMediaStatuses(),
+    );
+  }
+
+  Future<void> _pollMediaStatuses() async {
+    final pending = _whispers
+        .where((w) => w.mediaStatus == 'pending')
+        .map((w) => w.whisperId)
+        .toList();
+    if (pending.isEmpty) {
+      _syncMediaStatusPoll();
+      return;
+    }
+    try {
+      final fresh = await ref
+          .read(repositoryProvider)
+          .whisperMediaStatuses(pending);
+      if (!mounted || fresh.isEmpty) return;
+      var changed = false;
+      final next = [
+        for (final w in _whispers)
+          if (fresh[w.whisperId] case final String status
+              when status != w.mediaStatus)
+            (() {
+              changed = true;
+              return w.copyWith(mediaStatus: status);
+            })()
+          else
+            w,
+      ];
+      if (!changed) return;
+      setState(() => _whispers = next);
+      _syncMediaStatusPoll();
+    } catch (_) {
+      // Transient. The next tick tries again; a permanent failure just leaves
+      // the veil up, which is the safe direction for unscanned media.
+    }
+  }
+
   Future<void> _refreshFeed() async {
     if (_refreshing) return;
     setState(() => _refreshing = true);
@@ -293,6 +358,7 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
               }
 
               _whispers = whispers;
+              _syncMediaStatusPoll();
               _scrollToDeepLink(whispers);
               if (!_bootstrapped && _onStage) {
                 _bootstrapped = true;
@@ -543,6 +609,19 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
   bool _flashForward = false;
   bool _flashPaused = false;
 
+  /// True once the viewer has chosen to see a veiled background.
+  ///
+  /// Tracked here, not only inside SensitiveMediaVeil, because the pause
+  /// overlay below is a later Stack child and therefore sits *above* the veil
+  /// in hit-testing. While the media is still covered that overlay has to stay
+  /// out of the way, or the tap that should reveal the image pauses the audio
+  /// instead — which is precisely what it did.
+  bool _mediaRevealed = false;
+
+  /// Whether a veil is still covering this whisper's background.
+  bool _mediaIsCovered(Whisper whisper) =>
+      whisper.mediaNeedsVeil && !_mediaRevealed;
+
   Future<void> _togglePause() async {
     HapticFeedback.mediumImpact();
     try {
@@ -617,6 +696,7 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
               SensitiveMediaVeil(
                 veiled: whisper.mediaNeedsVeil,
                 pending: whisper.mediaStatus == 'pending',
+                onRevealed: () => setState(() => _mediaRevealed = true),
                 borderRadius: 0,
                 child: CachedNetworkImage(
                   imageUrl: whisper.backgroundImageUrl!,
@@ -650,18 +730,19 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
                 ),
               ),
             ),
-            Positioned(
-              left: 0,
-              right: 72,
-              top: 56,
-              bottom: 0,
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: _togglePause,
-                onDoubleTapDown: (d) =>
-                    _onDoubleTapDown(d, constraints.maxWidth - 72),
+            if (!_mediaIsCovered(whisper))
+              Positioned(
+                left: 0,
+                right: 72,
+                top: 56,
+                bottom: 0,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: _togglePause,
+                  onDoubleTapDown: (d) =>
+                      _onDoubleTapDown(d, constraints.maxWidth - 72),
+                ),
               ),
-            ),
             if (_flashPaused)
               const Center(
                 child: Icon(

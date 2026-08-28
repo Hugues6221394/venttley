@@ -1327,7 +1327,7 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
             onTap: () => openUserProfile(context, request.otherUserId),
             child: ProfileAvatar(
               avatarSeed: request.otherAvatarSeed,
-              label: request.otherPseudonym,
+              label: request.primaryName,
               profilePhotoUrl: request.profilePhotoUrl,
               size: 48,
             ),
@@ -1341,7 +1341,7 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    request.otherPseudonym,
+                    request.primaryName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -1352,6 +1352,7 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
                   ),
                   const SizedBox(height: 4),
                   Text(
+                    '@${request.otherPseudonym.replaceFirst('@', '')} · '
                     '${_relative(request.createdAt)} · ${request.otherKarma} karma',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1586,7 +1587,7 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
             children: [
               ProfileAvatar(
                 avatarSeed: widget.s.avatarSeed,
-                label: widget.s.pseudonym,
+                label: widget.s.primaryName,
                 profilePhotoUrl: widget.s.profilePhotoUrl,
                 size: 58,
                 showVerifiedBadge: widget.s.isVerified,
@@ -1598,7 +1599,7 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
                 children: [
                   Flexible(
                     child: Text(
-                      widget.s.pseudonym,
+                      widget.s.primaryName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -2105,7 +2106,7 @@ class _OutgoingSheet extends ConsumerWidget {
                               children: [
                                 ProfileAvatar(
                                   avatarSeed: r.otherAvatarSeed,
-                                  label: r.otherPseudonym,
+                                  label: r.primaryName,
                                   size: 38,
                                 ),
                                 const SizedBox(width: 10),
@@ -2115,7 +2116,7 @@ class _OutgoingSheet extends ConsumerWidget {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        r.otherPseudonym,
+                                        r.primaryName,
                                         style: TextStyle(
                                           color: context.ink,
                                           fontWeight: FontWeight.w900,

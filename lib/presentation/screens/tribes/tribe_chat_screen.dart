@@ -140,7 +140,9 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
       if (m.isDeleted) return false;
       final content = m.content?.toLowerCase() ?? '';
       final sender = m.senderPseudonym.toLowerCase();
-      return content.contains(q) || sender.contains(q);
+      return content.contains(q) ||
+          sender.contains(q) ||
+          m.displayName.toLowerCase().contains(q);
     }).toList();
   }
 
@@ -919,7 +921,7 @@ class _MessageSearchResults extends StatelessWidget {
                 children: [
                   ProfileAvatar(
                     avatarSeed: msg.senderAvatarSeed,
-                    label: msg.senderPseudonym,
+                    label: msg.displayName,
                     profilePhotoUrl: msg.senderProfilePhotoUrl,
                     size: 36,
                   ),
@@ -933,7 +935,7 @@ class _MessageSearchResults extends StatelessWidget {
                           children: [
                             Flexible(
                               child: Text(
-                                '@${msg.senderPseudonym}',
+                                msg.displayName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -1289,7 +1291,7 @@ class _MessageBubble extends ConsumerWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            '@${message.senderPseudonym}',
+                            message.displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -1323,7 +1325,7 @@ class _MessageBubble extends ConsumerWidget {
                         padding: const EdgeInsets.only(bottom: 8),
                         child: ProfileAvatar(
                           avatarSeed: message.senderAvatarSeed,
-                          label: message.senderPseudonym,
+                          label: message.displayName,
                           profilePhotoUrl: message.senderProfilePhotoUrl,
                           size: 34,
                         ),
@@ -1633,12 +1635,11 @@ class _BubbleBody extends StatelessWidget {
   final VoidCallback onQuestionTap;
 
   Widget _replyQuote() {
-    if (message.replyToMessageId == null ||
-        message.replySenderPseudonym == null) {
+    if (message.replyToMessageId == null || message.replyDisplayName == null) {
       return const SizedBox.shrink();
     }
     return ReplyQuote(
-      senderPseudonym: message.replySenderPseudonym!,
+      senderLabel: message.replyDisplayName!,
       content: message.replyContent,
       lightOnDark: mine,
       onTap: () => onJumpTo(message.replyToMessageId!),
@@ -1841,7 +1842,7 @@ class _Composer extends StatelessWidget {
                         color: VentlyColors.berryMagenta,
                       ),
                       title: Text(
-                        'Reply to @${replyTo!.senderPseudonym}',
+                        'Reply to ${replyTo!.displayName}',
                         style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 12,
@@ -2323,7 +2324,7 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
                                   children: [
                                     ProfileAvatar(
                                       avatarSeed: m.senderAvatarSeed,
-                                      label: m.senderPseudonym,
+                                      label: m.displayName,
                                       profilePhotoUrl: m.senderProfilePhotoUrl,
                                       size: 24,
                                     ),
@@ -2334,7 +2335,7 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
                                         children: [
                                           Flexible(
                                             child: Text(
-                                              '@${m.senderPseudonym}',
+                                              m.displayName,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(

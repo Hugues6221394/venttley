@@ -17,12 +17,18 @@ class SensitiveMediaVeil extends StatefulWidget {
     required this.child,
     required this.veiled,
     this.pending = false,
+    this.onRevealed,
     this.borderRadius = 10,
   });
 
   final Widget child;
   final bool veiled;
   final bool pending;
+
+  /// Fired when the viewer chooses to reveal. Lets the parent stop competing
+  /// for the tap: an overlay above this one swallows the reveal, which is how
+  /// tapping "Tap to view anyway" on a whisper paused the audio instead.
+  final VoidCallback? onRevealed;
   final double borderRadius;
 
   @override
@@ -45,7 +51,10 @@ class _SensitiveMediaVeilState extends State<SensitiveMediaVeil> {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
               child: GestureDetector(
-                onTap: () => setState(() => _revealed = true),
+                onTap: () {
+                  setState(() => _revealed = true);
+                  widget.onRevealed?.call();
+                },
                 child: Container(
                   color: context.ink.withOpacity(0.28),
                   alignment: Alignment.center,

@@ -339,13 +339,13 @@ class MessageHugRow extends StatelessWidget {
 class ReplyQuote extends StatelessWidget {
   const ReplyQuote({
     super.key,
-    required this.senderPseudonym,
+    required this.senderLabel,
     required this.content,
     this.onTap,
     this.lightOnDark = false,
   });
 
-  final String senderPseudonym;
+  final String senderLabel;
   final String? content;
   final VoidCallback? onTap;
   final bool lightOnDark;
@@ -377,7 +377,7 @@ class ReplyQuote extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '@$senderPseudonym',
+              senderLabel,
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 11,
@@ -445,7 +445,7 @@ class PinnedMessageBanner extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Pinned · @${message.senderPseudonym}',
+                        'Pinned · ${message.displayName}',
                         style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 11,

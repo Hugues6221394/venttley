@@ -1004,8 +1004,23 @@ class SupabaseBackend {
         'media-scan',
         body: {'kind': kind, 'id': id},
       );
-    } catch (_) {
+    } catch (e) {
       // Safe by default — unscanned media remains veiled, never shown clean.
+      //
+      // But say so. Swallowing this meant a media-scan function that is not
+      // deployed, or erroring, left every upload stuck on "Checking this
+      // image…" with nothing anywhere explaining it. The veil is the right
+      // default; being unable to tell "still scanning" from "the scanner never
+      // ran" is not.
+      log.warn(
+        'media.scan_dispatch_failed',
+        props: {
+          'kind': kind,
+          'reason': e is FunctionException
+              ? 'status=${e.status}'
+              : e.runtimeType.toString(),
+        },
+      );
     }
   }
 
@@ -1119,7 +1134,7 @@ class SupabaseBackend {
     final rows =
         await _client.rpc('trending_voices', params: {'p_limit': limit})
             as List<dynamic>;
-    return rows.map((r) {
+    final voices = rows.map((r) {
       final m = (r as Map).cast<String, dynamic>();
       return TrendingVoice(
         userId: m['user_id'] as String,
@@ -1133,6 +1148,25 @@ class SupabaseBackend {
         engagementScore: (m['engagement_score'] as int?) ?? 0,
       );
     }).toList();
+    if (voices.isEmpty) return voices;
+    final identities = await _displayNamesByUserId(
+      voices.map((voice) => voice.userId),
+    );
+    return [
+      for (final voice in voices)
+        TrendingVoice(
+          userId: voice.userId,
+          pseudonym: voice.pseudonym,
+          displayName: identities[voice.userId],
+          avatarSeed: voice.avatarSeed,
+          profilePhotoUrl: voice.profilePhotoUrl,
+          isVerified: voice.isVerified,
+          topQuote: voice.topQuote,
+          topCategory: voice.topCategory,
+          topMood: voice.topMood,
+          engagementScore: voice.engagementScore,
+        ),
+    ];
   }
 
   /// Unified search across tribes + posts + topics. Empty / very short
@@ -1632,6 +1666,7 @@ class SupabaseBackend {
       tribeId: r['tribe_id'] as String,
       senderId: r['sender_id'] as String?,
       senderPseudonym: (r['sender_pseudonym'] as String?) ?? 'anonymous',
+      senderDisplayName: r['sender_display_name'] as String?,
       senderAvatarSeed: (r['sender_avatar_seed'] as String?) ?? 'default-orb',
       senderProfilePhotoUrl: r['sender_profile_photo_url'] as String?,
       senderIsVerified: (r['sender_is_verified'] as bool?) ?? false,
@@ -1648,6 +1683,7 @@ class SupabaseBackend {
       replyToMessageId: r['reply_to_message_id'] as String?,
       replyContent: r['reply_content'] as String?,
       replySenderPseudonym: r['reply_sender_pseudonym'] as String?,
+      replySenderDisplayName: r['reply_sender_display_name'] as String?,
       huggedByMe: r['hugged_by_me'] == true,
       isPinned: r['is_pinned'] == true,
       metadata: _jsonMap(r['metadata']),
@@ -1848,11 +1884,34 @@ class SupabaseBackend {
           'p_before_whisper_id': beforeWhisperId,
         },
       );
-      final base = (rows as List)
+      var base = (rows as List)
           .cast<Map<String, dynamic>>()
           .map(_whisperFromRow)
           .toList();
       if (base.isEmpty) return base;
+
+      // Top up a short page with already-heard whispers.
+      //
+      // list_unheard_whispers only falls back to plain recency when the unheard
+      // set is *completely* empty (IF NOT FOUND). One unheard whisper therefore
+      // returns a one-item feed — which is exactly what happens the moment you
+      // post: yours is unheard, everything else you have already listened to,
+      // and the feed becomes a single page you cannot scroll off. The
+      // already-heard ones are still worth showing; they just belong after.
+      if (base.length < limit && beforeCreatedAt == null) {
+        try {
+          final seen = base.map((w) => w.whisperId).toSet();
+          final more = await _listWhispersFromView(
+            limit: limit,
+            category: category,
+            beforeCreatedAt: null,
+            beforeWhisperId: null,
+          );
+          base = [...base, ...more.where((w) => seen.add(w.whisperId))];
+        } catch (_) {
+          // The unheard page on its own is still a feed.
+        }
+      }
       return _whispersWithMyFlags(base);
     } catch (e) {
       // The migration may not be applied yet — this project applies them by
@@ -1929,6 +1988,25 @@ class SupabaseBackend {
   /// per-row feature-flag check on a hot feed, which also broke
   /// list_unheard_whispers with 42501. music_tracks_by_ids is SECURITY DEFINER
   /// and batched, which is why posts already resolve their track this way.
+  /// Fresh media_status for specific whispers.
+  ///
+  /// A newly uploaded background is scanned server-side and starts `pending`,
+  /// which the UI shows as "Checking this image…". Nothing re-read the row, so
+  /// the message stayed up forever and the only way past it was the reveal tap.
+  /// Small, targeted select — the ids are already on screen.
+  Future<Map<String, String>> whisperMediaStatuses(List<String> ids) async {
+    if (ids.isEmpty) return const {};
+    final rows = await _client
+        .from('whispers')
+        .select('whisper_id, media_status')
+        .inFilter('whisper_id', ids);
+    return {
+      for (final row in (rows as List).cast<Map<String, dynamic>>())
+        if (row['whisper_id'] case final String id)
+          id: (row['media_status'] as String?) ?? 'clean',
+    };
+  }
+
   Future<List<Whisper>> _hydrateWhisperMusic(List<Whisper> whispers) async {
     final trackIds = <String>{
       for (final w in whispers)
@@ -2863,7 +2941,7 @@ class SupabaseBackend {
     final rows =
         await _client.rpc('friend_suggestions', params: {'p_limit': limit})
             as List<dynamic>;
-    return rows.map((r) {
+    final suggestions = rows.map((r) {
       final m = (r as Map).cast<String, dynamic>();
       return FriendSuggestion(
         userId: m['user_id'] as String,
@@ -2875,6 +2953,23 @@ class SupabaseBackend {
         rationale: (m['rationale'] as String?) ?? '',
       );
     }).toList();
+    if (suggestions.isEmpty) return suggestions;
+    final identities = await _displayNamesByUserId(
+      suggestions.map((suggestion) => suggestion.userId),
+    );
+    return [
+      for (final suggestion in suggestions)
+        FriendSuggestion(
+          userId: suggestion.userId,
+          pseudonym: suggestion.pseudonym,
+          displayName: identities[suggestion.userId],
+          avatarSeed: suggestion.avatarSeed,
+          profilePhotoUrl: suggestion.profilePhotoUrl,
+          isVerified: suggestion.isVerified,
+          sharedTribes: suggestion.sharedTribes,
+          rationale: suggestion.rationale,
+        ),
+    ];
   }
 
   Future<List<FriendRequest>> incomingFriendRequests() async {
@@ -2889,6 +2984,7 @@ class SupabaseBackend {
             friendshipId: r['friendship_id'] as String,
             otherUserId: r['from_user_id'] as String,
             otherPseudonym: r['from_pseudonym'] as String,
+            otherDisplayName: r['from_display_name'] as String?,
             otherAvatarSeed:
                 (r['from_avatar_seed'] as String?) ?? 'default-orb',
             profilePhotoUrl: r['from_profile_photo_url'] as String?,
@@ -2913,6 +3009,7 @@ class SupabaseBackend {
             friendshipId: r['friendship_id'] as String,
             otherUserId: r['to_user_id'] as String,
             otherPseudonym: r['to_pseudonym'] as String,
+            otherDisplayName: r['to_display_name'] as String?,
             otherAvatarSeed: (r['to_avatar_seed'] as String?) ?? 'default-orb',
             profilePhotoUrl: r['to_profile_photo_url'] as String?,
             otherKarma: (r['to_karma'] as int?) ?? 0,
@@ -6483,7 +6580,7 @@ class SupabaseBackend {
         .from('prompt_answers')
         .select(
           'answer_id, prompt_id, answer_text, created_at, author_id, '
-          'users:author_id(anonymous_pseudonym, avatar_seed)',
+          'users:author_id(anonymous_pseudonym, display_name, avatar_seed, profile_photo_url)',
         )
         .eq('prompt_id', promptId)
         .order('created_at', ascending: false)
@@ -6493,10 +6590,13 @@ class SupabaseBackend {
       return PromptAnswer(
         answerId: r['answer_id'] as String,
         promptId: r['prompt_id'] as String,
+        authorId: r['author_id'] as String?,
         authorPseudonym: u?['anonymous_pseudonym'] != null
             ? '@${u!['anonymous_pseudonym']}'
             : '@anonymous',
         authorAvatarSeed: (u?['avatar_seed'] as String?) ?? 'default-orb',
+        authorDisplayName: u?['display_name'] as String?,
+        authorProfilePhotoUrl: u?['profile_photo_url'] as String?,
         text: r['answer_text'] as String,
         createdAt: DateTime.parse(r['created_at'] as String),
       );
@@ -6520,8 +6620,11 @@ class SupabaseBackend {
     return PromptAnswer(
       answerId: row['answer_id'] as String,
       promptId: row['prompt_id'] as String,
+      authorId: uid,
       authorPseudonym: '@${me?.anonymousPseudonym ?? 'anonymous'}',
+      authorDisplayName: me?.displayName,
       authorAvatarSeed: me?.avatarSeed ?? 'default-orb',
+      authorProfilePhotoUrl: me?.profilePhotoUrl,
       text: row['answer_text'] as String,
       createdAt: DateTime.parse(row['created_at'] as String),
     );
@@ -6658,6 +6761,19 @@ class SupabaseBackend {
                 'p_limit': limit,
                 'p_offset': offset,
               },
+            )
+            as List<dynamic>;
+    return rows.cast<Map<String, dynamic>>().map(_musicTrackFromRow).toList();
+  }
+
+  Future<List<MusicTrack>> musicCatalogSection(
+    String section, {
+    int limit = 12,
+  }) async {
+    final rows =
+        await _client.rpc(
+              'music_catalog_section',
+              params: {'p_section': section, 'p_limit': limit},
             )
             as List<dynamic>;
     return rows.cast<Map<String, dynamic>>().map(_musicTrackFromRow).toList();
@@ -6812,7 +6928,36 @@ class SupabaseBackend {
       moodTags: (row['mood_tags'] as List?)?.cast<String>() ?? const [],
       licenseCode: row['license_code'] as String,
       attributionText: row['attribution_text'] as String?,
+      cacheAllowed: (row['cache_allowed'] as bool?) ?? false,
     );
+  }
+
+  Future<Map<String, String>> _displayNamesByUserId(
+    Iterable<String> userIds,
+  ) async {
+    final ids = userIds.toSet().toList(growable: false);
+    if (ids.isEmpty) return const {};
+    try {
+      final rows = await _client
+          .from('users')
+          .select('user_id, display_name')
+          .inFilter('user_id', ids);
+      return {
+        for (final row in rows as List)
+          if ((row as Map<String, dynamic>)['display_name']
+              case final String name)
+            row['user_id'] as String: name,
+      };
+    } catch (error) {
+      // Display-name hydration is additive during rolling deployments. Keep
+      // the existing username identity usable if the new column/view is not
+      // available yet or a transient read fails.
+      log.warn(
+        'identity.display_name_hydration_failed',
+        props: {'reason': error.runtimeType.toString()},
+      );
+      return const {};
+    }
   }
 
   Future<void> _emitPosts() async {

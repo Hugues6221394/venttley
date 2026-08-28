@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../core/analytics_events.dart';
 import '../../core/providers.dart';
@@ -46,6 +47,20 @@ class MusicTrackCard extends ConsumerWidget {
         ),
         child: Row(
           children: [
+            if (track.artworkUrl case final String artworkUrl) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: CachedNetworkImage(
+                  imageUrl: artworkUrl,
+                  width: compact ? 38 : 44,
+                  height: compact ? 38 : 44,
+                  fit: BoxFit.cover,
+                  fadeInDuration: const Duration(milliseconds: 120),
+                  errorWidget: (_, __, ___) => const Icon(Icons.music_note),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
             IconButton.filledTonal(
               tooltip: isPlaying ? 'Pause music preview' : 'Play music preview',
               onPressed: isLoading
@@ -151,6 +166,7 @@ class _MusicPickerSheetState extends ConsumerState<_MusicPickerSheet> {
     'romantic': 'Romantic',
     'celebration': 'Celebration',
     'nostalgic': 'Nostalgic',
+    'campus': 'Campus',
     'confidence': 'Confidence',
   };
 
@@ -177,6 +193,7 @@ class _MusicPickerSheetState extends ConsumerState<_MusicPickerSheet> {
   Widget build(BuildContext context) {
     final request = (query: _query, mood: _mood);
     final catalog = ref.watch(musicCatalogProvider(request));
+    final isBrowsing = _query.isEmpty && _mood == null;
     return FractionallySizedBox(
       heightFactor: 0.88,
       child: Padding(
@@ -226,42 +243,112 @@ class _MusicPickerSheetState extends ConsumerState<_MusicPickerSheet> {
             ),
             const SizedBox(height: 10),
             Expanded(
-              child: catalog.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator.adaptive()),
-                error: (_, __) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text("Music isn't available right now."),
-                      const SizedBox(height: 8),
-                      OutlinedButton(
-                        onPressed: () =>
-                            ref.invalidate(musicCatalogProvider(request)),
-                        child: const Text('Try again'),
+              child: isBrowsing
+                  ? const _MusicDiscoverySections()
+                  : catalog.when(
+                      loading: () => const Center(
+                        child: CircularProgressIndicator.adaptive(),
                       ),
-                    ],
-                  ),
-                ),
-                data: (tracks) => tracks.isEmpty
-                    ? const Center(child: Text('No authorized tracks matched.'))
-                    : ListView.separated(
-                        itemCount: tracks.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final track = tracks[index];
-                          return InkWell(
-                            borderRadius: BorderRadius.circular(18),
-                            onTap: () => Navigator.of(context).pop(track),
-                            child: MusicTrackCard(track: track, compact: true),
-                          );
-                        },
+                      error: (_, __) => Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text("Music isn't available right now."),
+                            const SizedBox(height: 8),
+                            OutlinedButton(
+                              onPressed: () =>
+                                  ref.invalidate(musicCatalogProvider(request)),
+                              child: const Text('Try again'),
+                            ),
+                          ],
+                        ),
                       ),
-              ),
+                      data: (tracks) => tracks.isEmpty
+                          ? const Center(
+                              child: Text('No authorized tracks matched.'),
+                            )
+                          : ListView.separated(
+                              itemCount: tracks.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final track = tracks[index];
+                                return InkWell(
+                                  borderRadius: BorderRadius.circular(18),
+                                  onTap: () => Navigator.of(context).pop(track),
+                                  child: MusicTrackCard(
+                                    track: track,
+                                    compact: true,
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MusicDiscoverySections extends ConsumerWidget {
+  const _MusicDiscoverySections();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    const sections = <(String, String)>[
+      ('recent', 'Recently used'),
+      ('for_you', 'For you'),
+      ('trending', 'Trending'),
+    ];
+    return ListView(
+      children: [
+        for (final section in sections)
+          _MusicSection(
+            title: section.$2,
+            value: ref.watch(musicCatalogSectionProvider(section.$1)),
+          ),
+      ],
+    );
+  }
+}
+
+class _MusicSection extends StatelessWidget {
+  const _MusicSection({required this.title, required this.value});
+
+  final String title;
+  final AsyncValue<List<MusicTrack>> value;
+
+  @override
+  Widget build(BuildContext context) {
+    return value.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 14),
+        child: LinearProgressIndicator(minHeight: 2),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (tracks) {
+        if (tracks.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              for (final track in tracks) ...[
+                InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () => Navigator.of(context).pop(track),
+                  child: MusicTrackCard(track: track, compact: true),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

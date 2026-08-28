@@ -126,8 +126,9 @@ class _MembersBodyState extends ConsumerState<_MembersBody> {
                         label: Text(f.$2),
                         selected: _filter == f.$1,
                         onSelected: (_) => setState(() => _filter = f.$1),
-                        selectedColor:
-                            VentlyColors.berryMagenta.withOpacity(0.18),
+                        selectedColor: VentlyColors.berryMagenta.withOpacity(
+                          0.18,
+                        ),
                         checkmarkColor: VentlyColors.berryMagenta,
                       ),
                     ),
@@ -156,10 +157,8 @@ class _MembersBodyState extends ConsumerState<_MembersBody> {
               }
               return SliverList.builder(
                 itemCount: list.length,
-                itemBuilder: (_, i) => _MemberTile(
-                  member: list[i],
-                  tribeSlug: widget.tribe.slug,
-                ),
+                itemBuilder: (_, i) =>
+                    _MemberTile(member: list[i], tribeSlug: widget.tribe.slug),
               );
             },
           ),
@@ -207,6 +206,7 @@ class _MemberTile extends StatelessWidget {
                 UserProfileLink(
                   userId: member.userId,
                   pseudonym: member.pseudonym,
+                  displayName: member.displayName,
                   avatarSeed: member.avatarSeed,
                   profilePhotoUrl: member.profilePhotoUrl,
                   size: 42,
@@ -217,7 +217,7 @@ class _MemberTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '@${member.pseudonym}',
+                        member.displayName,
                         style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
                       Text(
@@ -234,9 +234,7 @@ class _MemberTile extends StatelessWidget {
                 PopupMenuButton<String>(
                   onSelected: (v) {
                     if (v == 'manage') {
-                      context.push(
-                        '/tribe/$tribeSlug/manage/settings/members',
-                      );
+                      context.push('/tribe/$tribeSlug/manage/settings/members');
                     } else if (v == 'profile') {
                       context.push('/user/${member.userId}');
                     }
@@ -244,7 +242,9 @@ class _MemberTile extends StatelessWidget {
                   itemBuilder: (_) => const [
                     PopupMenuItem(value: 'manage', child: Text('Manage')),
                     PopupMenuItem(
-                        value: 'profile', child: Text('View profile')),
+                      value: 'profile',
+                      child: Text('View profile'),
+                    ),
                   ],
                 ),
               ],
@@ -314,8 +314,10 @@ class _NoTribe extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Create a tribe to manage members.',
-              style: TextStyle(fontWeight: FontWeight.w800)),
+          const Text(
+            'Create a tribe to manage members.',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 12),
           FilledButton(onPressed: onCreate, child: const Text('Create tribe')),
         ],

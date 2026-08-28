@@ -1492,6 +1492,7 @@ class _MemberRow extends ConsumerWidget {
               UserProfileLink(
                 userId: member.userId,
                 pseudonym: member.pseudonym,
+                displayName: member.displayName,
                 avatarSeed: member.avatarSeed,
                 profilePhotoUrl: member.profilePhotoUrl,
                 size: 36,
@@ -1502,7 +1503,7 @@ class _MemberRow extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '@${member.pseudonym}${isMe ? ' · you' : ''}',
+                      '${member.displayName}${isMe ? ' · you' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -2774,11 +2775,11 @@ class _SpotlightPickerSheetState extends ConsumerState<_SpotlightPickerSheet> {
                       return ListTile(
                         leading: AnonymousAvatar(
                           seed: m.avatarSeed,
-                          label: m.pseudonym,
+                          label: m.displayName,
                           size: 36,
                         ),
                         title: Text(
-                          '@${m.pseudonym}',
+                          m.displayName,
                           style: TextStyle(
                             fontWeight: selected
                                 ? FontWeight.w800

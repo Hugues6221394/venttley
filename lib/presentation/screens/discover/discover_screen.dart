@@ -1286,7 +1286,7 @@ class _FeaturedVoiceCard extends ConsumerWidget {
               children: [
                 ProfileAvatar(
                   avatarSeed: voice.avatarSeed,
-                  label: voice.pseudonym,
+                  label: voice.primaryName,
                   profilePhotoUrl: voice.profilePhotoUrl,
                   size: 40,
                   showVerifiedBadge: voice.isVerified,
@@ -1300,7 +1300,7 @@ class _FeaturedVoiceCard extends ConsumerWidget {
                         children: [
                           Flexible(
                             child: Text(
-                              '@${voice.pseudonym}',
+                              voice.primaryName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -1398,7 +1398,7 @@ class _MiniVoiceCard extends ConsumerWidget {
           children: [
             Flexible(
               child: Text(
-                '@${voice.pseudonym}',
+                voice.primaryName,
                 textAlign: horizontal ? TextAlign.start : TextAlign.center,
                 style: TextStyle(
                   color: context.ink,
@@ -1433,7 +1433,7 @@ class _MiniVoiceCard extends ConsumerWidget {
         ? <Widget>[
             ProfileAvatar(
               avatarSeed: voice.avatarSeed,
-              label: voice.pseudonym,
+              label: voice.primaryName,
               profilePhotoUrl: voice.profilePhotoUrl,
               size: 46,
               showVerifiedBadge: voice.isVerified,
@@ -1446,7 +1446,7 @@ class _MiniVoiceCard extends ConsumerWidget {
         : <Widget>[
             ProfileAvatar(
               avatarSeed: voice.avatarSeed,
-              label: voice.pseudonym,
+              label: voice.primaryName,
               profilePhotoUrl: voice.profilePhotoUrl,
               size: 42,
               showVerifiedBadge: voice.isVerified,
@@ -1494,7 +1494,7 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
       setState(() => _sent = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Friend request sent to @${widget.voice.pseudonym}.'),
+          content: Text('Friend request sent to ${widget.voice.primaryName}.'),
         ),
       );
     } catch (e) {

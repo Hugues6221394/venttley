@@ -57,8 +57,10 @@ class _TribeMembersManagementScreenState
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('Members',
-            style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Members',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         actions: [
           IconButton(
             tooltip: 'Invite member',
@@ -129,8 +131,9 @@ class _TribeMembersManagementScreenState
                   final visible = _filterMembers(items);
                   if (visible.isEmpty) {
                     return const SliverFillRemaining(
-                      child:
-                          Center(child: Text('No members match this filter.')),
+                      child: Center(
+                        child: Text('No members match this filter.'),
+                      ),
                     );
                   }
                   return SliverPadding(
@@ -159,16 +162,19 @@ class _TribeMembersManagementScreenState
 
   List<TribeMemberRow> _filterMembers(List<TribeMemberRow> members) {
     final normalized = query.trim().replaceAll('@', '').toLowerCase();
-    return members.where((member) {
-      if (normalized.isNotEmpty &&
-          !member.pseudonym.toLowerCase().contains(normalized)) return false;
-      return switch (filter) {
-        'mods' => member.isKeeper || member.isMod,
-        'muted' => member.isMuted,
-        'warned' => member.hasWarnings,
-        _ => true,
-      };
-    }).toList(growable: false);
+    return members
+        .where((member) {
+          if (normalized.isNotEmpty &&
+              !member.pseudonym.toLowerCase().contains(normalized))
+            return false;
+          return switch (filter) {
+            'mods' => member.isKeeper || member.isMod,
+            'muted' => member.isMuted,
+            'warned' => member.hasWarnings,
+            _ => true,
+          };
+        })
+        .toList(growable: false);
   }
 
   void _refresh(String tribeId) {
@@ -183,7 +189,9 @@ class _TribeMembersManagementScreenState
     bool approve,
   ) async {
     try {
-      await ref.read(repositoryProvider).respondTribeJoinRequest(
+      await ref
+          .read(repositoryProvider)
+          .respondTribeJoinRequest(
             requestId: request.requestId,
             approve: approve,
           );
@@ -230,7 +238,9 @@ class _TribeMembersManagementScreenState
       muteUntil = DateTime.now().add(duration);
     }
     try {
-      await ref.read(repositoryProvider).manageTribeMember(
+      await ref
+          .read(repositoryProvider)
+          .manageTribeMember(
             tribeId: tribeId,
             userId: member.userId,
             action: action,
@@ -257,7 +267,8 @@ class _TribeMembersManagementScreenState
         initialValues: const [''],
         builder: (dialogContext, controllers) => AlertDialog(
           title: Text(
-              '${action[0].toUpperCase()}${action.substring(1)} @$pseudonym'),
+            '${action[0].toUpperCase()}${action.substring(1)} @$pseudonym',
+          ),
           content: TextField(
             controller: controllers.single,
             autofocus: true,
@@ -272,10 +283,8 @@ class _TribeMembersManagementScreenState
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                controllers.single.text.trim(),
-              ),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, controllers.single.text.trim()),
               child: const Text('Confirm'),
             ),
           ],
@@ -307,10 +316,8 @@ class _TribeMembersManagementScreenState
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                controllers.single.text.trim(),
-              ),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, controllers.single.text.trim()),
               child: const Text('Invite'),
             ),
           ],
@@ -319,8 +326,9 @@ class _TribeMembersManagementScreenState
     );
     if (username == null || username.isEmpty || !mounted) return;
     try {
-      final user =
-          await ref.read(repositoryProvider).findUserByPseudonym(username);
+      final user = await ref
+          .read(repositoryProvider)
+          .findUserByPseudonym(username);
       if (user == null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -328,10 +336,9 @@ class _TribeMembersManagementScreenState
         );
         return;
       }
-      await ref.read(repositoryProvider).inviteToTribe(
-            tribeId: tribe.tribeId,
-            invitedUserId: user.userId,
-          );
+      await ref
+          .read(repositoryProvider)
+          .inviteToTribe(tribeId: tribe.tribeId, invitedUserId: user.userId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Invitation sent to @${user.pseudonym}.')),
@@ -357,12 +364,14 @@ class _RequestsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Join requests · ${requests.length}',
-              style: TextStyle(
-                color: context.ink,
-                fontWeight: FontWeight.w900,
-                fontSize: 15,
-              )),
+          Text(
+            'Join requests · ${requests.length}',
+            style: TextStyle(
+              color: context.ink,
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
+            ),
+          ),
           const SizedBox(height: 9),
           for (final request in requests)
             Padding(
@@ -383,12 +392,16 @@ class _RequestsSection extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('@${request.pseudonym}',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w900)),
+                          Text(
+                            '@${request.pseudonym}',
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
                           if (request.note?.isNotEmpty == true)
-                            Text(request.note!,
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(
+                              request.note!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                         ],
                       ),
                     ),
@@ -433,6 +446,7 @@ class _MemberCard extends StatelessWidget {
             UserProfileLink(
               userId: member.userId,
               pseudonym: member.pseudonym,
+              displayName: member.displayName,
               avatarSeed: member.avatarSeed,
               profilePhotoUrl: member.profilePhotoUrl,
               size: 46,
@@ -442,16 +456,20 @@ class _MemberCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('@${member.pseudonym}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w900)),
-                  Text(member.role.toUpperCase(),
-                      style: const TextStyle(
-                        color: VentlyColors.berryMagenta,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                      )),
+                  Text(
+                    member.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  Text(
+                    '@${member.pseudonym} · ${member.role.toUpperCase()}',
+                    style: const TextStyle(
+                      color: VentlyColors.berryMagenta,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                   if (member.isMuted || member.hasWarnings)
                     Text(
                       [
@@ -475,21 +493,27 @@ class _MemberCard extends StatelessWidget {
                 itemBuilder: (_) => [
                   PopupMenuItem(
                     value: member.isMod ? 'demote' : 'promote',
-                    child: Text(member.isMod
-                        ? 'Demote moderator'
-                        : 'Promote moderator'),
+                    child: Text(
+                      member.isMod ? 'Demote moderator' : 'Promote moderator',
+                    ),
                   ),
                   const PopupMenuItem(
-                      value: 'warn', child: Text('Warn member')),
+                    value: 'warn',
+                    child: Text('Warn member'),
+                  ),
                   const PopupMenuItem(
-                      value: 'mute', child: Text('Mute member')),
+                    value: 'mute',
+                    child: Text('Mute member'),
+                  ),
                   if (member.isMuted)
                     const PopupMenuItem(
                       value: 'unmute',
                       child: Text('Remove mute'),
                     ),
                   const PopupMenuItem(
-                      value: 'remove', child: Text('Remove member')),
+                    value: 'remove',
+                    child: Text('Remove member'),
+                  ),
                   const PopupMenuItem(value: 'ban', child: Text('Ban member')),
                 ],
               ),

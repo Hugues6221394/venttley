@@ -807,6 +807,7 @@ class MusicTrack {
   final List<String> moodTags;
   final String licenseCode;
   final String? attributionText;
+  final bool cacheAllowed;
 
   const MusicTrack({
     required this.trackId,
@@ -822,6 +823,7 @@ class MusicTrack {
     this.genre,
     this.moodTags = const [],
     this.attributionText,
+    this.cacheAllowed = false,
   });
 }
 
@@ -1355,6 +1357,7 @@ class SharedPostSnapshot {
   final String postId;
   final String content;
   final String? authorPseudonym;
+  final String? authorDisplayName;
   final String? authorAvatarSeed;
   final String? category;
   final String? mood;
@@ -1366,6 +1369,7 @@ class SharedPostSnapshot {
     required this.content,
     required this.createdAt,
     this.authorPseudonym,
+    this.authorDisplayName,
     this.authorAvatarSeed,
     this.category,
     this.mood,
@@ -1381,6 +1385,7 @@ class SharedPostSnapshot {
       postId: postId,
       content: (m['content'] as String?) ?? '',
       authorPseudonym: m['author_pseudonym'] as String?,
+      authorDisplayName: m['author_display_name'] as String?,
       authorAvatarSeed: m['author_avatar_seed'] as String?,
       category: m['category'] as String?,
       mood: m['mood'] as String?,
@@ -1429,8 +1434,11 @@ class PollOption {
 class PromptAnswer {
   final String answerId;
   final String promptId;
+  final String? authorId;
   final String authorPseudonym;
+  final String? authorDisplayName;
   final String authorAvatarSeed;
+  final String? authorProfilePhotoUrl;
   final String text;
   final DateTime createdAt;
 
@@ -1441,7 +1449,16 @@ class PromptAnswer {
     required this.authorAvatarSeed,
     required this.text,
     required this.createdAt,
+    this.authorId,
+    this.authorDisplayName,
+    this.authorProfilePhotoUrl,
   });
+
+  String get displayName {
+    final value = authorDisplayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return authorPseudonym.replaceFirst('@', '');
+  }
 }
 
 class PlugPrompt {
@@ -1849,6 +1866,7 @@ class Whisper {
     String? musicPreviewUrl,
     String? musicTitle,
     String? musicArtist,
+    String? mediaStatus,
   }) => Whisper(
     whisperId: whisperId,
     authorId: authorId,
@@ -1875,7 +1893,7 @@ class Whisper {
     savedByMe: savedByMe ?? this.savedByMe,
     reactionCounts: reactionCounts ?? this.reactionCounts,
     myReaction: myReaction == _unset ? this.myReaction : myReaction as String?,
-    mediaStatus: mediaStatus,
+    mediaStatus: mediaStatus ?? this.mediaStatus,
     // These used to be omitted, which meant every copyWith silently erased the
     // music bed — and _whispersWithMyFlags copies every whisper on the way to
     // the screen, so a whisper could never keep its music no matter what the
@@ -2067,6 +2085,7 @@ class TribeMessage {
   final String tribeId;
   final String? senderId;
   final String senderPseudonym;
+  final String? senderDisplayName;
   final String senderAvatarSeed;
   final String? senderProfilePhotoUrl;
 
@@ -2088,6 +2107,7 @@ class TribeMessage {
   final String? replyToMessageId;
   final String? replyContent;
   final String? replySenderPseudonym;
+  final String? replySenderDisplayName;
   final bool huggedByMe;
   final bool isPinned;
 
@@ -2106,6 +2126,7 @@ class TribeMessage {
     required this.senderAvatarSeed,
     required this.createdAt,
     required this.sentByMe,
+    this.senderDisplayName,
     this.senderId,
     this.senderProfilePhotoUrl,
     this.senderIsVerified = false,
@@ -2120,6 +2141,7 @@ class TribeMessage {
     this.replyToMessageId,
     this.replyContent,
     this.replySenderPseudonym,
+    this.replySenderDisplayName,
     this.huggedByMe = false,
     this.isPinned = false,
     this.metadata,
@@ -2135,6 +2157,18 @@ class TribeMessage {
   bool get hasImage => imageUrl != null && imageUrl!.isNotEmpty;
   bool get hasAudio => audioUrl != null && audioUrl!.isNotEmpty;
   bool get hasText => content != null && content!.trim().isNotEmpty;
+  String get displayName {
+    final value = senderDisplayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return senderPseudonym.replaceFirst('@', '');
+  }
+
+  String? get replyDisplayName {
+    final value = replySenderDisplayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    final username = replySenderPseudonym?.replaceFirst('@', '').trim();
+    return username == null || username.isEmpty ? null : username;
+  }
 
   /// WhatsApp-style windows, mirrored by the server RPCs — 30 min to edit,
   /// 24h to delete-for-everyone. Editing is limited to plain-text messages
@@ -2164,6 +2198,7 @@ class TribeMessage {
 class FriendSuggestion {
   final String userId;
   final String pseudonym;
+  final String? displayName;
   final String avatarSeed;
   final String? profilePhotoUrl;
   final bool isVerified;
@@ -2178,7 +2213,13 @@ class FriendSuggestion {
     required this.sharedTribes,
     required this.rationale,
     this.profilePhotoUrl,
+    this.displayName,
   });
+
+  String get primaryName {
+    final value = displayName?.trim();
+    return value == null || value.isEmpty ? pseudonym : value;
+  }
 }
 
 /// A pending friend request (incoming or outgoing).
@@ -2186,6 +2227,7 @@ class FriendRequest {
   final String friendshipId;
   final String otherUserId;
   final String otherPseudonym;
+  final String? otherDisplayName;
   final String otherAvatarSeed;
   final String? profilePhotoUrl;
   final int otherKarma;
@@ -2206,7 +2248,13 @@ class FriendRequest {
     required this.isOutgoing,
     this.profilePhotoUrl,
     this.note,
+    this.otherDisplayName,
   });
+
+  String get primaryName {
+    final value = otherDisplayName?.trim();
+    return value == null || value.isEmpty ? otherPseudonym : value;
+  }
 }
 
 /// One mood bucket in the friend-profile distribution.
@@ -2562,6 +2610,7 @@ class SearchHit {
 class TrendingVoice {
   final String userId;
   final String pseudonym;
+  final String? displayName;
   final String avatarSeed;
   final String? profilePhotoUrl;
   final bool isVerified;
@@ -2580,7 +2629,13 @@ class TrendingVoice {
     required this.topMood,
     required this.engagementScore,
     this.profilePhotoUrl,
+    this.displayName,
   });
+
+  String get primaryName {
+    final value = displayName?.trim();
+    return value == null || value.isEmpty ? pseudonym : value;
+  }
 }
 
 /// A friend who is around right now (RPC `online_friends`, migration

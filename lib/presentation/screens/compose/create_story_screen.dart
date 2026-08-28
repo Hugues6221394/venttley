@@ -187,6 +187,11 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
             if (stagedMedia != null) ...stagedMedia.toPayload(),
             if (_selectedMusic != null)
               'musicTrack': _musicTrackPayload(_selectedMusic!),
+            if (_selectedMusic != null) ...{
+              'musicStartMs': 0,
+              'musicDurationMs': 15000,
+              'musicVolume': 0.75,
+            },
           }, operationId: operationId);
           if (!mounted) return;
           context.go('/feed');
@@ -359,6 +364,7 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
     'moodTags': track.moodTags,
     'licenseCode': track.licenseCode,
     'attributionText': track.attributionText,
+    'cacheAllowed': track.cacheAllowed,
   };
 }
 

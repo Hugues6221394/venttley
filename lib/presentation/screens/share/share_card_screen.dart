@@ -41,8 +41,9 @@ class ShareCardScreen extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       appBar: AppBar(
         leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.pop()),
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.pop(),
+        ),
         title: const Text('Share'),
       ),
       body: SafeArea(
@@ -62,10 +63,7 @@ class ShareCardScreen extends ConsumerWidget {
                         gradient: const LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [
-                            VentlyColors.blushPink,
-                            Color(0xFFFAD0DA),
-                          ],
+                          colors: [VentlyColors.blushPink, Color(0xFFFAD0DA)],
                         ),
                         borderRadius: BorderRadius.circular(28),
                         border: Border.all(color: VentlyColors.softMauve),
@@ -96,7 +94,7 @@ class ShareCardScreen extends ConsumerWidget {
                           Row(
                             children: [
                               Text(
-                                'Shared by ${post.authorPseudonym}',
+                                'Shared by ${post.authorDisplayName}',
                                 style: TextStyle(
                                   color: context.ink,
                                   fontWeight: FontWeight.w800,
@@ -126,16 +124,31 @@ class ShareCardScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 18),
-              Text('Share to',
-                  style: Theme.of(context).textTheme.titleSmall),
+              Text('Share to', style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 12),
               const Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _ShareIcon(label: 'IG Story',  icon: Icons.camera_alt_outlined, color: Color(0xFFE1306C)),
-                  _ShareIcon(label: 'Snapchat',  icon: Icons.send_rounded,        color: Color(0xFFFFFC00)),
-                  _ShareIcon(label: 'TikTok',    icon: Icons.music_note,          color: Colors.black87),
-                  _ShareIcon(label: 'WhatsApp',  icon: Icons.chat,                color: Color(0xFF25D366)),
+                  _ShareIcon(
+                    label: 'IG Story',
+                    icon: Icons.camera_alt_outlined,
+                    color: Color(0xFFE1306C),
+                  ),
+                  _ShareIcon(
+                    label: 'Snapchat',
+                    icon: Icons.send_rounded,
+                    color: Color(0xFFFFFC00),
+                  ),
+                  _ShareIcon(
+                    label: 'TikTok',
+                    icon: Icons.music_note,
+                    color: Colors.black87,
+                  ),
+                  _ShareIcon(
+                    label: 'WhatsApp',
+                    icon: Icons.chat,
+                    color: Color(0xFF25D366),
+                  ),
                 ],
               ),
               const SizedBox(height: 20),
@@ -146,10 +159,9 @@ class ShareCardScreen extends ConsumerWidget {
                   final dir = await getTemporaryDirectory();
                   final file = File('${dir.path}/venttly-share.png');
                   await file.writeAsBytes(bytes);
-                  await Share.shareXFiles(
-                    [XFile(file.path)],
-                    text: 'Vented on Venttly — your safe space.',
-                  );
+                  await Share.shareXFiles([
+                    XFile(file.path),
+                  ], text: 'Vented on Venttly — your safe space.');
                 },
                 icon: const Icon(Icons.download, size: 18),
                 label: const Text('Download Image'),
@@ -163,7 +175,11 @@ class ShareCardScreen extends ConsumerWidget {
 }
 
 class _ShareIcon extends StatelessWidget {
-  const _ShareIcon({required this.label, required this.icon, required this.color});
+  const _ShareIcon({
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
   final String label;
   final IconData icon;
   final Color color;

@@ -28,4 +28,5 @@ const String kLedgerVersion = '20260826100000';
 /// test fails until you do.
 const Map<String, String> kExpectedMigrations = <String, String>{
   '20260826100000': 'schema_migrations_ledger',
+  '20260827222451': 'complete_identity_mentions_music_rollout',
 };
