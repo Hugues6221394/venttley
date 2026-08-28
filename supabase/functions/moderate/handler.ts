@@ -1,18 +1,5 @@
 import { corsHeaders, handleOptions } from "../_shared/cors.ts";
 
-const SYSTEM_PROMPT =
-  "You are Venttly's safety reviewer for an anonymous emotional-support app. " +
-  "Read the user message and return ONLY a compact JSON object with keys: " +
-  'verdict ("safe"|"warn"|"block"), categories (array of any of ' +
-  '"self_harm","hate","harassment","sexual_content","violence","privacy","other"), ' +
-  "reason (one short sentence the user will read). Guidance: " +
-  "- block hate speech, harassment of others, sexual solicitation, doxxing, " +
-  "credible threats, sexual content involving minors. " +
-  "- warn (do NOT block) when the writer expresses self-harm or suicidal " +
-  "feelings - the user must still be able to reach out for help. " +
-  "- safe for emotional venting, sadness, anger, swearing, or descriptions of " +
-  "past trauma told in the first person.";
-
 const ALLOWED_VERDICTS = new Set(["safe", "warn", "block"]);
 const ALLOWED_CATEGORIES = new Set([
   "self_harm",
@@ -121,46 +108,17 @@ export function parseProviderVerdict(value: unknown): Verdict {
   return { verdict, categories, reason };
 }
 
-export async function classifyWithGroq(text: string): Promise<Verdict | null> {
-  const key = Deno.env.get("GROQ_API_KEY");
-  if (!key) return null;
-  const model = Deno.env.get("GROQ_GUARD_MODEL") ?? "llama-3.3-70b-versatile";
-  try {
-    const response = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          temperature: 0,
-          max_tokens: 200,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: text },
-          ],
-        }),
-        signal: AbortSignal.timeout(5000),
-      },
-    );
-    if (!response.ok) return null;
-    const body = await response.json();
-    const content = body?.choices?.[0]?.message?.content;
-    if (typeof content !== "string") return null;
-    return parseProviderVerdict(JSON.parse(content));
-  } catch {
-    return null;
-  }
+async function noRemoteClassifier(_text: string): Promise<Verdict | null> {
+  // This endpoint makes no external classifier request. A future classifier
+  // must run inside the approved trust boundary or arrive with an explicit
+  // privacy and processor review; a secret must never silently enable export.
+  return null;
 }
 
 export function createModerationHandler(
   dependencies: ModerationHandlerDependencies,
 ): (request: Request) => Promise<Response> {
-  const classify = dependencies.classify ?? classifyWithGroq;
+  const classify = dependencies.classify ?? noRemoteClassifier;
   const classifierVersion = dependencies.classifierVersion ??
     Deno.env.get("MODERATION_CLASSIFIER_VERSION") ?? "guard-v1";
   const now = dependencies.now ?? (() => new Date());

@@ -10,6 +10,8 @@ import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../../core/user_friendly_errors.dart';
+import '../home/home_shell.dart';
 
 class CreateTribeScreen extends ConsumerStatefulWidget {
   const CreateTribeScreen({super.key});
@@ -91,7 +93,9 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
     }
     setState(() => _submitting = true);
     try {
-      final tribe = await ref.read(repositoryProvider).createTribe(
+      final tribe = await ref
+          .read(repositoryProvider)
+          .createTribe(
             name: name,
             category: category,
             description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
@@ -125,39 +129,67 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
                   ]
                 : const [],
           );
+      Object? mediaError;
       String? avatarUrl;
       String? bannerUrl;
-      if (_avatarBytes != null) {
-        final upload = await ref.read(repositoryProvider).uploadTribeAvatar(
-              tribeId: tribe.tribeId,
-              bytes: _avatarBytes!,
-              extension: _avatarExtension,
-              contentType: _contentType(_avatarExtension),
-            );
-        avatarUrl = upload.url;
-      }
-      if (_bannerBytes != null) {
-        final upload = await ref.read(repositoryProvider).uploadTribeAvatar(
-              tribeId: tribe.tribeId,
-              bytes: _bannerBytes!,
-              extension: _bannerExtension,
-              contentType: _contentType(_bannerExtension),
-            );
-        bannerUrl = upload.url;
-      }
-      if (avatarUrl != null || bannerUrl != null) {
-        await ref.read(repositoryProvider).updateTribeConfiguration(
-              tribeId: tribe.tribeId,
-              avatarUrl: avatarUrl,
-              bannerUrl: bannerUrl,
-            );
+      try {
+        if (_avatarBytes != null) {
+          final upload = await ref
+              .read(repositoryProvider)
+              .uploadTribeAvatar(
+                tribeId: tribe.tribeId,
+                bytes: _avatarBytes!,
+                extension: _avatarExtension,
+                contentType: _contentType(_avatarExtension),
+              );
+          avatarUrl = upload.url;
+        }
+        if (_bannerBytes != null) {
+          final upload = await ref
+              .read(repositoryProvider)
+              .uploadTribeAvatar(
+                tribeId: tribe.tribeId,
+                bytes: _bannerBytes!,
+                extension: _bannerExtension,
+                contentType: _contentType(_bannerExtension),
+              );
+          bannerUrl = upload.url;
+        }
+        if (avatarUrl != null || bannerUrl != null) {
+          await ref
+              .read(repositoryProvider)
+              .updateTribeConfiguration(
+                tribeId: tribe.tribeId,
+                avatarUrl: avatarUrl,
+                bannerUrl: bannerUrl,
+              );
+        }
+      } catch (error) {
+        mediaError = error;
       }
       ref.invalidate(tribesProvider);
       ref.invalidate(tribesIKeepProvider);
       if (!mounted) return;
       context.go('/tribe/${tribe.slug}/manage/settings');
+      if (mediaError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Tribe created. Its images could not be saved yet: $mediaError',
+            ),
+          ),
+        );
+      }
     } catch (e) {
-      _toast(e.toString());
+      // Was interpolating the raw exception, so a person saw
+      // "PostgrestException(message: adults_only...)". Named server errors are
+      // translated centrally now.
+      _toast(
+        UserFriendlyErrors.message(
+          e,
+          fallback: "Couldn't create this Tribe. Please try again.",
+        ),
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -169,31 +201,35 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   }
 
   Future<void> _pickImage({required bool banner}) async {
-    final image = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 84,
-      maxWidth: banner ? 2048 : 1024,
-      maxHeight: banner ? 1152 : 1024,
-    );
-    if (image == null) return;
-    final bytes = await image.readAsBytes();
-    if (bytes.length > 8 * 1024 * 1024) {
-      _toast('Choose an image smaller than 8 MB.');
-      return;
-    }
-    final extension = image.name.contains('.')
-        ? image.name.split('.').last.toLowerCase()
-        : 'jpg';
-    if (!mounted) return;
-    setState(() {
-      if (banner) {
-        _bannerBytes = bytes;
-        _bannerExtension = extension;
-      } else {
-        _avatarBytes = bytes;
-        _avatarExtension = extension;
+    try {
+      final image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 84,
+        maxWidth: banner ? 2048 : 1024,
+        maxHeight: banner ? 1152 : 1024,
+      );
+      if (image == null) return;
+      final bytes = await image.readAsBytes();
+      if (bytes.length > 8 * 1024 * 1024) {
+        _toast('Choose an image smaller than 8 MB.');
+        return;
       }
-    });
+      final extension = image.name.contains('.')
+          ? image.name.split('.').last.toLowerCase()
+          : 'jpg';
+      if (!mounted) return;
+      setState(() {
+        if (banner) {
+          _bannerBytes = bytes;
+          _bannerExtension = extension;
+        } else {
+          _avatarBytes = bytes;
+          _avatarExtension = extension;
+        }
+      });
+    } catch (error) {
+      _toast('Could not open this image: $error');
+    }
   }
 
   @override
@@ -209,7 +245,12 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
       ),
       body: VentlyPremiumBackground(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+          // Clear the floating nav. At 40 the last rows of this form sat under
+          // the nav pill, which paints over the branch: the category chips
+          // landed at y~806 against a pill occupying ~770-835, so tapping
+          // "Interest" activated a nav tab instead. Same defect as the compose
+          // Publish button, and the reason there is a shared constant for it.
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, HomeShell.navClearance),
           children: [
             _CreationMedia(
               avatarBytes: _avatarBytes,
@@ -260,8 +301,10 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text('Category',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            const Text(
+              'Category',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -281,8 +324,11 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
                 ChoiceChip(
                   selected: _customMode,
                   onSelected: (_) => setState(() => _customMode = true),
-                  avatar:
-                      Icon(Icons.add_rounded, size: 16, color: scheme.primary),
+                  avatar: Icon(
+                    Icons.add_rounded,
+                    size: 16,
+                    color: scheme.primary,
+                  ),
                   label: const Text('Custom'),
                 ),
               ],
@@ -309,11 +355,10 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            Text('Visibility',
-                style: TextStyle(
-                  color: context.ink,
-                  fontWeight: FontWeight.w900,
-                )),
+            Text(
+              'Visibility',
+              style: TextStyle(color: context.ink, fontWeight: FontWeight.w900),
+            ),
             const SizedBox(height: 8),
             SegmentedButton<String>(
               showSelectedIcon: false,
@@ -339,8 +384,9 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
               value: _useSafetyTemplate,
               onChanged: (value) => setState(() => _useSafetyTemplate = value),
               title: const Text('Start with safety rules'),
-              subtitle:
-                  const Text('Respect, privacy, and anti-harassment baseline'),
+              subtitle: const Text(
+                'Respect, privacy, and anti-harassment baseline',
+              ),
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
@@ -371,11 +417,11 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
       .toList(growable: false);
 
   static String _contentType(String extension) => switch (extension) {
-        'png' => 'image/png',
-        'webp' => 'image/webp',
-        'heic' || 'heif' => 'image/heic',
-        _ => 'image/jpeg',
-      };
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    'heic' || 'heif' => 'image/heic',
+    _ => 'image/jpeg',
+  };
 }
 
 class _CreationMedia extends StatelessWidget {
@@ -433,8 +479,9 @@ class _CreationMedia extends StatelessWidget {
                 ),
                 child: CircleAvatar(
                   backgroundColor: VentlyColors.roseTint,
-                  backgroundImage:
-                      avatarBytes == null ? null : MemoryImage(avatarBytes!),
+                  backgroundImage: avatarBytes == null
+                      ? null
+                      : MemoryImage(avatarBytes!),
                   child: avatarBytes == null
                       ? const Icon(
                           Icons.add_a_photo_outlined,

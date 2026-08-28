@@ -1,16 +1,17 @@
 # Venttly
 
-> Your safe space to connect anonymously. Vent. Heal. Belong.
+> Your safe space to connect under a pseudonym. Vent. Heal. Belong.
 
-Venttly is an anonymous social platform for Gen Z emotional expression and
+Venttly is a pseudonymous social platform for emotional expression and
 peer support — built with **Flutter** on the client and **Supabase /
 PostgreSQL** on the server.
 
 V1 keeps the surface area small and honest. Highlights:
 
-* **Zero personal data.** No email, phone, or real name. Sign-up takes only a
-  username + password; the username is mapped to a synthetic auth handle
-  (`<username>@id.venttly.app`) that never receives mail.
+* **Pseudonymous by default.** A public real identity is never required.
+  Username/password accounts need no email or phone; optional contact,
+  profile-photo, and coarse-location features collect data only when a member
+  chooses the corresponding flow.
 * **Layered account recovery.** Optional 12-word recovery phrase seals the
   user's password into an AES-GCM blob whose key is derived (Argon2id) from
   the phrase. Blob + salt are stored on the user row and read back pre-auth
@@ -27,9 +28,10 @@ V1 keeps the surface area small and honest. Highlights:
   replies" sheet.
 * **Private DMs.** Plaintext server-side so reported chats can be reviewed;
   the UI never claims end-to-end encryption.
-* **Two-tier safety moderation.** Local keyword scan (self-harm, doxxing/PII,
-  hate, harassment, sexual content) feeds a Groq-hosted LLM safety check that
-  returns a structured JSON verdict.
+* **Server-enforced safety moderation.** PostgreSQL sanitizes and evaluates
+  every content write even when a modified client bypasses Flutter. It blocks
+  contact-detail exposure, hate, targeted harassment, and sexual solicitation;
+  self-harm language remains publishable and is tagged for support.
 * **Member reports.** Any signed-in user can flag a post. Reports are
   write-anyone / read-admin via Row Level Security.
 
@@ -40,7 +42,7 @@ V1 keeps the surface area small and honest. Highlights:
 | 0 | Security hardening — users-table column-level grants, seed wipe | ✅ |
 | 1 | Username + password sign-up, 12-word recovery phrase, login + restore | ✅ |
 | 2 | Hybrid Tribes (members + keeper), Tribes directory/detail/create, Questions tab | ✅ |
-| 3 | Two-tier moderation (Tier-1 local + Tier-2 Groq), member reports table | ✅ |
+| 3 | Server-enforced text safety, crisis tagging, member reports table | ✅ |
 | 4 | Private DMs (no E2EE claim), realtime chat, moderation on send | ✅ |
 | 5 | Profile screen, recovery-phrase reveal, launch readiness | in progress |
 
@@ -58,7 +60,8 @@ V1 keeps the surface area small and honest. Highlights:
 | `#361F23` | Muted Burgundy | Dark dividers |
 
 All cards use `BorderRadius.circular(24.0)` and ship with matching light +
-dark themes that meet WCAG 4.5:1 contrast.
+dark themes. Contrast, screen-reader, text-scale, and real-device checks remain
+release gates; this document does not claim conformance from tokens alone.
 
 ## Architecture
 
@@ -75,13 +78,16 @@ lib/
     ├── screens/                # onboarding, feed, tribes, questions, inbox, profile
     ├── theme/                  # VentlyTheme.light/dark + VentlyColors
     └── widgets/                # AnonymousAvatar, PostCard, PromptCard, etc.
+admin/
+├── app/(dashboard)/            # Next.js staff operations and moderation pages
+├── app/api/                    # authenticated admin/auth route handlers
+├── components/                 # console shell and shared UI
+├── lib/                        # RBAC, Supabase clients, audit, Redis, IP rules
+└── proxy.ts                    # session, IP, MFA, and route boundary
 supabase/
-└── migrations/
-    ├── 0001_init_schema.sql    # Core schema, indexes, triggers, RPCs
-    ├── 0003_security_hardening.sql
-    ├── 0004_username_auth_and_recovery.sql
-    ├── 0005_hybrid_tribes.sql
-    └── 0006_reports.sql
+├── migrations/                 # ordered schema, RLS, RPC, trigger changes
+├── functions/                  # authenticated/webhook Edge Functions
+└── tests/database/             # pgTAP authorization and behavior contracts
 ```
 
 `VentlyRepository` is the single data-layer facade. App runs use live Supabase
@@ -107,9 +113,10 @@ flutter run
 flutter run --dart-define=USE_MOCK_BACKEND=true
 ```
 
-The authenticated `moderate` Edge Function reads `GROQ_API_KEY` and optional
-`GROQ_GUARD_MODEL` from server-only Supabase secrets. Provider failures never
-enter the trusted moderation cache.
+The authenticated `moderate` Edge Function validates identity, payload size,
+and quota, but production contains no off-platform text classifier. The
+authoritative moderation path is the database write guard. Adding any external
+content processor requires a separate reviewed code and privacy change.
 
 ## Database
 
@@ -127,6 +134,9 @@ workflow. It refuses an ambiguous target or any staging project ref that
 matches the recorded production ref. Production changes require a separate,
 explicit approval after staging evidence is reviewed.
 
+The security-sensitive release sequence, content-free SLOs, kill switches, and
+rollback rules are in [`docs/trust-boundary-rollout.md`](docs/trust-boundary-rollout.md).
+
 Key schema notes:
 
 * `users.recovery_blob` + `users.recovery_salt` — encrypted-password material
@@ -138,23 +148,80 @@ Key schema notes:
   and `is_verified` flag so the directory list paints in one query.
 * `feed_posts` view exposes `tribe_name` / `tribe_slug` alongside post data
   so the feed never round-trips per row.
-* `post_reports` (migration 0006) is write-anyone / read-admin via RLS.
+* `reports` (introduced in migration 0006 and consolidated in 0007) accepts
+  authenticated member reports and restricts review to authorized staff via
+  RLS and role-checked moderation RPCs.
+
+## Super Admin and Trust & Safety console
+
+The separate Next.js console in [`admin/`](admin/) is the internal operating
+surface for Venttly. It is not part of the Flutter binary and must be deployed
+on a restricted admin hostname. Its full developer handoff—including setup,
+route ownership, database dependencies, staff roles, trust boundaries, and the
+prioritized production gap—is in
+[`admin/README.md`](admin/README.md).
+
+### Implemented today
+
+- Staff roles: `super_admin`, `admin`, `moderator`, `support`, `analyst`, and
+  `read_only_auditor`, with route-level access mapping and stricter role checks
+  inside privileged database RPCs.
+- Report moderation, post removal, suspension/shadow-ban actions, an escalating
+  suspension ladder, media review, and dynamic automod rules.
+- A cross-surface crisis queue for Vents, Whispers, Tribe messages, DMs, and
+  self-harm reports, with careful server-readable-DM wording.
+- A super-admin-only CSAM incident ledger, session/IP views, verification
+  decisions, and staff-role assignment.
+- User and Tribe investigation pages, targeted broadcasts, analytics, cost and
+  health views, runtime feature flags/kill switches, and an append-only audit
+  ledger.
+- Supabase cookie authentication, optional IP allowlisting, TOTP/AAL2 flow,
+  and optional shared Upstash rate limiting.
+
+### Production gap
+
+The console builds and is connected to real backend controls, but it must not
+yet be described as ready for moderation at million-user scale. Most urgently:
+
+- Route authorization must become fail-closed. An unknown section currently
+  falls through for any staff role, and a legacy `/notifications` fanout route
+  is not in the role matrix.
+- Remaining direct service-role writes must move behind actor-bound,
+  transactional RPCs whose audit insert cannot fail independently.
+- Production must require MFA, restricted network access, distributed rate
+  limits, session revocation, origin/input checks, and adversarial RBAC tests.
+- Moderation needs unified cases/evidence across every content surface,
+  assignment and persistent SLAs, appeals/second review, reporter-abuse and
+  coordinated-abuse tooling, and safe legal-hold workflows.
+- Crisis and child-safety operations require qualified legal review,
+  jurisdiction-aware global playbooks, trained 24/7 ownership, paging, and
+  restore/incident drills. UI instructions are not evidence of compliance.
+- Admin browser E2E, complete pgTAP role matrices, sustained concurrent queue
+  testing, and user-outcome observability remain release gates.
+
+These gaps are intentionally explicit so a developer assigned only to the
+Super Admin system can work from a truthful production backlog rather than
+assuming that page coverage equals operational readiness.
 
 ## Safety & compliance
 
-* **COPPA / FTC compliance.** A DOB picker blocks under-13s outright and
-  places 13–17 users into the `restricted_minor` safety tier (no DM
-  initiation, no external links).
+* **Age safety.** The server requires a self-reported birth year before core
+  social writes, rejects declared ages below 13, and places declared ages
+  13–17 into the `restricted_minor` tier (no DM initiation or external links).
+  This is an implemented control, not a claim of legal compliance.
 * **No deceptive engagement.** Venttly never generates fake confessions or
   simulated messages to drive upgrades.
-* **Two-tier moderation cascade.** Tier-1 keyword scan runs in-process
-  (self-harm phrases, phone/email PII, hate, harassment, sexual
-  solicitation). Tier-2 is a Groq chat-completion JSON-mode call (skipped
-  silently when no key is configured — never fails closed on infrastructure).
-  Crisis helplines surface inline whenever self-harm signals fire — and
-  self-harm content is *never* hard-blocked.
-* **Reported chats.** Moderators can review messages in a reported chat;
-  other conversations stay private.
+* **Moderation at ingress.** Database triggers enforce phone/email privacy,
+  hate, harassment, sexual-solicitation, staff block rules, and age/account
+  state on direct writes as well as RPC writes. Crisis support surfaces when
+  self-harm signals fire, and self-harm content is *never* hard-blocked.
+* **Server-readable chats.** Row-level policies restrict member access and
+  reported chats can be reviewed. Database operators and narrowly scoped
+  service processes can access plaintext; Venttly does not claim E2EE.
+* **Explicit processors.** When media scanning is enabled, uploaded images are
+  sent to Sightengine for a safety verdict. Firebase receives device tokens,
+  generic notification copy, and bounded routing IDs—never authored previews.
+  Space summaries and production text moderation make no third-party AI call.
 
 ## Running
 
@@ -164,6 +231,20 @@ flutter run            # Live Supabase backend
 flutter analyze        # zero errors
 ```
 
+Run the staff console separately:
+
+```bash
+cd admin
+npm ci
+cp .env.local.example .env.local
+npm run typecheck
+npm run build
+npm run dev
+```
+
+See [`admin/README.md`](admin/README.md) before granting a staff role or
+configuring any server-only secret.
+
 ## Tech stack
 
 * **Flutter 3.5+ / Dart 3.5+**
@@ -172,5 +253,5 @@ flutter analyze        # zero errors
 * `supabase_flutter` for live data
 * `cryptography` for the Argon2id KDF + AES-GCM recovery-phrase blob
 * `flutter_secure_storage` for the on-device recovery phrase
-* `http` for the Groq moderation call
+* `http` for authenticated Edge Function calls
 * `google_fonts` (Plus Jakarta Sans) for warm, organic typography

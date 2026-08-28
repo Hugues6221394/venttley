@@ -67,13 +67,14 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       helpText: 'When were you born?',
       builder: (ctx, child) => Theme(
         data: Theme.of(context).copyWith(
-          colorScheme: Theme.of(context).colorScheme.copyWith(
-                primary: VentlyColors.berryMagenta,
-              ),
+          colorScheme: Theme.of(
+            context,
+          ).colorScheme.copyWith(primary: VentlyColors.berryMagenta),
         ),
         child: child!,
       ),
     );
+    if (!mounted) return;
     if (picked != null) setState(() => _birthDate = picked);
   }
 
@@ -103,7 +104,9 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       _error = null;
     });
     try {
-      final result = await ref.read(sessionProvider.notifier).register(
+      final result = await ref
+          .read(sessionProvider.notifier)
+          .register(
             birthDate: _birthDate!,
             username: username,
             password: _password.text,
@@ -112,18 +115,25 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       if (!mounted) return;
       context.go('/onboarding/key', extra: result.recoveryPhrase);
     } on AgeGateBlocked catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString());
     } on UsernameTakenException {
-      setState(() => _error = UserFriendlyErrors.message(
-            'already exists',
-            fallback: 'That username is taken. Try another one.',
-          ));
+      if (!mounted) return;
+      setState(
+        () => _error = UserFriendlyErrors.message(
+          'already exists',
+          fallback: 'That username is taken. Try another one.',
+        ),
+      );
       _shuffleName();
     } on EmailConfirmationStillOnException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString());
     } on FormatException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = UserFriendlyErrors.message(e));
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -158,15 +168,12 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
               child: Text(
                 'Your emotional sanctuary',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurface.withOpacity(0.6),
-                    ),
+                  color: scheme.onSurface.withOpacity(0.6),
+                ),
               ),
             ),
             const SizedBox(height: 24),
-            _DobCard(
-              birthDate: _birthDate,
-              onTap: _pickDate,
-            ),
+            _DobCard(birthDate: _birthDate, onTap: _pickDate),
             const SizedBox(height: 14),
             _UsernameCard(
               controller: _username,
@@ -211,11 +218,14 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.lock_outline,
-                      size: 14, color: scheme.onSurface.withOpacity(0.55)),
+                  Icon(
+                    Icons.lock_outline,
+                    size: 14,
+                    color: scheme.onSurface.withOpacity(0.55),
+                  ),
                   const SizedBox(width: 6),
                   Text(
-                    'Zero Personal Data Required',
+                    'No public real identity required',
                     style: TextStyle(
                       fontSize: 11,
                       color: scheme.onSurface.withOpacity(0.55),
@@ -245,15 +255,19 @@ class _DobCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Date of birth',
-                style: Theme.of(context).textTheme.titleSmall),
+            Text(
+              'Date of birth',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
             const SizedBox(height: 10),
             InkWell(
               onTap: onTap,
               borderRadius: BorderRadius.circular(20),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 14),
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: Theme.of(context).inputDecorationTheme.fillColor,
                   borderRadius: BorderRadius.circular(20),
@@ -316,8 +330,10 @@ class _UsernameCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Your anonymous identity',
-                style: Theme.of(context).textTheme.titleSmall),
+            Text(
+              'Your anonymous identity',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -383,8 +399,10 @@ class _PasswordCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Set a password',
-                style: Theme.of(context).textTheme.titleSmall),
+            Text(
+              'Set a password',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
             const SizedBox(height: 10),
             TextField(
               controller: password,
@@ -394,7 +412,8 @@ class _PasswordCard extends StatelessWidget {
                 prefixIcon: const Icon(Icons.lock_outline),
                 suffixIcon: IconButton(
                   icon: Icon(
-                      showPassword ? Icons.visibility : Icons.visibility_off),
+                    showPassword ? Icons.visibility : Icons.visibility_off,
+                  ),
                   onPressed: onToggleVisibility,
                 ),
               ),
@@ -431,12 +450,13 @@ class _ErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.warning_amber_outlined,
-              color: scheme.error, size: 18),
+          Icon(Icons.warning_amber_outlined, color: scheme.error, size: 18),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(message,
-                style: TextStyle(color: scheme.error, fontSize: 12)),
+            child: Text(
+              message,
+              style: TextStyle(color: scheme.error, fontSize: 12),
+            ),
           ),
         ],
       ),

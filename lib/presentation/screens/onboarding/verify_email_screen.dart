@@ -36,7 +36,9 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     super.initState();
     // Fire the first code once the frame is up (never mutate providers in
     // build/initState directly — defer).
-    WidgetsBinding.instance.addPostFrameCallback((_) => _send(initial: true));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _send(initial: true);
+    });
   }
 
   @override
@@ -47,7 +49,9 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   }
 
   String get _email =>
-      widget.email ?? ref.read(sessionProvider.notifier).currentEmail ?? 'your email';
+      widget.email ??
+      ref.read(sessionProvider.notifier).currentEmail ??
+      'your email';
 
   void _startCooldown() {
     _timer?.cancel();
@@ -87,8 +91,9 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
       _error = null;
     });
     try {
-      final ok =
-          await ref.read(sessionProvider.notifier).confirmEmailVerification(code);
+      final ok = await ref
+          .read(sessionProvider.notifier)
+          .confirmEmailVerification(code);
       if (!mounted) return;
       if (ok) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -96,7 +101,8 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
         );
         context.go('/feed');
       } else {
-        setState(() => _error = 'That code is wrong or expired. Try again or resend.');
+        setState(() =>
+            _error = 'That code is wrong or expired. Try again or resend.');
       }
     } catch (e) {
       if (!mounted) return;
@@ -106,8 +112,10 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     }
   }
 
-  String _clean(Object e) =>
-      e.toString().replaceFirst('Exception: ', '').replaceFirst('StateError: ', '');
+  String _clean(Object e) => e
+      .toString()
+      .replaceFirst('Exception: ', '')
+      .replaceFirst('StateError: ', '');
 
   @override
   Widget build(BuildContext context) {

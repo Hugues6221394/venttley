@@ -10,6 +10,8 @@ import 'profile_avatar.dart';
 void showBlockedAccountsSheet(BuildContext context) {
   showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
+    useSafeArea: true,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -109,8 +111,7 @@ class BlockedAccountsSheet extends ConsumerWidget {
                                           .unblockUser(b.userId);
                                       ref.invalidate(myBlocksProvider);
                                       if (ctx.mounted) {
-                                        ScaffoldMessenger.of(ctx)
-                                            .showSnackBar(
+                                        ScaffoldMessenger.of(ctx).showSnackBar(
                                           const SnackBar(
                                             content: Text('Unblocked.'),
                                           ),
@@ -118,8 +119,7 @@ class BlockedAccountsSheet extends ConsumerWidget {
                                       }
                                     } catch (e) {
                                       if (ctx.mounted) {
-                                        ScaffoldMessenger.of(ctx)
-                                            .showSnackBar(
+                                        ScaffoldMessenger.of(ctx).showSnackBar(
                                           SnackBar(
                                             content:
                                                 Text('Could not unblock: $e'),

@@ -9,6 +9,7 @@ import '../../../data/services/identity_service.dart';
 import '../../../data/services/supabase_backend.dart'
     show InvalidCredentialsException, MfaChallengeRequiredException;
 import '../../theme/colors.dart';
+import '../../widgets/modal_text_controller_scope.dart';
 
 /// Returning-user entry: sign in with username + password, or recover with
 /// the 12-word phrase.
@@ -64,8 +65,12 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
   void initState() {
     super.initState();
     () async {
-      final last = await ref.read(repositoryProvider).identity.lastUsername();
-      if (last != null && mounted) _username.text = last;
+      try {
+        final last = await ref.read(repositoryProvider).identity.lastUsername();
+        if (last != null && mounted) _username.text = last;
+      } catch (_) {
+        // Remembering the previous username is a convenience, not a blocker.
+      }
     }();
   }
 
@@ -96,7 +101,18 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
         // Re-fetch the profile now that we're at AAL2.
         try {
           await ref.read(sessionProvider.notifier).restore();
-        } catch (_) {}
+          if (ref.read(sessionProvider) == null) {
+            throw StateError('Session was not restored');
+          }
+        } catch (_) {
+          if (mounted) {
+            setState(
+              () => _error =
+                  'Two-factor verification succeeded, but your session could not be restored. Please try signing in again.',
+            );
+          }
+          return;
+        }
         if (!mounted) return;
         context.go('/feed');
       } else {
@@ -115,17 +131,21 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
   }
 
   Future<bool> _promptTotp(String factorId) async {
-    final ctl = TextEditingController();
     String? error;
+    var verifying = false;
     final ok = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setLocal) {
-        return AlertDialog(
-          title: const Text('Two-factor verification'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+      builder: (ctx) => ModalTextControllerScope(
+        initialValues: const [''],
+        builder: (ctx, controllers) {
+          final ctl = controllers.single;
+          return StatefulBuilder(builder: (ctx, setLocal) {
+            return AlertDialog(
+              title: const Text('Two-factor verification'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
               const Text(
                   'Enter the 6-digit code from your authenticator app.'),
               const SizedBox(height: 12),
@@ -139,33 +159,51 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
                   errorText: error,
                 ),
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                final code = ctl.text.trim();
-                if (code.length != 6) {
-                  setLocal(() => error = 'Enter all 6 digits.');
-                  return;
-                }
-                try {
-                  await ref
-                      .read(repositoryProvider)
-                      .verifyMfa(factorId: factorId, code: code);
-                  if (ctx.mounted) Navigator.pop(ctx, true);
-                } catch (_) {
-                  setLocal(() => error = 'Code didn\'t match.');
-                }
-              },
-              child: const Text('Verify'),
-            ),
-          ],
-        );
-      }),
+                ],
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Cancel')),
+                ElevatedButton(
+                  onPressed: verifying
+                      ? null
+                      : () async {
+                      final code = ctl.text.trim();
+                      if (code.length != 6) {
+                        setLocal(() => error = 'Enter all 6 digits.');
+                        return;
+                      }
+                      setLocal(() {
+                        verifying = true;
+                        error = null;
+                      });
+                      try {
+                        await ref
+                            .read(repositoryProvider)
+                            .verifyMfa(factorId: factorId, code: code);
+                        if (ctx.mounted) Navigator.pop(ctx, true);
+                      } catch (_) {
+                        if (!ctx.mounted) return;
+                        setLocal(() {
+                          verifying = false;
+                          error = 'Code didn\'t match.';
+                        });
+                      }
+                        },
+                  child: verifying
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Verify'),
+                ),
+              ],
+            );
+          });
+        },
+      ),
     );
     return ok == true;
   }

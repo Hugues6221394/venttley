@@ -8,8 +8,9 @@
 --
 -- Exposed as a SECURITY DEFINER function gated by is_staff() — this is
 -- suicide-risk data, so it must never be readable by a normal user, even if
--- they call the function directly. DM bodies are E2E-stored (encrypted_payload)
--- so they're shown as a placeholder, never decrypted server-side.
+-- they call the function directly. The historical encrypted_payload column
+-- stores server-readable chat text; access remains limited to authorized
+-- safety staff and previews must never leave this protected surface.
 --
 -- severity_rank drives ordering (high=3, elevated=2); ties break on recency.
 
@@ -94,7 +95,7 @@ BEGIN
                    left(p.content, 200),
                    left(tm.content, 200),
                    CASE WHEN r.target_chat_message_id IS NOT NULL
-                        THEN '(private DM — content encrypted)' END,
+                        THEN '(private DM — server-readable; access restricted)' END,
                    CASE WHEN r.target_comment_id IS NOT NULL THEN '(reported comment)' END,
                    CASE WHEN r.target_room_id    IS NOT NULL THEN '(reported conversation)' END,
                    '(reported content)'

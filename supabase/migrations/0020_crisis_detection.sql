@@ -4,8 +4,8 @@
 -- self-harm or suicidal ideation. Two pieces:
 --
 --   1. posts.crisis_level — null when the classifier saw nothing concerning,
---      'elevated' when Tier-2 (Groq) flagged self-harm, 'high' when a Tier-1
---      keyword match fired (the more confident signal). Readers see a
+--      'elevated' or 'high' when a safety rule identified self-harm risk.
+--      Readers see a
 --      helpline banner at the top of the post detail view.
 --
 --   2. crisis_resources — region-tagged helplines (Rwanda first, global

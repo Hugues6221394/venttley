@@ -74,9 +74,11 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
   }
 
   void _startReply(WhisperComment target) {
-    setState(() =>
-        // Replies attach to the top-level thread (single-level nesting).
-        _replyingTo = target);
+    setState(
+      () =>
+          // Replies attach to the top-level thread (single-level nesting).
+          _replyingTo = target,
+    );
     _focusNode.requestFocus();
   }
 
@@ -104,14 +106,17 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
     try {
       final persona = ref.read(activePersonaProvider);
       final target = _replyingTo;
-      await ref.read(repositoryProvider).addWhisperComment(
+      await ref
+          .read(repositoryProvider)
+          .addWhisperComment(
             widget.whisper.whisperId,
             text,
             personaId: persona?.personaId,
             // Single-level threading: replying to a reply attaches to its
             // top-level parent, IG-style.
-            parentId:
-                target == null ? null : (target.parentId ?? target.commentId),
+            parentId: target == null
+                ? null
+                : (target.parentId ?? target.commentId),
             idempotencyKey: operationId,
           );
       await _draftSaver?.clear();
@@ -125,31 +130,30 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
       if (outbox != null) {
         final persona = ref.read(activePersonaProvider);
         final target = _replyingTo;
-        await outbox.enqueue(
-          OutboxKind.whisperComment,
-          {
-            'whisperId': widget.whisper.whisperId,
-            'content': text,
-            'personaId': persona?.personaId,
-            'parentId':
-                target == null ? null : (target.parentId ?? target.commentId),
-          },
-          operationId: operationId,
-        );
+        await outbox.enqueue(OutboxKind.whisperComment, {
+          'whisperId': widget.whisper.whisperId,
+          'content': text,
+          'personaId': persona?.personaId,
+          'parentId': target == null
+              ? null
+              : (target.parentId ?? target.commentId),
+        }, operationId: operationId);
         await _draftSaver?.clear();
         _controller.clear();
         if (mounted) {
           setState(() => _replyingTo = null);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text(
-                    "You're offline — comment queued, it will post automatically.")),
+              content: Text(
+                "You're offline — comment queued, it will post automatically.",
+              ),
+            ),
           );
         }
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not post comment: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not post comment: $e')));
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -185,9 +189,9 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
       ref.invalidate(whispersFeedProvider);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not delete: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not delete: $e')));
       }
     }
   }
@@ -196,13 +200,16 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
     try {
       await ref.read(repositoryProvider).toggleWhisperCommentLike(c.commentId);
       ref.invalidate(whisperCommentsProvider(widget.whisper.whisperId));
-    } catch (_) {/* transient — next realtime tick corrects */}
+    } catch (_) {
+      /* transient — next realtime tick corrects */
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final commentsAsync =
-        ref.watch(whisperCommentsProvider(widget.whisper.whisperId));
+    final commentsAsync = ref.watch(
+      whisperCommentsProvider(widget.whisper.whisperId),
+    );
     final bottom = MediaQuery.paddingOf(context).bottom;
     final maxH = MediaQuery.sizeOf(context).height * 0.78;
 
@@ -282,8 +289,9 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
                       );
                     }
                     // Thread: top-level in order, replies under parents.
-                    final topLevel =
-                        comments.where((c) => c.parentId == null).toList();
+                    final topLevel = comments
+                        .where((c) => c.parentId == null)
+                        .toList();
                     final replies = <String, List<WhisperComment>>{};
                     for (final c in comments) {
                       if (c.parentId != null) {
@@ -306,18 +314,29 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
                                 comment: c,
                                 onReply: () => _startReply(c),
                                 onDelete: c.canDelete ? () => _delete(c) : null,
-                                onLike: () => _toggleLike(c),
+                                onLike:
+                                    c.authorId ==
+                                        ref.read(sessionProvider)?.userId
+                                    ? null
+                                    : () => _toggleLike(c),
                               ),
                               for (final r in kids)
                                 Padding(
-                                  padding:
-                                      const EdgeInsets.only(left: 42, top: 8),
+                                  padding: const EdgeInsets.only(
+                                    left: 42,
+                                    top: 8,
+                                  ),
                                   child: _CommentTile(
                                     comment: r,
                                     onReply: () => _startReply(r),
-                                    onDelete:
-                                        r.canDelete ? () => _delete(r) : null,
-                                    onLike: () => _toggleLike(r),
+                                    onDelete: r.canDelete
+                                        ? () => _delete(r)
+                                        : null,
+                                    onLike:
+                                        r.authorId ==
+                                            ref.read(sessionProvider)?.userId
+                                        ? null
+                                        : () => _toggleLike(r),
                                     compact: true,
                                   ),
                                 ),
@@ -341,10 +360,13 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
                         Container(
                           margin: const EdgeInsets.only(bottom: 6),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
-                            color: VentlyColors.roseTint
-                                .withOpacity(context.isDark ? 0.14 : 1),
+                            color: VentlyColors.roseTint.withOpacity(
+                              context.isDark ? 0.14 : 1,
+                            ),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
@@ -363,8 +385,11 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
                               ),
                               InkWell(
                                 onTap: () => setState(() => _replyingTo = null),
-                                child: const Icon(Icons.close_rounded,
-                                    size: 16, color: VentlyColors.berryMagenta),
+                                child: const Icon(
+                                  Icons.close_rounded,
+                                  size: 16,
+                                  color: VentlyColors.berryMagenta,
+                                ),
                               ),
                             ],
                           ),
@@ -448,7 +473,7 @@ class _CommentTile extends StatelessWidget {
 
   final WhisperComment comment;
   final VoidCallback onReply;
-  final VoidCallback onLike;
+  final VoidCallback? onLike;
   final VoidCallback? onDelete;
   final bool compact;
 
@@ -470,13 +495,14 @@ class _CommentTile extends StatelessWidget {
           UserProfileLink(
             userId: comment.authorId!,
             pseudonym: comment.authorPseudonym.replaceFirst('@', ''),
+            displayName: comment.authorDisplayName,
             avatarSeed: comment.authorAvatarSeed,
             size: avatarSize,
           )
         else
           ProfileAvatar(
             avatarSeed: comment.authorAvatarSeed,
-            label: comment.authorPseudonym,
+            label: comment.authorDisplayName,
             size: avatarSize,
           ),
         const SizedBox(width: 10),
@@ -498,7 +524,7 @@ class _CommentTile extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          comment.authorPseudonym,
+                          comment.authorDisplayName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -536,7 +562,9 @@ class _CommentTile extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 2),
+                            horizontal: 4,
+                            vertical: 2,
+                          ),
                           child: Row(
                             children: [
                               Icon(
@@ -571,7 +599,9 @@ class _CommentTile extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 2),
+                            horizontal: 4,
+                            vertical: 2,
+                          ),
                           child: Text(
                             'Reply',
                             style: TextStyle(

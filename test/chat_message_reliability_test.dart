@@ -17,8 +17,10 @@ void main() {
       sentByMe: true,
     );
 
-    expect(message.copyWith(reactionCounts: const {'hug': 1}).deliveredAt,
-        deliveredAt);
+    expect(
+      message.copyWith(reactionCounts: const {'hug': 1}).deliveredAt,
+      deliveredAt,
+    );
   });
 
   test('development backend supports author edit and both delete modes', () {
@@ -72,14 +74,16 @@ void main() {
       contains('an initially-safe message cannot be replaced with abuse'),
     );
     expect(
-        source, contains('onLongPress: () => _openActionSheet(context, ref)'));
+      source,
+      contains('onLongPress: () => _openActionSheet(context, ref)'),
+    );
     expect(source, contains("message.attachedMediaType == 'image'"));
     expect(source, contains('snapshot != null'));
   });
 
   test('inbox and chat surfaces preserve peer profile photos', () {
     final migration = File(
-      'supabase/migrations/20260721195342_inbox_peer_profile_photos.sql',
+      'supabase/migrations/20260721195535_inbox_peer_profile_photos.sql',
     ).readAsStringSync();
     final backend = File(
       'lib/data/services/supabase_backend.dart',

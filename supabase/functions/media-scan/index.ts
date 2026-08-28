@@ -13,18 +13,20 @@
 // mark the media 'sensitive' (veiled), never 'clean' — nudity must not slip
 // through unscanned.
 //
-// CSAM: Sightengine also offers a CSAM model (and PhotoDNA / Thorn Safer exist
-// for hash-matching + NCMEC reporting). That requires separate vetted access;
-// when enabled, a CSAM hit must be BLOCKED and reported — wire it in below at
-// the marked TODO. Do not silently downgrade a CSAM signal.
+// CSAM: Sightengine also offers a separately enabled CSAM model. When enabled,
+// a hit is quarantined through record_csam_incident for mandated human review;
+// it is never silently downgraded to an ordinary sensitive-media verdict.
 //
-// Auth: JWT verification ON. Any signed-in user may trigger a (re)scan; the
-// verdict is computed here, never supplied by the caller, so it can't be spoofed.
+// Auth: JWT verification ON. The handler also validates the JWT, re-reads the
+// row, requires caller ownership, derives the canonical storage URL itself,
+// and accepts only a pending item. Caller-supplied URLs are never scanned.
 
-import { adminClient } from '../_shared/supabase.ts';
-import { corsHeaders, handleOptions } from '../_shared/cors.ts';
+import { adminClient } from "../_shared/supabase.ts";
+import { corsHeaders, handleOptions } from "../_shared/cors.ts";
+import { rolloutEnabled } from "../_shared/internal_auth.ts";
+import { isOwnedStoragePath, ownedPathFromPublicUrl } from "./ownership.ts";
 
-type Verdict = 'clean' | 'sensitive' | 'blocked';
+type Verdict = "clean" | "sensitive" | "blocked";
 
 function classify(nudity: Record<string, number>, gore: number): {
   verdict: Verdict;
@@ -37,11 +39,11 @@ function classify(nudity: Record<string, number>, gore: number): {
   );
   const suggestive = nudity.suggestive ?? 0;
 
-  let verdict: Verdict = 'clean';
+  let verdict: Verdict = "clean";
   if (sexual >= 0.6 || gore >= 0.7) {
-    verdict = 'blocked';
+    verdict = "blocked";
   } else if (sexual >= 0.3 || suggestive >= 0.5 || gore >= 0.4) {
-    verdict = 'sensitive';
+    verdict = "sensitive";
   }
   return { verdict, labels: { sexual, suggestive, gore } };
 }
@@ -55,105 +57,282 @@ function csamProb(body: Record<string, unknown>): number {
   const candidates = [
     (c?.match as Record<string, number> | undefined)?.prob,
     (c as Record<string, number> | undefined)?.prob,
-    (body['minor'] as Record<string, number> | undefined)?.prob,
+    (body["minor"] as Record<string, number> | undefined)?.prob,
   ];
-  return Math.max(0, ...candidates.map((n) => (typeof n === 'number' ? n : 0)));
+  return Math.max(0, ...candidates.map((n) => (typeof n === "number" ? n : 0)));
 }
 
 async function scan(
   imageUrl: string,
-): Promise<{ verdict: Verdict; labels: Record<string, unknown>; csam: boolean }> {
-  const user = Deno.env.get('SIGHTENGINE_USER');
-  const secret = Deno.env.get('SIGHTENGINE_SECRET');
+): Promise<
+  { verdict: Verdict; labels: Record<string, unknown>; csam: boolean }
+> {
+  const user = Deno.env.get("SIGHTENGINE_USER");
+  const secret = Deno.env.get("SIGHTENGINE_SECRET");
   // Fail safe: no scanner configured → veil, never show unscanned nudity.
   if (!user || !secret) {
-    return { verdict: 'sensitive', labels: { reason: 'scanner_not_configured' }, csam: false };
+    return {
+      verdict: "sensitive",
+      labels: { reason: "scanner_not_configured" },
+      csam: false,
+    };
   }
-  const models = Deno.env.get('SIGHTENGINE_MODELS') ?? 'nudity-2.1,gore';
-  const api = new URL('https://api.sightengine.com/1.0/check.json');
-  api.searchParams.set('url', imageUrl);
-  api.searchParams.set('models', models);
-  api.searchParams.set('api_user', user);
-  api.searchParams.set('api_secret', secret);
+  const models = Deno.env.get("SIGHTENGINE_MODELS") ?? "nudity-2.1,gore";
+  const api = new URL("https://api.sightengine.com/1.0/check.json");
+  api.searchParams.set("url", imageUrl);
+  api.searchParams.set("models", models);
+  api.searchParams.set("api_user", user);
+  api.searchParams.set("api_secret", secret);
 
   try {
     const res = await fetch(api, { signal: AbortSignal.timeout(6000) });
     const body = await res.json();
-    if (body.status !== 'success') {
-      return { verdict: 'sensitive', labels: { reason: 'scan_error', body }, csam: false };
+    if (body.status !== "success") {
+      return {
+        verdict: "sensitive",
+        labels: { reason: "scan_error" },
+        csam: false,
+      };
     }
     // CSAM check first — a hit overrides everything and routes to the incident
     // pipeline (quarantine + mandated report), never a normal delete.
-    if (Deno.env.get('SIGHTENGINE_CSAM') === 'on' && csamProb(body) >= 0.5) {
-      return { verdict: 'blocked', labels: { csam: csamProb(body) }, csam: true };
+    if (Deno.env.get("SIGHTENGINE_CSAM") === "on" && csamProb(body) >= 0.5) {
+      return {
+        verdict: "blocked",
+        labels: { csam: csamProb(body) },
+        csam: true,
+      };
     }
     const gore = body.gore?.prob ?? body.gore?.classes?.gory ?? 0;
     const { verdict, labels } = classify(body.nudity ?? {}, gore);
     return { verdict, labels, csam: false };
   } catch (_) {
-    return { verdict: 'sensitive', labels: { reason: 'scan_exception' }, csam: false };
+    return {
+      verdict: "sensitive",
+      labels: { reason: "scan_exception" },
+      csam: false,
+    };
   }
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return handleOptions()!;
-  const headers = { ...corsHeaders, 'Content-Type': 'application/json' };
+  if (req.method === "OPTIONS") return handleOptions()!;
+  const headers = { ...corsHeaders, "Content-Type": "application/json" };
 
-  if (!req.headers.get('Authorization')) {
-    return new Response(JSON.stringify({ ok: false, error: 'no auth' }), {
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ ok: false, error: "method_not_allowed" }),
+      {
+        status: 405,
+        headers,
+      },
+    );
+  }
+  if (!rolloutEnabled("MEDIA_SCAN_ENABLED")) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "media_scan_disabled" }),
+      {
+        status: 503,
+        headers,
+      },
+    );
+  }
+
+  const authorization = req.headers.get("Authorization");
+  const token = authorization?.replace(/^Bearer\s+/i, "").trim();
+  if (!token) {
+    return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), {
       status: 401,
       headers,
     });
   }
 
-  let payload: { kind?: string; id?: string; imageUrl?: string };
+  const sb = adminClient();
+  const { data: authData, error: authError } = await sb.auth.getUser(token);
+  const callerId = authData.user?.id;
+  if (authError || !callerId) {
+    return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), {
+      status: 401,
+      headers,
+    });
+  }
+
+  let payload: { kind?: string; id?: string };
   try {
     payload = await req.json();
   } catch {
-    return new Response(JSON.stringify({ ok: false, error: 'bad body' }), {
+    return new Response(JSON.stringify({ ok: false, error: "bad body" }), {
       status: 400,
       headers,
     });
   }
-  const { kind, id, imageUrl } = payload;
-  if ((kind !== 'post' && kind !== 'whisper') || !id || !imageUrl) {
-    return new Response(JSON.stringify({ ok: false, error: 'missing fields' }), {
-      status: 400,
-      headers,
-    });
+  const { kind, id } = payload;
+  if ((kind !== "post" && kind !== "whisper") || !id) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "missing fields" }),
+      {
+        status: 400,
+        headers,
+      },
+    );
   }
 
+  const table = kind === "post" ? "posts" : "whispers";
+  const idCol = kind === "post" ? "post_id" : "whisper_id";
+  const columns = kind === "post"
+    ? "post_id, author_id, image_path, media_status"
+    : "whisper_id, author_id, background_image_url, media_status";
+  const { data: stored, error: readError } = await sb
+    .from(table)
+    .select(columns)
+    .eq(idCol, id)
+    .maybeSingle();
+  if (readError) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "media_lookup_failed" }),
+      {
+        status: 500,
+        headers,
+      },
+    );
+  }
+  if (!stored) {
+    return new Response(JSON.stringify({ ok: false, error: "not_found" }), {
+      status: 404,
+      headers,
+    });
+  }
+  const storedRow = stored as Record<string, unknown>;
+  if (storedRow.author_id !== callerId) {
+    return new Response(JSON.stringify({ ok: false, error: "forbidden" }), {
+      status: 403,
+      headers,
+    });
+  }
+  if (storedRow.media_status !== "pending") {
+    return new Response(
+      JSON.stringify({ ok: false, error: "media_not_pending" }),
+      {
+        status: 409,
+        headers,
+      },
+    );
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const bucket = kind === "post" ? "post-media" : "whispers-media";
+  const storedPath = kind === "post"
+    ? (typeof storedRow.image_path === "string" &&
+        isOwnedStoragePath(storedRow.image_path, callerId)
+      ? storedRow.image_path
+      : null)
+    : (typeof storedRow.background_image_url === "string"
+      ? ownedPathFromPublicUrl(
+        storedRow.background_image_url,
+        supabaseUrl,
+        bucket,
+        callerId,
+      )
+      : null);
+  if (!storedPath) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "invalid_media_reference" }),
+      {
+        status: 409,
+        headers,
+      },
+    );
+  }
+  const imageUrl =
+    sb.storage.from(bucket).getPublicUrl(storedPath).data.publicUrl;
+  const leaseId = crypto.randomUUID();
+  const claim = await sb.rpc("claim_media_scan", {
+    p_kind: kind,
+    p_content_id: id,
+    p_user_id: callerId,
+    p_lease_id: leaseId,
+  });
+  if (claim.error) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "media_claim_failed" }),
+      { status: 500, headers },
+    );
+  }
+  if (claim.data === "rate_limited") {
+    return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), {
+      status: 429,
+      headers,
+    });
+  }
+  if (claim.data !== "claimed") {
+    return new Response(
+      JSON.stringify({ ok: false, error: "scan_already_claimed" }),
+      { status: 409, headers },
+    );
+  }
   const { verdict, labels, csam } = await scan(imageUrl);
-
-  const sb = adminClient();
-  const table = kind === 'post' ? 'posts' : 'whispers';
-  const idCol = kind === 'post' ? 'post_id' : 'whisper_id';
 
   // CSAM hit → route to the incident pipeline: quarantine (preserve, don't
   // delete) + open a super-admin incident for mandated review/reporting.
   if (csam) {
-    const { data: row } = await sb.from(table).select('author_id').eq(idCol, id).maybeSingle();
-    const authorId = (row as Record<string, string> | null)?.author_id ?? null;
-    await sb.rpc('record_csam_incident', {
+    const incident = await sb.rpc("record_claimed_csam_incident", {
       p_kind: kind,
-      p_id: id,
-      p_media_url: imageUrl,
-      p_author: authorId,
+      p_content_id: id,
+      p_user_id: callerId,
+      p_lease_id: leaseId,
       p_labels: labels,
     });
-    return new Response(JSON.stringify({ ok: true, verdict: 'blocked', csam: true }), { headers });
+    if (incident.error) {
+      console.error(
+        "CSAM quarantine failed",
+        incident.error.code ?? "database_error",
+      );
+      return new Response(
+        JSON.stringify({ ok: false, error: "quarantine_failed" }),
+        {
+          status: 500,
+          headers,
+        },
+      );
+    }
+    if (!incident.data) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "media_state_changed" }),
+        { status: 409, headers },
+      );
+    }
+    return new Response(
+      JSON.stringify({ ok: true, verdict: "blocked", csam: true }),
+      { headers },
+    );
   }
 
-  const { error } = await sb
-    .from(table)
-    .update({ media_status: verdict, media_labels: labels })
-    .eq(idCol, id);
+  const update = await sb.rpc("complete_media_scan_verdict", {
+    p_kind: kind,
+    p_content_id: id,
+    p_user_id: callerId,
+    p_lease_id: leaseId,
+    p_verdict: verdict,
+    p_labels: labels,
+  });
 
-  if (error) {
-    return new Response(JSON.stringify({ ok: false, error: error.message }), {
-      status: 500,
-      headers,
-    });
+  if (update.error) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "media_update_failed" }),
+      {
+        status: 500,
+        headers,
+      },
+    );
+  }
+  if (update.data !== true) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "media_state_changed" }),
+      {
+        status: 409,
+        headers,
+      },
+    );
   }
   return new Response(JSON.stringify({ ok: true, verdict }), { headers });
 });

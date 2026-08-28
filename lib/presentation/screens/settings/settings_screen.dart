@@ -13,8 +13,10 @@ import '../../../core/providers.dart';
 import '../../../data/services/moderation_service.dart';
 import '../../theme/colors.dart';
 import '../../widgets/blocked_accounts_sheet.dart';
+import '../../widgets/profile_avatar.dart';
 import '../../widgets/recovery_phrase_dialog.dart';
 import '../../widgets/vently_notification_bell.dart';
+import '../home/adaptive_shell_tabs.dart';
 
 /// Account, appearance, privacy, and safety settings.
 class SettingsScreen extends ConsumerWidget {
@@ -26,6 +28,8 @@ class SettingsScreen extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final blocks = ref.watch(myBlocksProvider).valueOrNull ?? const [];
     final notificationsOn = ref.watch(pushNotificationsEnabledProvider);
+    final storyReplies =
+        ref.watch(storyRepliesEnabledProvider).valueOrNull ?? true;
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -36,41 +40,59 @@ class SettingsScreen extends ConsumerWidget {
           if (me != null) ...[
             const _SectionHeader('Signed in as'),
             ListTile(
-              leading: CircleAvatar(
-                backgroundColor: scheme.primary.withOpacity(0.14),
-                child: Text(
-                  me.anonymousPseudonym
-                      .replaceAll('@', '')
-                      .characters
-                      .first
-                      .toUpperCase(),
-                  style: TextStyle(
-                    color: scheme.primary,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+              leading: ProfileAvatar(
+                avatarSeed: me.avatarSeed,
+                label: me.displayName,
+                profilePhotoUrl: me.profilePhotoUrl,
+                size: 42,
               ),
               title: Text(
-                me.anonymousPseudonym,
+                me.displayName,
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
-              subtitle: ref.watch(keeperModeProvider).when(
+              subtitle: ref
+                  .watch(keeperModeProvider)
+                  .when(
                     data: (mode) => Text(
                       mode.label,
-                      style:
-                          TextStyle(color: scheme.onSurface.withOpacity(0.6)),
+                      style: TextStyle(
+                        color: scheme.onSurface.withOpacity(0.6),
+                      ),
                     ),
                     loading: () => Text(
-                      me.userRole == 'plug' ? 'Verified Plug' : 'Member',
-                      style:
-                          TextStyle(color: scheme.onSurface.withOpacity(0.6)),
+                      me.userRole == 'super_admin'
+                          ? 'Super Admin'
+                          : me.isPlug
+                          ? 'Verified Plug'
+                          : 'Member',
+                      style: TextStyle(
+                        color: scheme.onSurface.withOpacity(0.6),
+                      ),
                     ),
                     error: (_, __) => Text(
-                      me.userRole == 'plug' ? 'Verified Plug' : 'Member',
-                      style:
-                          TextStyle(color: scheme.onSurface.withOpacity(0.6)),
+                      me.userRole == 'super_admin'
+                          ? 'Super Admin'
+                          : me.isPlug
+                          ? 'Verified Plug'
+                          : 'Member',
+                      style: TextStyle(
+                        color: scheme.onSurface.withOpacity(0.6),
+                      ),
                     ),
                   ),
+              // Your own face and name at the top of Settings reads as the way
+              // to your profile, so make it one.
+              //
+              // Which route depends on what the profile tab actually holds. For
+              // a keeper it holds the Studio analytics, so the profile has to
+              // be pushed as a page. For everyone else the tab *is* the
+              // profile, and pushing a copy sent them profile → Settings →
+              // profile; go() switches to the tab they already have, which is
+              // exactly what tapping the footer's profile icon would do.
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => showsStudioSurfaces(ref)
+                  ? context.push('/profile/me')
+                  : context.go('/profile'),
             ),
           ],
           const _SectionHeader('Appearance'),
@@ -95,12 +117,17 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const _SectionHeader('Data & network'),
           SwitchListTile(
-            secondary: const Icon(Icons.data_saver_on_rounded,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Data Saver',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            secondary: const Icon(
+              Icons.data_saver_on_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Data Saver',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text(
-                'Lighter images, no whisper autoplay, less prefetch'),
+              'Lighter images, no whisper autoplay, less prefetch',
+            ),
             activeColor: VentlyColors.berryMagenta,
             value: ref.watch(dataSaverProvider),
             onChanged: (v) =>
@@ -108,39 +135,56 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const _SectionHeader('Account'),
           ListTile(
-            leading: const Icon(Icons.face_retouching_natural_rounded,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Avatar builder',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            leading: const Icon(
+              Icons.face_retouching_natural_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Avatar builder',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text('Colors, shape, and glow'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => context.push('/profile/avatar'),
           ),
           ListTile(
-            leading: const Icon(Icons.shield_outlined,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Password & security',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle:
-                const Text('Password, recovery email, 2FA, active sessions'),
+            leading: const Icon(
+              Icons.shield_outlined,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Password & security',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            subtitle: const Text(
+              'Password, recovery email, 2FA, active sessions',
+            ),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => context.push('/profile/password-security'),
           ),
           ListTile(
-            leading: const Icon(Icons.key_outlined,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Recovery phrase',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            leading: const Icon(
+              Icons.key_outlined,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Recovery phrase',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text('View your 12-word backup key'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => showRecoveryPhraseDialog(context, ref),
           ),
-          if (me?.userRole == 'plug')
+          if (me?.isPlug == true)
             ListTile(
-              leading: const Icon(Icons.dashboard_customize_rounded,
-                  color: VentlyColors.berryMagenta),
-              title: const Text('Plug dashboard',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
+              leading: const Icon(
+                Icons.dashboard_customize_rounded,
+                color: VentlyColors.berryMagenta,
+              ),
+              title: const Text(
+                'Plug dashboard',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
               subtitle: const Text('Manage tribes, prompts, and reports'),
               trailing: const Icon(Icons.chevron_right_rounded),
               // Use go(), not push(): the keeper studio lives in the bottom-nav
@@ -153,11 +197,46 @@ class SettingsScreen extends ConsumerWidget {
               },
             ),
           const _SectionHeader('Privacy'),
+          SwitchListTile(
+            secondary: const Icon(
+              Icons.chat_bubble_outline_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Story replies',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            subtitle: Text(
+              storyReplies
+                  ? 'Friends can reply privately to your stories'
+                  : 'No one can reply to your stories',
+            ),
+            activeColor: VentlyColors.berryMagenta,
+            value: storyReplies,
+            onChanged: (enabled) async {
+              try {
+                await ref
+                    .read(storyRepliesEnabledProvider.notifier)
+                    .setEnabled(enabled);
+              } catch (_) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Could not update story replies.'),
+                  ),
+                );
+              }
+            },
+          ),
           ListTile(
-            leading: const Icon(Icons.block_rounded,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Blocked accounts',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            leading: const Icon(
+              Icons.block_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Blocked accounts',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: Text(
               blocks.isEmpty ? 'No one blocked' : '${blocks.length} blocked',
             ),
@@ -168,10 +247,12 @@ class SettingsScreen extends ConsumerWidget {
             leading: const VentlyNotificationBell(
               color: VentlyColors.berryMagenta,
             ),
-            title: const Text('Notification alerts',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            title: const Text(
+              'Notification alerts',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text(
-              'Messages, friend requests, and reactions while Venttly is open',
+              'Allow message, friend-request, and activity alerts',
             ),
             trailing: Switch.adaptive(
               value: notificationsOn,
@@ -181,37 +262,51 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.inbox_outlined,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Activity inbox',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            leading: const Icon(
+              Icons.inbox_outlined,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Activity inbox',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text('Likes, replies, and friend activity'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => context.push('/notifications'),
           ),
           ListTile(
-            leading: const Icon(Icons.download_rounded,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Download my data',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            leading: const Icon(
+              Icons.download_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Download my data',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text('Export everything you\'ve shared (JSON)'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => _exportMyData(context, ref),
           ),
           const _SectionHeader('Safety'),
           ListTile(
-            leading: const Icon(Icons.favorite_rounded,
-                color: VentlyColors.berryMagenta),
-            title: const Text('Crisis resources',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: const Text('Free, confidential support lines'),
+            leading: const Icon(
+              Icons.favorite_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Crisis resources',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            subtitle: const Text('Verified support contacts for Rwanda'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => _showCrisisSheet(context),
           ),
           const _SectionHeader('Session'),
           ListTile(
-            leading: Icon(Icons.logout_rounded,
-                color: scheme.error.withOpacity(0.85)),
+            leading: Icon(
+              Icons.logout_rounded,
+              color: scheme.error.withOpacity(0.85),
+            ),
             title: Text(
               'Sign out',
               style: TextStyle(
@@ -220,7 +315,8 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
             onTap: () async {
-              final confirmed = await showDialog<bool>(
+              final confirmed =
+                  await showDialog<bool>(
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('Sign out?'),
@@ -241,17 +337,25 @@ class SettingsScreen extends ConsumerWidget {
                   ) ??
                   false;
               if (!confirmed || !context.mounted) return;
-              await ref.read(sessionProvider.notifier).logout();
+              try {
+                await ref.read(sessionProvider.notifier).logout();
+              } catch (_) {
+                // SessionController still clears local state in finally.
+              }
               if (context.mounted) context.go('/onboarding');
             },
           ),
           if (me != null) ...[
             const _SectionHeader('Danger zone'),
             ListTile(
-              leading: const Icon(Icons.pause_circle_outline_rounded,
-                  color: VentlyColors.berryMagenta),
-              title: const Text('Deactivate account',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
+              leading: const Icon(
+                Icons.pause_circle_outline_rounded,
+                color: VentlyColors.berryMagenta,
+              ),
+              title: const Text(
+                'Deactivate account',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
               subtitle: const Text(
                 'Hide your profile, vents, and whispers. Reappears when you '
                 'log back in.',
@@ -260,8 +364,10 @@ class SettingsScreen extends ConsumerWidget {
               onTap: () => _confirmDeactivate(context, ref),
             ),
             ListTile(
-              leading: Icon(Icons.delete_forever_rounded,
-                  color: scheme.error.withOpacity(0.9)),
+              leading: Icon(
+                Icons.delete_forever_rounded,
+                color: scheme.error.withOpacity(0.9),
+              ),
               title: Text(
                 'Delete account',
                 style: TextStyle(
@@ -303,7 +409,8 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmDeactivate(BuildContext context, WidgetRef ref) async {
-    final ok = await showDialog<bool>(
+    final ok =
+        await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Deactivate account?'),
@@ -331,16 +438,17 @@ class SettingsScreen extends ConsumerWidget {
       if (context.mounted) context.go('/onboarding');
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not deactivate: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not deactivate: $e')));
       }
     }
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final scheme = Theme.of(context).colorScheme;
-    final ok = await showDialog<bool>(
+    final ok =
+        await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Delete account?'),
@@ -399,10 +507,9 @@ class SettingsScreen extends ConsumerWidget {
           .first;
       final file = File('${dir.path}/venttly-data-$stamp.json');
       await file.writeAsString(json);
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/json')],
-        subject: 'My Venttly data',
-      );
+      await Share.shareXFiles([
+        XFile(file.path, mimeType: 'application/json'),
+      ], subject: 'My Venttly data');
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text('Could not export your data: $e')),
@@ -413,6 +520,8 @@ class SettingsScreen extends ConsumerWidget {
   void _showCrisisSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -433,7 +542,8 @@ class SettingsScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'If you are in crisis, reach out — these lines are free and confidential.',
+                'If you are in immediate danger, contact emergency services. '
+                'These Rwanda contacts can help you find appropriate support.',
                 style: TextStyle(
                   color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.7),
                   height: 1.4,
@@ -465,10 +575,9 @@ class SettingsScreen extends ConsumerWidget {
                         Text(
                           r.reach,
                           style: TextStyle(
-                            color: Theme.of(ctx)
-                                .colorScheme
-                                .onSurface
-                                .withOpacity(0.7),
+                            color: Theme.of(
+                              ctx,
+                            ).colorScheme.onSurface.withOpacity(0.7),
                             fontSize: 13,
                           ),
                         ),
@@ -508,8 +617,9 @@ class _AppearanceOption extends StatelessWidget {
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color:
-            selected ? scheme.primary.withOpacity(0.14) : context.glass(0.55),
+        color: selected
+            ? scheme.primary.withOpacity(0.14)
+            : context.glass(0.55),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: selected ? scheme.primary : context.glassBorder,

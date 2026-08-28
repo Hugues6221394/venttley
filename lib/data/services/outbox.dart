@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../repositories/vently_repository.dart';
+import '../../domain/entities/entities.dart';
 import 'pending_media_store.dart';
 import 'sensitive_store.dart';
 
@@ -28,12 +29,12 @@ class StagedOutboxMedia {
   final int? durationSeconds;
 
   Map<String, dynamic> toPayload() => {
-        'localMediaPath': path,
-        'localMediaExtension': extension,
-        'localMediaContentType': contentType,
-        'localMediaType': mediaType,
-        'localMediaDurationSeconds': durationSeconds,
-      };
+    'localMediaPath': path,
+    'localMediaExtension': extension,
+    'localMediaContentType': contentType,
+    'localMediaType': mediaType,
+    'localMediaDurationSeconds': durationSeconds,
+  };
 }
 
 class OutboxOp {
@@ -62,16 +63,16 @@ class OutboxOp {
   bool get isFailed => failedAt != null;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'kind': kind.name,
-        'payload': payload,
-        'createdAt': createdAt.toIso8601String(),
-        'attempts': attempts,
-        'nextRetryAt': nextRetryAt?.toIso8601String(),
-        'lastError': lastError,
-        'failedAt': failedAt?.toIso8601String(),
-        'actorUserId': actorUserId,
-      };
+    'id': id,
+    'kind': kind.name,
+    'payload': payload,
+    'createdAt': createdAt.toIso8601String(),
+    'attempts': attempts,
+    'nextRetryAt': nextRetryAt?.toIso8601String(),
+    'lastError': lastError,
+    'failedAt': failedAt?.toIso8601String(),
+    'actorUserId': actorUserId,
+  };
 
   static OutboxOp? fromJson(Map<String, dynamic> value) {
     try {
@@ -116,12 +117,12 @@ class OutboxOp {
   }
 
   String get label => switch (kind) {
-        OutboxKind.post => 'vent',
-        OutboxKind.comment => 'reply',
-        OutboxKind.whisperComment => 'whisper reply',
-        OutboxKind.dm => 'message',
-        OutboxKind.tribeMessage => 'tribe message',
-      };
+    OutboxKind.post => 'vent',
+    OutboxKind.comment => 'reply',
+    OutboxKind.whisperComment => 'whisper reply',
+    OutboxKind.dm => 'message',
+    OutboxKind.tribeMessage => 'tribe message',
+  };
 }
 
 typedef OutboxExecutor = Future<void> Function(OutboxOp operation);
@@ -200,8 +201,9 @@ class OutboxService extends ChangeNotifier {
           await storage.delete(entry.key);
           continue;
         }
-        final operation =
-            decoded is Map<String, dynamic> ? OutboxOp.fromJson(decoded) : null;
+        final operation = decoded is Map<String, dynamic>
+            ? OutboxOp.fromJson(decoded)
+            : null;
         if (operation == null) {
           await storage.delete(entry.key);
           continue;
@@ -379,7 +381,8 @@ class OutboxService extends ChangeNotifier {
           );
           continue;
         }
-        final due = operation.nextRetryAt == null ||
+        final due =
+            operation.nextRetryAt == null ||
             !operation.nextRetryAt!.isAfter(now);
         if (!due) continue;
         try {
@@ -390,8 +393,9 @@ class OutboxService extends ChangeNotifier {
         } catch (error) {
           operation.attempts += 1;
           operation.lastError = '$error';
-          operation.nextRetryAt =
-              _now().add(retryDelayForAttempt(operation.attempts));
+          operation.nextRetryAt = _now().add(
+            retryDelayForAttempt(operation.attempts),
+          );
           await _storage.write(
             _storageKey(operation.id),
             jsonEncode(operation.toJson()),
@@ -417,7 +421,7 @@ class OutboxService extends ChangeNotifier {
       jsonEncode({
         'id': id,
         'completed': true,
-        'completedAt': _now().toIso8601String()
+        'completedAt': _now().toIso8601String(),
       }),
     );
     await _storage.delete(key);
@@ -425,17 +429,13 @@ class OutboxService extends ChangeNotifier {
 
   static String _storageKey(String id) => '$_keyPrefix$id';
 
-  Future<void> _persist(OutboxOp operation) => _storage.write(
-        _storageKey(operation.id),
-        jsonEncode(operation.toJson()),
-      );
+  Future<void> _persist(OutboxOp operation) =>
+      _storage.write(_storageKey(operation.id), jsonEncode(operation.toJson()));
 
   Future<void> _deleteLocalMedia(OutboxOp operation) =>
       discardStagedMedia(operation.payload['localMediaPath'] as String?);
 
-  static Future<void> _migrateLegacyPreferences(
-    SensitiveStore storage,
-  ) async {
+  static Future<void> _migrateLegacyPreferences(SensitiveStore storage) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_legacyKey);
     if (raw == null) return;
@@ -445,9 +445,7 @@ class OutboxService extends ChangeNotifier {
       if (decoded is List) {
         for (final value in decoded) {
           if (value is! Map) continue;
-          final operation = OutboxOp.fromJson(
-            Map<String, dynamic>.from(value),
-          );
+          final operation = OutboxOp.fromJson(Map<String, dynamic>.from(value));
           if (operation == null) continue;
           final key = _storageKey(operation.id);
           if (!existing.containsKey(key)) {
@@ -489,11 +487,20 @@ class OutboxService extends ChangeNotifier {
           spaceId: payload['spaceId'] as String?,
           personaId: payload['personaId'] as String?,
           isWhisper: (payload['isWhisper'] as bool?) ?? false,
+          isStory: (payload['isStory'] as bool?) ?? false,
+          storyAudience: (payload['storyAudience'] as String?) ?? 'everyone',
           imagePath: payload['imagePath'] as String?,
           imageUrl: payload['imageUrl'] as String?,
           audioPath: payload['audioPath'] as String?,
           audioUrl: payload['audioUrl'] as String?,
           audioDurationSeconds: payload['audioDurationSeconds'] as int?,
+          cardBackgroundColor: payload['cardBackgroundColor'] as String?,
+          cardTextColor: payload['cardTextColor'] as String?,
+          musicTrack: _musicTrackFromPayload(payload['musicTrack']),
+          musicStartMs: (payload['musicStartMs'] as num?)?.toInt() ?? 0,
+          musicDurationMs:
+              (payload['musicDurationMs'] as num?)?.toInt() ?? 15000,
+          musicVolume: (payload['musicVolume'] as num?)?.toDouble() ?? 0.75,
           idempotencyKey: operation.id,
         );
       case OutboxKind.comment:
@@ -539,6 +546,30 @@ class OutboxService extends ChangeNotifier {
     }
   }
 
+  static MusicTrack? _musicTrackFromPayload(Object? raw) {
+    if (raw is! Map) return null;
+    final value = Map<String, dynamic>.from(raw);
+    final trackId = value['trackId'] as String?;
+    final previewUrl = value['previewUrl'] as String?;
+    if (trackId == null || previewUrl == null) return null;
+    return MusicTrack(
+      trackId: trackId,
+      provider: (value['provider'] as String?) ?? 'unknown',
+      providerTrackId: (value['providerTrackId'] as String?) ?? trackId,
+      title: (value['title'] as String?) ?? 'Music',
+      artist: (value['artist'] as String?) ?? 'Unknown artist',
+      album: value['album'] as String?,
+      artworkUrl: value['artworkUrl'] as String?,
+      previewUrl: previewUrl,
+      previewDurationMs: (value['previewDurationMs'] as num?)?.toInt() ?? 15000,
+      genre: value['genre'] as String?,
+      moodTags: (value['moodTags'] as List?)?.cast<String>() ?? const [],
+      licenseCode: (value['licenseCode'] as String?) ?? 'UNKNOWN',
+      attributionText: value['attributionText'] as String?,
+      cacheAllowed: (value['cacheAllowed'] as bool?) ?? false,
+    );
+  }
+
   static Future<void> _uploadPendingMedia(
     VentlyRepository repository,
     OutboxKind kind,
@@ -549,9 +580,11 @@ class OutboxService extends ChangeNotifier {
     final localPath = payload['localMediaPath'] as String?;
     if (localPath == null) return;
     final mediaType = payload['localMediaType'] as String? ?? 'image';
-    final extension = payload['localMediaExtension'] as String? ??
+    final extension =
+        payload['localMediaExtension'] as String? ??
         (mediaType == 'audio' ? 'm4a' : 'jpg');
-    final contentType = payload['localMediaContentType'] as String? ??
+    final contentType =
+        payload['localMediaContentType'] as String? ??
         (mediaType == 'audio' ? 'audio/mp4' : 'image/jpeg');
 
     switch (kind) {

@@ -10,16 +10,22 @@ import '../../domain/entities/entities.dart';
 ///   * not voted + open → tappable options
 ///   * voted OR closed → bar chart with percentages + own-vote highlight
 class PollCard extends ConsumerWidget {
-  const PollCard({super.key, required this.poll, this.compact = false});
+  const PollCard({
+    super.key,
+    required this.poll,
+    this.compact = false,
+    this.votingDisabled = false,
+  });
 
   final PostPoll poll;
   final bool compact;
+  final bool votingDisabled;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final showResults = poll.hasVoted || poll.isClosed;
+    final showResults = poll.hasVoted || poll.isClosed || votingDisabled;
     final total = poll.totalVotes.clamp(1, 1 << 30);
 
     return Container(
@@ -29,7 +35,9 @@ class PollCard extends ConsumerWidget {
       ),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
+        color: isDark
+            ? Theme.of(context).colorScheme.surface
+            : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: scheme.primary.withOpacity(isDark ? 0.30 : 0.18),
@@ -53,7 +61,9 @@ class PollCard extends ConsumerWidget {
               ),
               const Spacer(),
               Text(
-                poll.isClosed
+                votingDisabled
+                    ? 'Authors can’t vote'
+                    : poll.isClosed
                     ? 'Closed'
                     : '${poll.totalVotes} ${poll.totalVotes == 1 ? "vote" : "votes"}',
                 style: TextStyle(
@@ -86,7 +96,9 @@ class PollCard extends ConsumerWidget {
                 onTap: showResults
                     ? null
                     : () async {
-                        await ref.read(repositoryProvider).votePoll(
+                        await ref
+                            .read(repositoryProvider)
+                            .votePoll(
                               pollId: poll.pollId,
                               optionId: o.optionId,
                             );
@@ -150,8 +162,11 @@ class _OptionRow extends StatelessWidget {
                   if (isMine)
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
-                      child: Icon(Icons.check_circle,
-                          size: 14, color: scheme.primary),
+                      child: Icon(
+                        Icons.check_circle,
+                        size: 14,
+                        color: scheme.primary,
+                      ),
                     ),
                   Expanded(
                     child: Text(

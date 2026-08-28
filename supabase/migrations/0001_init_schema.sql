@@ -1,7 +1,7 @@
 -- ============================================================================
 -- Venttly | Initial Schema Migration
 -- Anonymous social platform for Gen Z emotional expression and peer support.
--- Zero-PII by design. Uses ltree for high-speed comment tree traversal.
+-- Pseudonymous by default. Uses ltree for high-speed comment tree traversal.
 -- ============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -27,7 +27,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ---------------------------------------------------------------------------
--- Users  (zero personally identifiable information)
+-- Users (public real identity not required; optional profile/contact data may exist)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
     user_id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS users (
     birth_year           SMALLINT,                         -- year only, no day/month stored
     recovery_key_hash    TEXT NOT NULL,                    -- argon2id hash of client recovery key
     device_signature_hash TEXT,                            -- argon2id hash of hardware signature
-    public_key           TEXT,                             -- E2EE identity key (curve25519)
+    public_key           TEXT,                             -- reserved cryptographic identity key
     created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT recovery_key_hash_len CHECK (length(recovery_key_hash) > 0)
@@ -191,7 +191,7 @@ CREATE TABLE IF NOT EXISTS comment_likes (
 );
 
 -- ---------------------------------------------------------------------------
--- Chat (E2EE message requests + double-ratchet payloads)
+-- Chat (server-readable messages retained for the current moderation model)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS chat_rooms (
     room_id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

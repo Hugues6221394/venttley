@@ -10,6 +10,7 @@ import '../../widgets/connection_banner.dart';
 import '../../widgets/keeper_content_studio_sheet.dart';
 import '../../widgets/premium_motion.dart';
 import '../../widgets/quick_create_sheet.dart';
+import '../../widgets/whisper_mini_player.dart';
 
 /// Bottom-nav shell — role-aware, floating glass pill per the launch mockups.
 ///
@@ -19,18 +20,51 @@ class HomeShell extends ConsumerWidget {
   const HomeShell({super.key, required this.navigationShell});
   final StatefulNavigationShell navigationShell;
 
+  /// Bottom space a scrollable surface must reserve so its last item stays
+  /// reachable.
+  ///
+  /// The shell sets `extendBody: true` and floats the nav as a pill, so content
+  /// scrolls *underneath* it — a surface that reserves nothing leaves its final
+  /// row permanently covered. Covers the 78pt pill plus its padding, outer
+  /// margin and the home-indicator inset.
+  ///
+  /// Exposed as a constant because this was previously duplicated as a bare
+  /// `108` in the feed and simply omitted on the keeper home, which occluded
+  /// that screen's last row of cards.
+  static const double navClearance = 108;
+
   static const _memberTabs = [
-    _Tab(CupertinoIcons.house, CupertinoIcons.house_fill, 'Home',
-        branchIndex: 0),
-    _Tab(CupertinoIcons.waveform, CupertinoIcons.waveform, 'Whispers',
-        branchIndex: 1),
+    _Tab(
+      CupertinoIcons.house,
+      CupertinoIcons.house_fill,
+      'Home',
+      branchIndex: 0,
+    ),
+    _Tab(
+      CupertinoIcons.waveform,
+      CupertinoIcons.waveform,
+      'Whispers',
+      branchIndex: 1,
+    ),
     _Tab(Icons.add_rounded, Icons.add_rounded, 'Post', isPost: true),
-    _Tab(CupertinoIcons.person_2, CupertinoIcons.person_2_fill, 'Friends',
-        pushRoute: '/friends'),
-    _Tab(CupertinoIcons.chat_bubble, CupertinoIcons.chat_bubble_fill, 'Inbox',
-        branchIndex: 3),
-    _Tab(CupertinoIcons.person, CupertinoIcons.person_fill, 'Profile',
-        branchIndex: 4),
+    _Tab(
+      CupertinoIcons.person_2,
+      CupertinoIcons.person_2_fill,
+      'Friends',
+      pushRoute: '/friends',
+    ),
+    _Tab(
+      CupertinoIcons.chat_bubble,
+      CupertinoIcons.chat_bubble_fill,
+      'Inbox',
+      branchIndex: 3,
+    ),
+    _Tab(
+      CupertinoIcons.person,
+      CupertinoIcons.person_fill,
+      'Profile',
+      branchIndex: 4,
+    ),
   ];
 
   /// Public for navigation contract tests and accessibility audits.
@@ -38,16 +72,32 @@ class HomeShell extends ConsumerWidget {
       List.unmodifiable(_memberTabs.map((tab) => tab.label));
 
   static const _keeperTabs = [
-    _Tab(Icons.dashboard_outlined, Icons.dashboard_rounded, 'Studio',
-        branchIndex: 0),
-    _Tab(Icons.view_agenda_outlined, Icons.view_agenda_rounded, 'Spaces',
-        branchIndex: 1),
+    _Tab(
+      Icons.dashboard_outlined,
+      Icons.dashboard_rounded,
+      'Studio',
+      branchIndex: 0,
+    ),
+    _Tab(
+      Icons.view_agenda_outlined,
+      Icons.view_agenda_rounded,
+      'Spaces',
+      branchIndex: 1,
+    ),
     _Tab(Icons.add_rounded, Icons.add_rounded, 'Create', isPost: true),
-    _Tab(Icons.groups_outlined, Icons.groups_rounded, 'Members',
-        branchIndex: 3),
+    _Tab(
+      Icons.groups_outlined,
+      Icons.groups_rounded,
+      'Members',
+      branchIndex: 3,
+    ),
     _Tab(Icons.forum_outlined, Icons.forum_rounded, 'Chat', isTribeChat: true),
-    _Tab(Icons.insights_outlined, Icons.insights_rounded, 'Analytics',
-        branchIndex: 4),
+    _Tab(
+      Icons.insights_outlined,
+      Icons.insights_rounded,
+      'Analytics',
+      branchIndex: 4,
+    ),
   ];
 
   @override
@@ -65,7 +115,17 @@ class HomeShell extends ConsumerWidget {
           navigationShell,
           // Floats over content so it never shifts layout; SafeArea inside.
           const Positioned(
-              top: 0, left: 0, right: 0, child: ConnectionBanner()),
+            top: 0,
+            left: 0,
+            right: 0,
+            child: ConnectionBanner(),
+          ),
+          // Draggable, so it lives in the Stack rather than the nav slot. The
+          // user can move it off anything it covers, or dismiss it.
+          WhisperMiniPlayer(
+            onOpen: () => navigationShell.goBranch(1),
+            onWhispersTab: navigationShell.currentIndex == 1 && !studioMode,
+          ),
         ],
       ),
       bottomNavigationBar: _GlassNavBar(
@@ -93,7 +153,12 @@ class HomeShell extends ConsumerWidget {
             return;
           }
           if (tab.pushRoute != null) {
-            context.push(tab.pushRoute!);
+            // Friends lives in the Home branch but is presented as a first-
+            // class tab. A push would leave the previous branch selected
+            // underneath it (for example Friends and Profile both active).
+            // Tab changes replace the shell location so there is exactly one
+            // selected destination and a deterministic back stack.
+            context.go(tab.pushRoute!);
             return;
           }
           navigationShell.goBranch(
@@ -192,8 +257,9 @@ class _GlassNavBar extends ConsumerWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color:
-                    VentlyColors.berryMagenta.withOpacity(isDark ? 0.10 : 0.08),
+                color: VentlyColors.berryMagenta.withOpacity(
+                  isDark ? 0.10 : 0.08,
+                ),
                 blurRadius: 28,
                 spreadRadius: -10,
                 offset: const Offset(0, 9),
@@ -212,7 +278,9 @@ class _GlassNavBar extends ConsumerWidget {
                 Expanded(
                   child: tab.isPost
                       ? _PostNavButton(
-                          label: tab.label, onTap: () => onTapTab(tab))
+                          label: tab.label,
+                          onTap: () => onTapTab(tab),
+                        )
                       : _NavItem(
                           tab: tab,
                           selected: selectedFor(tab),
@@ -299,10 +367,14 @@ class _NavItem extends StatelessWidget {
                   right: 8,
                   top: 2,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                    constraints:
-                        const BoxConstraints(minWidth: 19, minHeight: 19),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 19,
+                      minHeight: 19,
+                    ),
                     decoration: BoxDecoration(
                       gradient: VentlyGradients.brand,
                       borderRadius: BorderRadius.circular(12),

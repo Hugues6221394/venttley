@@ -7,6 +7,7 @@ import '../../../domain/entities/entities.dart';
 import '../../../domain/keeper/keeper_overview.dart';
 import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
+import 'home_shell.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
@@ -78,12 +79,13 @@ class KeeperHomeScreen extends ConsumerWidget {
                     SliverToBoxAdapter(
                       child: _StudioV2Grid(overview: overview),
                     ),
-                    SliverToBoxAdapter(
-                      child: _TodaySnapshot(overview: overview),
-                    ),
-                    SliverToBoxAdapter(
-                      child: _OverviewGrid(overview: overview),
-                    ),
+                    // _TodaySnapshot ("Today's activity": vents, new members,
+                    // reports) and _OverviewGrid (members, vents·24h, new·7d)
+                    // used to sit here. Between them and the Tribe overview
+                    // above, `totalPosts24h` was rendered three times on one
+                    // screen and members, reports and new-members twice each —
+                    // in three different card styles, all reading zero. The
+                    // Tribe overview grid now carries those four numbers once.
                     if (overview.totalOpenReports > 0 ||
                         overview.totalScheduledPrompts > 0)
                       SliverToBoxAdapter(
@@ -130,7 +132,11 @@ class KeeperHomeScreen extends ConsumerWidget {
                         );
                       },
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 28)),
+                    // Was 28, which left the bottom row of stat cards covered
+                    // by the floating nav pill.
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: HomeShell.navClearance),
+                    ),
                   ],
                 ),
               );
@@ -208,12 +214,17 @@ class _KeeperWelcome extends StatelessWidget {
         child: Stack(
           children: [
             // Decorative orb (Venttly mark inside a soft glowing disc).
+            // A soft glow, not a logo. The disc used to carry the two-bar
+            // Venttly mark at its centre; with the panel shortened to a status
+            // line the callout card now crosses exactly there, slicing the bars
+            // in half. The wordmark is already in the top bar a few points
+            // above, so the disc keeps the warmth and drops the mark.
             Positioned(
-              right: -18,
-              top: -6,
+              right: -12,
+              top: -14,
               child: Container(
-                width: 150,
-                height: 150,
+                width: 132,
+                height: 132,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
@@ -230,11 +241,6 @@ class _KeeperWelcome extends StatelessWidget {
                           ],
                   ),
                 ),
-                alignment: Alignment.center,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [_orbBar(), const SizedBox(width: 6), _orbBar()],
-                ),
               ),
             ),
             Padding(
@@ -242,21 +248,42 @@ class _KeeperWelcome extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // The state of the tribe, not a title for the screen.
+                  //
+                  // This was a "CONTROL CENTER" eyebrow, a 23pt "Your tribe, at
+                  // a glance" and "Everything you need to keep it safe and
+                  // thriving." — three lines telling a keeper what screen they
+                  // are on, above the top bar that already says "Plug Studio /
+                  // Manage your tribe. Protect your safe space." and above a
+                  // "Creator Studio" section whose own tagline said almost the
+                  // same sentence again. The last line also ran underneath the
+                  // decorative orb, so it was chrome that was hard to read.
+                  //
+                  // A keeper opens this to learn one thing: is anything on
+                  // fire. Now it says so.
                   Row(
                     children: [
                       Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          color: VentlyColors.berryMagenta,
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: reports > 0
+                              ? VentlyColors.dangerRed
+                              : VentlyColors.successGreen,
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 7),
                       Text(
-                        'CONTROL CENTER',
+                        reports > 0
+                            ? 'NEEDS REVIEW'
+                            : quiet
+                            ? 'ALL CLEAR · QUIET'
+                            : 'ALL CLEAR · ACTIVE',
                         style: TextStyle(
-                          color: VentlyColors.berryMagenta.withOpacity(0.9),
+                          color: reports > 0
+                              ? VentlyColors.dangerRed
+                              : context.ink.withOpacity(0.55),
                           fontWeight: FontWeight.w800,
                           fontSize: 11,
                           letterSpacing: 1.4,
@@ -264,28 +291,7 @@ class _KeeperWelcome extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Your tribe, at a glance',
-                    style: TextStyle(
-                      color: context.ink,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 23,
-                      height: 1.05,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Everything you need to keep it safe and thriving.',
-                    style: TextStyle(
-                      color: context.ink.withOpacity(0.6),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12.5,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   _HeroCallout(icon: icon, hint: hint, onTap: onTap),
                   if (primary != null) ...[
                     const SizedBox(height: 10),
@@ -300,14 +306,6 @@ class _KeeperWelcome extends StatelessWidget {
     );
   }
 
-  Widget _orbBar() => Container(
-        width: 12,
-        height: 34,
-        decoration: BoxDecoration(
-          gradient: VentlyGradients.brand,
-          borderRadius: BorderRadius.circular(6),
-        ),
-      );
 }
 
 /// Persistent Plugz ownership action, kept above metrics and activity cards.
@@ -385,9 +383,12 @@ class _HeroCallout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
+      // Opaque in light mode. At 0.72 the decorative orb behind the panel bled
+      // through the card and sat under the action button, which read as a
+      // rendering fault rather than as depth.
       color: context.isDark
           ? Colors.white.withOpacity(0.07)
-          : Colors.white.withOpacity(0.72),
+          : Colors.white,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
@@ -504,7 +505,10 @@ class _TopBar extends StatelessWidget {
           _BellButton(),
           const SizedBox(width: 4),
           GestureDetector(
-            onTap: () => context.go('/profile'),
+            // /profile resolves to the Studio analytics for a keeper, so this
+            // avatar used to send them to Analytics — the one place it could
+            // not plausibly mean. Push the real profile instead.
+            onTap: () => context.push('/profile/me'),
             child: me == null
                 ? const CircleAvatar(
                     radius: 18,
@@ -568,11 +572,10 @@ class _CommandStrip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
-    final stats = primary != null ? overview.statsFor(primary.tribeId) : null;
-    final health = _healthScore(overview, stats);
     final members = primary?.memberCount ?? overview.totalMembers;
     final reports = overview.totalOpenReports;
     final vents = overview.totalPosts24h;
+    final joined = overview.totalNewMembers7d;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 10, 18, 4),
@@ -651,18 +654,25 @@ class _CommandStrip extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 10),
+              // Was "Tribe health", a percentage. `_healthScore` computed
+              // `engagement + 55 - reportsPenalty`, clamped to 40..100, with a
+              // comment saying the floor existed "so it never looks broken" —
+              // so a tribe with no posts and no members beyond its keeper
+              // rendered "55% · Growing ↗". That is not a measurement, it is a
+              // constant wearing a metric's clothes, and it is the same problem
+              // that got the profile's mood ring removed: a number nobody can
+              // explain and nobody maintains. New members in the last week is
+              // something a keeper can act on and verify.
               Expanded(
                 child: _OverviewCard(
-                  icon: Icons.favorite_rounded,
-                  color: VentlyColors.berryMagenta,
-                  value: '$health%',
-                  label: 'Tribe health',
-                  status: health >= 80
-                      ? 'Thriving ↗'
-                      : health >= 55
-                          ? 'Growing ↗'
-                          : 'Building',
-                  statusColor: VentlyColors.successGreen,
+                  icon: Icons.person_add_alt_1_rounded,
+                  color: VentlyTokens.growthTeal,
+                  value: '$joined',
+                  label: 'New · 7d',
+                  status: joined > 0 ? 'Growing' : 'None yet',
+                  statusColor: joined > 0
+                      ? VentlyColors.successGreen
+                      : context.ink.withOpacity(0.5),
                 ),
               ),
             ],
@@ -670,14 +680,6 @@ class _CommandStrip extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  int _healthScore(KeeperOverview overview, TribeStudioStats? stats) {
-    final engagement = overview.engagementScoreFor(stats);
-    final reportsPenalty = (overview.totalOpenReports * 8).clamp(0, 40);
-    // Start from an encouraging baseline: a calm, report-free tribe is healthy
-    // even before activity ramps up. Floor at 40 so it never looks broken.
-    return (engagement + 55 - reportsPenalty).clamp(40, 100);
   }
 }
 
@@ -869,153 +871,6 @@ class _PriorityQueue extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 // ignore: unused_element
-class _HeroPanel extends ConsumerWidget {
-  const _HeroPanel({required this.me, required this.overview});
-  final AppUser? me;
-  final KeeperOverview overview;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
-    final stats = primary != null ? overview.statsFor(primary.tribeId) : null;
-    final health = _healthScore(overview, stats);
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [VentlyColors.berryMagenta, VentlyColors.deepBurgundy],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: VentlyColors.berryMagenta.withOpacity(0.28),
-              blurRadius: 22,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.18),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                  child: const Text(
-                    'KEEPER STUDIO',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 10,
-                      letterSpacing: 1.1,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () {
-                    ref.read(keeperMemberViewProvider.notifier).state = true;
-                    context.go('/feed');
-                  },
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                  ),
-                  child: const Text(
-                    'Member feed',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (primary != null) ...[
-              Text(
-                primary.name,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Text(
-                    '${PostCard.compactNumber(primary.memberCount)} members',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                    child: Text(
-                      'Health $health%',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-            ],
-            Text(
-              primary != null ? 'Today' : 'Your tribes',
-              style: TextStyle(
-                color: Colors.white.withOpacity(primary != null ? 0.85 : 1),
-                fontSize: primary != null ? 14 : 22,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            if (primary == null) const SizedBox(height: 4),
-            Text(
-              overview.tribeCount == 1
-                  ? 'Your tribe needs you today — ${overview.totalOpenReports} open reports, ${overview.totalPosts24h} vents in 24h.'
-                  : '${overview.tribeCount} tribes · ${PostCard.compactNumber(overview.totalMembers)} souls · ${overview.totalOpenReports} reports waiting.',
-              style: const TextStyle(
-                color: Colors.white70,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                height: 1.35,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  int _healthScore(KeeperOverview overview, TribeStudioStats? stats) {
-    final engagement = overview.engagementScoreFor(stats);
-    final reportsPenalty = (overview.totalOpenReports * 8).clamp(0, 40);
-    return (engagement + 20 - reportsPenalty).clamp(0, 100);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Quick actions + today's snapshot
-// ---------------------------------------------------------------------------
 
 class _QuickActionsRow extends ConsumerWidget {
   const _QuickActionsRow({required this.overview});
@@ -1108,6 +963,12 @@ class _StudioV2Grid extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // "Everything you need to grow and protect your tribe." used to sit
+          // under this heading, one screen below the hero's "Everything you
+          // need to keep it safe and thriving." and the top bar's "Manage your
+          // tribe. Protect your safe space." Three taglines making the same
+          // promise is not reassurance, it is noise between the keeper and the
+          // four things they came to open.
           Text(
             'Creator Studio',
             style: TextStyle(
@@ -1116,23 +977,22 @@ class _StudioV2Grid extends StatelessWidget {
               fontSize: 15,
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            'Everything you need to grow and protect your tribe.',
-            style: TextStyle(
-              color: context.ink.withOpacity(0.55),
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-            ),
-          ),
           const SizedBox(height: 10),
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
+            // A nested ScrollView with a null padding inherits the ambient
+            // MediaQuery padding along its scroll axis — here the home
+            // indicator's bottom inset, which this grid has no business
+            // reserving. It was adding dead space under the last row.
+            padding: EdgeInsets.zero,
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
-            childAspectRatio: 1.18,
+            // Raised from 1.18 now that tile content is top-aligned rather than
+            // bottom-anchored: the cells no longer need the extra height that
+            // the Spacer used to absorb.
+            childAspectRatio: 1.3,
             children: [
               _V2Tile(
                 icon: Icons.gavel_rounded,
@@ -1230,7 +1090,11 @@ class _V2Tile extends StatelessWidget {
                     ),
                     child: Icon(icon, color: accent, size: 21),
                   ),
-                  const Spacer(),
+                  // Top-aligned, not bottom-aligned. A Spacer here pushed the
+                  // text to the bottom of each cell, so a tile whose subtitle
+                  // wrapped to two lines sat its label a line higher than its
+                  // neighbour's — "Moderation" and "Calendar" never lined up.
+                  const SizedBox(height: 14),
                   Text(
                     label,
                     style: TextStyle(
@@ -1366,195 +1230,9 @@ class _QuickAction extends StatelessWidget {
   }
 }
 
-class _TodaySnapshot extends StatelessWidget {
-  const _TodaySnapshot({required this.overview});
-  final KeeperOverview overview;
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: GlassCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Today's activity",
-              style: TextStyle(
-                color: context.ink,
-                fontWeight: FontWeight.w900,
-                fontSize: 15,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _SnapTile(
-                  label: 'Vents',
-                  value: '${overview.totalPosts24h}',
-                  icon: Icons.forum_rounded,
-                  accent: VentlyTokens.messageBlue,
-                ),
-                const SizedBox(width: 10),
-                _SnapTile(
-                  label: 'New members',
-                  value: '${overview.totalNewMembers7d}',
-                  icon: Icons.person_add_alt_1_rounded,
-                  accent: VentlyTokens.growthTeal,
-                ),
-                const SizedBox(width: 10),
-                _SnapTile(
-                  label: 'Reports',
-                  value: '${overview.totalOpenReports}',
-                  icon: Icons.gavel_rounded,
-                  accent: VentlyColors.dangerRed,
-                  urgent: overview.totalOpenReports > 0,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
-class _SnapTile extends StatelessWidget {
-  const _SnapTile({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.accent,
-    this.urgent = false,
-  });
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color accent;
-  final bool urgent;
 
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-        decoration: BoxDecoration(
-          color: accent.withOpacity(urgent ? 0.14 : 0.08),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 16, color: accent),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                color: context.ink,
-                fontWeight: FontWeight.w900,
-                fontSize: 22,
-              ),
-            ),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: context.ink.withOpacity(0.6),
-                fontWeight: FontWeight.w800,
-                fontSize: 10.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Overview KPIs
-// ---------------------------------------------------------------------------
-
-class _OverviewGrid extends StatelessWidget {
-  const _OverviewGrid({required this.overview});
-  final KeeperOverview overview;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
-      child: Row(
-        children: [
-          _KpiTile(
-            label: 'Members',
-            value: PostCard.compactNumber(overview.totalMembers),
-            icon: Icons.groups_rounded,
-          ),
-          const SizedBox(width: 10),
-          _KpiTile(
-            label: 'Vents · 24h',
-            value: '${overview.totalPosts24h}',
-            icon: Icons.forum_rounded,
-          ),
-          const SizedBox(width: 10),
-          _KpiTile(
-            label: 'New · 7d',
-            value: '${overview.totalNewMembers7d}',
-            icon: Icons.person_add_alt_1_rounded,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _KpiTile extends StatelessWidget {
-  const _KpiTile({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
-  final String label;
-  final String value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GlassCard(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: VentlyColors.berryMagenta, size: 18),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                color: context.ink,
-                fontWeight: FontWeight.w900,
-                fontSize: 20,
-              ),
-            ),
-            Text(
-              label,
-              style: TextStyle(
-                color: context.ink.withOpacity(0.55),
-                fontWeight: FontWeight.w800,
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Content + safety hub
-// ---------------------------------------------------------------------------
 
 class _ContentHub extends StatelessWidget {
   const _ContentHub({required this.overview});
@@ -1891,42 +1569,55 @@ class _KeeperDrawer extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-              child: Row(
-                children: [
-                  if (me != null)
-                    ProfileAvatar(
-                      avatarSeed: me!.avatarSeed,
-                      label: me!.anonymousPseudonym,
-                      profilePhotoUrl: me!.profilePhotoUrl,
-                      size: 44,
-                    ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Plug Studio',
-                          style: TextStyle(
-                            color: context.ink,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 16,
+            // Tappable, because a drawer header showing your own face reads as
+            // the way to your own profile whether or not it is wired up. It
+            // used to be inert, which is worse than not being there.
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/profile/me');
+              },
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+                child: Row(
+                  children: [
+                    if (me != null)
+                      ProfileAvatar(
+                        avatarSeed: me!.avatarSeed,
+                        label: me!.anonymousPseudonym,
+                        profilePhotoUrl: me!.profilePhotoUrl,
+                        size: 44,
+                      ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Plug Studio',
+                            style: TextStyle(
+                              color: context.ink,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                            ),
                           ),
-                        ),
-                        const Text(
-                          'Tribe Control Center',
-                          style: TextStyle(
-                            color: VentlyColors.berryMagenta,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11.5,
+                          const Text(
+                            'Tribe Control Center',
+                            style: TextStyle(
+                              color: VentlyColors.berryMagenta,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11.5,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: context.ink.withOpacity(0.35),
+                    ),
+                  ],
+                ),
               ),
             ),
             const Divider(height: 1, color: Color(0xFFEEDCE3)),
@@ -2019,6 +1710,17 @@ class _KeeperDrawer extends ConsumerWidget {
                     },
                   ),
                   const _DrawerSection('Account'),
+                  // A keeper is a member too, and the bottom-nav slot where
+                  // everyone else finds their profile holds the Studio
+                  // analytics here. Without this row there is no route to it.
+                  _DrawerTile(
+                    icon: Icons.person_rounded,
+                    label: 'My profile',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/profile/me');
+                    },
+                  ),
                   _DrawerTile(
                     icon: Icons.settings_rounded,
                     label: 'Settings',

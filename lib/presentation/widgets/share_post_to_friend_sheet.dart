@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -50,6 +51,11 @@ class _SharePostToFriendSheetState
         plaintext: '',
         attachedPostId: widget.postId,
       );
+      unawaited(ref.read(repositoryProvider).refreshMessages(room.roomId));
+      ref.invalidate(inboxStreamProvider);
+      ref.invalidate(allInboxRoomsStreamProvider);
+      ref.invalidate(unreadInboxCountProvider);
+      ref.invalidate(navInboxBadgeCountProvider);
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -66,14 +72,14 @@ class _SharePostToFriendSheetState
       // would only happen if the friendship ended between list-load
       // and tap. Surface cleanly.
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not share: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not share: $e')));
     } finally {
       if (mounted) setState(() => _sendingTo = null);
     }
@@ -110,8 +116,8 @@ class _SharePostToFriendSheetState
                   Text(
                     'Share to a friend',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ],
               ),
@@ -120,7 +126,9 @@ class _SharePostToFriendSheetState
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: scheme.surface,
                   borderRadius: BorderRadius.circular(14),
@@ -129,18 +137,18 @@ class _SharePostToFriendSheetState
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.format_quote,
-                        size: 14, color: scheme.onSurface.withOpacity(0.5)),
+                    Icon(
+                      Icons.format_quote,
+                      size: 14,
+                      color: scheme.onSurface.withOpacity(0.5),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         widget.previewSnippet,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          height: 1.35,
-                        ),
+                        style: const TextStyle(fontSize: 12.5, height: 1.35),
                       ),
                     ),
                   ],
@@ -150,14 +158,15 @@ class _SharePostToFriendSheetState
             const Divider(height: 1),
             Expanded(
               child: friends.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text('Could not load friends:\n$e',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.black54)),
+                    child: Text(
+                      'Could not load friends:\n$e',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.black54),
+                    ),
                   ),
                 ),
                 data: (list) {
@@ -167,10 +176,11 @@ class _SharePostToFriendSheetState
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.diversity_3,
-                              size: 36,
-                              color:
-                                  scheme.onSurface.withOpacity(0.4)),
+                          Icon(
+                            Icons.diversity_3,
+                            size: 36,
+                            color: scheme.onSurface.withOpacity(0.4),
+                          ),
                           const SizedBox(height: 12),
                           const Text(
                             'You don\'t have any friends yet.',
@@ -199,20 +209,20 @@ class _SharePostToFriendSheetState
                       return ListTile(
                         leading: AnonymousAvatar(
                           seed: f.avatarSeed,
-                          label: f.pseudonym,
+                          label: f.displayName,
                           size: 40,
                         ),
                         title: Text(
-                          '@${f.pseudonym}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700),
+                          f.displayName,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         trailing: isSending
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2),
+                                  strokeWidth: 2,
+                                ),
                               )
                             : Icon(
                                 Icons.send_rounded,
@@ -249,9 +259,7 @@ Future<void> showSharePostToFriendSheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (_) => SharePostToFriendSheet(
-      postId: postId,
-      previewSnippet: previewSnippet,
-    ),
+    builder: (_) =>
+        SharePostToFriendSheet(postId: postId, previewSnippet: previewSnippet),
   );
 }

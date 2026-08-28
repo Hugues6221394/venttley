@@ -1,0 +1,71 @@
+name: Deploy hardened Supabase functions to production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DEPLOY HARDENED FUNCTIONS TO PRODUCTION
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Revalidate privileged worker bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: denoland/setup-deno@v2.0.5
+        with:
+          deno-version: lts
+          cache: true
+      - run: >-
+          deno fmt --check
+          supabase/functions/_shared
+          supabase/functions/media-scan
+          supabase/functions/notification-fanout
+      - run: >-
+          deno check
+          supabase/functions/media-scan/index.ts
+          supabase/functions/notification-fanout/index.ts
+      - run: >-
+          deno test
+          supabase/functions/_shared/internal_auth_test.ts
+          supabase/functions/media-scan/ownership_test.ts
+
+  deploy:
+    name: Deploy only to the protected production project
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_PRODUCTION_ACCESS_TOKEN }}
+      PRODUCTION_PROJECT_REF: ${{ secrets.SUPABASE_PRODUCTION_PROJECT_ID }}
+      SUPABASE_ENVIRONMENT: ${{ vars.SUPABASE_ENVIRONMENT }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: supabase/setup-cli@v2.1.1
+        with:
+          version: 2.107.0
+      - name: Refuse ambiguous or non-production targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "DEPLOY HARDENED FUNCTIONS TO PRODUCTION"
+          test "$SUPABASE_ENVIRONMENT" = "production"
+          test -n "$PRODUCTION_PROJECT_REF"
+          test -n "$SUPABASE_ACCESS_TOKEN"
+      - name: Deploy user-authenticated media scanner
+        run: >-
+          supabase functions deploy media-scan --use-api
+          --project-ref "$PRODUCTION_PROJECT_REF"
+      - name: Deploy secret-authenticated push worker
+        run: >-
+          supabase functions deploy notification-fanout --use-api
+          --no-verify-jwt
+          --project-ref "$PRODUCTION_PROJECT_REF"

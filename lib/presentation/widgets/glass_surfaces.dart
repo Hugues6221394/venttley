@@ -54,11 +54,9 @@ class GlassSheet extends StatelessWidget {
             borderRadius: const BorderRadius.vertical(
               top: Radius.circular(GlassTokens.radiusSheet),
             ),
-            border: Border(
-              top: BorderSide(color: GlassTokens.border(context)),
-            ),
+            border: Border(top: BorderSide(color: GlassTokens.border(context))),
           ),
-          child: child,
+          child: Material(type: MaterialType.transparency, child: child),
         ),
       ),
     );
@@ -89,9 +87,7 @@ class GlassBubble extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
             color: GlassTokens.tint(context),
-            border: Border.all(
-              color: VentlyColors.softMauve.withOpacity(0.38),
-            ),
+            border: Border.all(color: VentlyColors.softMauve.withOpacity(0.38)),
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(GlassTokens.radiusBubble),
               topRight: Radius.circular(GlassTokens.radiusBubble),
@@ -137,8 +133,7 @@ class GlassComposer extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
               decoration: BoxDecoration(
                 color: GlassTokens.tint(context),
-                borderRadius:
-                    BorderRadius.circular(GlassTokens.radiusComposer),
+                borderRadius: BorderRadius.circular(GlassTokens.radiusComposer),
                 border: Border.all(color: GlassTokens.border(context)),
               ),
               child: child,

@@ -4,8 +4,8 @@
 -- can read across tables regardless of RLS, but STRICTLY scoped to auth.uid() —
 -- a caller only ever gets their own rows.
 --
--- DM bodies are end-to-end encrypted (chat_messages.encrypted_payload) and not
--- readable on the server, so only their metadata is exported, with a note.
+-- Historical v1 export. Chat bodies are server-readable; migration
+-- 20260811222118 replaces this function with the complete v2 export.
 
 CREATE OR REPLACE FUNCTION public.export_my_data()
 RETURNS JSONB
@@ -54,7 +54,7 @@ BEGIN
                 'room_id',    m.room_id,
                 'created_at', m.created_at,
                 'edited_at',  m.edited_at,
-                'note', 'Body is end-to-end encrypted and not readable on the server.'
+                'note', 'Body is included by the venttly-dsar-v2 export.'
             )), '[]'::jsonb)
               FROM public.chat_messages m WHERE m.sender_id = v_me
         ),

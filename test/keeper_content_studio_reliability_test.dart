@@ -34,7 +34,7 @@ void main() {
       expect(memberSurfaces, contains('/manage/settings/members'));
       expect(studio, contains('composeTargetTribeProvider.notifier'));
       expect(studio, contains('composeTargetSpaceProvider.notifier'));
-      expect(studio, contains('manage/settings/content?filter=pinned'));
+      expect(studio, contains('manage/settings/content?action=pin'));
       expect(studio, contains('manage/settings/identity?focus=welcome'));
       expect(studio, contains('manage/settings/spaces?create=true'));
       expect(studio, contains('manage/settings/rules'));
@@ -42,6 +42,7 @@ void main() {
       expect(router, contains("queryParameters['focus'] == 'welcome'"));
       expect(router, contains("queryParameters['create'] == 'true'"));
       expect(router, contains("queryParameters['filter']"));
+      expect(router, contains("queryParameters['action']"));
     });
 
     testWidgets('all eight Studio actions fit a compact phone', (tester) async {

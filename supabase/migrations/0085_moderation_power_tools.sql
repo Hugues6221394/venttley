@@ -234,7 +234,7 @@ BEGIN
            END AS target_kind,
            COALESCE(left(p.content, 160), left(tm.content, 160),
                     CASE WHEN r.target_chat_message_id IS NOT NULL
-                         THEN '(private DM — encrypted)' END,
+                         THEN '(private DM — server-readable for safety review)' END,
                     '(content)') AS preview,
            r.created_at
       FROM reports r

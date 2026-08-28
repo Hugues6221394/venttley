@@ -18,7 +18,7 @@ class NotificationsService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
-  bool _enabled = true;
+  bool _enabled = false;
   void Function(String? payload)? _onTap;
 
   bool get enabled => _enabled;

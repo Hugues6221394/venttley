@@ -12,6 +12,7 @@ import '../../widgets/skeleton.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/vently_logo.dart';
+import '../../widgets/tribe_age_gate.dart';
 
 /// Hybrid Tribes browse + search + create entry point.
 class TribesDirectoryScreen extends ConsumerStatefulWidget {
@@ -36,6 +37,19 @@ class _TribesDirectoryScreenState extends ConsumerState<TribesDirectoryScreen> {
     ('venting', 'Venting', Icons.bedtime_outlined),
   ];
 
+  /// Check eligibility before opening the flow.
+  ///
+  /// Creation used to raise `plug_approval_required` for any normal member, so
+  /// this button existed and could never succeed. It is open to adults now, and
+  /// the check happens here rather than at submit: finding out you were never
+  /// allowed to do this, after naming a Tribe and writing its rules, is how a
+  /// person decides a product wasted their time.
+  Future<void> _startCreateTribe(BuildContext context, WidgetRef ref) async {
+    if (!await ensureCanCreateTribe(context, ref)) return;
+    if (!context.mounted) return;
+    context.push('/tribes/new');
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -51,7 +65,7 @@ class _TribesDirectoryScreenState extends ConsumerState<TribesDirectoryScreen> {
           IconButton(
             tooltip: 'Create a Tribe',
             icon: const Icon(Icons.add_circle_outline),
-            onPressed: () => context.push('/tribes/new'),
+            onPressed: () => _startCreateTribe(context, ref),
           ),
         ],
       ),
@@ -95,54 +109,55 @@ class _TribesDirectoryScreenState extends ConsumerState<TribesDirectoryScreen> {
             child: async.isLoading && tribes.isEmpty
                 ? const TribeSkeletonList()
                 : tribes.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.diversity_3,
-                                  size: 56,
-                                  color: scheme.primary.withOpacity(0.5)),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'No Tribes here yet.',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _search.isEmpty
-                                    ? 'Be the first to start one — tap +.'
-                                    : 'Try a different search.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: scheme.onSurface.withOpacity(0.6),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              ElevatedButton.icon(
-                                onPressed: () => context.push('/tribes/new'),
-                                icon: const Icon(Icons.add, size: 16),
-                                label: const Text('Create a Tribe'),
-                              ),
-                            ],
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.diversity_3,
+                            size: 56,
+                            color: scheme.primary.withOpacity(0.5),
                           ),
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: () async => ref.invalidate(
-                          tribesProvider(query),
-                        ),
-                        child: ListView.builder(
-                          itemCount: tribes.length,
-                          cacheExtent: 800,
-                          padding: const EdgeInsets.only(bottom: 116),
-                          itemBuilder: (_, i) => FadeSlideIn(
-                            index: i.clamp(0, 5),
-                            child: _TribeCard(tribe: tribes[i]),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'No Tribes here yet.',
+                            style: TextStyle(fontWeight: FontWeight.w700),
                           ),
-                        ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _search.isEmpty
+                                ? 'Be the first to start one — tap +.'
+                                : 'Try a different search.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: scheme.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ElevatedButton.icon(
+                            onPressed: () => _startCreateTribe(context, ref),
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Create a Tribe'),
+                          ),
+                        ],
                       ),
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: () async =>
+                        ref.invalidate(tribesProvider(query)),
+                    child: ListView.builder(
+                      itemCount: tribes.length,
+                      cacheExtent: 800,
+                      padding: const EdgeInsets.only(bottom: 116),
+                      itemBuilder: (_, i) => FadeSlideIn(
+                        index: i.clamp(0, 5),
+                        child: _TribeCard(tribe: tribes[i]),
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -201,18 +216,22 @@ class _TribeCard extends ConsumerWidget {
                         ),
                         if (tribe.isPrivate) ...[
                           const SizedBox(width: 6),
-                          Icon(Icons.lock,
-                              size: 13,
-                              color: scheme.onSurface.withOpacity(0.5)),
+                          Icon(
+                            Icons.lock,
+                            size: 13,
+                            color: scheme.onSurface.withOpacity(0.5),
+                          ),
                         ],
                       ],
                     ),
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        Icon(Icons.people_alt_outlined,
-                            size: 12,
-                            color: scheme.onSurface.withOpacity(0.55)),
+                        Icon(
+                          Icons.people_alt_outlined,
+                          size: 12,
+                          color: scheme.onSurface.withOpacity(0.55),
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '${PostCard.compactNumber(tribe.memberCount)} • $categoryLabel',

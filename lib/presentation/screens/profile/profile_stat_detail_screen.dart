@@ -110,12 +110,15 @@ class ProfileStatDetailScreen extends ConsumerWidget {
           _VentsStatBody(userId: profile.userId),
         ];
       case ProfileStatKind.comments:
+        final replies = profile.comments ?? 0;
         return [
           _InsightCard(
-            title: '${profile.comments ?? 0} replies given',
+            title: '$replies ${replies == 1 ? 'reply' : 'replies'} given',
             body:
-                'Comments are how Venttly members show up for each other — '
-                'short, anonymous support on vents and whispers.',
+                'Replies are how Venttly members show up for each other — '
+                'short, anonymous support on other people’s vents and '
+                'whispers. This counts replies @${profile.pseudonym} has '
+                'written, not replies their own posts received.',
           ),
         ];
       case ProfileStatKind.reactions:

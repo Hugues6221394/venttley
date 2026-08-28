@@ -50,7 +50,7 @@ class VentlyTheme {
         color: VentlyColors.softMauve,
         thickness: 0.6,
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: VentlyColors.cardBlush,
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -191,7 +191,7 @@ class VentlyTheme {
         color: divider,
         thickness: 0.6,
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: card,
         elevation: 0,
         shape: RoundedRectangleBorder(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -30,134 +31,162 @@ Future<void> showTribeMessageActions(
   await showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
+    // The action list is not a fixed size: it grows with the message (go-to-
+    // quoted, copy, pin for keepers, edit, two delete tiers, report) and it
+    // carries a reaction tray. At showModalBottomSheet's default half-screen
+    // constraint the last row — Delete, a destructive action — overflowed by
+    // 1.4px on an iPhone 17, and would clip properly at larger text scales or
+    // on a shorter device. Scroll-controlled plus a scroll view fits every
+    // combination instead of the ones that happened to be short enough.
+    isScrollControlled: true,
     builder: (ctx) => GlassSheet(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: VentlyColors.softMauve.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(2),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(ctx).size.height * 0.78,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: VentlyColors.softMauve.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
-            ),
-          ),
-          _ActionTile(
-            icon: Icons.reply_rounded,
-            label: 'Reply',
-            onTap: () {
-              Navigator.pop(ctx);
-              onReply();
-            },
-          ),
-          if (message.replyToMessageId != null)
-            _ActionTile(
-              icon: Icons.vertical_align_top_rounded,
-              label: 'Go to quoted message',
-              onTap: () {
-                Navigator.pop(ctx);
-                onScrollToQuoted();
-              },
-            ),
-          if (onCopy != null)
-            _ActionTile(
-              icon: Icons.copy_rounded,
-              label: 'Copy text',
-              onTap: () {
-                Navigator.pop(ctx);
-                onCopy();
-              },
-            ),
-          _ActionTile(
-            icon: message.huggedByMe ? Icons.favorite : Icons.favorite_border,
-            label: message.huggedByMe ? 'Remove hug' : 'Send a hug',
-            accent: VentlyColors.berryMagenta,
-            onTap: () async {
-              Navigator.pop(ctx);
-              await VentlyHaptics.reaction();
-              await ref
-                  .read(repositoryProvider)
-                  .toggleTribeMessageHug(message.messageId);
-              ref.invalidate(tribeMessagesProvider(tribeId));
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
-            child: Text(
-              'React',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 12,
-                color: context.ink,
+              _ActionTile(
+                icon: Icons.reply_rounded,
+                label: 'Reply',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  onReply();
+                },
               ),
-            ),
+              if (message.replyToMessageId != null)
+                _ActionTile(
+                  icon: Icons.vertical_align_top_rounded,
+                  label: 'Go to quoted message',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    onScrollToQuoted();
+                  },
+                ),
+              if (onCopy != null)
+                _ActionTile(
+                  icon: Icons.copy_rounded,
+                  label: 'Copy text',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    onCopy();
+                  },
+                ),
+              _ActionTile(
+                icon: message.huggedByMe
+                    ? Icons.favorite
+                    : Icons.favorite_border,
+                label: message.huggedByMe ? 'Remove hug' : 'Send a hug',
+                accent: VentlyColors.berryMagenta,
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await VentlyHaptics.reaction();
+                  await ref
+                      .read(repositoryProvider)
+                      .toggleTribeMessageHug(message.messageId);
+                  unawaited(
+                    ref.read(repositoryProvider).refreshTribeMessages(tribeId),
+                  );
+                },
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
+                child: Text(
+                  'React',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                    color: context.ink,
+                  ),
+                ),
+              ),
+              TribeReactionTray(
+                messageId: message.messageId,
+                tribeId: tribeId,
+                myReaction: message.myReaction,
+              ),
+              const SizedBox(height: 8),
+              if (canManage)
+                _ActionTile(
+                  icon: Icons.push_pin_outlined,
+                  label: message.isPinned ? 'Unpin message' : 'Pin message',
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await VentlyHaptics.pin();
+                    if (message.isPinned) {
+                      await ref
+                          .read(repositoryProvider)
+                          .unpinTribeMessage(tribeId);
+                    } else {
+                      await ref
+                          .read(repositoryProvider)
+                          .pinTribeMessage(
+                            tribeId: tribeId,
+                            messageId: message.messageId,
+                          );
+                    }
+                    unawaited(
+                      ref
+                          .read(repositoryProvider)
+                          .refreshTribeMessages(tribeId),
+                    );
+                    ref.invalidate(tribeBySlugProvider(tribeSlug));
+                  },
+                ),
+              if (onEdit != null)
+                _ActionTile(
+                  icon: Icons.edit_outlined,
+                  label: 'Edit',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    onEdit();
+                  },
+                ),
+              if (onDeleteForMe != null)
+                _ActionTile(
+                  icon: Icons.delete_outline,
+                  label: 'Delete',
+                  accent: VentlyColors.berryMagenta,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _confirmTribeDelete(
+                      context,
+                      canEveryone:
+                          onDeleteForEveryone != null &&
+                          message.canDeleteForEveryone,
+                      onEveryone: onDeleteForEveryone,
+                      onMe: onDeleteForMe,
+                    );
+                  },
+                ),
+              if (onReport != null)
+                _ActionTile(
+                  icon: Icons.flag_outlined,
+                  label: 'Report message',
+                  accent: VentlyColors.berryMagenta,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    onReport();
+                  },
+                ),
+            ],
           ),
-          TribeReactionTray(
-            messageId: message.messageId,
-            tribeId: tribeId,
-            myReaction: message.myReaction,
-          ),
-          const SizedBox(height: 8),
-          if (canManage)
-            _ActionTile(
-              icon: Icons.push_pin_outlined,
-              label: message.isPinned ? 'Unpin message' : 'Pin message',
-              onTap: () async {
-                Navigator.pop(ctx);
-                await VentlyHaptics.pin();
-                if (message.isPinned) {
-                  await ref.read(repositoryProvider).unpinTribeMessage(tribeId);
-                } else {
-                  await ref.read(repositoryProvider).pinTribeMessage(
-                        tribeId: tribeId,
-                        messageId: message.messageId,
-                      );
-                }
-                ref.invalidate(tribeMessagesProvider(tribeId));
-                ref.invalidate(tribeBySlugProvider(tribeSlug));
-              },
-            ),
-          if (onEdit != null)
-            _ActionTile(
-              icon: Icons.edit_outlined,
-              label: 'Edit',
-              onTap: () {
-                Navigator.pop(ctx);
-                onEdit();
-              },
-            ),
-          if (onDeleteForMe != null)
-            _ActionTile(
-              icon: Icons.delete_outline,
-              label: 'Delete',
-              accent: VentlyColors.berryMagenta,
-              onTap: () {
-                Navigator.pop(ctx);
-                _confirmTribeDelete(
-                  context,
-                  canEveryone: onDeleteForEveryone != null &&
-                      message.canDeleteForEveryone,
-                  onEveryone: onDeleteForEveryone,
-                  onMe: onDeleteForMe,
-                );
-              },
-            ),
-          if (onReport != null)
-            _ActionTile(
-              icon: Icons.flag_outlined,
-              label: 'Report message',
-              accent: VentlyColors.berryMagenta,
-              onTap: () {
-                Navigator.pop(ctx);
-                onReport();
-              },
-            ),
-        ],
+        ),
       ),
     ),
   );
@@ -181,11 +210,14 @@ Future<void> _confirmTribeDelete(
         children: [
           Padding(
             padding: const EdgeInsets.only(bottom: 6, left: 4),
-            child: Text('Delete message?',
-                style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: context.ink)),
+            child: Text(
+              'Delete message?',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+                color: context.ink,
+              ),
+            ),
           ),
           if (canEveryone && onEveryone != null)
             _ActionTile(
@@ -207,8 +239,10 @@ Future<void> _confirmTribeDelete(
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel',
-                style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -262,10 +296,7 @@ class MessageHugRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (hasReactions)
-          TribeReactionSummary(
-            counts: reactionCounts,
-            myReaction: myReaction,
-          ),
+          TribeReactionSummary(counts: reactionCounts, myReaction: myReaction),
         if (count > 0)
           Padding(
             padding: EdgeInsets.only(top: hasReactions ? 4 : 0),
@@ -308,20 +339,22 @@ class MessageHugRow extends StatelessWidget {
 class ReplyQuote extends StatelessWidget {
   const ReplyQuote({
     super.key,
-    required this.senderPseudonym,
+    required this.senderLabel,
     required this.content,
     this.onTap,
     this.lightOnDark = false,
   });
 
-  final String senderPseudonym;
+  final String senderLabel;
   final String? content;
   final VoidCallback? onTap;
   final bool lightOnDark;
 
   @override
   Widget build(BuildContext context) {
-    final preview = content?.trim().isNotEmpty == true ? content! : 'Attachment';
+    final preview = content?.trim().isNotEmpty == true
+        ? content!
+        : 'Attachment';
     final fg = lightOnDark ? Colors.white : context.ink;
     return GestureDetector(
       onTap: onTap,
@@ -344,7 +377,7 @@ class ReplyQuote extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '@$senderPseudonym',
+              senderLabel,
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 11,
@@ -385,10 +418,10 @@ class PinnedMessageBanner extends StatelessWidget {
     final preview = message.content?.trim().isNotEmpty == true
         ? message.content!
         : message.hasAudio
-            ? 'Voice note'
-            : message.hasImage
-                ? 'Photo'
-                : 'Pinned message';
+        ? 'Voice note'
+        : message.hasImage
+        ? 'Photo'
+        : 'Pinned message';
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
       child: Material(
@@ -401,15 +434,18 @@ class PinnedMessageBanner extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
             child: Row(
               children: [
-                const Icon(Icons.push_pin,
-                    size: 18, color: VentlyColors.berryMagenta),
+                const Icon(
+                  Icons.push_pin,
+                  size: 18,
+                  color: VentlyColors.berryMagenta,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Pinned · @${message.senderPseudonym}',
+                        'Pinned · ${message.displayName}',
                         style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 11,

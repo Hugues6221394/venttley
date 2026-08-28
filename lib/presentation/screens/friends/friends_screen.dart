@@ -8,6 +8,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/user_friendly_errors.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_recommendations.dart';
 import '../../theme/colors.dart';
@@ -21,6 +22,7 @@ import '../../widgets/vently_premium_background.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/verified_badge.dart';
+import '../home/home_shell.dart';
 
 /// Friends — Image #15.
 ///
@@ -75,7 +77,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   Widget build(BuildContext context) {
     final me = ref.watch(sessionProvider);
     final friendsAsync = ref.watch(myFriendsProvider);
-    final incoming = ref.watch(incomingFriendRequestsProvider).valueOrNull ??
+    final incoming =
+        ref.watch(incomingFriendRequestsProvider).valueOrNull ??
         const <FriendRequest>[];
     final suggestionsAsync = ref.watch(friendSuggestionsProvider);
     final tribeQuery = TribeQuery(
@@ -86,8 +89,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
         ? ref.watch(recommendedTribesProvider(tribeQuery))
         : null;
 
-    final filteredFriends =
-        _applyQuery(friendsAsync.valueOrNull ?? const [], _query.text);
+    final filteredFriends = _applyQuery(
+      friendsAsync.valueOrNull ?? const [],
+      _query.text,
+    );
     final grouped = _groupAlphabetically(filteredFriends);
 
     return Scaffold(
@@ -114,9 +119,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                   ),
                 ),
                 if (_view == _CircleView.friends) ...[
-                  SliverToBoxAdapter(
-                    child: _InstantConnectCard(me: me),
-                  ),
+                  SliverToBoxAdapter(child: _InstantConnectCard(me: me)),
                   if (incoming.isNotEmpty)
                     SliverToBoxAdapter(
                       child: _RequestsSection(incoming: incoming),
@@ -136,6 +139,18 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                   if (friendsAsync.isLoading &&
                       friendsAsync.valueOrNull == null)
                     const SliverToBoxAdapter(child: _ListSkeleton())
+                  else if (friendsAsync.hasError &&
+                      friendsAsync.valueOrNull == null)
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: 320,
+                        child: VentlyErrorState(
+                          error: friendsAsync.error!,
+                          title: 'Couldn\'t load friends',
+                          onRetry: () => ref.invalidate(myFriendsProvider),
+                        ),
+                      ),
+                    )
                   else if (filteredFriends.isEmpty)
                     SliverToBoxAdapter(
                       child: _EmptyState(
@@ -150,7 +165,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 116),
+                      // Bottom inset drops to 8: the suggestions rail below now
+                      // owns the nav clearance, so keeping it here would leave a
+                      // nav-pill-sized gap in the middle of the page.
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
                       sliver: SliverList.builder(
                         itemCount: grouped.length,
                         itemBuilder: (ctx, i) {
@@ -160,28 +178,48 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(4, 14, 4, 6),
-                                  child: Text(
-                                    entry.letter,
-                                    style: const TextStyle(
-                                      color: VentlyColors.berryMagenta,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 13,
+                                if (entry.letter.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      4,
+                                      14,
+                                      4,
+                                      6,
+                                    ),
+                                    child: Text(
+                                      entry.letter,
+                                      style: const TextStyle(
+                                        color: VentlyColors.berryMagenta,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                   ),
-                                ),
                                 for (final f in entry.friends)
-                                  RepaintBoundary(
-                                    child: _FriendRow(friend: f),
-                                  ),
+                                  RepaintBoundary(child: _FriendRow(friend: f)),
                               ],
                             ),
                           );
                         },
                       ),
                     ),
+                  // Suggestions after the list ends, not only when it is
+                  // empty. friend_suggestions() already ranks mutual-tribe
+                  // people first with a cold-start fallback, but it was gated on
+                  // having zero friends — so the one moment a user is most
+                  // obviously looking for someone new, having just scrolled to
+                  // the bottom of everyone they know, was the one moment the
+                  // screen offered nothing.
+                  if ((friendsAsync.valueOrNull?.isNotEmpty ?? false))
+                    SliverToBoxAdapter(
+                      child: _QuickSuggestionsSection(
+                        async: suggestionsAsync,
+                        heading: 'People you might know',
+                      ),
+                    ),
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: HomeShell.navClearance),
+                  ),
                 ] else ...[
                   SliverToBoxAdapter(
                     child: _TribeExploreControls(
@@ -219,7 +257,12 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 6, 20, 116),
+                      padding: const EdgeInsets.fromLTRB(
+                        20,
+                        6,
+                        20,
+                        HomeShell.navClearance,
+                      ),
                       sliver: SliverList.builder(
                         itemCount: recommendationsAsync.valueOrNull!.length,
                         itemBuilder: (context, index) {
@@ -250,7 +293,11 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     final cleaned = q.trim().toLowerCase();
     if (cleaned.isEmpty) return all;
     return all
-        .where((f) => f.pseudonym.toLowerCase().contains(cleaned))
+        .where(
+          (f) =>
+              f.pseudonym.toLowerCase().contains(cleaned) ||
+              f.displayName.toLowerCase().contains(cleaned),
+        )
         .toList();
   }
 
@@ -270,14 +317,27 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     });
   }
 
+  /// Below this, an index costs more than it saves.
+  ///
+  /// A–Z headers exist so you can find one person in a long list. With four
+  /// friends they produced three headers for four rows — a letter above almost
+  /// every name, which reads as structure that means something and does not.
+  static const _kAlphabetIndexFrom = 12;
+
   List<_AlphabeticalGroup> _groupAlphabetically(List<FriendSummary> friends) {
-    final sorted = [...friends]..sort((a, b) {
+    final sorted = [...friends]
+      ..sort((a, b) {
         if (_sort == _FriendSort.favorites) {
           final fav = (b.isFavorite ? 1 : 0) - (a.isFavorite ? 1 : 0);
           if (fav != 0) return fav;
         }
         return a.pseudonym.toLowerCase().compareTo(b.pseudonym.toLowerCase());
       });
+    if (sorted.length < _kAlphabetIndexFrom) {
+      // One unlabelled group: the sort order above still applies, so favourites
+      // stay on top — the headers were never what put them there.
+      return [_AlphabeticalGroup(letter: '', friends: sorted)];
+    }
     final groups = <String, List<FriendSummary>>{};
     for (final f in sorted) {
       final letter = f.pseudonym.isEmpty ? '#' : f.pseudonym[0].toUpperCase();
@@ -316,8 +376,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.shield_outlined, color: context.ink),
-                title: const Text('Blocked accounts',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Blocked accounts',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _openBlockedSheet(context);
@@ -326,8 +388,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.outbox_outlined, color: context.ink),
-                title: const Text('Sent requests',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Sent requests',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _openOutgoingSheet(context);
@@ -416,10 +480,7 @@ class _AlphabeticalGroup {
 // =========================================================================
 
 class _CircleViewTabs extends StatelessWidget {
-  const _CircleViewTabs({
-    required this.selected,
-    required this.onSelected,
-  });
+  const _CircleViewTabs({required this.selected, required this.onSelected});
 
   final _CircleView selected;
   final ValueChanged<_CircleView> onSelected;
@@ -634,10 +695,7 @@ class _TribeExploreControls extends StatelessWidget {
 }
 
 class _RecommendedTribeCard extends ConsumerStatefulWidget {
-  const _RecommendedTribeCard({
-    super.key,
-    required this.recommendation,
-  });
+  const _RecommendedTribeCard({super.key, required this.recommendation});
 
   final TribeRecommendation recommendation;
 
@@ -688,9 +746,9 @@ class _RecommendedTribeCardState extends ConsumerState<_RecommendedTribeCard> {
       ref.invalidate(tribesProvider);
       ref.invalidate(recommendedTribesProvider);
       ref.invalidate(tribeBySlugProvider(tribe.slug));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('You joined ${tribe.name}.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('You joined ${tribe.name}.')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -870,10 +928,7 @@ class _FriendsHeader extends StatelessWidget {
             dimension: 46,
             child: IconButton(
               tooltip: 'Notifications',
-              icon: VentlyNotificationBell(
-                color: context.ink,
-                size: 23,
-              ),
+              icon: VentlyNotificationBell(color: context.ink, size: 23),
               style: IconButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.surface,
                 side: const BorderSide(color: VentlyColors.softMauve),
@@ -891,108 +946,90 @@ class _FriendsHeader extends StatelessWidget {
 // INSTANT CONNECT
 // =========================================================================
 
+/// The two ways to add someone, as two buttons.
+///
+/// This was a full explainer card — a 64pt QR tile, a heading and two lines of
+/// body copy — stacked above the buttons it described. Together they pushed the
+/// friends list entirely off the first screen: on a 6.7" display you scrolled
+/// past a page of onboarding to reach the four people you came for. The one
+/// sentence worth keeping is the privacy reassurance, which is why it stays as
+/// a caption rather than moving into a sheet nobody opens.
 class _InstantConnectCard extends StatelessWidget {
   const _InstantConnectCard({required this.me});
   final AppUser? me;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: context.glassBorder),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: context.isDark
-                        ? VentlyColors.berryDesat.withOpacity(0.14)
-                        : VentlyColors.roseTint,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  alignment: Alignment.center,
-                  child: const Icon(Icons.qr_code_2_rounded,
-                      color: VentlyColors.roseDeep, size: 31),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Instant connect',
-                        style: TextStyle(
-                          color: context.ink,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 17,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        "Share your profile or scan a friend's code - no numbers, no real names.",
-                        style: TextStyle(
-                          color: context.inkMuted,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                          height: 1.45,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
                 child: SizedBox(
-                  height: 48,
-                  child: FilledButton(
-                    onPressed:
-                        me == null ? null : () => _shareLink(context, me!),
+                  height: 46,
+                  child: FilledButton.icon(
+                    onPressed: me == null
+                        ? null
+                        : () => _shareLink(context, me!),
+                    icon: const Icon(Icons.ios_share_rounded, size: 18),
+                    label: const Text(
+                      'Share link',
+                      maxLines: 1,
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
                     style: FilledButton.styleFrom(
                       backgroundColor: VentlyColors.berryMagenta,
+                      // FilledButton.icon's default horizontal padding wrapped
+                      // "Share link" onto two lines inside a half-width pill on
+                      // a 390pt phone. Caught by the golden, not the simulator,
+                      // which is 12pt wider.
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(18),
                       ),
                       elevation: 0,
                     ),
-                    child: const Text('Share link',
-                        style: TextStyle(fontWeight: FontWeight.w900)),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: SizedBox(
-                  height: 48,
-                  child: FilledButton(
-                    onPressed:
-                        me == null ? null : () => _showMyQr(context, me!),
+                  height: 46,
+                  child: FilledButton.icon(
+                    onPressed: me == null
+                        ? null
+                        : () => _showMyQr(context, me!),
+                    icon: const Icon(Icons.qr_code_2_rounded, size: 19),
+                    label: const Text(
+                      'My QR',
+                      maxLines: 1,
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
                     style: FilledButton.styleFrom(
                       backgroundColor: VentlyColors.roseTint,
                       foregroundColor: VentlyColors.roseDeep,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(18),
                       ),
                       elevation: 0,
                     ),
-                    child: const Text('My QR',
-                        style: TextStyle(fontWeight: FontWeight.w900)),
                   ),
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'No phone numbers, no real names.',
+            style: TextStyle(
+              color: context.inkMuted,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
@@ -1050,11 +1087,14 @@ class _InstantConnectCard extends StatelessWidget {
               _RealQrCard(handle: me.anonymousPseudonym),
               const SizedBox(height: 14),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
-                  color:
-                      context.isDark ? context.glass() : VentlyColors.cardBlush,
+                  color: context.isDark
+                      ? context.glass()
+                      : VentlyColors.cardBlush,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
@@ -1168,7 +1208,51 @@ class _RequestsSection extends ConsumerWidget {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {},
+                      onPressed: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        showDragHandle: true,
+                        builder: (sheetContext) => SafeArea(
+                          child: SizedBox(
+                            height:
+                                MediaQuery.sizeOf(sheetContext).height * 0.72,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    20,
+                                    0,
+                                    20,
+                                    12,
+                                  ),
+                                  child: Text(
+                                    'Friend requests · ${incoming.length}',
+                                    style: TextStyle(
+                                      color: context.ink,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: ListView.builder(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      20,
+                                      0,
+                                      20,
+                                      24,
+                                    ),
+                                    itemCount: incoming.length,
+                                    itemBuilder: (_, index) =>
+                                        _RequestCard(request: incoming[index]),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                       style: TextButton.styleFrom(
                         foregroundColor: VentlyColors.berryMagenta,
                       ),
@@ -1243,7 +1327,8 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
             onTap: () => openUserProfile(context, request.otherUserId),
             child: ProfileAvatar(
               avatarSeed: request.otherAvatarSeed,
-              label: request.otherPseudonym,
+              label: request.primaryName,
+              profilePhotoUrl: request.profilePhotoUrl,
               size: 48,
             ),
           ),
@@ -1256,7 +1341,7 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    request.otherPseudonym,
+                    request.primaryName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -1267,6 +1352,7 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
                   ),
                   const SizedBox(height: 4),
                   Text(
+                    '@${request.otherPseudonym.replaceFirst('@', '')} · '
                     '${_relative(request.createdAt)} · ${request.otherKarma} karma',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1307,8 +1393,10 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
               child: IconButton(
                 tooltip: 'Ignore',
                 onPressed: () => _decide(accept: false),
-                icon: const Icon(Icons.close_rounded,
-                    color: VentlyColors.roseDeep),
+                icon: const Icon(
+                  Icons.close_rounded,
+                  color: VentlyColors.roseDeep,
+                ),
                 style: IconButton.styleFrom(
                   backgroundColor: VentlyColors.roseTint,
                 ),
@@ -1326,8 +1414,16 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
 // =========================================================================
 
 class _QuickSuggestionsSection extends StatelessWidget {
-  const _QuickSuggestionsSection({required this.async});
+  const _QuickSuggestionsSection({
+    required this.async,
+    this.heading = 'Quick Suggestions',
+  });
   final AsyncValue<List<FriendSuggestion>> async;
+
+  /// Reads differently depending on where it sits. Above an empty list it is
+  /// the whole point of the screen; below a populated one it is an invitation
+  /// to keep going.
+  final String heading;
   @override
   Widget build(BuildContext context) {
     final list = async.valueOrNull ?? const <FriendSuggestion>[];
@@ -1345,8 +1441,9 @@ class _QuickSuggestionsSection extends StatelessWidget {
               decoration: BoxDecoration(
                 color: context.glass(0.9),
                 borderRadius: BorderRadius.circular(22),
-                border:
-                    Border.all(color: VentlyColors.softMauve.withOpacity(0.3)),
+                border: Border.all(
+                  color: VentlyColors.softMauve.withOpacity(0.3),
+                ),
               ),
             ),
           ),
@@ -1362,7 +1459,7 @@ class _QuickSuggestionsSection extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
             child: Text(
-              'Quick Suggestions',
+              heading,
               style: TextStyle(
                 color: context.ink,
                 fontWeight: FontWeight.w900,
@@ -1397,19 +1494,74 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
   bool _sent = false;
   bool _busy = false;
 
+  /// Kept from the send so the request can be withdrawn again. Adding someone
+  /// on a hunch has to be undoable — otherwise a mis-tap on a stranger is
+  /// permanent, and on an app where people are here to be vulnerable that is
+  /// not a small thing.
+  String? _friendshipId;
+
   Future<void> _add() async {
-    if (_busy || _sent) return;
+    if (_busy) return;
     setState(() => _busy = true);
     try {
-      await ref.read(repositoryProvider).sendFriendRequest(widget.s.userId);
+      final id = await ref
+          .read(repositoryProvider)
+          .sendFriendRequest(widget.s.userId);
       ref.invalidate(outgoingFriendRequestsProvider);
-      ref.invalidate(friendSuggestionsProvider);
+      // Deliberately NOT invalidating friendSuggestionsProvider here: it would
+      // drop this person out of the rail the instant you added them, taking the
+      // undo with it.
       if (!mounted) return;
-      setState(() => _sent = true);
+      setState(() {
+        _sent = true;
+        _friendshipId = id;
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not send: $e')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              e,
+              fallback: "Couldn't send that request.",
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Withdraw a request you just sent. decline_friend_request takes either side
+  /// of a pending row — the recipient declining and the sender withdrawing are
+  /// the same delete — so there is nothing new needed on the server.
+  Future<void> _withdraw() async {
+    final id = _friendshipId;
+    if (_busy || id == null) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(repositoryProvider).declineFriendRequest(id);
+      ref.invalidate(outgoingFriendRequestsProvider);
+      if (!mounted) return;
+      setState(() {
+        _sent = false;
+        _friendshipId = null;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Request withdrawn.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              e,
+              fallback: "Couldn't withdraw that request.",
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1422,86 +1574,111 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
       padding: const EdgeInsets.fromLTRB(10, 12, 10, 10),
       margin: EdgeInsets.zero,
       borderRadius: 22,
-      child: SizedBox(
-        width: 132,
-        child: Column(
-          children: [
-            ProfileAvatar(
-              avatarSeed: widget.s.avatarSeed,
-              label: widget.s.pseudonym,
-              profilePhotoUrl: widget.s.profilePhotoUrl,
-              size: 58,
-              showVerifiedBadge: widget.s.isVerified,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    widget.s.pseudonym,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: context.ink,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
+      // The whole card opens the public profile. Deciding whether to add a
+      // stranger from a name and a one-line rationale is asking a lot; the
+      // profile is where that decision can actually be made. The button keeps
+      // its own taps, so ADD still adds.
+      child: InkWell(
+        onTap: () => context.push('/user/${widget.s.userId}'),
+        borderRadius: BorderRadius.circular(22),
+        child: SizedBox(
+          width: 132,
+          child: Column(
+            children: [
+              ProfileAvatar(
+                avatarSeed: widget.s.avatarSeed,
+                label: widget.s.primaryName,
+                profilePhotoUrl: widget.s.profilePhotoUrl,
+                size: 58,
+                showVerifiedBadge: widget.s.isVerified,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      widget.s.primaryName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: context.ink,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
-                ),
-                if (widget.s.isVerified) ...[
-                  const SizedBox(width: 3),
-                  const VerifiedBadge(size: 13),
+                  if (widget.s.isVerified) ...[
+                    const SizedBox(width: 3),
+                    const VerifiedBadge(size: 13),
+                  ],
                 ],
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              widget.s.rationale,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: context.ink.withOpacity(0.6),
-                fontSize: 10.5,
-                fontWeight: FontWeight.w800,
               ),
-            ),
-            const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              height: 30,
-              child: FilledButton(
-                onPressed: _add,
-                style: FilledButton.styleFrom(
-                  backgroundColor: _sent
-                      ? VentlyColors.softMauve.withOpacity(0.4)
-                      : const Color(0xFFFFE3EC),
-                  foregroundColor: VentlyColors.berryMagenta,
-                  padding: EdgeInsets.zero,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
+              const SizedBox(height: 2),
+              Text(
+                widget.s.rationale,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.ink.withOpacity(0.6),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
                 ),
-                child: _busy
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: VentlyColors.berryMagenta),
-                      )
-                    : Text(
-                        _sent ? 'PENDING' : 'ADD',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 11,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
               ),
-            ),
-          ],
+              const Spacer(),
+              SizedBox(
+                width: double.infinity,
+                height: 30,
+                child: FilledButton(
+                  // Once sent, this is the undo. It used to be a dead label that
+                  // called _add and returned immediately, so a request could be
+                  // started and never taken back.
+                  onPressed: _sent ? _withdraw : _add,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _sent
+                        ? VentlyColors.softMauve.withOpacity(0.4)
+                        : const Color(0xFFFFE3EC),
+                    foregroundColor: VentlyColors.berryMagenta,
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: _busy
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: VentlyColors.berryMagenta,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (_sent) ...[
+                              const Icon(Icons.close_rounded, size: 12),
+                              const SizedBox(width: 3),
+                            ],
+                            Text(
+                              // "PENDING" alone says what happened, not what a
+                              // tap will do. The cross is what makes it read as
+                              // undoable.
+                              _sent ? 'PENDING' : 'ADD',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 11,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ).animate().fadeIn(duration: 220.ms);
@@ -1526,7 +1703,7 @@ class _MyFriendsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1568,13 +1745,17 @@ class _MyFriendsHeader extends StatelessWidget {
             decoration: BoxDecoration(
               color: context.glass(0.9),
               borderRadius: BorderRadius.circular(22),
-              border:
-                  Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
+              border: Border.all(
+                color: VentlyColors.softMauve.withOpacity(0.4),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.search_rounded,
-                    size: 18, color: VentlyColors.berryMagenta),
+                const Icon(
+                  Icons.search_rounded,
+                  size: 18,
+                  color: VentlyColors.berryMagenta,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
@@ -1616,15 +1797,13 @@ class _FriendRow extends ConsumerWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 13),
           decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: VentlyColors.softMauve),
-            ),
+            border: Border(bottom: BorderSide(color: VentlyColors.softMauve)),
           ),
           child: Row(
             children: [
               ProfileAvatar(
                 avatarSeed: friend.avatarSeed,
-                label: friend.pseudonym,
+                label: friend.displayName,
                 profilePhotoUrl: friend.profilePhotoUrl,
                 size: 52,
                 showVerifiedBadge: friend.isVerified,
@@ -1639,7 +1818,7 @@ class _FriendRow extends ConsumerWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            friend.pseudonym,
+                            friend.displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1670,8 +1849,11 @@ class _FriendRow extends ConsumerWidget {
               _FavoriteHeart(friend: friend),
               IconButton(
                 visualDensity: VisualDensity.compact,
-                icon: Icon(Icons.more_horiz_rounded,
-                    color: context.inkMuted, size: 20),
+                icon: Icon(
+                  Icons.more_horiz_rounded,
+                  color: context.inkMuted,
+                  size: 20,
+                ),
                 onPressed: () => _showActions(context, ref),
               ),
             ],
@@ -1718,8 +1900,10 @@ class _FriendRow extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.person_outline, color: context.ink),
-                title: const Text('View profile',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'View profile',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(sheetCtx);
                   context.push('/user/${friend.userId}');
@@ -1728,18 +1912,21 @@ class _FriendRow extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.chat_bubble_outline, color: context.ink),
-                title: const Text('Message',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Message',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
                   try {
-                    final room =
-                        await ref.read(repositoryProvider).sendMessageRequest(
-                              peerUserId: friend.userId,
-                              peerPseudonym: friend.pseudonym,
-                              peerAvatarSeed: friend.avatarSeed,
-                              preview: 'Hey',
-                            );
+                    final room = await ref
+                        .read(repositoryProvider)
+                        .sendMessageRequest(
+                          peerUserId: friend.userId,
+                          peerPseudonym: friend.pseudonym,
+                          peerAvatarSeed: friend.avatarSeed,
+                          preview: 'Hey',
+                        );
                     if (context.mounted) {
                       GoRouter.of(context).push('/chat/${room.roomId}');
                     }
@@ -1758,8 +1945,10 @@ class _FriendRow extends ConsumerWidget {
                   color: context.ink,
                   muted: true,
                 ),
-                title: const Text('Mute notifications',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Mute notifications',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () {
                   Navigator.pop(sheetCtx);
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -1772,8 +1961,10 @@ class _FriendRow extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.person_remove_alt_1, color: context.ink),
-                title: const Text('Remove friend',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                title: const Text(
+                  'Remove friend',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
                   await ref.read(repositoryProvider).unfriend(friend.userId);
@@ -1783,8 +1974,10 @@ class _FriendRow extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.block,
-                    color: Theme.of(context).colorScheme.error),
+                leading: Icon(
+                  Icons.block,
+                  color: Theme.of(context).colorScheme.error,
+                ),
                 title: Text(
                   'Block',
                   style: TextStyle(
@@ -1859,7 +2052,8 @@ class _OutgoingSheet extends ConsumerWidget {
   const _OutgoingSheet();
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final outgoing = ref.watch(outgoingFriendRequestsProvider).valueOrNull ??
+    final outgoing =
+        ref.watch(outgoingFriendRequestsProvider).valueOrNull ??
         const <FriendRequest>[];
     return DraggableScrollableSheet(
       initialChildSize: 0.55,
@@ -1898,19 +2092,21 @@ class _OutgoingSheet extends ConsumerWidget {
                           final r = outgoing[i];
                           return Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: context.glass(0.9),
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
-                                  color:
-                                      VentlyColors.softMauve.withOpacity(0.3)),
+                                color: VentlyColors.softMauve.withOpacity(0.3),
+                              ),
                             ),
                             child: Row(
                               children: [
                                 ProfileAvatar(
                                   avatarSeed: r.otherAvatarSeed,
-                                  label: r.otherPseudonym,
+                                  label: r.primaryName,
                                   size: 38,
                                 ),
                                 const SizedBox(width: 10),
@@ -1920,7 +2116,7 @@ class _OutgoingSheet extends ConsumerWidget {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        r.otherPseudonym,
+                                        r.primaryName,
                                         style: TextStyle(
                                           color: context.ink,
                                           fontWeight: FontWeight.w900,
@@ -1943,7 +2139,8 @@ class _OutgoingSheet extends ConsumerWidget {
                                         .read(repositoryProvider)
                                         .declineFriendRequest(r.friendshipId);
                                     ref.invalidate(
-                                        outgoingFriendRequestsProvider);
+                                      outgoingFriendRequestsProvider,
+                                    );
                                   },
                                   child: const Text(
                                     'Cancel',
@@ -2036,8 +2233,9 @@ class _ListSkeleton extends StatelessWidget {
             decoration: BoxDecoration(
               color: context.glass(0.9),
               borderRadius: BorderRadius.circular(18),
-              border:
-                  Border.all(color: VentlyColors.softMauve.withOpacity(0.3)),
+              border: Border.all(
+                color: VentlyColors.softMauve.withOpacity(0.3),
+              ),
             ),
           ),
         ),

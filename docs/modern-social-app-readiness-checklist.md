@@ -66,14 +66,14 @@ Main gaps to verify before calling it modern-production-ready:
 
 - [x] Composer drafts and retry payloads are encrypted with platform secure
   storage, account-scoped, and migrated away from plaintext preferences.
-- [x] Posts, comments, whisper comments, DMs, and tribe messages use one
+- [x] Posts, audio Whispers, comments, whisper comments, DMs, and tribe messages use one
   mutation UUID across the first request and every retry.
 - [x] Private server receipts and transaction locks make lost-response retries
   return the original resource instead of creating duplicates.
 - [x] Automatic retries use bounded backoff; writes that exhaust the retry
   window remain visible and can be retried instead of being deleted.
-- [x] Tier-2 moderation is authenticated, size-bounded, rate-limited, and keeps
-  provider secrets out of the mobile binary.
+- [x] The advisory moderation API is authenticated, size-bounded, and
+  rate-limited; authoritative content rules execute at database ingress.
 - [x] PII scrubbing covers nested telemetry, logs, breadcrumbs, exceptions,
   tokens, email addresses, phone-like values, and long free-form text.
 - [x] New search/feature-flag surfaces use caller RLS and explicit Data API
@@ -94,9 +94,10 @@ tests remain release gates.
 - [x] The moderation handler is dependency-injected and tested without network
   calls for auth, quotas, malformed/oversized input, cache hits, cache writes,
   provider degradation, and provider-output sanitization.
-- [x] Images and voice notes are encrypted before upload and survive upload
-  failure, row-send failure, restart, backoff, and manual retry. Local bytes are
-  removed after confirmation or explicit failed-send removal.
+- [x] Pending image and voice bytes are encrypted in app-private local recovery
+  storage before upload. Supabase Storage objects are not client-side E2EE.
+  Upload and row-send retries retain local bytes until confirmation or explicit
+  failed-send removal.
 - [x] Vents, stories, replies, DMs, and tribe image/voice messages share the
   same durable media/outbox path and server mutation key.
 - [x] DM voice-note schema, storage MIME types, room status, participant checks,

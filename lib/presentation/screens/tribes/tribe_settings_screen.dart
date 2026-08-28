@@ -7,9 +7,11 @@ import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../home/home_shell.dart';
 
 class TribeSettingsScreen extends ConsumerWidget {
   const TribeSettingsScreen({super.key, required this.slug});
@@ -94,11 +96,8 @@ class TribeSettingsScreen extends ConsumerWidget {
                           icon: Icons.tune_rounded,
                           title: 'Access and permissions',
                           subtitle: 'Visibility, approvals, posting and safety',
-                          onTap: () => _showAdvancedSettings(
-                            context,
-                            ref,
-                            overview,
-                          ),
+                          onTap: () =>
+                              _showAdvancedSettings(context, ref, overview),
                         ),
                         _ManagementTile(
                           icon: Icons.rule_rounded,
@@ -150,9 +149,8 @@ class TribeSettingsScreen extends ConsumerWidget {
                           subtitle:
                               '${overview.openReports} open report${overview.openReports == 1 ? '' : 's'}',
                           badge: overview.openReports,
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/moderation',
-                          ),
+                          onTap: () =>
+                              context.push('/tribe/$slug/manage/moderation'),
                         ),
                         _ManagementTile(
                           icon: Icons.insights_outlined,
@@ -181,19 +179,21 @@ class TribeSettingsScreen extends ConsumerWidget {
                         overview,
                         action,
                       ),
-                      onTransfer: () => _showTransferSheet(
-                        context,
-                        ref,
-                        overview,
-                      ),
-                      onDelete: () => _showDeleteDialog(
-                        context,
-                        ref,
-                        overview,
-                      ),
+                      onTransfer: () =>
+                          _showTransferSheet(context, ref, overview),
+                      onDelete: () => _showDeleteDialog(context, ref, overview),
                     ),
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                  // Clear the floating nav, not an arbitrary 40. HomeShell
+                  // paints its pill over the branch, so at 40 the last row —
+                  // Delete Tribe — sat at y~792 against a pill occupying
+                  // ~770-835: tapping the app's most destructive action
+                  // activated a nav tab instead. It was unreachable rather
+                  // than dangerous, but the same padding also swallowed
+                  // Archive and Transfer at the bottom of the list.
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: HomeShell.navClearance),
+                  ),
                 ],
               ),
             ),
@@ -222,7 +222,9 @@ class TribeSettingsScreen extends ConsumerWidget {
     );
     if (result == null || !context.mounted) return;
     try {
-      await ref.read(repositoryProvider).updateTribeConfiguration(
+      await ref
+          .read(repositoryProvider)
+          .updateTribeConfiguration(
             tribeId: overview.tribeId,
             settings: result,
           );
@@ -252,47 +254,52 @@ class TribeSettingsScreen extends ConsumerWidget {
       'cancel_delete' => 'Restore Tribe',
       _ => 'Update Tribe',
     };
-    final reason = TextEditingController();
-    final confirmed = await showDialog<bool>(
+    final reasonText = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(label),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_lifecycleMessage(action)),
-            if (action == 'pause' || action == 'archive') ...[
-              const SizedBox(height: 16),
-              TextField(
-                controller: reason,
-                maxLength: 240,
-                decoration: const InputDecoration(
-                  labelText: 'Reason (optional)',
-                  prefixIcon: Icon(Icons.notes_rounded),
+      builder: (dialogContext) => ModalTextControllerScope(
+        initialValues: const [''],
+        builder: (dialogContext, controllers) => AlertDialog(
+          title: Text(label),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_lifecycleMessage(action)),
+              if (action == 'pause' || action == 'archive') ...[
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controllers.single,
+                  maxLength: 240,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason (optional)',
+                    prefixIcon: Icon(Icons.notes_rounded),
+                  ),
                 ),
-              ),
+              ],
             ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, controllers.single.text.trim()),
+              child: Text(label),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(label),
-          ),
-        ],
       ),
     );
-    if (confirmed != true || !context.mounted) return;
+    if (reasonText == null || !context.mounted) return;
     try {
-      await ref.read(repositoryProvider).setTribeLifecycle(
+      await ref
+          .read(repositoryProvider)
+          .setTribeLifecycle(
             tribeId: overview.tribeId,
             action: action,
-            reason: reason.text.trim(),
+            reason: reasonText,
           );
       ref.invalidate(tribeManagementProvider(overview.tribeId));
       ref.invalidate(tribesIKeepProvider);
@@ -305,24 +312,31 @@ class TribeSettingsScreen extends ConsumerWidget {
   }
 
   static String _lifecycleMessage(String action) => switch (action) {
-        'pause' =>
-          'New members and new posts will stop. Existing content and chats remain available.',
-        'archive' =>
-          'The Tribe becomes read-only and leaves public discovery until restored.',
-        'activate' =>
-          'Membership and posting will reopen with all data preserved.',
-        'cancel_delete' =>
-          'This cancels permanent deletion and restores the Tribe immediately.',
-        _ => 'This updates the Tribe lifecycle.',
-      };
+    'pause' =>
+      'New members and new posts will stop. Existing content and chats remain available.',
+    'archive' =>
+      'The Tribe becomes read-only and leaves public discovery until restored.',
+    'activate' => 'Membership and posting will reopen with all data preserved.',
+    'cancel_delete' =>
+      'This cancels permanent deletion and restores the Tribe immediately.',
+    _ => 'This updates the Tribe lifecycle.',
+  };
 
   static Future<void> _showTransferSheet(
     BuildContext context,
     WidgetRef ref,
     TribeManagementOverview overview,
   ) async {
-    final members =
-        await ref.read(tribeMembersProvider(overview.tribeId).future);
+    List<TribeMemberRow> members;
+    try {
+      members = await ref.read(tribeMembersProvider(overview.tribeId).future);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load transfer candidates: $error')),
+      );
+      return;
+    }
     if (!context.mounted) return;
     final eligible = members.where((member) => !member.isKeeper).toList();
     await showModalBottomSheet<void>(
@@ -341,13 +355,15 @@ class TribeSettingsScreen extends ConsumerWidget {
   ) async {
     final result =
         await showDialog<({String name, String password, String reason})>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _DeleteTribeDialog(overview: overview),
-    );
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => _DeleteTribeDialog(overview: overview),
+        );
     if (result == null || !context.mounted) return;
     try {
-      await ref.read(repositoryProvider).setTribeLifecycle(
+      await ref
+          .read(repositoryProvider)
+          .setTribeLifecycle(
             tribeId: overview.tribeId,
             action: 'request_delete',
             confirmedName: result.name,
@@ -487,8 +503,10 @@ class _StatusBanner extends StatelessWidget {
                   Container(
                     width: 7,
                     height: 7,
-                    decoration:
-                        BoxDecoration(color: accent, shape: BoxShape.circle),
+                    decoration: BoxDecoration(
+                      color: accent,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -539,11 +557,16 @@ class _Snapshot extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    Icon(values[i].$3,
-                        size: 17, color: VentlyColors.berryMagenta),
+                    Icon(
+                      values[i].$3,
+                      size: 17,
+                      color: VentlyColors.berryMagenta,
+                    ),
                     const SizedBox(height: 4),
-                    Text('${values[i].$2}',
-                        style: const TextStyle(fontWeight: FontWeight.w900)),
+                    Text(
+                      '${values[i].$2}',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
                     Text(
                       values[i].$1,
                       style: TextStyle(
@@ -634,8 +657,10 @@ class _ManagementTile extends StatelessWidget {
         ),
         child: Icon(icon, size: 19, color: VentlyColors.berryMagenta),
       ),
-      title: Text(title,
-          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+      title: Text(
+        title,
+        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+      ),
       subtitle: Text(
         subtitle,
         maxLines: 2,
@@ -689,12 +714,14 @@ class _LifecycleSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Ownership and lifecycle',
-              style: TextStyle(
-                color: context.ink,
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-              )),
+          Text(
+            'Ownership and lifecycle',
+            style: TextStyle(
+              color: context.ink,
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           const SizedBox(height: 10),
           GlassCard(
             padding: EdgeInsets.zero,
@@ -782,14 +809,18 @@ class _LifecycleTile extends StatelessWidget {
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
       leading: Icon(icon, color: color),
-      title: Text(title,
-          style: TextStyle(color: color, fontWeight: FontWeight.w900)),
-      subtitle: Text(subtitle,
-          style: TextStyle(
-            color: context.ink.withOpacity(0.55),
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          )),
+      title: Text(
+        title,
+        style: TextStyle(color: color, fontWeight: FontWeight.w900),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          color: context.ink.withOpacity(0.55),
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       trailing: onTap == null ? null : const Icon(Icons.chevron_right_rounded),
     );
   }
@@ -809,8 +840,9 @@ class _AdvancedSettingsSheetState extends State<_AdvancedSettingsSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints:
-          BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .9),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .9,
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
@@ -833,17 +865,21 @@ class _AdvancedSettingsSheetState extends State<_AdvancedSettingsSheet> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text('Access and permissions',
-                        style: TextStyle(
-                          color: context.ink,
-                          fontSize: 19,
-                          fontWeight: FontWeight.w900,
-                        )),
+                    child: Text(
+                      'Access and permissions',
+                      style: TextStyle(
+                        color: context.ink,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                   ),
                   TextButton(
                     onPressed: () => Navigator.pop(context, value),
-                    child: const Text('Save',
-                        style: TextStyle(fontWeight: FontWeight.w900)),
+                    child: const Text(
+                      'Save',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
                   ),
                 ],
               ),
@@ -854,8 +890,9 @@ class _AdvancedSettingsSheetState extends State<_AdvancedSettingsSheet> {
                 children: [
                   SwitchListTile.adaptive(
                     value: value.joinApprovalRequired,
-                    onChanged: (next) => setState(() =>
-                        value = value.copyWith(joinApprovalRequired: next)),
+                    onChanged: (next) => setState(
+                      () => value = value.copyWith(joinApprovalRequired: next),
+                    ),
                     title: const Text('Join approval required'),
                     subtitle: const Text('Review every membership request'),
                   ),
@@ -868,9 +905,9 @@ class _AdvancedSettingsSheetState extends State<_AdvancedSettingsSheet> {
                       '7 days': 7,
                       '30 days': 30,
                     },
-                    onChanged: (next) => setState(() => value = value.copyWith(
-                          minimumAccountAgeDays: next,
-                        )),
+                    onChanged: (next) => setState(
+                      () => value = value.copyWith(minimumAccountAgeDays: next),
+                    ),
                   ),
                   _ChoiceTile(
                     title: 'Post approval',
@@ -880,9 +917,9 @@ class _AdvancedSettingsSheetState extends State<_AdvancedSettingsSheet> {
                       'New members': 'new_members',
                       'All posts': 'all',
                     },
-                    onChanged: (next) => setState(() => value = value.copyWith(
-                          postApprovalMode: next,
-                        )),
+                    onChanged: (next) => setState(
+                      () => value = value.copyWith(postApprovalMode: next),
+                    ),
                   ),
                   _ChoiceTile(
                     title: 'Posting permission',
@@ -892,9 +929,9 @@ class _AdvancedSettingsSheetState extends State<_AdvancedSettingsSheet> {
                       'Moderators': 'mods',
                       'Plug only': 'keeper',
                     },
-                    onChanged: (next) => setState(() => value = value.copyWith(
-                          postingPermission: next,
-                        )),
+                    onChanged: (next) => setState(
+                      () => value = value.copyWith(postingPermission: next),
+                    ),
                   ),
                   _ChoiceTile(
                     title: 'Slow mode',
@@ -908,27 +945,30 @@ class _AdvancedSettingsSheetState extends State<_AdvancedSettingsSheet> {
                       '5 minutes': 300,
                       '1 hour': 3600,
                     },
-                    onChanged: (next) => setState(() => value = value.copyWith(
-                          slowModeSeconds: next,
-                        )),
+                    onChanged: (next) => setState(
+                      () => value = value.copyWith(slowModeSeconds: next),
+                    ),
                   ),
                   SwitchListTile.adaptive(
                     value: value.allowWhispers,
                     onChanged: (next) => setState(
-                        () => value = value.copyWith(allowWhispers: next)),
+                      () => value = value.copyWith(allowWhispers: next),
+                    ),
                     title: const Text('Allow Whispers'),
                   ),
                   SwitchListTile.adaptive(
                     value: value.allowPolls,
                     onChanged: (next) => setState(
-                        () => value = value.copyWith(allowPolls: next)),
+                      () => value = value.copyWith(allowPolls: next),
+                    ),
                     title: const Text('Allow polls'),
                   ),
                   SwitchListTile.adaptive(
                     value: value.allowAnonymousReactions,
-                    onChanged: (next) => setState(() => value = value.copyWith(
-                          allowAnonymousReactions: next,
-                        )),
+                    onChanged: (next) => setState(
+                      () =>
+                          value = value.copyWith(allowAnonymousReactions: next),
+                    ),
                     title: const Text('Anonymous reactions'),
                   ),
                   _ChoiceTile(
@@ -939,22 +979,24 @@ class _AdvancedSettingsSheetState extends State<_AdvancedSettingsSheet> {
                       'Standard': 'standard',
                       'Strict': 'strict',
                     },
-                    onChanged: (next) => setState(() => value = value.copyWith(
-                          contentSensitivityFilter: next,
-                        )),
+                    onChanged: (next) => setState(
+                      () => value = value.copyWith(
+                        contentSensitivityFilter: next,
+                      ),
+                    ),
                   ),
                   SwitchListTile.adaptive(
                     value: value.showContentWhenPaused,
-                    onChanged: (next) => setState(() => value = value.copyWith(
-                          showContentWhenPaused: next,
-                        )),
+                    onChanged: (next) => setState(
+                      () => value = value.copyWith(showContentWhenPaused: next),
+                    ),
                     title: const Text('Show content while paused'),
                   ),
                   SwitchListTile.adaptive(
                     value: value.inviteLinksEnabled,
-                    onChanged: (next) => setState(() => value = value.copyWith(
-                          inviteLinksEnabled: next,
-                        )),
+                    onChanged: (next) => setState(
+                      () => value = value.copyWith(inviteLinksEnabled: next),
+                    ),
                     title: const Text('Invite links'),
                   ),
                 ],
@@ -1014,8 +1056,9 @@ class _TransferSheetState extends ConsumerState<_TransferSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints:
-          BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .84),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .84,
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
@@ -1029,12 +1072,14 @@ class _TransferSheetState extends ConsumerState<_TransferSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Transfer ownership',
-                      style: TextStyle(
-                        color: context.ink,
-                        fontSize: 19,
-                        fontWeight: FontWeight.w900,
-                      )),
+                  Text(
+                    'Transfer ownership',
+                    style: TextStyle(
+                      color: context.ink,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                   const SizedBox(height: 5),
                   Text(
                     'Ownership changes only after the recipient accepts.',
@@ -1062,7 +1107,7 @@ class _TransferSheetState extends ConsumerState<_TransferSheet> {
                             groupValue: selectedUserId,
                             onChanged: (next) =>
                                 setState(() => selectedUserId = next),
-                            title: Text('@${member.pseudonym}'),
+                            title: Text(member.displayName),
                             subtitle: Text(member.role.toUpperCase()),
                           ),
                         SwitchListTile.adaptive(
@@ -1102,7 +1147,9 @@ class _TransferSheetState extends ConsumerState<_TransferSheet> {
   Future<void> _submit() async {
     setState(() => saving = true);
     try {
-      await ref.read(repositoryProvider).initiateTribeTransfer(
+      await ref
+          .read(repositoryProvider)
+          .initiateTribeTransfer(
             tribeId: widget.overview.tribeId,
             toUserId: selectedUserId!,
             keepPreviousOwnerAsMod: keepAsMod,
@@ -1145,8 +1192,11 @@ class _DeleteTribeDialogState extends State<_DeleteTribeDialog> {
     final valid =
         name.text.trim() == widget.overview.name && password.text.isNotEmpty;
     return AlertDialog(
-      icon: const Icon(Icons.warning_amber_rounded,
-          color: VentlyColors.dangerRed, size: 34),
+      icon: const Icon(
+        Icons.warning_amber_rounded,
+        color: VentlyColors.dangerRed,
+        size: 34,
+      ),
       title: const Text('Schedule Tribe deletion'),
       content: SingleChildScrollView(
         child: Column(
@@ -1176,9 +1226,11 @@ class _DeleteTribeDialogState extends State<_DeleteTribeDialog> {
                 suffixIcon: IconButton(
                   tooltip: obscure ? 'Show password' : 'Hide password',
                   onPressed: () => setState(() => obscure = !obscure),
-                  icon: Icon(obscure
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined),
+                  icon: Icon(
+                    obscure
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
                 ),
               ),
             ),
@@ -1200,17 +1252,15 @@ class _DeleteTribeDialogState extends State<_DeleteTribeDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          style:
-              FilledButton.styleFrom(backgroundColor: VentlyColors.dangerRed),
+          style: FilledButton.styleFrom(
+            backgroundColor: VentlyColors.dangerRed,
+          ),
           onPressed: valid
-              ? () => Navigator.pop(
-                    context,
-                    (
-                      name: name.text.trim(),
-                      password: password.text,
-                      reason: reason.text.trim(),
-                    ),
-                  )
+              ? () => Navigator.pop(context, (
+                  name: name.text.trim(),
+                  password: password.text,
+                  reason: reason.text.trim(),
+                ))
               : null,
           child: const Text('Schedule deletion'),
         ),

@@ -29,6 +29,32 @@ void main() {
     expect(migration, contains('FROM anon'));
   });
 
+  test('group member RPC restores its complete invoker privilege chain', () {
+    final migration = File(
+      'supabase/migrations/20260813184402_restore_group_chat_member_rpc_grants.sql',
+    ).readAsStringSync();
+
+    expect(migration, contains('GRANT USAGE ON SCHEMA private'));
+    expect(
+      migration,
+      contains('GRANT EXECUTE ON FUNCTION private.is_chat_room_member(UUID)'),
+    );
+    expect(
+      migration,
+      contains(
+        'ALTER FUNCTION public.group_chat_members(UUID) SECURITY INVOKER',
+      ),
+    );
+    expect(
+      migration,
+      isNot(
+        contains(
+          'ALTER FUNCTION public.group_chat_members(UUID) SECURITY DEFINER',
+        ),
+      ),
+    );
+  });
+
   test('group settings expose the required Instagram-style controls', () {
     final settings = File(
       'lib/presentation/screens/inbox/group_chat_settings_screen.dart',
@@ -50,28 +76,37 @@ void main() {
     ]) {
       expect(settings, contains(label));
     }
+    expect(settings, contains('showGroupInviteShareSheet'));
+    expect(settings, isNot(contains('SelectableText(link')));
+    expect(settings, isNot(contains("venttly://group-invite/\$token")));
     expect(creator, contains('ImagePicker'));
     expect(creator, contains('additionalMemberUserIds'));
   });
 
   test('group invite deep links accept only the registered route shape', () {
+    const token = '550e8400-e29b-41d4-a716-446655440000';
     expect(
-      groupInvitePathFromUri(
-        Uri.parse('venttly://group-invite/invite-token'),
-      ),
-      '/group-invite/invite-token',
+      groupInvitePathFromUri(Uri.parse('venttly://group-invite/$token')),
+      '/group-invite/$token',
     );
     expect(
-      groupInvitePathFromUri(
-        Uri.parse('venttly:///group-invite/invite-token'),
-      ),
-      '/group-invite/invite-token',
+      groupInvitePathFromUri(Uri.parse('venttly:///group-invite/$token')),
+      '/group-invite/$token',
     );
     expect(groupInvitePathFromUri(Uri.parse('https://example.com')), isNull);
     expect(
       groupInvitePathFromUri(Uri.parse('venttly://profile/user-id')),
       isNull,
     );
+    for (final uri in [
+      Uri.parse('venttly://group-invite/not-a-uuid'),
+      Uri.parse('venttly://group-invite/$token/extra'),
+      Uri.parse('venttly://group-invite/$token?redirect=/profile'),
+      Uri.parse('venttly://group-invite/$token#fragment'),
+      Uri.parse('venttly://attacker@group-invite/$token'),
+    ]) {
+      expect(groupInvitePathFromUri(uri), isNull, reason: '$uri');
+    }
   });
 
   testWidgets('member profile opens on root navigator from group settings',

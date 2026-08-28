@@ -21,6 +21,7 @@ import '../../widgets/sensitive_media_veil.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/whisper_comments_sheet.dart';
+import '../../widgets/whisper_mini_player.dart';
 import '../../widgets/whisper_share_sheet.dart';
 
 /// Whispers — TikTok/Reels-style vertical audio feed.
@@ -47,8 +48,18 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
   List<Whisper> _whispers = const [];
   StreamSubscription<ProcessingState>? _completeSub;
 
+  /// Polls media_status while a loaded whisper is still being scanned.
+  ///
+  /// The scan happens server-side after upload and the row starts `pending`,
+  /// which the UI renders as "Checking this image…". Nothing ever re-read it,
+  /// so that message was permanent — the image was fine, the client just never
+  /// asked again. Runs only while something is actually pending and stops
+  /// itself, so a settled feed costs nothing.
+  Timer? _mediaStatusPoll;
+
   @override
   void dispose() {
+    _mediaStatusPoll?.cancel();
     _completeSub?.cancel();
     _pageController.dispose();
     super.dispose();
@@ -77,8 +88,140 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
     );
   }
 
-  Future<void> _onPageChanged(int index, List<Whisper> whispers) async {
+  /// True only while this shell branch is the visible one.
+  ///
+  /// StatefulShellRoute.indexedStack keeps every branch mounted — go_router wraps
+  /// them in `Offstage(offstage: !isActive, child: TickerMode(enabled: isActive))`
+  /// — so this screen is built and alive while the user is on Home. TickerMode is
+  /// therefore the honest signal for "am I on screen", and without it the
+  /// bootstrap below started audio from a page nobody had opened.
+  bool get _onStage => TickerMode.of(context);
+
+  bool _refreshing = false;
+
+  /// Re-enters the feed from the top. `_bootstrapped` is cleared so the existing
+  /// autoplay path re-arms on the new first page, and the page controller is sent
+  /// home — otherwise the PageView would keep the old index and land mid-list.
+  /// Start or stop the pending-media poll to match what is loaded.
+  void _syncMediaStatusPoll() {
+    final pending = _whispers
+        .where((w) => w.mediaStatus == 'pending')
+        .map((w) => w.whisperId)
+        .toList();
+    if (pending.isEmpty) {
+      _mediaStatusPoll?.cancel();
+      _mediaStatusPoll = null;
+      return;
+    }
+    if (_mediaStatusPoll != null) return;
+    // 2.5s is fast enough to feel immediate on a scan that takes a few seconds,
+    // and slow enough that a stuck scan is not a hot loop against the API.
+    _mediaStatusPoll = Timer.periodic(
+      const Duration(milliseconds: 2500),
+      (_) => _pollMediaStatuses(),
+    );
+  }
+
+  Future<void> _pollMediaStatuses() async {
+    final pending = _whispers
+        .where((w) => w.mediaStatus == 'pending')
+        .map((w) => w.whisperId)
+        .toList();
+    if (pending.isEmpty) {
+      _syncMediaStatusPoll();
+      return;
+    }
+    try {
+      final fresh = await ref
+          .read(repositoryProvider)
+          .whisperMediaStatuses(pending);
+      if (!mounted || fresh.isEmpty) return;
+      var changed = false;
+      final next = [
+        for (final w in _whispers)
+          if (fresh[w.whisperId] case final String status
+              when status != w.mediaStatus)
+            (() {
+              changed = true;
+              return w.copyWith(mediaStatus: status);
+            })()
+          else
+            w,
+      ];
+      if (!changed) return;
+      setState(() => _whispers = next);
+      _syncMediaStatusPoll();
+    } catch (_) {
+      // Transient. The next tick tries again; a permanent failure just leaves
+      // the veil up, which is the safe direction for unscanned media.
+    }
+  }
+
+  Future<void> _refreshFeed() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      _bootstrapped = false;
+      await ref.read(whispersFeedProvider.notifier).refresh();
+      if (!mounted) return;
+      if (_pageController.hasClients) _pageController.jumpToPage(0);
+      setState(() => _currentIndex = 0);
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  bool? _wasOnStage;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final onStage = _onStage;
+    if (onStage == _wasOnStage) return;
+    _wasOnStage = onStage;
+    if (!onStage) {
+      // Clear the bootstrap flag either way, so returning re-runs the existing
+      // autoplay path rather than landing on a dead page.
+      _bootstrapped = false;
+      final active = ref.read(activeWhisperProvider);
+      if (active?.startedByUser == true) {
+        // The user chose this one: hand off to the mini-player, keep playing.
+        return;
+      }
+      // Autoplayed. Silence it — this is the case that was the reported bug.
+      unawaited(_pauseOffStage());
+      // Deferred deliberately: didChangeDependencies can run during a build, and
+      // mutating a provider then throws "Tried to modify a provider while the
+      // widget tree was building" — which cascaded into render assertions and a
+      // blank shell.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(activeWhisperProvider.notifier).state = null;
+      });
+    }
+  }
+
+  Future<void> _pauseOffStage() async {
+    try {
+      final controller = await ref.read(whisperPlayerProvider.future);
+      await controller.pause();
+    } catch (_) {
+      /* nothing playing, or the player is gone */
+    }
+  }
+
+  /// [byUser] distinguishes a deliberate swipe from the autoplay that fires when
+  /// the tab opens. Only the former earns the right to keep playing after the
+  /// user leaves — see [ActiveWhisper.startedByUser].
+  Future<void> _onPageChanged(
+    int index,
+    List<Whisper> whispers, {
+    bool byUser = false,
+  }) async {
     if (!mounted) return;
+    // The bootstrap and deep-link paths both run in post-frame callbacks, so
+    // re-check here rather than trusting the caller.
+    if (!_onStage) return;
     HapticFeedback.lightImpact();
     setState(() => _currentIndex = index);
 
@@ -102,7 +245,31 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
       await controller.startPlayback(
         whisperId: w.whisperId,
         url: w.audioUrl,
+        // Re-entry (the bootstrap and deep-link paths) resumes; only a
+        // deliberate swipe onto a whisper starts it over.
+        restart: byUser,
+        musicUrl: w.hasMusicBed ? w.musicPreviewUrl : null,
+        musicStartMs: w.musicStartMs,
+        musicVolume: w.musicVolume,
       );
+      if (mounted) {
+        // Re-entering the tab replays the current page with byUser false. That
+        // must not erase intent the user already expressed for this whisper, or
+        // tapping the mini-player to return would silently strip its right to
+        // follow them out again.
+        final prior = ref.read(activeWhisperProvider);
+        final chosen =
+            byUser ||
+            (prior != null &&
+                prior.whisperId == w.whisperId &&
+                prior.startedByUser);
+        ref.read(activeWhisperProvider.notifier).state = ActiveWhisper(
+          whisperId: w.whisperId,
+          title: (w.title ?? '').trim().isEmpty ? 'Whisper' : w.title!.trim(),
+          author: w.authorDisplayName,
+          startedByUser: chosen,
+        );
+      }
       // Capture this listener (dedup per user; first listen bumps the public
       // plays_count). Every listen is recorded whether or not they like it.
       unawaited(ref.read(repositoryProvider).recordWhisperListen(w.whisperId));
@@ -118,8 +285,10 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              UserFriendlyErrors.message(e,
-                  fallback: 'Could not play whisper.'),
+              UserFriendlyErrors.message(
+                e,
+                fallback: 'Could not play whisper.',
+              ),
             ),
           ),
         );
@@ -128,10 +297,15 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
   }
 
   void _precacheAround(
-      BuildContext context, List<Whisper> whispers, int index) {
-    for (var i = index;
-        i <= index + _preloadAhead && i < whispers.length;
-        i++) {
+    BuildContext context,
+    List<Whisper> whispers,
+    int index,
+  ) {
+    for (
+      var i = index;
+      i <= index + _preloadAhead && i < whispers.length;
+      i++
+    ) {
       final url = whispers[i].backgroundImageUrl;
       if (url != null && url.isNotEmpty) {
         precacheImage(CachedNetworkImageProvider(url), context);
@@ -163,6 +337,8 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
       body: Stack(
         children: [
           feedAsync.when(
+            // Never swap content we still have for a skeleton; first load only.
+            skipLoadingOnReload: true,
             loading: () => const WhisperFeedSkeleton(),
             error: (e, _) => _WhispersError(
               error: e,
@@ -174,17 +350,17 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
                   category: cat,
                   onClearCategory: cat == null
                       ? null
-                      : () => ref
-                          .read(whispersCategoryProvider.notifier)
-                          .state = null,
+                      : () =>
+                            ref.read(whispersCategoryProvider.notifier).state =
+                                null,
                   onComposeSoon: _composeSoonState,
                 );
               }
 
               _whispers = whispers;
+              _syncMediaStatusPoll();
               _scrollToDeepLink(whispers);
-
-              if (!_bootstrapped) {
+              if (!_bootstrapped && _onStage) {
                 _bootstrapped = true;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _onPageChanged(_currentIndex, whispers);
@@ -197,7 +373,7 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
                 physics: const ClampingScrollPhysics(),
                 allowImplicitScrolling: true,
                 itemCount: whispers.length,
-                onPageChanged: (i) => _onPageChanged(i, whispers),
+                onPageChanged: (i) => _onPageChanged(i, whispers, byUser: true),
                 itemBuilder: (ctx, i) {
                   return RepaintBoundary(
                     child: _WhisperPage(
@@ -236,6 +412,8 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
                 activeCategory: cat,
                 onPickCategory: _openCategorySheet,
                 onCompose: _composeSoonState,
+                onRefresh: _refreshFeed,
+                refreshing: _refreshing,
               ),
             ),
           ),
@@ -282,10 +460,19 @@ class _WhispersTopBar extends StatelessWidget {
     required this.activeCategory,
     required this.onPickCategory,
     required this.onCompose,
+    required this.onRefresh,
+    required this.refreshing,
   });
   final String? activeCategory;
   final VoidCallback onPickCategory;
   final VoidCallback onCompose;
+
+  /// Explicit refresh. The feed enters at a random point in the recent unheard
+  /// window, so this genuinely reshuffles rather than re-fetching the same list —
+  /// but a vertical PageView has no pull-to-refresh, so without a button there
+  /// was no way to ask for it.
+  final VoidCallback onRefresh;
+  final bool refreshing;
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -338,13 +525,44 @@ class _WhispersTopBar extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const Icon(Icons.expand_more_rounded,
-                      size: 16, color: VentlyColors.berryMagenta),
+                  const Icon(
+                    Icons.expand_more_rounded,
+                    size: 16,
+                    color: VentlyColors.berryMagenta,
+                  ),
                 ],
               ),
             ),
           ),
           const Spacer(),
+          InkWell(
+            onTap: refreshing ? null : onRefresh,
+            customBorder: const CircleBorder(),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.42),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: refreshing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.refresh_rounded,
+                      color: Colors.white,
+                      size: 19,
+                    ),
+            ),
+          ),
+          const SizedBox(width: 8),
           InkWell(
             onTap: onCompose,
             customBorder: const CircleBorder(),
@@ -356,8 +574,11 @@ class _WhispersTopBar extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
-              child:
-                  const Icon(Icons.mic_rounded, color: Colors.white, size: 18),
+              child: const Icon(
+                Icons.mic_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
             ),
           ),
         ],
@@ -388,6 +609,19 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
   bool _flashForward = false;
   bool _flashPaused = false;
 
+  /// True once the viewer has chosen to see a veiled background.
+  ///
+  /// Tracked here, not only inside SensitiveMediaVeil, because the pause
+  /// overlay below is a later Stack child and therefore sits *above* the veil
+  /// in hit-testing. While the media is still covered that overlay has to stay
+  /// out of the way, or the tap that should reveal the image pauses the audio
+  /// instead — which is precisely what it did.
+  bool _mediaRevealed = false;
+
+  /// Whether a veil is still covering this whisper's background.
+  bool _mediaIsCovered(Whisper whisper) =>
+      whisper.mediaNeedsVeil && !_mediaRevealed;
+
   Future<void> _togglePause() async {
     HapticFeedback.mediumImpact();
     try {
@@ -396,6 +630,11 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
         await controller.startPlayback(
           whisperId: widget.whisper.whisperId,
           url: widget.whisper.audioUrl,
+          musicUrl: widget.whisper.hasMusicBed
+              ? widget.whisper.musicPreviewUrl
+              : null,
+          musicStartMs: widget.whisper.musicStartMs,
+          musicVolume: widget.whisper.musicVolume,
         );
         return;
       }
@@ -457,17 +696,16 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
               SensitiveMediaVeil(
                 veiled: whisper.mediaNeedsVeil,
                 pending: whisper.mediaStatus == 'pending',
+                onRevealed: () => setState(() => _mediaRevealed = true),
                 borderRadius: 0,
                 child: CachedNetworkImage(
                   imageUrl: whisper.backgroundImageUrl!,
                   fit: BoxFit.cover,
                   fadeInDuration: const Duration(milliseconds: 180),
-                  placeholder: (_, __) => Container(
-                    color: context.ink.withOpacity(0.4),
-                  ),
-                  errorWidget: (_, __, ___) => Container(
-                    color: context.ink.withOpacity(0.4),
-                  ),
+                  placeholder: (_, __) =>
+                      Container(color: context.ink.withOpacity(0.4)),
+                  errorWidget: (_, __, ___) =>
+                      Container(color: context.ink.withOpacity(0.4)),
                 ),
               )
             else
@@ -488,29 +726,30 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0x44000000),
-                    Color(0xAA000000),
-                  ],
+                  colors: [Color(0x44000000), Color(0xAA000000)],
                 ),
               ),
             ),
-            Positioned(
-              left: 0,
-              right: 72,
-              top: 56,
-              bottom: 0,
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: _togglePause,
-                onDoubleTapDown: (d) =>
-                    _onDoubleTapDown(d, constraints.maxWidth - 72),
+            if (!_mediaIsCovered(whisper))
+              Positioned(
+                left: 0,
+                right: 72,
+                top: 56,
+                bottom: 0,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: _togglePause,
+                  onDoubleTapDown: (d) =>
+                      _onDoubleTapDown(d, constraints.maxWidth - 72),
+                ),
               ),
-            ),
             if (_flashPaused)
               const Center(
-                child:
-                    Icon(Icons.pause_rounded, color: Colors.white70, size: 72),
+                child: Icon(
+                  Icons.pause_rounded,
+                  color: Colors.white70,
+                  size: 72,
+                ),
               ),
             if (_flashRewind)
               const Align(
@@ -535,10 +774,7 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Spacer(),
-                    _AudioCard(
-                      whisper: whisper,
-                      isActive: widget.isActive,
-                    ),
+                    _AudioCard(whisper: whisper, isActive: widget.isActive),
                     const SizedBox(height: 14),
                     _CaptionBlock(whisper: whisper),
                   ],
@@ -616,8 +852,11 @@ class _StaticAudioCard extends StatelessWidget {
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
-          child: const Icon(Icons.play_arrow_rounded,
-              color: VentlyColors.berryMagenta, size: 30),
+          child: const Icon(
+            Icons.play_arrow_rounded,
+            color: VentlyColors.berryMagenta,
+            size: 30,
+          ),
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -689,6 +928,11 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
         await widget.controller.startPlayback(
           whisperId: widget.whisper.whisperId,
           url: widget.whisper.audioUrl,
+          musicUrl: widget.whisper.hasMusicBed
+              ? widget.whisper.musicPreviewUrl
+              : null,
+          musicStartMs: widget.whisper.musicStartMs,
+          musicVolume: widget.whisper.musicVolume,
         );
       } else {
         await widget.controller.togglePause();
@@ -709,21 +953,29 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
   @override
   Widget build(BuildContext context) {
     final totalSecs = widget.whisper.audioDurationSeconds;
-    final isThisActive = widget.isActive &&
-        widget.controller.isActiveWhisper(widget.whisper.whisperId);
-
-    if (!isThisActive) {
-      return _StaticPausedRow(
-        whisper: widget.whisper,
-        onPlay: _togglePlay,
-      );
-    }
-
+    // The active/inactive branch sits INSIDE the stream on purpose. It used to
+    // return early, outside any subscription, so when the media finished loading
+    // nothing rebuilt this widget — the row stayed on a static play button until
+    // some unrelated frame happened to repaint it.
     return StreamBuilder<PlayerState>(
       stream: widget.controller.stateStream,
       builder: (ctx, stateSnap) {
         final playing = stateSnap.data?.playing ?? false;
         final processing = stateSnap.data?.processingState;
+
+        final isThisActive =
+            widget.isActive &&
+            widget.controller.isActiveWhisper(widget.whisper.whisperId);
+
+        if (!isThisActive) {
+          return _StaticPausedRow(
+            whisper: widget.whisper,
+            onPlay: _togglePlay,
+            loading:
+                widget.isActive &&
+                widget.controller.isLoadingWhisper(widget.whisper.whisperId),
+          );
+        }
 
         return StreamBuilder<Duration>(
           stream: widget.controller.positionStream,
@@ -737,8 +989,9 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
                 .clamp(1, 1 << 30);
             // Clamp the displayed position so it never exceeds the total.
             final posMs = pos.inMilliseconds.clamp(0, totalMs);
-            final progress =
-                _seeking ? _seekValue : (posMs / totalMs).clamp(0.0, 1.0);
+            final progress = _seeking
+                ? _seekValue
+                : (posMs / totalMs).clamp(0.0, 1.0);
 
             return Column(
               mainAxisSize: MainAxisSize.min,
@@ -756,7 +1009,8 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
                           shape: BoxShape.circle,
                         ),
                         alignment: Alignment.center,
-                        child: processing == ProcessingState.loading ||
+                        child:
+                            processing == ProcessingState.loading ||
                                 processing == ProcessingState.buffering
                             ? const SizedBox(
                                 width: 22,
@@ -794,13 +1048,16 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
                                 ),
                               ),
                               const Spacer(),
-                              Icon(Icons.equalizer_rounded,
-                                  color: Colors.white.withOpacity(0.78),
-                                  size: 11),
+                              Icon(
+                                Icons.equalizer_rounded,
+                                color: Colors.white.withOpacity(0.78),
+                                size: 11,
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 WhisperVoiceFilters.label(
-                                    widget.whisper.voiceFilter),
+                                  widget.whisper.voiceFilter,
+                                ),
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.85),
                                   fontSize: 10.5,
@@ -810,7 +1067,8 @@ class _LiveAudioPlayerState extends State<_LiveAudioPlayer> {
                               const SizedBox(width: 10),
                               Text(
                                 _formatDuration(
-                                    Duration(milliseconds: totalMs)),
+                                  Duration(milliseconds: totalMs),
+                                ),
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w900,
@@ -930,16 +1188,24 @@ class _PlaybackChip extends StatelessWidget {
 }
 
 class _StaticPausedRow extends StatelessWidget {
-  const _StaticPausedRow({required this.whisper, required this.onPlay});
+  const _StaticPausedRow({
+    required this.whisper,
+    required this.onPlay,
+    this.loading = false,
+  });
   final Whisper whisper;
   final VoidCallback onPlay;
+
+  /// Media is still downloading. Shows a spinner instead of a play button that
+  /// would do nothing, and swallows the tap so it cannot queue a second load.
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         InkWell(
-          onTap: onPlay,
+          onTap: loading ? null : onPlay,
           customBorder: const CircleBorder(),
           child: Container(
             width: 50,
@@ -949,14 +1215,24 @@ class _StaticPausedRow extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
-            child: const Icon(Icons.play_arrow_rounded,
-                color: VentlyColors.berryMagenta, size: 30),
+            child: loading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: VentlyColors.berryMagenta,
+                    ),
+                  )
+                : const Icon(
+                    Icons.play_arrow_rounded,
+                    color: VentlyColors.berryMagenta,
+                    size: 30,
+                  ),
           ),
         ),
         const SizedBox(width: 14),
-        const Expanded(
-          child: _WaveformProgress(progress: 0),
-        ),
+        const Expanded(child: _WaveformProgress(progress: 0)),
         const SizedBox(width: 8),
         Text(
           _formatSecs(whisper.audioDurationSeconds),
@@ -1009,8 +1285,10 @@ class _WaveformProgress extends StatelessWidget {
       height: 26,
       child: LayoutBuilder(
         builder: (_, constraints) {
-          final filledBars =
-              (_heights.length * progress).round().clamp(0, _heights.length);
+          final filledBars = (_heights.length * progress).round().clamp(
+            0,
+            _heights.length,
+          );
           return Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -1064,6 +1342,7 @@ class _CaptionBlock extends StatelessWidget {
               UserProfileLink(
                 userId: whisper.authorId!,
                 pseudonym: whisper.authorPseudonym.replaceFirst('@', ''),
+                displayName: whisper.authorDisplayName,
                 avatarSeed: whisper.authorAvatarSeed,
                 profilePhotoUrl: whisper.authorProfilePhotoUrl,
                 size: 32,
@@ -1071,7 +1350,7 @@ class _CaptionBlock extends StatelessWidget {
             else
               ProfileAvatar(
                 avatarSeed: whisper.authorAvatarSeed,
-                label: whisper.authorPseudonym,
+                label: whisper.authorDisplayName,
                 profilePhotoUrl: whisper.authorProfilePhotoUrl,
                 size: 32,
               ),
@@ -1080,7 +1359,7 @@ class _CaptionBlock extends StatelessWidget {
               InkWell(
                 onTap: () => context.push('/user/${whisper.authorId}'),
                 child: Text(
-                  '@${whisper.authorPseudonym}',
+                  whisper.authorDisplayName,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w900,
@@ -1090,7 +1369,7 @@ class _CaptionBlock extends StatelessWidget {
               )
             else
               Text(
-                '@${whisper.authorPseudonym}',
+                whisper.authorDisplayName,
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w900,
@@ -1292,8 +1571,10 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              UserFriendlyErrors.message(e,
-                  fallback: 'Could not save whisper.'),
+              UserFriendlyErrors.message(
+                e,
+                fallback: 'Could not save whisper.',
+              ),
             ),
           ),
         );
@@ -1307,8 +1588,9 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
   Widget build(BuildContext context) {
     final repository = ref.read(repositoryProvider);
     final me = ref.watch(sessionProvider) ?? repository.currentUser;
-    final isMine =
-        widget.whisper.ownedBy(me?.userId ?? repository.authenticatedUserId);
+    final isMine = widget.whisper.ownedBy(
+      me?.userId ?? repository.authenticatedUserId,
+    );
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1317,18 +1599,14 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
           emoji: _myReaction != null ? PostReactions.emoji(_myReaction!) : null,
           label: _short(_totalReactions),
           color: _myReaction != null ? VentlyColors.berryMagenta : Colors.white,
-          onTap: _openReactionPicker,
+          onTap: isMine ? null : _openReactionPicker,
         ),
         const SizedBox(height: 14),
         _RailButton(
           icon: Icons.mode_comment_outlined,
           label: _short(widget.whisper.commentsCount),
           color: Colors.white,
-          onTap: () => showWhisperCommentsSheet(
-            context,
-            ref,
-            widget.whisper,
-          ),
+          onTap: () => showWhisperCommentsSheet(context, ref, widget.whisper),
         ),
         const SizedBox(height: 14),
         _RailButton(
@@ -1376,10 +1654,14 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline,
-                    color: VentlyColors.berryMagenta),
-                title: const Text('Delete whisper',
-                    style: TextStyle(color: VentlyColors.berryMagenta)),
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: VentlyColors.berryMagenta,
+                ),
+                title: const Text(
+                  'Delete whisper',
+                  style: TextStyle(color: VentlyColors.berryMagenta),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _confirmDeleteWhisper();
@@ -1391,8 +1673,11 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
                 title: const Text('Report whisper'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Reported. Thanks for the heads up.')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Reported. Thanks for the heads up.'),
+                    ),
+                  );
                 },
               ),
           ],
@@ -1403,8 +1688,9 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
 
   Future<void> _openEditWhisperDialog() async {
     final titleCtl = TextEditingController(text: widget.whisper.title ?? '');
-    final descCtl =
-        TextEditingController(text: widget.whisper.description ?? '');
+    final descCtl = TextEditingController(
+      text: widget.whisper.description ?? '',
+    );
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1441,8 +1727,9 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Save'),
@@ -1452,22 +1739,27 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
     );
     if (saved != true) return;
     try {
-      final ok = await ref.read(repositoryProvider).editWhisper(
+      final ok = await ref
+          .read(repositoryProvider)
+          .editWhisper(
             whisperId: widget.whisper.whisperId,
             title: titleCtl.text.trim().isEmpty ? null : titleCtl.text.trim(),
-            description:
-                descCtl.text.trim().isEmpty ? null : descCtl.text.trim(),
+            description: descCtl.text.trim().isEmpty
+                ? null
+                : descCtl.text.trim(),
           );
       if (!mounted) return;
       if (ok) {
         ref.invalidate(whispersFeedProvider);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Whisper updated')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Whisper updated')));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(_friendly(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendly(e))));
     }
   }
 
@@ -1479,11 +1771,13 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
         content: const Text('This can\'t be undone.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: VentlyColors.berryMagenta),
+              backgroundColor: VentlyColors.berryMagenta,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
           ),
@@ -1500,20 +1794,22 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
         ref.invalidate(whispersFeedProvider);
         ref.invalidate(myWhispersProvider);
         ref.invalidate(popularWhispersProvider);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Whisper deleted')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Whisper deleted')));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(_friendly(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendly(e))));
     }
   }
 
   String _friendly(Object e) => UserFriendlyErrors.message(
-        e,
-        fallback: 'Something went wrong. Try again.',
-      );
+    e,
+    fallback: 'Something went wrong. Try again.',
+  );
 
   static String _short(int n) {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
@@ -1534,7 +1830,7 @@ class _RailButton extends StatelessWidget {
   final String? emoji;
   final String label;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
     return InkWell(
@@ -1669,8 +1965,11 @@ class _WhispersError extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_rounded,
-                size: 44, color: Colors.white.withOpacity(0.9)),
+            Icon(
+              Icons.cloud_off_rounded,
+              size: 44,
+              color: Colors.white.withOpacity(0.9),
+            ),
             const SizedBox(height: VentlyTokens.s12),
             const Text(
               'Whispers unavailable',
@@ -1698,8 +1997,10 @@ class _WhispersError extends StatelessWidget {
                 backgroundColor: VentlyColors.berryMagenta,
               ),
               icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Try again',
-                  style: TextStyle(fontWeight: FontWeight.w900)),
+              label: const Text(
+                'Try again',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
             ),
           ],
         ),
@@ -1729,10 +2030,11 @@ class _WhispersEmpty extends ConsumerWidget {
             .where((post) => !post.isWhisper)
             .take(3)
             .toList();
-    final people = (ref.watch(friendSuggestionsProvider).valueOrNull ??
-            const <FriendSuggestion>[])
-        .take(8)
-        .toList();
+    final people =
+        (ref.watch(friendSuggestionsProvider).valueOrNull ??
+                const <FriendSuggestion>[])
+            .take(8)
+            .toList();
 
     return SafeArea(
       child: CustomScrollView(
@@ -1837,14 +2139,10 @@ class _WhispersEmpty extends ConsumerWidget {
                 final post = posts[index];
                 return PostCard(
                   post: post,
-                  onTap: () => context.push(
-                    '/post/${post.postId}',
-                    extra: post,
-                  ),
-                  onComment: () => context.push(
-                    '/post/${post.postId}',
-                    extra: post,
-                  ),
+                  onTap: () =>
+                      context.push('/post/${post.postId}', extra: post),
+                  onComment: () =>
+                      context.push('/post/${post.postId}', extra: post),
                   onShare: () => context.push('/post/${post.postId}/share'),
                 );
               },

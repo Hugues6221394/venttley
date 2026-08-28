@@ -66,6 +66,49 @@ void main() {
         studio,
         contains("context.push('/tribe/\${tribe.slug}/manage/settings')"),
       );
+      final dashboard = File(
+        'lib/presentation/screens/tribes/tribe_manage_screen.dart',
+      ).readAsStringSync();
+      final actionCenter = File(
+        'lib/presentation/widgets/keeper_action_center.dart',
+      ).readAsStringSync();
+      expect(
+        dashboard,
+        contains("context.push('/tribe/\$tribeSlug/manage/settings')"),
+      );
+      expect(actionCenter, contains('/manage/settings/members'));
+      for (final path in const [
+        'lib/presentation/screens/tribes/tribe_members_management_screen.dart',
+        'lib/presentation/screens/tribes/tribe_spaces_management_screen.dart',
+        'lib/presentation/screens/tribes/tribe_rules_editor_screen.dart',
+        'lib/presentation/screens/tribes/tribe_content_management_screen.dart',
+        'lib/presentation/screens/tribes/tribe_audit_screen.dart',
+      ]) {
+        final source = File(path).readAsStringSync();
+        expect(source, contains('sessionProvider'), reason: path);
+        expect(source, contains('tribe.keeperId'), reason: path);
+      }
+      final members = File(
+        'lib/presentation/screens/tribes/tribe_members_management_screen.dart',
+      ).readAsStringSync();
+      final content = File(
+        'lib/presentation/screens/tribes/tribe_content_management_screen.dart',
+      ).readAsStringSync();
+      expect(members, contains('Could not send this invitation'));
+      expect(content, contains('Could not load Spaces'));
+      expect(
+        dashboard,
+        contains('Could not search right now'),
+        reason: 'Invite lookup failures must remain inside the sheet',
+      );
+      final create = File(
+        'lib/presentation/screens/tribes/create_tribe_screen.dart',
+      ).readAsStringSync();
+      expect(
+        create,
+        contains('Tribe created. Its images could not be saved yet'),
+        reason: 'Optional media failure must not encourage duplicate Tribes',
+      );
       expect(
           notifications, contains("item.kind == 'tribe_ownership_transfer'"));
       expect(notifications, contains('respondTribeTransfer'));

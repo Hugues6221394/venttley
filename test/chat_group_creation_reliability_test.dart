@@ -19,8 +19,10 @@ void main() {
       'lib/presentation/widgets/chat_options_sheet.dart',
     ).readAsStringSync();
 
-    expect(migration,
-        contains('CREATE OR REPLACE FUNCTION public.create_group_chat'));
+    expect(
+      migration,
+      contains('CREATE OR REPLACE FUNCTION public.create_group_chat'),
+    );
     expect(migration, contains("f.status = 'accepted'"));
     expect(migration, contains("room_kind IN ('direct', 'group')"));
     expect(migration, contains("r.room_kind = 'group' AS is_group"));
@@ -28,8 +30,9 @@ void main() {
     expect(sheet, isNot(contains("context.push('/tribes/new')")));
   });
 
-  testWidgets('group chat action closes its sheet before navigation',
-      (tester) async {
+  testWidgets('group chat action closes its sheet before navigation', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -44,11 +47,8 @@ void main() {
           builder: (context, state) => Scaffold(
             body: Center(
               child: FilledButton(
-                onPressed: () => showChatOptionsSheet(
-                  context,
-                  room: _room,
-                  onSearch: () {},
-                ),
+                onPressed: () =>
+                    showChatOptionsSheet(context, room: _room, onSearch: () {}),
                 child: const Text('Open options'),
               ),
             ),
@@ -88,8 +88,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('group creator stays composed on a compact phone',
-      (tester) async {
+  testWidgets('group creator stays composed on a compact phone', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -128,7 +129,7 @@ void main() {
 
     expect(find.text('New group chat'), findsOneWidget);
     expect(find.text('Create group chat'), findsOneWidget);
-    expect(find.text('@HealingSlow'), findsOneWidget);
+    expect(find.text('HealingSlow'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

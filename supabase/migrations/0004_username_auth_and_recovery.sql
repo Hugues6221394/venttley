@@ -1,8 +1,8 @@
 -- ============================================================================
--- Venttly | Migration 0004 — Username/password auth + zero-PII recovery
+-- Venttly | Migration 0004 — Username/password auth + pseudonymous recovery
 --
 -- v1 moves from Supabase anonymous auth to username + password. To stay
--- zero-PII the client maps a username to a synthetic internal handle
+-- no-contact username flow maps a username to a synthetic internal handle
 -- (`<lower(username)>@id.venttly.app`) and uses Supabase email+password auth;
 -- the password is the real credential.
 --

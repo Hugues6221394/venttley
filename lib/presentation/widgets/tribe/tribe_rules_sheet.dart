@@ -15,10 +15,7 @@ Future<void> showTribeRulesSheet(BuildContext context, Tribe tribe) {
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (_) => GlassSheet(
-      child: SafeArea(
-        top: false,
-        child: _RulesSheetBody(tribe: tribe),
-      ),
+      child: SafeArea(top: false, child: _RulesSheetBody(tribe: tribe)),
     ),
   );
 }
@@ -63,22 +60,29 @@ class _RulesSheetBodyState extends ConsumerState<_RulesSheetBody> {
         ),
         Row(
           children: [
-            const Icon(Icons.menu_book_outlined,
-                size: 18, color: VentlyColors.berryMagenta),
+            const Icon(
+              Icons.menu_book_outlined,
+              size: 18,
+              color: VentlyColors.berryMagenta,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 '${widget.tribe.name} — Rules',
                 style: const TextStyle(
-                    fontWeight: FontWeight.w900, fontSize: 16),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                ),
               ),
             ),
             if (isKeeper)
               TextButton.icon(
                 onPressed: _editRules,
                 icon: const Icon(Icons.edit_outlined, size: 16),
-                label: const Text('Edit',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                label: const Text(
+                  'Edit',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
               ),
           ],
         ),
@@ -126,8 +130,10 @@ class _RulesSheetBodyState extends ConsumerState<_RulesSheetBody> {
                     child: Text(
                       lines[i],
                       style: const TextStyle(
-                          fontSize: 13.5, height: 1.4,
-                          fontWeight: FontWeight.w600),
+                        fontSize: 13.5,
+                        height: 1.4,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -140,13 +146,15 @@ class _RulesSheetBodyState extends ConsumerState<_RulesSheetBody> {
           decoration: BoxDecoration(
             color: VentlyColors.dangerRed.withOpacity(0.08),
             borderRadius: BorderRadius.circular(12),
-            border:
-                Border.all(color: VentlyColors.dangerRed.withOpacity(0.25)),
+            border: Border.all(color: VentlyColors.dangerRed.withOpacity(0.25)),
           ),
           child: Row(
             children: [
-              const Icon(Icons.gavel_rounded,
-                  size: 15, color: VentlyColors.dangerRed),
+              const Icon(
+                Icons.gavel_rounded,
+                size: 15,
+                color: VentlyColors.dangerRed,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -179,29 +187,34 @@ class _RulesSheetBodyState extends ConsumerState<_RulesSheetBody> {
           maxLines: 10,
           maxLength: 2000,
           decoration: const InputDecoration(
-            hintText: 'One rule per line, e.g.\nBe kind — no harassment.\nNo screenshots. What stays here, stays safe.',
+            hintText:
+                'One rule per line, e.g.\nBe kind — no harassment.\nNo screenshots. What stays here, stays safe.',
           ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-              child: const Text('Save')),
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
     if (saved == null) return;
     try {
-      await ref.read(repositoryProvider).updateTribeManagement(
-          tribeId: widget.tribe.tribeId, rules: saved);
+      await ref
+          .read(repositoryProvider)
+          .updateTribeManagement(tribeId: widget.tribe.tribeId, rules: saved);
       ref.invalidate(tribeBySlugProvider(widget.tribe.slug));
       if (mounted) setState(() => _rules = saved);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Could not save rules: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save rules: $e')));
     }
   }
 }
@@ -216,8 +229,9 @@ class _BanList extends ConsumerStatefulWidget {
 }
 
 class _BanListState extends ConsumerState<_BanList> {
-  late Future<List<Map<String, dynamic>>> _future =
-      ref.read(repositoryProvider).tribeBans(widget.tribeId);
+  late Future<List<Map<String, dynamic>>> _future = ref
+      .read(repositoryProvider)
+      .tribeBans(widget.tribeId);
 
   @override
   Widget build(BuildContext context) {
@@ -249,10 +263,13 @@ class _BanListState extends ConsumerState<_BanList> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('@${b['pseudonym']}',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 13)),
+                          Text(
+                            '@${b['pseudonym']}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
                           if ((b['reason'] as String?)?.isNotEmpty == true)
                             Text(
                               b['reason'] as String,
@@ -260,8 +277,7 @@ class _BanListState extends ConsumerState<_BanList> {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 11,
-                                color: context.ink
-                                    .withOpacity(0.55),
+                                color: context.ink.withOpacity(0.55),
                               ),
                             ),
                         ],
@@ -269,17 +285,24 @@ class _BanListState extends ConsumerState<_BanList> {
                     ),
                     TextButton(
                       onPressed: () async {
-                        await ref.read(repositoryProvider).unbanMember(
-                            tribeId: widget.tribeId,
-                            userId: b['userId'] as String);
+                        await ref
+                            .read(repositoryProvider)
+                            .unbanMember(
+                              tribeId: widget.tribeId,
+                              userId: b['userId'] as String,
+                            );
                         if (mounted) {
-                          setState(() => _future = ref
-                              .read(repositoryProvider)
-                              .tribeBans(widget.tribeId));
+                          setState(
+                            () => _future = ref
+                                .read(repositoryProvider)
+                                .tribeBans(widget.tribeId),
+                          );
                         }
                       },
-                      child: const Text('Unban',
-                          style: TextStyle(fontWeight: FontWeight.w800)),
+                      child: const Text(
+                        'Unban',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
                     ),
                   ],
                 ),

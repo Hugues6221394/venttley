@@ -7,6 +7,7 @@ import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_premium_background.dart';
@@ -18,10 +19,12 @@ class TribeContentManagementScreen extends ConsumerStatefulWidget {
     super.key,
     required this.slug,
     this.initialFilter = 'all',
+    this.initialAction,
   });
 
   final String slug;
   final String initialFilter;
+  final String? initialAction;
 
   @override
   ConsumerState<TribeContentManagementScreen> createState() =>
@@ -33,16 +36,20 @@ class _TribeContentManagementScreenState
   late _ContentFilter _filter;
   String? _busyPostId;
 
+  bool get _isPinSelection => widget.initialAction == 'pin';
+
   @override
   void initState() {
     super.initState();
-    _filter = switch (widget.initialFilter) {
-      'pinned' => _ContentFilter.pinned,
-      'pending' => _ContentFilter.pending,
-      'attention' => _ContentFilter.attention,
-      'archived' => _ContentFilter.archived,
-      _ => _ContentFilter.all,
-    };
+    _filter = _isPinSelection
+        ? _ContentFilter.all
+        : switch (widget.initialFilter) {
+            'pinned' => _ContentFilter.pinned,
+            'pending' => _ContentFilter.pending,
+            'attention' => _ContentFilter.attention,
+            'archived' => _ContentFilter.archived,
+            _ => _ContentFilter.all,
+          };
   }
 
   @override
@@ -75,7 +82,13 @@ class _TribeContentManagementScreenState
 
     final postsAsync = ref.watch(managedTribePostsProvider(tribe.tribeId));
     final posts = postsAsync.valueOrNull ?? const <TribeManagedPost>[];
-    final visible = _applyFilter(posts);
+    final visible = _isPinSelection
+        ? posts
+            .where(
+              (post) => !post.isPinned && !post.isArchived && !post.isPending,
+            )
+            .toList(growable: false)
+        : _applyFilter(posts);
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: VentlyPremiumBackground(
@@ -94,15 +107,17 @@ class _TribeContentManagementScreenState
                     pendingCount: posts.where((post) => post.isPending).length,
                     attentionCount:
                         posts.where((post) => post.needsAttention).length,
+                    pinSelection: _isPinSelection,
                     onBack: () => context.pop(),
                   ),
                 ),
-                SliverToBoxAdapter(
-                  child: _FilterBar(
-                    selected: _filter,
-                    onChanged: (value) => setState(() => _filter = value),
+                if (!_isPinSelection)
+                  SliverToBoxAdapter(
+                    child: _FilterBar(
+                      selected: _filter,
+                      onChanged: (value) => setState(() => _filter = value),
+                    ),
                   ),
-                ),
                 if (postsAsync.isLoading && posts.isEmpty)
                   const SliverFillRemaining(
                     child: Center(child: CircularProgressIndicator()),
@@ -120,7 +135,10 @@ class _TribeContentManagementScreenState
                 else if (visible.isEmpty)
                   SliverFillRemaining(
                     hasScrollBody: false,
-                    child: _EmptyState(filter: _filter),
+                    child: _EmptyState(
+                      filter: _filter,
+                      pinSelection: _isPinSelection,
+                    ),
                   )
                 else
                   SliverPadding(
@@ -137,6 +155,10 @@ class _TribeContentManagementScreenState
                           onAuthor: post.authorId == null
                               ? null
                               : () => context.push('/user/${post.authorId}'),
+                          primaryActionLabel: _isPinSelection ? 'Pin' : null,
+                          onPrimaryAction: _isPinSelection
+                              ? () => _performAction(tribe, post, 'pin')
+                              : null,
                           onAction: (action) =>
                               _performAction(tribe, post, action),
                         );
@@ -212,7 +234,16 @@ class _TribeContentManagementScreenState
   }
 
   Future<String?> _chooseSpace(String tribeId, String? currentSpaceId) async {
-    final spaces = await ref.read(spacesByTribeProvider(tribeId).future);
+    List<Space> spaces;
+    try {
+      spaces = await ref.read(spacesByTribeProvider(tribeId).future);
+    } catch (error) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load Spaces: $error')),
+      );
+      return null;
+    }
     if (!mounted) return null;
     final choices = spaces
         .where((space) => !space.isArchived && space.spaceId != currentSpaceId)
@@ -261,58 +292,62 @@ class _TribeContentManagementScreenState
     String action,
     TribeManagedPost post,
   ) async {
-    final controller = TextEditingController();
     final result = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(_actionLabel(action)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              action == 'remove' || action == 'reject'
-                  ? 'This removes the vent from member view.'
-                  : 'This changes how members can access this vent.',
+      builder: (dialogContext) => ModalTextControllerScope(
+        initialValues: const [''],
+        builder: (dialogContext, controllers) {
+          final controller = controllers.single;
+          return AlertDialog(
+            title: Text(_actionLabel(action)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  action == 'remove' || action == 'reject'
+                      ? 'This removes the vent from member view.'
+                      : 'This changes how members can access this vent.',
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  maxLength: 240,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason',
+                    hintText: 'Add a clear moderation reason',
+                    prefixIcon: Icon(Icons.notes_rounded),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  post.content,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: context.inkMuted, fontSize: 12),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              maxLength: 240,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Reason',
-                hintText: 'Add a clear moderation reason',
-                prefixIcon: Icon(Icons.notes_rounded),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              post.content,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: context.inkMuted, fontSize: 12),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.length < 3) return;
-              Navigator.pop(dialogContext, value);
-            },
-            child: const Text('Confirm'),
-          ),
-        ],
+              FilledButton(
+                onPressed: () {
+                  final value = controller.text.trim();
+                  if (value.length < 3) return;
+                  Navigator.pop(dialogContext, value);
+                },
+                child: const Text('Confirm'),
+              ),
+            ],
+          );
+        },
       ),
     );
-    controller.dispose();
     return result;
   }
 
@@ -344,12 +379,14 @@ class _Header extends StatelessWidget {
     required this.tribe,
     required this.pendingCount,
     required this.attentionCount,
+    required this.pinSelection,
     required this.onBack,
   });
 
   final Tribe tribe;
   final int pendingCount;
   final int attentionCount;
+  final bool pinSelection;
   final VoidCallback onBack;
 
   @override
@@ -367,12 +404,17 @@ class _Header extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Content control',
-                    style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900),
+                  Text(
+                    pinSelection ? 'Pin a vent' : 'Content control',
+                    style: const TextStyle(
+                      fontSize: 25,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                   Text(
-                    tribe.name,
+                    pinSelection
+                        ? 'Choose a vent to keep at the top of ${tribe.name}'
+                        : tribe.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -455,12 +497,16 @@ class _ManagedPostCard extends StatelessWidget {
     required this.onOpen,
     required this.onAction,
     this.onAuthor,
+    this.primaryActionLabel,
+    this.onPrimaryAction,
   });
 
   final TribeManagedPost post;
   final bool busy;
   final VoidCallback onOpen;
   final VoidCallback? onAuthor;
+  final String? primaryActionLabel;
+  final VoidCallback? onPrimaryAction;
   final ValueChanged<String> onAction;
 
   @override
@@ -563,6 +609,14 @@ class _ManagedPostCard extends StatelessWidget {
                 const SizedBox(width: 5),
                 Text('${post.commentsCount}', style: _metricStyle(context)),
                 const Spacer(),
+                if (primaryActionLabel != null && onPrimaryAction != null) ...[
+                  FilledButton.icon(
+                    onPressed: busy ? null : onPrimaryAction,
+                    icon: const Icon(Icons.push_pin_outlined, size: 16),
+                    label: Text(primaryActionLabel!),
+                  ),
+                  const SizedBox(width: 6),
+                ],
                 TextButton.icon(
                   onPressed: onOpen,
                   icon: const Icon(Icons.open_in_new_rounded, size: 16),
@@ -722,9 +776,13 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.filter});
+  const _EmptyState({
+    required this.filter,
+    this.pinSelection = false,
+  });
 
   final _ContentFilter filter;
+  final bool pinSelection;
 
   @override
   Widget build(BuildContext context) => Center(
@@ -740,15 +798,19 @@ class _EmptyState extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               Text(
-                filter == _ContentFilter.all
-                    ? 'No Tribe vents yet'
-                    : 'Nothing in this queue',
+                pinSelection
+                    ? 'Every eligible vent is already pinned'
+                    : filter == _ContentFilter.all
+                        ? 'No Tribe vents yet'
+                        : 'Nothing in this queue',
                 style:
                     const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 6),
               Text(
-                'Pull to refresh whenever you need a fresh moderation view.',
+                pinSelection
+                    ? 'Unpin a vent from Content control to choose another.'
+                    : 'Pull to refresh whenever you need a fresh moderation view.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: context.inkMuted),
               ),

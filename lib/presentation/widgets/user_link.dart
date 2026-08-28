@@ -9,7 +9,8 @@ void openUserProfile(BuildContext context, String? userId) {
   if (userId == null || userId.trim().isEmpty) return;
   final currentPath = GoRouterState.of(context).uri.path;
   final fromRootConversation = currentPath.startsWith('/chat/') ||
-      currentPath.startsWith('/group-chat/');
+      currentPath.startsWith('/group-chat/') ||
+      currentPath.startsWith('/post-preview/');
   context.push(
     fromRootConversation ? '/user-preview/$userId' : '/user/$userId',
   );

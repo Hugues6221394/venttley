@@ -51,6 +51,16 @@ class AdaptiveProfileTab extends ConsumerWidget {
   }
 }
 
+/// Whether the shell is currently showing Studio surfaces rather than the
+/// consumer app.
+///
+/// Public because callers outside the shell need to know what the profile tab
+/// actually contains before sending someone to it: for a keeper that slot holds
+/// the analytics, so "go to my profile" has to push /profile/me, while for
+/// everyone else the tab *is* the profile and pushing a copy would be a loop.
+/// One function so the answer cannot drift from what the tabs render.
+bool showsStudioSurfaces(WidgetRef ref) => _showStudio(ref);
+
 bool _showStudio(WidgetRef ref) {
   final memberView = ref.watch(keeperMemberViewProvider);
   if (memberView) return false;

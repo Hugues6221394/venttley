@@ -12,14 +12,14 @@ INSERT INTO auth.users (
     '71000000-0000-4000-8000-000000000001',
     'authenticated', 'authenticated', 'cold-start-a@id.venttly.app',
     '{"provider":"email","providers":["email"]}'::JSONB,
-    '{"pseudonym":"cold_start_a","avatar_seed":"cold-a","safety_tier":"standard"}'::JSONB,
+    '{"pseudonym":"cold_start_a","avatar_seed":"cold-a","birth_year":2000}'::JSONB,
     NOW() - INTERVAL '2 hours', NOW() - INTERVAL '2 hours'
   ),
   (
     '71000000-0000-4000-8000-000000000002',
     'authenticated', 'authenticated', 'cold-start-b@id.venttly.app',
     '{"provider":"email","providers":["email"]}'::JSONB,
-    '{"pseudonym":"cold_start_b","avatar_seed":"cold-b","safety_tier":"standard"}'::JSONB,
+    '{"pseudonym":"cold_start_b","avatar_seed":"cold-b","birth_year":2000}'::JSONB,
     NOW() - INTERVAL '2 hours', NOW() - INTERVAL '2 hours'
   );
 
@@ -90,7 +90,7 @@ SELECT ok(
   'a user with no memberships receives public tribe recommendations'
 );
 SELECT is(
-  (SELECT count(*) FROM public.my_friends()),
+  (SELECT count(*) FROM public.my_friends),
   0::BIGINT,
   'cold-start recommendations do not fabricate friendships'
 );

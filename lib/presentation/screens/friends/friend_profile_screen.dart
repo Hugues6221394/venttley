@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,31 +7,60 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
+import '../../../domain/profile/profile_stat_kind.dart';
 import '../../theme/colors.dart';
 import '../../widgets/badge_shelf.dart';
 import '../../widgets/friend_action_button.dart';
-import '../../widgets/glass_card.dart';
 import '../../widgets/media_preview_viewer.dart';
 import '../../widgets/profile_stats_panel.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/profile_banner_image.dart';
+import '../../widgets/question_card.dart';
 import '../../widgets/tagged_text.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../widgets/post_card.dart' show PostCard;
+import '../home/home_shell.dart';
 
 /// The Friend Profile — section 6 of the social spec. A friend-gated
 /// "safe stalking" view: pseudonym + avatar at the top, an emotional
-/// stats grid, mood distribution ring, mutual friends + tribes,
+/// stats grid, mutual friends + tribes,
 /// badges, recent vents, and the friend-action chip in context.
 ///
 /// Strangers see a stripped view that pushes them toward sending a
 /// friend request. Self redirects to /profile.
-class FriendProfileScreen extends ConsumerWidget {
+class FriendProfileScreen extends ConsumerStatefulWidget {
   const FriendProfileScreen({super.key, required this.userId});
   final String userId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FriendProfileScreen> createState() =>
+      _FriendProfileScreenState();
+}
+
+class _FriendProfileScreenState extends ConsumerState<FriendProfileScreen> {
+  /// How far the top scrim has faded in, 0..1.
+  ///
+  /// The app bar is transparent over an extended body so the hero banner can
+  /// run to the top of the screen. That is right at rest and wrong the moment
+  /// the page moves: section text slid under the status bar and behind the
+  /// floating back chip with nothing between them.
+  double _scrim = 0;
+
+  bool _onScroll(ScrollNotification n) {
+    // depth 0 is the profile's own scroll view. The Vents tab has its own
+    // ListView inside it, and its offset says nothing about whether the header
+    // has moved — without this, scrolling a tab faded in a scrim over a hero
+    // still sitting at the top.
+    if (n.depth != 0 || n.metrics.axis != Axis.vertical) return false;
+    final next = (n.metrics.pixels / 80).clamp(0.0, 1.0);
+    if ((next - _scrim).abs() > 0.01) setState(() => _scrim = next);
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final userId = widget.userId;
     final me = ref.watch(sessionProvider);
     if (me != null && me.userId == userId) {
       // Self → bounce to the dedicated /profile screen. Use a
@@ -40,21 +69,64 @@ class FriendProfileScreen extends ConsumerWidget {
         if (context.mounted) context.go('/profile');
       });
       // Spinner (not an empty box) so the hand-off never flashes blank.
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final async = ref.watch(userProfileProvider(userId));
+    // The content is placed directly inside the Scaffold body. An earlier
+    // `Stack(fit: StackFit.expand)` wrapper (background + floating back button)
+    // rendered the whole route washed-out and non-interactive — the expanded
+    // stack collapsed the profile into a shrunken, dimmed frame. The back
+    // affordance now lives in a transparent AppBar, which restores a clean,
+    // full-opacity, scrollable profile.
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+        // Blur plus a fade to transparent, so the strip reads as depth rather
+        // than as a bar with an edge. Opacity(0) skips painting its child
+        // entirely, so the blur costs nothing while the page is at rest.
+        flexibleSpace: IgnorePointer(
+          child: Opacity(
+            opacity: _scrim,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Theme.of(
+                          context,
+                        ).scaffoldBackgroundColor.withOpacity(0.92),
+                        Theme.of(
+                          context,
+                        ).scaffoldBackgroundColor.withOpacity(0.0),
+                      ],
+                    ),
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ),
+          ),
+        ),
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 4, top: 4),
+          child: IconButton(
+            tooltip: 'Back',
+            style: IconButton.styleFrom(
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.surface.withOpacity(0.82),
+            ),
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => context.pop(),
+          ),
         ),
       ),
       body: VentlyPremiumBackground(
@@ -68,12 +140,15 @@ class FriendProfileScreen extends ConsumerWidget {
                 message: "This profile isn't available.",
               );
             }
-            return RefreshIndicator(
-              onRefresh: () async {
-                ref.invalidate(userProfileProvider(userId));
-                await ref.read(userProfileProvider(userId).future);
-              },
-              child: _FriendProfileBody(profile: profile),
+            return NotificationListener<ScrollNotification>(
+              onNotification: _onScroll,
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(userProfileProvider(userId));
+                  await ref.read(userProfileProvider(userId).future);
+                },
+                child: _FriendProfileBody(profile: profile),
+              ),
             );
           },
         ),
@@ -99,7 +174,12 @@ class _FriendProfileBody extends StatelessWidget {
           SliverToBoxAdapter(child: _StrangerCallout(profile: profile)),
           if (profile.mutualTribes.isNotEmpty || profile.mutualFriendsCount > 0)
             SliverToBoxAdapter(child: _MutualsSection(profile: profile)),
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          // The profile renders inside the shell, so the floating nav pill
+          // overlays it. 32 left the Mutuals section — the one real trust signal
+          // a stranger gets — sitting under the bar.
+          const SliverToBoxAdapter(
+            child: SizedBox(height: HomeShell.navClearance),
+          ),
         ],
       );
     }
@@ -117,8 +197,6 @@ class _FriendProfileBody extends StatelessWidget {
           if (profile.relation == FriendStatus.blockedByMe)
             const SliverToBoxAdapter(child: _BlockedNotice()),
           SliverToBoxAdapter(child: ProfileStatsPanel(profile: profile)),
-          if (profile.topMoods.isNotEmpty)
-            SliverToBoxAdapter(child: _MoodRing(moods: profile.topMoods)),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
@@ -144,6 +222,13 @@ class _FriendProfileBody extends StatelessWidget {
               unselectedLabelColor: context.ink,
               indicatorColor: VentlyColors.berryMagenta,
               indicatorWeight: 3,
+              // Material 3 defaults this to outlineVariant, which drew a hard
+              // near-black rule the full width of a very soft palette. The bar
+              // is pinned and content scrolls under it, so it still needs an
+              // edge — just a quiet one.
+              dividerColor: Theme.of(
+                context,
+              ).colorScheme.primary.withOpacity(0.12),
               labelStyle: const TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 13,
@@ -210,11 +295,13 @@ class _VentsTabState extends ConsumerState<_VentsTab> {
   Future<void> _loadMore() async {
     final first =
         ref.read(userPostsProvider(widget.profile.userId)).valueOrNull ??
-            const <Post>[];
+        const <Post>[];
     setState(() => _loadingMore = true);
     try {
       final offset = first.length + _extraPosts.length;
-      final next = await ref.read(repositoryProvider).postsByAuthor(
+      final next = await ref
+          .read(repositoryProvider)
+          .postsByAuthor(
             widget.profile.userId,
             limit: _pageSize,
             offset: offset,
@@ -240,17 +327,18 @@ class _VentsTabState extends ConsumerState<_VentsTab> {
   Widget build(BuildContext context) {
     final firstPosts =
         ref.watch(userPostsProvider(widget.profile.userId)).valueOrNull ??
-            const <Post>[];
+        const <Post>[];
     final posts = [...firstPosts, ..._extraPosts];
 
     return ListView(
       controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 116),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, HomeShell.navClearance),
       children: [
         if (widget.profile.mostLiked != null ||
             widget.profile.mostCommented != null)
           _Highlights(profile: widget.profile),
         _WhispersSection(userId: widget.profile.userId),
+        _QuestionsSection(userId: widget.profile.userId),
         _TribesSection(userId: widget.profile.userId),
         if (posts.isNotEmpty) ...[
           const Padding(
@@ -292,7 +380,7 @@ class _AchievementsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, HomeShell.navClearance),
       children: [
         BadgeShelf(
           userId: profile.userId,
@@ -318,7 +406,7 @@ class _ActivityTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, HomeShell.navClearance),
       children: [
         if (profile.heatmap.isNotEmpty)
           _ActivityHeatmap(days: profile.heatmap)
@@ -408,8 +496,10 @@ class _VibeLevelBar extends StatelessWidget {
             children: [
               Text(
                 'Vibe level $tier',
-                style:
-                    const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
               ),
               const Spacer(),
               if (mood != null)
@@ -441,144 +531,170 @@ class _VibeLevelBar extends StatelessWidget {
 
 // ─────────────────────── Hero ───────────────────────
 
-class _Hero extends ConsumerWidget {
+/// Premium public-profile hero: an immersive photo/gradient banner, a large
+/// overlapping avatar that opens a full-screen photo preview, and a clean
+/// identity block (name · pronouns/mood pills · joined) above the stat band
+/// and friend actions.
+class _Hero extends StatelessWidget {
   const _Hero({required this.profile});
   final UserProfileView profile;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final daysSince =
-        DateTime.now().difference(profile.joinedAt).inDays.clamp(0, 999999);
+    final daysSince = DateTime.now()
+        .difference(profile.joinedAt)
+        .inDays
+        .clamp(0, 999999);
+    final joinedLabel = daysSince < 7
+        ? 'Just joined'
+        : daysSince < 365
+        ? 'Joined ${daysSince ~/ 7} weeks ago'
+        : 'Joined ${(daysSince / 365).toStringAsFixed(1)} years ago';
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
-      child: GlassCard(
-        elevated: true,
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
-        borderRadius: 24,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: scheme.primary.withOpacity(0.10)),
+          boxShadow: [
+            BoxShadow(
+              color: scheme.primary.withOpacity(0.12),
+              blurRadius: 30,
+              spreadRadius: -10,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
         child: Column(
           children: [
-            _PublicProfilePhoto(profile: profile),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            // Banner with the avatar overlapping its lower edge.
+            Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
               children: [
-                Text(
-                  '@${profile.pseudonym}',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                _HeroBanner(
+                  photoUrl: (profile.profilePhotoUrl ?? '').trim(),
+                  bannerUrl: (profile.profileBannerUrl ?? '').trim(),
+                  bannerOffset: profile.profileBannerOffset,
                 ),
-                if (profile.isVerified) ...[
-                  const SizedBox(width: 6),
-                  Icon(Icons.verified, size: 18, color: scheme.primary),
-                ],
-                if ((profile.pronouns ?? '').trim().isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: scheme.primary.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      profile.pronouns!.trim(),
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: scheme.primary,
-                      ),
-                    ),
-                  ),
-                ],
+                Positioned(bottom: -52, child: _HeroAvatar(profile: profile)),
               ],
             ),
-            // Friends (total connections) directly under the username.
+            const SizedBox(height: 60),
             Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: GestureDetector(
-                onTap: () =>
-                    context.push('/user/${profile.userId}/stat/connections'),
-                child: RichText(
-                  text: TextSpan(
-                    style: TextStyle(color: scheme.onSurface.withOpacity(0.75)),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      TextSpan(
-                        text: PostCard.compactNumber(profile.connectionsCount),
-                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      Flexible(
+                        child: Text(
+                          profile.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.3,
+                              ),
+                        ),
                       ),
-                      TextSpan(
-                        text: profile.connectionsCount == 1
-                            ? ' Connection'
-                            : ' Connections',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
+                      if (profile.isVerified) ...[
+                        const SizedBox(width: 6),
+                        Icon(Icons.verified, size: 20, color: scheme.primary),
+                      ],
                     ],
                   ),
-                ),
-              ),
-            ),
-            if ((profile.bio ?? '').trim().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 10, 8, 0),
-                child: TaggedText(
-                  profile.bio!.trim(),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    height: 1.35,
-                    color: scheme.onSurface.withOpacity(0.82),
+                  const SizedBox(height: 3),
+                  Text(
+                    '@${profile.pseudonym}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: scheme.onSurface.withOpacity(0.60),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ),
-            if (profile.currentMood != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '${Moods.emoji(profile.currentMood!)}  feeling ${Moods.label(profile.currentMood!).toLowerCase()}',
-                  style: TextStyle(color: scheme.onSurface.withOpacity(0.7)),
-                ),
-              ),
-            const SizedBox(height: 6),
-            Text(
-              daysSince < 7
-                  ? 'Just joined'
-                  : daysSince < 365
-                      ? 'Joined ${daysSince ~/ 7} weeks ago'
-                      : 'Joined ${(daysSince / 365).toStringAsFixed(1)} years ago',
-              style: TextStyle(
-                fontSize: 12,
-                color: scheme.onSurface.withOpacity(0.55),
-              ),
-            ),
-            const SizedBox(height: 14),
-            _StatsBanner(profile: profile),
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                FriendActionButton(
-                  otherUserId: profile.userId,
-                  otherPseudonym: profile.pseudonym,
-                ),
-                if (profile.isFriend) ...[
-                  const SizedBox(width: 8),
-                  _MessageButton(profile: profile),
+                  if ((profile.pronouns ?? '').trim().isNotEmpty ||
+                      profile.currentMood != null) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        if ((profile.pronouns ?? '').trim().isNotEmpty)
+                          _MetaPill(text: profile.pronouns!.trim()),
+                        if (profile.currentMood != null)
+                          _MetaPill(
+                            text:
+                                '${Moods.emoji(profile.currentMood!)}  ${Moods.label(profile.currentMood!)}',
+                            tinted: true,
+                          ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    joinedLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface.withOpacity(0.5),
+                    ),
+                  ),
+                  if ((profile.bio ?? '').trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 12, 4, 0),
+                      child: TaggedText(
+                        profile.bio!.trim(),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.4,
+                          color: scheme.onSurface.withOpacity(0.82),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  _StatsBanner(profile: profile),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FriendActionButton(
+                        otherUserId: profile.userId,
+                        otherPseudonym: profile.pseudonym,
+                      ),
+                      if (profile.isFriend) ...[
+                        const SizedBox(width: 8),
+                        _MessageButton(profile: profile),
+                      ],
+                    ],
+                  ),
+                  if (!profile.isFriend &&
+                      profile.relation != FriendStatus.self)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        'Friends can DM. Send a request to unlock messaging.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: scheme.onSurface.withOpacity(0.5),
+                        ),
+                      ),
+                    ),
                 ],
-              ],
-            ),
-            if (!profile.isFriend && profile.relation != FriendStatus.self)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'Friends can DM. Send a request to unlock messaging.',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: scheme.onSurface.withOpacity(0.55),
-                  ),
-                ),
               ),
+            ),
+            const SizedBox(height: 18),
           ],
         ),
       ),
@@ -586,107 +702,398 @@ class _Hero extends ConsumerWidget {
   }
 }
 
-class _PublicProfilePhoto extends StatelessWidget {
-  const _PublicProfilePhoto({required this.profile});
+/// The blurred-photo (or brand-gradient) banner behind the hero avatar. Its
+/// lower edge fades into the card surface so the overlapping avatar sits on a
+/// seamless backdrop.
+class _HeroBanner extends StatelessWidget {
+  const _HeroBanner({
+    required this.photoUrl,
+    this.bannerUrl = '',
+    this.bannerOffset = 0.5,
+  });
 
+  final String photoUrl;
+
+  /// A background the person actually chose (migration 20260817100000).
+  ///
+  /// When absent this falls back to the old behaviour — the profile photo,
+  /// blurred — which was never really a banner: it was the same picture twice,
+  /// once sharp and once out of focus. A chosen banner renders sharp and
+  /// cropped, because the point of picking one is that it is seen.
+  final String bannerUrl;
+
+  /// The crop anchor its owner chose. Honoured here so a visitor sees the
+  /// framing the author picked rather than whatever BoxFit.cover lands on.
+  final double bannerOffset;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final hasBanner = bannerUrl.isNotEmpty;
+    final hasPhoto = photoUrl.isNotEmpty;
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      child: SizedBox(
+        // Taller when there is a real background to show. At 116 a chosen photo
+        // is a sliver with an avatar sitting on most of it — enough to prove
+        // the upload worked, not enough to be worth choosing. The blurred-photo
+        // and brand-gradient fallbacks stay at 116, because neither is an image
+        // anyone picked and giving them more room just pushes the name down.
+        height: hasBanner ? 168 : 116,
+        width: double.infinity,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (hasBanner)
+              // Sharp and cropped: a chosen background is meant to be seen.
+              ProfileBannerImage(
+                url: bannerUrl,
+                alignment: Alignment(0, bannerOffset * 2 - 1),
+                // No onGivenUp: this is somebody else's row and only its owner
+                // may touch it.
+                fallback: const _BrandBanner(),
+              )
+            else if (hasPhoto)
+              ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+                child: ProfileBannerImage(
+                  url: photoUrl,
+                  alignment: Alignment.center,
+                  fallback: const _BrandBanner(),
+                ),
+              )
+            else
+              const _BrandBanner(),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(
+                      hasBanner ? 0.22 : (hasPhoto ? 0.12 : 0.0),
+                    ),
+                    scheme.surface.withOpacity(0.0),
+                    scheme.surface,
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BrandBanner extends StatelessWidget {
+  const _BrandBanner();
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            VentlyColors.berryMagenta,
+            Color(0xFFE0729A),
+            VentlyColors.softMauve,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The large hero avatar. When the user has uploaded a photo it becomes a
+/// button that opens the full-screen, zoomable preview, and carries a small
+/// "expand" glyph so the affordance is obvious.
+class _HeroAvatar extends StatelessWidget {
+  const _HeroAvatar({required this.profile});
   final UserProfileView profile;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final photoUrl = (profile.profilePhotoUrl ?? '').trim();
-    final avatar = Container(
+    final hasPhoto = photoUrl.isNotEmpty;
+
+    final ringed = Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
+        color: scheme.surface,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: scheme.primary.withOpacity(0.35),
-            blurRadius: 22,
+            color: scheme.primary.withOpacity(0.38),
+            blurRadius: 26,
             spreadRadius: 1,
           ),
         ],
-        border: Border.all(color: scheme.primary, width: 2.5),
+        border: Border.all(color: scheme.primary, width: 3),
       ),
-      child: ProfileAvatar(
-        avatarSeed: profile.avatarSeed,
-        label: profile.pseudonym,
-        profilePhotoUrl: profile.profilePhotoUrl,
-        size: 96,
-        showVerifiedBadge: profile.isVerified,
+      // ClipOval because the ring is circular but the fallback avatar is not:
+      // ProfileAvatar clips uploaded photos to an oval and leaves the anonymous
+      // letter tile as the squircle the feed uses. Unclipped, that tile's
+      // corners pushed past the ring on every profile without a photo.
+      child: ClipOval(
+        child: ProfileAvatar(
+          avatarSeed: profile.avatarSeed,
+          label: profile.pseudonym,
+          profilePhotoUrl: profile.profilePhotoUrl,
+          size: 104,
+        ),
       ),
     );
-    if (photoUrl.isEmpty) return avatar;
+
+    final withGlyph = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        ringed,
+        if (hasPhoto)
+          Positioned(
+            right: 2,
+            bottom: 2,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.55),
+                shape: BoxShape.circle,
+                border: Border.all(color: scheme.surface, width: 2.5),
+              ),
+              child: const Icon(
+                Icons.zoom_out_map_rounded,
+                color: Colors.white,
+                size: 15,
+              ),
+            ),
+          ),
+      ],
+    );
+
+    if (!hasPhoto) return withGlyph;
     return Semantics(
       button: true,
-      label: 'Preview @${profile.pseudonym} profile photo',
-      child: InkWell(
-        customBorder: const CircleBorder(),
+      label: 'View @${profile.pseudonym} profile photo',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () => showMediaPreview(
           context,
-          items: [
-            MediaPreviewItem(url: photoUrl, label: 'Profile photo'),
-          ],
+          items: [MediaPreviewItem(url: photoUrl, label: 'Profile photo')],
           title: '@${profile.pseudonym}',
         ),
-        child: avatar,
+        child: withGlyph,
       ),
     );
   }
 }
 
-/// Instagram-style 3-stat banner in the hero: total friends, total posts
-/// (vents + whispers), and total hugs (🫂 reactions received).
-class _StatsBanner extends StatelessWidget {
-  const _StatsBanner({required this.profile});
-  final UserProfileView profile;
+/// A small rounded label used for pronouns and current-mood in the hero.
+class _MetaPill extends StatelessWidget {
+  const _MetaPill({required this.text, this.tinted = false});
+  final String text;
+  final bool tinted;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    Widget stat(String value, String label) => Expanded(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+      decoration: BoxDecoration(
+        color: scheme.primary.withOpacity(tinted ? 0.12 : 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.primary.withOpacity(0.14)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: tinted ? scheme.primary : scheme.onSurface.withOpacity(0.72),
+        ),
+      ),
+    );
+  }
+}
+
+/// The three headline numbers a stranger scans before deciding to add someone:
+/// how much this person shares, who already trusts them, and where they belong.
+/// Activity is what drives the add, so it sits above the fold, in the hero.
+///
+/// Each column is tappable and opens the same detail screen the Activity grid
+/// below opens. They used to be inert — a 20pt number that does nothing, sitting
+/// directly above an identical number that does, is a dead end users tap twice.
+///
+/// Deliberately unfilled, hairlines only: the Activity cards below carry the
+/// elevation. When this was a tinted, bordered box it read as a second card
+/// competing with them rather than as part of the identity block.
+///
+/// It shows Connections/Vents/Tribes and the grid below shows everything else —
+/// no number appears in both places. Previously Connections was in both, and
+/// "Posts" here (vents + whispers) sat above "Vents" there, so the same person
+/// appeared to have two different post counts.
+class _StatsBanner extends StatelessWidget {
+  const _StatsBanner({required this.profile});
+  final UserProfileView profile;
+
+  static const _kinds = [
+    ProfileStatKind.connections,
+    ProfileStatKind.vents,
+    ProfileStatKind.tribes,
+  ];
+
+  int _value(ProfileStatKind kind) => switch (kind) {
+    ProfileStatKind.connections => profile.connectionsCount,
+    ProfileStatKind.vents => profile.vents,
+    _ => profile.activeTribes,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        for (var i = 0; i < _kinds.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: _Kpi3DTile(
+              value: PostCard.compactNumber(_value(_kinds[i])),
+              label: _kinds[i].title,
+              onTap: () => context.push(
+                '/user/${profile.userId}/stat/${_kinds[i].routeSegment}',
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// A KPI that looks like the raised, painted-on button it actually is.
+///
+/// These were flat columns separated by hairlines. They have always been
+/// tappable — each one opens a stat detail screen — but nothing about them said
+/// so, and a 22pt number that navigates while looking like a label is a control
+/// people do not find.
+///
+/// The raised read comes from four things stacked, not from one big shadow:
+///
+/// * a vertical gradient that is lightest at the top, so the surface reads as
+///   catching light from above;
+/// * a bright hairline on the top edge and a darker one on the bottom, which is
+///   what actually sells "moulded" rather than "floating";
+/// * a soft coloured drop shadow offset downward, tight enough to look moulded
+///   into the card rather than hovering over it;
+/// * a press state that flattens all of the above and shrinks slightly, so the
+///   depth is something you can push. A 3D button that does not move when
+///   pressed reads as a picture of a button.
+class _Kpi3DTile extends StatefulWidget {
+  const _Kpi3DTile({
+    required this.value,
+    required this.label,
+    required this.onTap,
+  });
+
+  final String value;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  State<_Kpi3DTile> createState() => _Kpi3DTileState();
+}
+
+class _Kpi3DTileState extends State<_Kpi3DTile> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Lightest at the top. Inverted in dark mode, where light still comes from
+    // above but the surface it lands on is dark.
+    final gradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: isDark
+          ? [Colors.white.withOpacity(0.10), Colors.white.withOpacity(0.03)]
+          : [Colors.white, const Color(0xFFFDF2F6)],
+    );
+
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _down = true),
+      onTapUp: (_) => setState(() => _down = false),
+      onTapCancel: () => setState(() => _down = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 110),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            gradient: gradient,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: scheme.primary.withOpacity(isDark ? 0.16 : 0.12),
+            ),
+            boxShadow: _down
+                // Pressed: the tile sits down into the card.
+                ? [
+                    BoxShadow(
+                      color: scheme.primary.withOpacity(isDark ? 0.10 : 0.08),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: scheme.primary.withOpacity(isDark ? 0.22 : 0.16),
+                      blurRadius: 10,
+                      spreadRadius: -2,
+                      offset: const Offset(0, 4),
+                    ),
+                    // A second, tighter shadow directly under the bottom edge.
+                    // One large blur reads as floating; two — one tight, one
+                    // soft — read as moulded.
+                    BoxShadow(
+                      color: scheme.primary.withOpacity(isDark ? 0.14 : 0.10),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+          ),
           child: Column(
             children: [
               Text(
-                value,
+                widget.value,
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
-                  fontSize: 20,
-                  color: scheme.primary,
+                  fontSize: 21,
+                  height: 1.1,
+                  letterSpacing: -0.5,
+                  color: scheme.onSurface,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
-                label,
+                widget.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onSurface.withOpacity(0.6),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.1,
+                  color: scheme.onSurface.withOpacity(0.58),
                 ),
               ),
             ],
           ),
-        );
-    Widget divider() => Container(
-          width: 1,
-          height: 34,
-          color: scheme.primary.withOpacity(0.12),
-        );
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        color: scheme.primary.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.primary.withOpacity(0.12)),
-      ),
-      child: Row(
-        children: [
-          stat(PostCard.compactNumber(profile.connectionsCount), 'Connections'),
-          divider(),
-          stat(PostCard.compactNumber(profile.postsTotal), 'Posts'),
-          divider(),
-          stat(PostCard.compactNumber(profile.hugsReceived), 'Hugs'),
-        ],
+        ),
       ),
     );
   }
@@ -720,13 +1127,25 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
       // Shouldn't happen (we only render this button when isFriend),
       // but defensive: friendship can change between render and tap.
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
+      // The server refuses new rooms for restricted minors (migration
+      // 20260811020000). Surfacing the raw PostgrestException here would tell
+      // the user nothing about why, on an action they did nothing wrong to
+      // trigger.
+      final blocked = e.toString().contains('minor_dm_initiation_blocked');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not start chat: $e')),
+        SnackBar(
+          content: Text(
+            blocked
+                ? 'Accounts registered as 13-17 can reply to chats, but not '
+                      'start new ones.'
+                : 'Could not start chat: $e',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -736,198 +1155,65 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
+    // Advisory only. can_initiate_dm is false for a restricted minor even when
+    // a room already exists, while the server refuses new rooms only — so this
+    // dims the CTA to set expectations without blocking the tap, which would
+    // strand a minor whose friend opened the thread.
+    final mayStartNew =
+        ref
+            .watch(dmInitiationAllowedProvider(widget.profile.userId))
+            .valueOrNull ??
+        true;
+    final accent = mayStartNew
+        ? scheme.primary
+        : scheme.onSurface.withOpacity(0.45);
+    return Semantics(
+      button: true,
+      hint: mayStartNew
+          ? null
+          : 'Accounts registered as 13-17 cannot start new chats',
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(20),
-        onTap: _busy ? null : _openOrCreateRoom,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.primary.withOpacity(0.6)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_busy)
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: scheme.primary,
-                  ),
-                )
-              else
-                Icon(Icons.chat_bubble_outline,
-                    size: 15, color: scheme.primary),
-              const SizedBox(width: 6),
-              Text(
-                'Message',
-                style: TextStyle(
-                  color: scheme.primary,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────── Mood ring ───────────────────────
-
-class _MoodRing extends StatelessWidget {
-  const _MoodRing({required this.moods});
-  final List<MoodCount> moods;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final total = moods.fold<int>(0, (s, m) => s + m.count);
-    final top = moods.first;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: scheme.outline.withOpacity(0.25)),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 86,
-              height: 86,
-              child: CustomPaint(
-                painter: _MoodRingPainter(
-                  moods: moods,
-                  base: scheme.surfaceContainerHighest,
-                ),
-                child: Center(
-                  child: Text(
-                    Moods.emoji(top.mood),
-                    style: const TextStyle(fontSize: 28),
-                  ),
-                ),
-              ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: _busy ? null : _openOrCreateRoom,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: accent.withOpacity(0.6)),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Mood distribution',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  Text(
-                    'Top: ${Moods.label(top.mood)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: scheme.onSurface.withOpacity(0.6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_busy)
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: accent,
                     ),
+                  )
+                else
+                  Icon(Icons.chat_bubble_outline, size: 15, color: accent),
+                const SizedBox(width: 6),
+                Text(
+                  'Message',
+                  style: TextStyle(
+                    color: accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
                   ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      for (final m in moods.take(4))
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: _moodColor(m.mood, scheme).withOpacity(0.18),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${Moods.emoji(m.mood)} ${Moods.label(m.mood)} · ${total > 0 ? (m.count * 100 / total).round() : 0}%',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: _moodColor(m.mood, scheme),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
-}
-
-Color _moodColor(String mood, ColorScheme scheme) {
-  switch (mood) {
-    case 'happy':
-    case 'grateful':
-    case 'hopeful':
-      return Colors.amber.shade700;
-    case 'healing':
-      return Colors.teal.shade600;
-    case 'sad':
-    case 'lonely':
-    case 'broken':
-      return Colors.indigo.shade400;
-    case 'angry':
-      return Colors.redAccent;
-    case 'anxious':
-    case 'overthinking':
-      return Colors.deepPurple.shade400;
-    case 'exhausted':
-      return Colors.brown.shade400;
-    case 'confused':
-      return Colors.blueGrey.shade400;
-    default:
-      return scheme.primary;
-  }
-}
-
-class _MoodRingPainter extends CustomPainter {
-  _MoodRingPainter({required this.moods, required this.base});
-  final List<MoodCount> moods;
-  final Color base;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromLTWH(4, 4, size.width - 8, size.height - 8);
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 8
-      ..color = base.withOpacity(0.35);
-    canvas.drawArc(rect, 0, math.pi * 2, false, ring);
-
-    final total = moods.fold<int>(0, (s, m) => s + m.count);
-    if (total == 0) return;
-
-    var start = -math.pi / 2;
-    final scheme = ColorScheme.fromSeed(seedColor: Colors.pinkAccent);
-    for (final m in moods.take(6)) {
-      final sweep = (m.count / total) * math.pi * 2;
-      final paint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 8
-        ..strokeCap = StrokeCap.butt
-        ..color = _moodColor(m.mood, scheme);
-      canvas.drawArc(rect, start, sweep, false, paint);
-      start += sweep;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _MoodRingPainter old) =>
-      old.moods != moods || old.base != base;
 }
 
 // ─────────────────────── Badges (legacy row removed — see BadgeShelf) ─────
@@ -1075,9 +1361,11 @@ class _MutualsSection extends StatelessWidget {
                       height: 36,
                       child: Stack(
                         children: [
-                          for (var i = 0;
-                              i < profile.mutualFriendSample.length;
-                              i++)
+                          for (
+                            var i = 0;
+                            i < profile.mutualFriendSample.length;
+                            i++
+                          )
                             Positioned(
                               left: i * 24.0,
                               child: UserProfileLink(
@@ -1135,11 +1423,10 @@ class _StrangerCallout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final hidden = profile.vents;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
         decoration: BoxDecoration(
           color: scheme.primary.withOpacity(0.06),
           borderRadius: BorderRadius.circular(18),
@@ -1147,20 +1434,38 @@ class _StrangerCallout extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Icon(Icons.lock_outline, color: scheme.primary),
-            const SizedBox(height: 6),
-            Text(
-              hidden == 0
-                  ? 'No vents to show yet.'
-                  : '$hidden vents · ${profile.activeTribes} tribes',
-              style: const TextStyle(fontWeight: FontWeight.w800),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.lock_outline_rounded,
+                color: scheme.primary,
+                size: 20,
+              ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             Text(
-              'Send a friend request to see streaks, badges, mood distribution, and recent vents.',
+              'The rest is friends-only',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 15,
+                color: scheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 5),
+            // Names what is actually behind the gate. The old copy promised
+            // streaks and badges were hidden while the Activity grid right above
+            // it was already showing both counts.
+            Text(
+              'Send @${profile.pseudonym} a friend request to see their vents, '
+              'whispers and day-to-day activity.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 12.5,
+                height: 1.4,
                 color: scheme.onSurface.withOpacity(0.65),
               ),
             ),
@@ -1238,10 +1543,11 @@ class _NotAvailable extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.lock_person,
-                size: 36,
-                color:
-                    Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
+            Icon(
+              Icons.lock_person,
+              size: 36,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+            ),
             const SizedBox(height: 8),
             Text(
               message,
@@ -1310,8 +1616,10 @@ class _ActivityHeatmap extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text('Activity',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text(
+                  'Activity',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 const Spacer(),
                 Text(
                   '$total in 90 days',
@@ -1418,24 +1726,22 @@ class _ActivityHeatmap extends StatelessWidget {
   }
 
   static String _weekdayName(int i) => switch (i) {
-        0 => 'Mon',
-        1 => 'Tue',
-        2 => 'Wed',
-        3 => 'Thu',
-        4 => 'Fri',
-        5 => 'Sat',
-        6 => 'Sun',
-        _ => '',
-      };
+    0 => 'Mon',
+    1 => 'Tue',
+    2 => 'Wed',
+    3 => 'Thu',
+    4 => 'Fri',
+    5 => 'Sat',
+    6 => 'Sun',
+    _ => '',
+  };
 }
 
 class _HeatmapCell {
   final DateTime? day;
   final int count;
   const _HeatmapCell({required this.day, required this.count});
-  const _HeatmapCell.empty()
-      : day = null,
-        count = 0;
+  const _HeatmapCell.empty() : day = null, count = 0;
 }
 
 class _HeatmapDot extends StatelessWidget {
@@ -1485,10 +1791,10 @@ Color _heatmapColor(double intensity, Color accent, ColorScheme scheme) {
   final step = intensity < 0.25
       ? 0.25
       : intensity < 0.5
-          ? 0.5
-          : intensity < 0.75
-              ? 0.75
-              : 1.0;
+      ? 0.5
+      : intensity < 0.75
+      ? 0.75
+      : 1.0;
   return accent.withOpacity(0.18 + step * 0.65);
 }
 
@@ -1543,6 +1849,52 @@ class _WhispersSection extends ConsumerWidget {
   }
 }
 
+/// Every question this member has asked — mirrors the vents/whispers rails so
+/// friends can answer, like, or report right from the profile.
+class _QuestionsSection extends ConsumerWidget {
+  const _QuestionsSection({required this.userId});
+  final String userId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(userQuestionsProvider(userId));
+    return async.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (list) {
+        if (list.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const _SectionTitle('Questions asked'),
+                  const Spacer(),
+                  Text(
+                    '${list.length}',
+                    style: TextStyle(
+                      color: VentlyColors.berryMagenta.withOpacity(0.85),
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              for (final q in list)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: QuestionCard(prompt: q, compact: true),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _WhisperMiniCard extends StatelessWidget {
   const _WhisperMiniCard({required this.whisper});
   final Whisper whisper;
@@ -1574,8 +1926,11 @@ class _WhisperMiniCard extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
-                  child: const Icon(Icons.play_arrow_rounded,
-                      color: Colors.white, size: 18),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -1587,8 +1942,11 @@ class _WhisperMiniCard extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                Icon(Icons.favorite_border,
-                    size: 12, color: context.ink.withOpacity(0.6)),
+                Icon(
+                  Icons.favorite_border,
+                  size: 12,
+                  color: context.ink.withOpacity(0.6),
+                ),
                 const SizedBox(width: 3),
                 Text(
                   '${whisper.likesCount}',
@@ -1692,12 +2050,16 @@ class _TribesSection extends ConsumerWidget {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color:
-                                  VentlyColors.berryMagenta.withOpacity(0.12),
+                              color: VentlyColors.berryMagenta.withOpacity(
+                                0.12,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.diversity_3,
-                                color: VentlyColors.berryMagenta, size: 20),
+                            child: const Icon(
+                              Icons.diversity_3,
+                              color: VentlyColors.berryMagenta,
+                              size: 20,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -1727,8 +2089,10 @@ class _TribesSection extends ConsumerWidget {
                               ],
                             ),
                           ),
-                          const Icon(Icons.chevron_right_rounded,
-                              color: VentlyColors.softMauve),
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            color: VentlyColors.softMauve,
+                          ),
                         ],
                       ),
                     ),

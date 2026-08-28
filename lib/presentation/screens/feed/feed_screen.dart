@@ -14,6 +14,7 @@ import '../../../domain/home/home_discovery.dart';
 import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
 import '../../widgets/chat_audio_bubble.dart';
+import '../home/home_shell.dart';
 import '../../widgets/friend_action_button.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/sensitive_media_veil.dart';
@@ -43,7 +44,8 @@ class FeedScreen extends ConsumerWidget {
     final topicStatsAsync = ref.watch(trendingTopicStatsProvider);
     final discoveryPosts = ref.watch(homeDiscoveryPostsProvider).valueOrNull;
     final filter = ref.watch(feedFilterProvider);
-    final tribes = ref
+    final tribes =
+        ref
             .watch(tribesProvider(const TribeQuery()))
             .valueOrNull
             ?.take(6)
@@ -73,6 +75,8 @@ class FeedScreen extends ConsumerWidget {
               ref.invalidate(popularWhispersProvider);
             },
             child: feed.when(
+              // Never swap content we still have for a skeleton; first load only.
+              skipLoadingOnReload: true,
               loading: () => const PostSkeletonList(),
               error: (e, _) => VentlyErrorState(
                 error: e,
@@ -80,16 +84,18 @@ class FeedScreen extends ConsumerWidget {
                 onRetry: () => ref.invalidate(feedPostsProvider),
               ),
               data: (posts) {
-                final feedPosts =
-                    posts.where((post) => !post.isWhisper).toList();
+                final feedPosts = posts
+                    .where((post) => !post.isWhisper && !post.isStory)
+                    .toList();
                 final recommendedPosts = (discoveryPosts ?? const <Post>[])
-                    .where((post) => !post.isWhisper)
+                    .where((post) => !post.isWhisper && !post.isStory)
                     .take(12)
                     .toList();
                 final showingRecommendations =
                     feedPosts.isEmpty && recommendedPosts.isNotEmpty;
-                final visiblePosts =
-                    showingRecommendations ? recommendedPosts : feedPosts;
+                final visiblePosts = showingRecommendations
+                    ? recommendedPosts
+                    : feedPosts;
                 final discovery = HomeDiscovery.from(
                   posts: discoveryPosts ?? posts,
                   tribes: tribes,
@@ -97,14 +103,18 @@ class FeedScreen extends ConsumerWidget {
                 final friendStories =
                     storiesAsync.valueOrNull ?? const <VentStory>[];
                 final communityStories = (discoveryPosts ?? const <Post>[])
-                    .where((post) => post.isWhisper)
+                    .where(
+                      (post) =>
+                          post.isStory && post.storyAudience == 'everyone',
+                    )
                     .map(VentStory.fromPost)
                     .take(12)
                     .toList();
                 final showingCommunityStories =
                     friendStories.isEmpty && communityStories.isNotEmpty;
-                final stories =
-                    showingCommunityStories ? communityStories : friendStories;
+                final stories = showingCommunityStories
+                    ? communityStories
+                    : friendStories;
                 return CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   // Pre-build offscreen items so fast flings never show a
@@ -117,12 +127,10 @@ class FeedScreen extends ConsumerWidget {
                     const SliverToBoxAdapter(child: EmailVerificationBanner()),
                     SliverToBoxAdapter(
                       child: storiesAsync.when(
-                        loading: () => _StoriesLoadingRail(
-                          me: me,
-                        ),
-                        error: (_, __) => _StoriesUnavailableRail(
-                          me: me,
-                        ),
+                        // Never swap content we still have for a skeleton; first load only.
+                        skipLoadingOnReload: true,
+                        loading: () => _StoriesLoadingRail(me: me),
+                        error: (_, __) => _StoriesUnavailableRail(me: me),
                         data: (_) => FadeSlideIn(
                           index: 1,
                           child: _VentlyStoriesRail(
@@ -143,6 +151,8 @@ class FeedScreen extends ConsumerWidget {
                       ),
                     SliverToBoxAdapter(
                       child: topicStatsAsync.when(
+                        // Never swap content we still have for a skeleton; first load only.
+                        skipLoadingOnReload: true,
                         loading: () => const _TrendingTopicsLoading(),
                         error: (_, __) => _TrendingTopicsUnavailable(
                           onRetry: () =>
@@ -221,14 +231,21 @@ class FeedScreen extends ConsumerWidget {
                                 ),
                                 onLike: () async {
                                   try {
-                                    await ref.read(repositoryProvider).react(
-                                        post.postId, post.myReaction ?? 'hug');
+                                    await ref
+                                        .read(repositoryProvider)
+                                        .react(
+                                          post.postId,
+                                          post.myReaction ?? 'hug',
+                                        );
                                   } catch (e) {
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(SnackBar(
-                                              content:
-                                                  Text('Could not react: $e')));
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Could not react: $e'),
+                                        ),
+                                      );
                                     }
                                     return;
                                   }
@@ -251,8 +268,9 @@ class FeedScreen extends ConsumerWidget {
                           },
                         ),
                       ),
-                    // Clearance for the floating glass nav (extendBody).
-                    const SliverToBoxAdapter(child: SizedBox(height: 108)),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: HomeShell.navClearance),
+                    ),
                   ],
                 );
               },
@@ -351,7 +369,7 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                   )
                 : ProfileAvatar(
                     avatarSeed: user.avatarSeed,
-                    label: user.anonymousPseudonym,
+                    label: user.displayName,
                     profilePhotoUrl: user.profilePhotoUrl,
                     size: 36,
                   ),
@@ -379,7 +397,7 @@ class _VentlyFeedTopBar extends ConsumerWidget {
         VentlyNotificationBell.iconData,
         'Notifications',
         '/notifications',
-        false
+        false,
       ),
       (Icons.shield_outlined, 'Security', '/profile/security', false),
       (Icons.settings_outlined, 'Settings', '/settings', false),
@@ -411,8 +429,10 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                   color: context.ink,
                 ),
               ),
-              trailing: const Icon(Icons.chevron_right_rounded,
-                  color: VentlyColors.softMauve),
+              trailing: const Icon(
+                Icons.chevron_right_rounded,
+                color: VentlyColors.softMauve,
+              ),
               onTap: () {
                 Navigator.of(sheetCtx).pop();
                 // Returning to the Studio must exit "member view" first, or the
@@ -437,8 +457,11 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                 color: VentlyColors.dangerRed.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.logout_rounded,
-                  size: 18, color: VentlyColors.dangerRed),
+              child: const Icon(
+                Icons.logout_rounded,
+                size: 18,
+                color: VentlyColors.dangerRed,
+              ),
             ),
             title: const Text(
               'Sign out',
@@ -450,7 +473,8 @@ class _VentlyFeedTopBar extends ConsumerWidget {
             ),
             onTap: () async {
               Navigator.of(sheetCtx).pop();
-              final confirmed = await showDialog<bool>(
+              final confirmed =
+                  await showDialog<bool>(
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('Sign out?'),
@@ -524,7 +548,10 @@ class _CompactGreeting extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 16, 6),
+      // Right inset matches the left, and every other section on this screen.
+      // It was 16, which pushed the trailing icon 4px past the column every
+      // other row aligns to — there is no IconButton padding here to absorb it.
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -568,6 +595,16 @@ class _VentlyStoriesRail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    VentStory? ownStory;
+    final friendStories = <VentStory>[];
+    for (final story in stories) {
+      if (story.authorId != null && story.authorId == me?.userId) {
+        ownStory ??= story;
+      } else {
+        friendStories.add(story);
+      }
+    }
+
     if (stories.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -585,13 +622,15 @@ class _VentlyStoriesRail extends ConsumerWidget {
                 _AddStoryBubble(
                   me: me,
                   alignToCard: true,
-                  onTap: () => context.push('/compose/story'),
+                  onAdd: () => context.push('/compose/story'),
                 ),
                 const SizedBox(width: 14),
                 Container(
                   width: 230,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: context.glass(0.72),
                     borderRadius: BorderRadius.circular(18),
@@ -648,16 +687,19 @@ class _VentlyStoriesRail extends ConsumerWidget {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: stories.length + 1,
+            itemCount: friendStories.length + 1,
             separatorBuilder: (_, __) => const SizedBox(width: 12),
             itemBuilder: (ctx, i) {
               if (i == 0) {
                 return _AddStoryBubble(
                   me: me,
-                  onTap: () => context.push('/compose/story'),
+                  onAdd: () => context.push('/compose/story'),
+                  onView: ownStory == null
+                      ? null
+                      : () => context.push('/story/${ownStory!.postId}'),
                 );
               }
-              return _VentlyStoryCircle(story: stories[i - 1]);
+              return _VentlyStoryCircle(story: friendStories[i - 1]);
             },
           ),
         ),
@@ -688,7 +730,7 @@ class _StoriesLoadingRail extends StatelessWidget {
             children: [
               _AddStoryBubble(
                 me: me,
-                onTap: () => context.push('/compose/story'),
+                onAdd: () => context.push('/compose/story'),
               ),
               const SizedBox(width: 14),
               for (var i = 0; i < 4; i++) ...[
@@ -726,7 +768,7 @@ class _StoriesUnavailableRail extends StatelessWidget {
               _AddStoryBubble(
                 me: me,
                 alignToCard: true,
-                onTap: () => context.push('/compose/story'),
+                onAdd: () => context.push('/compose/story'),
               ),
               const SizedBox(width: 14),
               Container(
@@ -828,62 +870,87 @@ class _StoryBubbleSkeleton extends StatelessWidget {
 class _AddStoryBubble extends StatelessWidget {
   const _AddStoryBubble({
     required this.me,
-    required this.onTap,
+    required this.onAdd,
+    this.onView,
     this.alignToCard = false,
   });
 
   final AppUser? me;
-  final VoidCallback onTap;
+  final VoidCallback onAdd;
+  final VoidCallback? onView;
   final bool alignToCard;
 
   @override
   Widget build(BuildContext context) {
     final label = me?.anonymousPseudonym ?? 'You';
-    return Semantics(
-      label: 'Add your 24 hour story',
-      button: true,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: alignToCard ? 2 : 0),
-        child: SizedBox(
-          key: const Key('home-add-story'),
-          width: 64,
-          child: Column(
-            mainAxisAlignment:
-                alignToCard ? MainAxisAlignment.end : MainAxisAlignment.start,
-            children: [
-              Pressable(
-                onTap: onTap,
-                child: SizedBox(
-                  width: 54,
-                  height: 54,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 52,
-                        height: 52,
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: VentlyColors.softMauve,
-                            width: 1.5,
+    final hasStory = onView != null;
+    return Padding(
+      padding: EdgeInsets.only(bottom: alignToCard ? 2 : 0),
+      child: SizedBox(
+        key: const Key('home-add-story'),
+        width: 64,
+        child: Column(
+          mainAxisAlignment: alignToCard
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 58,
+              height: 54,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Semantics(
+                    label: hasStory
+                        ? 'View your active story'
+                        : 'Add your 24 hour story',
+                    button: true,
+                    child: Pressable(
+                      key: const Key('home-view-story'),
+                      onTap: onView ?? onAdd,
+                      child: SizedBox(
+                        width: 54,
+                        height: 54,
+                        child: Center(
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: hasStory
+                                    ? VentlyColors.berryMagenta
+                                    : VentlyColors.softMauve,
+                                width: hasStory ? 2.4 : 1.5,
+                              ),
+                            ),
+                            child: ProfileAvatar(
+                              avatarSeed:
+                                  me?.avatarSeed ?? 'venttly-story-owner',
+                              label: label,
+                              profilePhotoUrl: me?.profilePhotoUrl,
+                              size: 46,
+                            ),
                           ),
                         ),
-                        child: ProfileAvatar(
-                          avatarSeed: me?.avatarSeed ?? 'venttly-story-owner',
-                          label: label,
-                          profilePhotoUrl: me?.profilePhotoUrl,
-                          size: 46,
-                        ),
                       ),
-                      Positioned(
-                        right: -1,
-                        bottom: 0,
+                    ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Semantics(
+                      label: hasStory ? 'Add another story' : 'Add story',
+                      button: true,
+                      child: Pressable(
+                        key: const Key('home-add-story-button'),
+                        onTap: onAdd,
+                        pressedScale: 0.88,
                         child: Container(
-                          width: 20,
-                          height: 20,
+                          width: 22,
+                          height: 22,
                           decoration: BoxDecoration(
                             color: VentlyColors.berryMagenta,
                             shape: BoxShape.circle,
@@ -894,28 +961,38 @@ class _AddStoryBubble extends StatelessWidget {
                           ),
                           child: const Icon(
                             Icons.add_rounded,
-                            size: 14,
+                            size: 15,
                             color: Colors.white,
                           ),
                         ),
                       ),
-                    ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 5),
+            Semantics(
+              label: hasStory
+                  ? 'View your active story'
+                  : 'Add your 24 hour story',
+              button: true,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onView ?? onAdd,
+                child: Text(
+                  'Your story',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.ink,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-              const SizedBox(height: 5),
-              Text(
-                'Your story',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: context.ink,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -952,7 +1029,7 @@ class _VentlyStoryCircle extends StatelessWidget {
               ),
               child: ProfileAvatar(
                 avatarSeed: story.authorAvatarSeed,
-                label: story.authorPseudonym,
+                label: story.authorDisplayName,
                 profilePhotoUrl: story.authorProfilePhotoUrl,
                 size: 48,
               ),
@@ -960,7 +1037,7 @@ class _VentlyStoryCircle extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           Text(
-            story.authorPseudonym,
+            story.authorDisplayName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -988,7 +1065,10 @@ class _FeedFiltersHeader extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
       alignment: Alignment.topCenter,
@@ -1069,6 +1149,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
                     UserProfileLink(
                       userId: post.authorId!,
                       pseudonym: post.authorPseudonym.replaceFirst('@', ''),
+                      displayName: post.authorDisplayName,
                       avatarSeed: post.authorAvatarSeed,
                       profilePhotoUrl: post.authorProfilePhotoUrl,
                       size: 44,
@@ -1076,7 +1157,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
                   else
                     ProfileAvatar(
                       avatarSeed: post.authorAvatarSeed,
-                      label: post.authorPseudonym,
+                      label: post.authorDisplayName,
                       profilePhotoUrl: post.authorProfilePhotoUrl,
                       size: 44,
                     ),
@@ -1089,7 +1170,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
                           InkWell(
                             onTap: onMessage,
                             child: Text(
-                              post.authorPseudonym,
+                              post.authorDisplayName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -1101,7 +1182,7 @@ class _VentlyFeedPostCard extends StatelessWidget {
                           )
                         else
                           Text(
-                            post.authorPseudonym,
+                            post.authorDisplayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1127,8 +1208,10 @@ class _VentlyFeedPostCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Container(
                     constraints: const BoxConstraints(maxWidth: 124),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 11,
+                      vertical: 7,
+                    ),
                     decoration: BoxDecoration(
                       color: VentlyColors.roseTint,
                       borderRadius: BorderRadius.circular(16),
@@ -1175,8 +1258,10 @@ class _VentlyFeedPostCard extends StatelessWidget {
                         height: 120,
                         color: const Color(0xFFFFE5ED),
                         alignment: Alignment.center,
-                        child: const Icon(Icons.image_outlined,
-                            color: VentlyColors.berryMagenta),
+                        child: const Icon(
+                          Icons.image_outlined,
+                          color: VentlyColors.berryMagenta,
+                        ),
                       ),
                     ),
                   ),
@@ -1216,8 +1301,11 @@ class _VentlyFeedPostCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                       child: Row(
                         children: [
-                          Icon(CupertinoIcons.chat_bubble,
-                              size: 19, color: context.inkMuted),
+                          Icon(
+                            CupertinoIcons.chat_bubble,
+                            size: 19,
+                            color: context.inkMuted,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
@@ -1251,10 +1339,10 @@ class _VentlyFeedPostCard extends StatelessWidget {
   }
 
   static TextStyle _metricStyle(BuildContext context) => TextStyle(
-        color: context.inkMuted,
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
-      );
+    color: context.inkMuted,
+    fontSize: 13,
+    fontWeight: FontWeight.w700,
+  );
 
   static String _ago(DateTime date) {
     final diff = DateTime.now().difference(date);
@@ -1529,8 +1617,11 @@ class _TribeChipCard extends StatelessWidget {
                   if (tribe.joinedByMe)
                     Icon(Icons.check_circle, size: 16, color: scheme.primary)
                   else
-                    Icon(Icons.add_circle_outline,
-                        size: 16, color: scheme.onSurface.withOpacity(0.5)),
+                    Icon(
+                      Icons.add_circle_outline,
+                      size: 16,
+                      color: scheme.onSurface.withOpacity(0.5),
+                    ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -1547,8 +1638,11 @@ class _TribeChipCard extends StatelessWidget {
               const Spacer(),
               Row(
                 children: [
-                  Icon(Icons.people_alt_outlined,
-                      size: 12, color: scheme.onSurface.withOpacity(0.55)),
+                  Icon(
+                    Icons.people_alt_outlined,
+                    size: 12,
+                    color: scheme.onSurface.withOpacity(0.55),
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '${PostCard.compactNumber(tribe.memberCount)} members',
@@ -1639,7 +1733,9 @@ class _FeedSectionHeader extends ConsumerWidget {
                         .update((value) => value.copyWith(clearMood: true)),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 11, vertical: 7),
+                        horizontal: 11,
+                        vertical: 7,
+                      ),
                       decoration: BoxDecoration(
                         color: VentlyColors.roseTint,
                         borderRadius: BorderRadius.circular(18),
@@ -1657,8 +1753,11 @@ class _FeedSectionHeader extends ConsumerWidget {
                             ),
                           ),
                           const SizedBox(width: 5),
-                          const Icon(Icons.close_rounded,
-                              color: VentlyColors.roseDeep, size: 14),
+                          const Icon(
+                            Icons.close_rounded,
+                            color: VentlyColors.roseDeep,
+                            size: 14,
+                          ),
                         ],
                       ),
                     ),
@@ -1755,10 +1854,13 @@ class _FeedSectionHeader extends ConsumerWidget {
                       mood: m,
                       selected: f.mood == m,
                       onTap: () {
-                        sheetRef.read(feedFilterProvider.notifier).update((s) =>
-                            f.mood == m
-                                ? s.copyWith(clearMood: true)
-                                : s.copyWith(mood: m));
+                        sheetRef
+                            .read(feedFilterProvider.notifier)
+                            .update(
+                              (s) => f.mood == m
+                                  ? s.copyWith(clearMood: true)
+                                  : s.copyWith(mood: m),
+                            );
                       },
                     ),
                 ],
@@ -1852,8 +1954,8 @@ class _ScopeToggle extends StatelessWidget {
               color: selected
                   ? Colors.white
                   : disabled
-                      ? scheme.onSurface.withOpacity(0.30)
-                      : scheme.primary,
+                  ? scheme.onSurface.withOpacity(0.30)
+                  : scheme.primary,
             ),
           ),
         ),
@@ -1972,52 +2074,92 @@ class _CategoryRail extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    const items = <String?>[null, ...FeedCategories.all];
+    // "All" is pinned outside the scroll view, not items[0] inside it. With 20
+    // categories it used to scroll off the left the moment you picked something
+    // near the end, so clearing a filter meant hunting back for a chip you
+    // could no longer see. An escape from a filter must never require finding
+    // it first.
     return SizedBox(
       height: 58,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-        itemCount: items.length,
-        itemBuilder: (ctx, i) {
-          final key = items[i];
-          final selected = filter.category == key;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Pressable(
-              onTap: () {
-                ref
-                    .read(feedFilterProvider.notifier)
-                    .update((s) => s.copyWith(category: key));
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 5, 2, 5),
+            child: _chip(context, ref, null, filter.category == null, scheme),
+          ),
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+              itemCount: FeedCategories.all.length,
+              itemBuilder: (ctx, i) {
+                final key = FeedCategories.all[i];
+                return _chip(context, ref, key, filter.category == key, scheme);
               },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                alignment: Alignment.center,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? context.ink
-                      : Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: selected ? context.ink : VentlyColors.softMauve,
-                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// One category chip. [key] null is the pinned "All" reset.
+  Widget _chip(
+    BuildContext context,
+    WidgetRef ref,
+    String? key,
+    bool selected,
+    ColorScheme scheme,
+  ) {
+    // When a filter is active the reset chip carries a clear affordance, so it
+    // reads as "get me out" rather than as one more category to choose from.
+    final isReset = key == null;
+    final filtering = filter.category != null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Pressable(
+        onTap: () {
+          ref
+              .read(feedFilterProvider.notifier)
+              .update((s) => s.copyWith(category: key));
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected
+                ? context.ink
+                : Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: selected ? context.ink : VentlyColors.softMauve,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isReset && filtering) ...[
+                Icon(
+                  Icons.close_rounded,
+                  size: 14,
+                  color: scheme.onSurface.withOpacity(0.7),
                 ),
-                child: Text(
-                  key == null ? 'All' : FeedCategories.label(key),
-                  style: TextStyle(
-                    color: selected
-                        ? Theme.of(context).scaffoldBackgroundColor
-                        : scheme.onSurface.withOpacity(0.7),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                isReset ? 'All' : FeedCategories.label(key),
+                style: TextStyle(
+                  color: selected
+                      ? Theme.of(context).scaffoldBackgroundColor
+                      : scheme.onSurface.withOpacity(0.7),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
                 ),
               ),
-            ),
-          );
-        },
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2075,7 +2217,8 @@ class _SuggestedPeopleRail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final list = ref.watch(friendSuggestionsProvider).valueOrNull ??
+    final list =
+        ref.watch(friendSuggestionsProvider).valueOrNull ??
         const <FriendSuggestion>[];
     if (list.isEmpty) return const SizedBox.shrink();
     return Padding(

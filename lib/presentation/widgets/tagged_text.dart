@@ -83,11 +83,9 @@ class _TaggedTextState extends ConsumerState<TaggedText> {
       final recognizer = TapGestureRecognizer()
         ..onTap = () => unawaited(_open(handle));
       _recognizers.add(recognizer);
-      spans.add(TextSpan(
-        text: m.group(0),
-        style: tagStyle,
-        recognizer: recognizer,
-      ));
+      spans.add(
+        TextSpan(text: m.group(0), style: tagStyle, recognizer: recognizer),
+      );
       cursor = m.end;
     }
     if (cursor < widget.text.length) {
@@ -196,7 +194,7 @@ class _TagAutocompleteState extends ConsumerState<TagAutocomplete> {
     final active = _query.isNotEmpty;
     final candidates = active
         ? (ref.watch(tagCandidatesProvider(_query)).valueOrNull ??
-            const <TagCandidate>[])
+              const <TagCandidate>[])
         : const <TagCandidate>[];
 
     return Column(
@@ -223,8 +221,10 @@ class _TagAutocompleteState extends ConsumerState<TagAutocomplete> {
                 return InkWell(
                   onTap: () => _select(c),
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     child: Row(
                       children: [
                         if (c.kind == 'tribe')
@@ -232,17 +232,21 @@ class _TagAutocompleteState extends ConsumerState<TagAutocomplete> {
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color:
-                                  VentlyColors.berryMagenta.withOpacity(0.14),
+                              color: VentlyColors.berryMagenta.withOpacity(
+                                0.14,
+                              ),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(Icons.groups_rounded,
-                                size: 18, color: VentlyColors.berryMagenta),
+                            child: const Icon(
+                              Icons.groups_rounded,
+                              size: 18,
+                              color: VentlyColors.berryMagenta,
+                            ),
                           )
                         else
                           ProfileAvatar(
                             avatarSeed: c.avatarSeed ?? 'default-orb',
-                            label: c.handle,
+                            label: c.display,
                             size: 32,
                           ),
                         const SizedBox(width: 10),
@@ -251,7 +255,7 @@ class _TagAutocompleteState extends ConsumerState<TagAutocomplete> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '@${c.handle}',
+                                c.kind == 'tribe' ? '@${c.handle}' : c.display,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -264,7 +268,7 @@ class _TagAutocompleteState extends ConsumerState<TagAutocomplete> {
                                 Text(
                                   c.kind == 'tribe'
                                       ? '${c.display} · Tribe'
-                                      : c.display,
+                                      : '@${c.handle}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(

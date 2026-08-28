@@ -21,7 +21,10 @@ class WelcomeScreen extends StatelessWidget {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: isDark
-                ? [Theme.of(context).scaffoldBackgroundColor, Theme.of(context).colorScheme.surface]
+                ? [
+                    Theme.of(context).scaffoldBackgroundColor,
+                    Theme.of(context).colorScheme.surface,
+                  ]
                 : [
                     const Color(0xFFFFEEF3),
                     const Color(0xFFFFF8F8),
@@ -33,8 +36,10 @@ class WelcomeScreen extends StatelessWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               return SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 22,
+                ),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     minHeight: constraints.maxHeight - 44,
@@ -48,23 +53,23 @@ class WelcomeScreen extends StatelessWidget {
                       Text(
                         'Welcome to Venttly',
                         textAlign: TextAlign.center,
-                        style:
-                            Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                  fontWeight: FontWeight.w900,
-                                  color: isDark
-                                      ? VentlyColors.softOffWhite
-                                      : context.ink,
-                                ),
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              color: isDark
+                                  ? VentlyColors.softOffWhite
+                                  : context.ink,
+                            ),
                       ),
                       const SizedBox(height: 12),
                       Text(
                         'A social space for anonymous stories, 24h vents, tribes, and honest conversations.',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              color: scheme.onSurface.withOpacity(0.66),
-                              height: 1.42,
-                              fontWeight: FontWeight.w600,
-                            ),
+                          color: scheme.onSurface.withOpacity(0.66),
+                          height: 1.42,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 22),
                       const _TrustPanel(),
@@ -108,8 +113,7 @@ class WelcomeScreen extends StatelessWidget {
                       const SizedBox(height: 14),
                       Center(
                         child: TextButton(
-                          onPressed: () =>
-                              context.push('/onboarding/recover'),
+                          onPressed: () => context.push('/onboarding/recover'),
                           child: RichText(
                             text: TextSpan(
                               style: TextStyle(
@@ -119,7 +123,8 @@ class WelcomeScreen extends StatelessWidget {
                               ),
                               children: [
                                 const TextSpan(
-                                    text: 'Already have an account?  '),
+                                  text: 'Already have an account?  ',
+                                ),
                                 TextSpan(
                                   text: 'Log in',
                                   style: TextStyle(
@@ -200,8 +205,10 @@ class _SocialAuthRowState extends ConsumerState<_SocialAuthRow> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(
-                  'Google sign-in unavailable: ${e.toString().replaceFirst('Exception: ', '')}')),
+            content: Text(
+              'Google sign-in unavailable: ${e.toString().replaceFirst('Exception: ', '')}',
+            ),
+          ),
         );
       }
     } finally {
@@ -247,8 +254,7 @@ class _SocialButton extends StatelessWidget {
         minimumSize: const Size.fromHeight(50),
         side: BorderSide(color: VentlyColors.softMauve.withOpacity(0.6)),
         foregroundColor: context.ink,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
       ),
       icon: Icon(icon, size: 22),
       label: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -276,10 +282,7 @@ class _WelcomeLogo extends StatelessWidget {
           ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: Image.asset(
-          'assets/images/venttly_logo.png',
-          fit: BoxFit.cover,
-        ),
+        child: Image.asset('assets/images/venttly_logo.png', fit: BoxFit.cover),
       ),
     );
   }
@@ -301,7 +304,7 @@ class _TrustPanel extends StatelessWidget {
         children: [
           _Bullet(
             icon: Icons.lock_outline,
-            title: 'Anonymous by design',
+            title: 'Pseudonymous by default',
             text: 'No email or phone number needed to start.',
           ),
           _Bullet(
@@ -312,7 +315,7 @@ class _TrustPanel extends StatelessWidget {
           _Bullet(
             icon: Icons.shield_outlined,
             title: 'Safer social energy',
-            text: 'AI-assisted moderation helps keep posts cleaner.',
+            text: 'Server-enforced safety rules apply to every post.',
           ),
         ],
       ),
@@ -321,11 +324,7 @@ class _TrustPanel extends StatelessWidget {
 }
 
 class _Bullet extends StatelessWidget {
-  const _Bullet({
-    required this.icon,
-    required this.title,
-    required this.text,
-  });
+  const _Bullet({required this.icon, required this.title, required this.text});
 
   final IconData icon;
   final String title;
@@ -413,8 +412,11 @@ void _legacyShowEmailSoonSheet(BuildContext context) {
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: Icon(Icons.mail_lock_outlined,
-                    color: scheme.primary, size: 38),
+                child: Icon(
+                  Icons.mail_lock_outlined,
+                  color: scheme.primary,
+                  size: 38,
+                ),
               ),
               const SizedBox(height: 14),
               Text(
@@ -428,7 +430,7 @@ void _legacyShowEmailSoonSheet(BuildContext context) {
               ),
               const SizedBox(height: 8),
               Text(
-                'Right now Venttly identities are zero-PII — username + recovery phrase. '
+                'Venttly is pseudonymous by default — username + recovery phrase accounts need no contact details. '
                 'Email signup with verification + handle picking lands next. '
                 'For today, the anonymous flow is the path forward.',
                 textAlign: TextAlign.center,
@@ -448,7 +450,9 @@ void _legacyShowEmailSoonSheet(BuildContext context) {
                 style: FilledButton.styleFrom(
                   backgroundColor: VentlyColors.berryMagenta,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 28, vertical: 12),
+                    horizontal: 28,
+                    vertical: 12,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),
                   ),

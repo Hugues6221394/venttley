@@ -251,18 +251,19 @@ async function probePgStats(): Promise<ProbeResult> {
 async function probeCron(): Promise<ProbeResult> {
   try {
     const db = await createAdminClient();
-    const { data } = await db
-      .from("mv_hot_posts")
-      .select("post_id", { count: "exact", head: true })
-      .limit(1);
+    const { data, error } = await db.rpc("admin_hot_feed_health");
+    if (error) throw error;
+    const rowCount =
+      data && typeof data === "object" && "row_count" in data
+        ? Number(data.row_count)
+        : 0;
     // The materialised view is refreshed by a pg_cron job every ~2 minutes.
-    // We can't read pg_cron directly via PostgREST; reaching the MV at all
-    // tells us the cron has run at least once.
+    // The role-checked RPC keeps the backing cache out of the Data API.
     return {
       name: "Hot-feed cron (mv_hot_posts)",
       status: "ok",
-      detail: "Materialised view reachable",
-      meta: { rows_reached: data ? "ok" : "0" },
+      detail: "Materialised feed cache reachable",
+      meta: { cached_posts: rowCount },
     };
   } catch (e) {
     return {

@@ -15,6 +15,7 @@ import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tagged_text.dart';
+import '../../widgets/user_link.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/friend_action_button.dart';
@@ -27,11 +28,7 @@ import '../../widgets/vently_error_state.dart';
 enum _ThreadSort { top, newest }
 
 class PostDetailScreen extends ConsumerStatefulWidget {
-  const PostDetailScreen({
-    super.key,
-    required this.postId,
-    this.initialPost,
-  });
+  const PostDetailScreen({super.key, required this.postId, this.initialPost});
 
   final String postId;
   final Post? initialPost;
@@ -91,8 +88,10 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
 
   List<ThreadedComment> _orderedComments(List<ThreadedComment> comments) {
     final pinned = comments.where((comment) => comment.isPinned).toList()
-      ..sort((a, b) =>
-          (b.pinnedAt ?? b.createdAt).compareTo(a.pinnedAt ?? a.createdAt));
+      ..sort(
+        (a, b) =>
+            (b.pinnedAt ?? b.createdAt).compareTo(a.pinnedAt ?? a.createdAt),
+      );
     final regular = comments.where((comment) => !comment.isPinned).toList();
     if (_threadSort == _ThreadSort.newest) {
       regular.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -107,6 +106,31 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       });
     }
     return [...pinned, ...regular];
+  }
+
+  /// Drops deleted comments that have nothing live underneath them.
+  ///
+  /// A deleted comment used to render as "Comment removed by author" wherever it
+  /// sat, so a thread of four replies could be mostly grey tombstones — rows
+  /// that take up space, carry a name and a timestamp, and say nothing. Nobody
+  /// reading a thread needs to know that something they never saw is gone.
+  ///
+  /// A tombstone survives in exactly one case: when the deleted comment still
+  /// has live replies under it. Removing it there would orphan those replies or
+  /// silently reparent them, which is a worse lie than the tombstone. So the
+  /// marker only appears where it is structurally load-bearing.
+  List<ThreadedComment> _withoutDeadTombstones(List<ThreadedComment> nodes) {
+    final kept = <ThreadedComment>[];
+    for (final node in nodes) {
+      final children = _withoutDeadTombstones(node.children);
+      if (node.isDeleted && children.isEmpty) continue;
+      kept.add(
+        children.length == node.children.length
+            ? node
+            : node.copyWith(children: children),
+      );
+    }
+    return kept;
   }
 
   int _countComments(List<ThreadedComment> comments) {
@@ -134,8 +158,9 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Couldn\'t pick image: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Couldn\'t pick image: $e')));
     }
   }
 
@@ -150,10 +175,10 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   }
 
   void _clearAttachment() => setState(() {
-        _pendingImageBytes = null;
-        _pendingImageExt = null;
-        _pendingGifUrl = null;
-      });
+    _pendingImageBytes = null;
+    _pendingImageExt = null;
+    _pendingGifUrl = null;
+  });
 
   Future<void> _sendReply() async {
     if (_sending) return;
@@ -165,11 +190,15 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       final moderation = await ref.read(moderationServiceProvider).review(text);
       if (!mounted) return;
       if (moderation.isBlocked) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(moderation.reasons.isEmpty
-              ? 'Held back by safety AI.'
-              : moderation.reasons.first),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              moderation.reasons.isEmpty
+                  ? 'Held back by safety AI.'
+                  : moderation.reasons.first,
+            ),
+          ),
+        );
         return;
       }
     }
@@ -236,19 +265,15 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
         return;
       }
       try {
-        await outbox.enqueue(
-          OutboxKind.comment,
-          {
-            'postId': widget.postId,
-            'parentId': _replyingToId,
-            'content': text,
-            'personaId': persona?.personaId,
-            'imageUrl': imageUrl,
-            'imagePath': imagePath,
-            if (stagedMedia != null) ...stagedMedia.toPayload(),
-          },
-          operationId: operationId,
-        );
+        await outbox.enqueue(OutboxKind.comment, {
+          'postId': widget.postId,
+          'parentId': _replyingToId,
+          'content': text,
+          'personaId': persona?.personaId,
+          'imageUrl': imageUrl,
+          'imagePath': imagePath,
+          if (stagedMedia != null) ...stagedMedia.toPayload(),
+        }, operationId: operationId);
         await _draftSaver?.clear();
         _replyController.clear();
         if (!mounted) return;
@@ -320,7 +345,9 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       );
     }
     final commentsAsync = ref.watch(commentsProvider(widget.postId));
-    final comments = commentsAsync.valueOrNull ?? const <ThreadedComment>[];
+    final comments = _withoutDeadTombstones(
+      commentsAsync.valueOrNull ?? const <ThreadedComment>[],
+    );
     final orderedComments = _orderedComments(comments);
     final visibleCommentCount = commentsAsync.valueOrNull == null
         ? post.commentsCount
@@ -423,8 +450,10 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                                       height: 160,
                                       color: VentlyColors.roseTint,
                                       alignment: Alignment.center,
-                                      child: const Icon(Icons.image_outlined,
-                                          color: VentlyColors.berryMagenta),
+                                      child: const Icon(
+                                        Icons.image_outlined,
+                                        color: VentlyColors.berryMagenta,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -457,7 +486,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                                         MaterialTapTargetSize.shrinkWrap,
                                   ),
                                   onPressed: () =>
-                                      context.push('/user/${post.authorId}'),
+                                      openUserProfile(context, post.authorId),
                                   child: const Text(
                                     'View profile',
                                     style: TextStyle(
@@ -500,20 +529,17 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                     const SliverToBoxAdapter(child: _CommentsEmpty())
                   else
                     SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final comment = orderedComments[index];
-                          return _CommentNode(
-                            key: ValueKey(comment.commentId),
-                            comment: comment,
-                            postId: widget.postId,
-                            postAuthorId: post.authorId,
-                            canHighlightComment: canHighlightComment,
-                            onReply: _setReplyTarget,
-                          );
-                        },
-                        childCount: orderedComments.length,
-                      ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final comment = orderedComments[index];
+                        return _CommentNode(
+                          key: ValueKey(comment.commentId),
+                          comment: comment,
+                          postId: widget.postId,
+                          postAuthorId: post.authorId,
+                          canHighlightComment: canHighlightComment,
+                          onReply: _setReplyTarget,
+                        );
+                      }, childCount: orderedComments.length),
                     ),
                   const SliverToBoxAdapter(child: SizedBox(height: 24)),
                 ],
@@ -547,7 +573,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   void _setReplyTarget(ThreadedComment c) {
     setState(() {
       _replyingToId = c.commentId;
-      _replyingToName = c.authorPseudonym;
+      _replyingToName = c.authorDisplayName;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _replyFocus.requestFocus();
@@ -851,8 +877,9 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
     setState(() {
       _likeInFlight = true;
       _likedByMe = !wasLiked;
-      _likesCount =
-          wasLiked ? (_likesCount - 1).clamp(0, 1 << 30) : _likesCount + 1;
+      _likesCount = wasLiked
+          ? (_likesCount - 1).clamp(0, 1 << 30)
+          : _likesCount + 1;
     });
     try {
       final result = await ref
@@ -901,6 +928,7 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
               UserProfileLink(
                 userId: comment.authorId!,
                 pseudonym: comment.authorPseudonym.replaceFirst('@', ''),
+                displayName: comment.authorDisplayName,
                 avatarSeed: comment.authorAvatarSeed,
                 profilePhotoUrl: comment.authorProfilePhotoUrl,
                 size: nested ? 30 : 36,
@@ -908,7 +936,7 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
             else
               ProfileAvatar(
                 avatarSeed: comment.authorAvatarSeed,
-                label: comment.authorPseudonym,
+                label: comment.authorDisplayName,
                 profilePhotoUrl: comment.authorProfilePhotoUrl,
                 size: nested ? 30 : 36,
               ),
@@ -923,10 +951,11 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                         child: InkWell(
                           onTap: comment.authorId == null
                               ? null
-                              : () => context.push('/user/${comment.authorId}'),
+                              : () =>
+                                    openUserProfile(context, comment.authorId),
                           borderRadius: BorderRadius.circular(4),
                           child: Text(
-                            comment.authorPseudonym,
+                            comment.authorDisplayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -949,8 +978,9 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                           ),
                           decoration: BoxDecoration(
                             color: scheme.primary.withOpacity(0.09),
-                            borderRadius:
-                                BorderRadius.circular(VentlyTokens.radiusChip),
+                            borderRadius: BorderRadius.circular(
+                              VentlyTokens.radiusChip,
+                            ),
                           ),
                           child: Text(
                             'Author',
@@ -1016,11 +1046,11 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                                   child: Text(
                                     widget.canHighlightComment && !iAmPostOwner
                                         ? (comment.isPinned
-                                            ? 'Remove helpful highlight'
-                                            : 'Highlight as helpful')
+                                              ? 'Remove helpful highlight'
+                                              : 'Highlight as helpful')
                                         : (comment.isPinned
-                                            ? 'Unpin from top'
-                                            : 'Pin to top'),
+                                              ? 'Unpin from top'
+                                              : 'Pin to top'),
                                   ),
                                 ),
                             ],
@@ -1062,12 +1092,14 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                                 memCacheWidth: 640,
                                 maxWidthDiskCache: 960,
                                 placeholder: (_, __) => Container(
-                                  color:
-                                      VentlyColors.softMauve.withOpacity(0.16),
+                                  color: VentlyColors.softMauve.withOpacity(
+                                    0.16,
+                                  ),
                                 ),
                                 errorWidget: (_, __, ___) => Container(
-                                  color:
-                                      VentlyColors.softMauve.withOpacity(0.16),
+                                  color: VentlyColors.softMauve.withOpacity(
+                                    0.16,
+                                  ),
                                   alignment: Alignment.center,
                                   child: const Icon(
                                     Icons.broken_image_outlined,
@@ -1093,7 +1125,7 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                               ? 'Like'
                               : PostCard.compactNumber(_likesCount),
                           selected: _likedByMe,
-                          onTap: _toggleLike,
+                          onTap: isMine ? null : _toggleLike,
                         ),
                         const SizedBox(width: 16),
                         _CommentAction(
@@ -1120,16 +1152,16 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                         depth >= 3
                             ? Icons.arrow_forward_rounded
                             : (_collapsed
-                                ? Icons.keyboard_arrow_down_rounded
-                                : Icons.keyboard_arrow_up_rounded),
+                                  ? Icons.keyboard_arrow_down_rounded
+                                  : Icons.keyboard_arrow_up_rounded),
                         size: 17,
                       ),
                       label: Text(
                         depth >= 3
                             ? 'View $replyCount more replies'
                             : _collapsed
-                                ? 'View $replyCount ${replyCount == 1 ? 'reply' : 'replies'}'
-                                : 'Hide replies',
+                            ? 'View $replyCount ${replyCount == 1 ? 'reply' : 'replies'}'
+                            : 'Hide replies',
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
@@ -1228,8 +1260,9 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Couldn\'t update pin: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Couldn\'t update pin: $e')));
     }
   }
 
@@ -1248,7 +1281,9 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
             child: const Text('Save'),
@@ -1259,18 +1294,24 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
     if (updated == null || updated.isEmpty) return;
     if (updated == widget.comment.content) return;
     try {
-      final ok = await ref.read(repositoryProvider).editComment(
-          commentId: widget.comment.commentId, newContent: updated);
+      final ok = await ref
+          .read(repositoryProvider)
+          .editComment(
+            commentId: widget.comment.commentId,
+            newContent: updated,
+          );
       if (!mounted) return;
       if (ok) {
         ref.invalidate(commentsProvider(widget.postId));
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Comment updated')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Comment updated')));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(_friendlyError(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
     }
   }
 
@@ -1280,14 +1321,17 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete this comment?'),
         content: const Text(
-            'Replies will stay anchored under a tombstone. You can\'t undo this.'),
+          'Replies will stay anchored under a tombstone. You can\'t undo this.',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: VentlyColors.berryMagenta),
+              backgroundColor: VentlyColors.berryMagenta,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
           ),
@@ -1305,8 +1349,9 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(_friendlyError(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
     }
   }
 
@@ -1349,10 +1394,9 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                 children: [
                   Text(
                     'Deeper replies',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w800),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const Spacer(),
                   IconButton(
@@ -1368,12 +1412,13 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
                 children: [
                   for (final c in root.children)
                     _CommentNode(
-                        key: ValueKey(c.commentId),
-                        comment: c,
-                        postId: widget.postId,
-                        postAuthorId: widget.postAuthorId,
-                        canHighlightComment: widget.canHighlightComment,
-                        onReply: widget.onReply),
+                      key: ValueKey(c.commentId),
+                      comment: c,
+                      postId: widget.postId,
+                      postAuthorId: widget.postAuthorId,
+                      canHighlightComment: widget.canHighlightComment,
+                      onReply: widget.onReply,
+                    ),
                 ],
               ),
             ),
@@ -1394,33 +1439,37 @@ class _CommentAction extends StatelessWidget {
 
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool selected;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final color =
-        selected ? scheme.primary : scheme.onSurface.withOpacity(0.58);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+    final color = selected
+        ? scheme.primary
+        : scheme.onSurface.withOpacity(0.58);
+    return Tooltip(
+      message: onTap == null ? 'You can’t react to your own comment' : label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1441,8 +1490,11 @@ class _LockedFooter extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.lock_outline,
-              size: 16, color: context.ink.withOpacity(0.7)),
+          Icon(
+            Icons.lock_outline,
+            size: 16,
+            color: context.ink.withOpacity(0.7),
+          ),
           const SizedBox(width: 8),
           Text(
             'Replies are locked by the author.',
@@ -1556,7 +1608,9 @@ class _ReplyComposer extends StatelessWidget {
                           child: imageBytes != null
                               ? Image.memory(imageBytes!, fit: BoxFit.cover)
                               : CachedNetworkImage(
-                                  imageUrl: gifUrl!, fit: BoxFit.cover),
+                                  imageUrl: gifUrl!,
+                                  fit: BoxFit.cover,
+                                ),
                         ),
                       ),
                       Positioned(
@@ -1570,8 +1624,11 @@ class _ReplyComposer extends StatelessWidget {
                               color: Colors.black54,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.close,
-                                size: 14, color: Colors.white),
+                            child: const Icon(
+                              Icons.close,
+                              size: 14,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
@@ -1584,7 +1641,8 @@ class _ReplyComposer extends StatelessWidget {
               child: ValueListenableBuilder<TextEditingValue>(
                 valueListenable: controller,
                 builder: (context, value, _) {
-                  final canSend = !sending &&
+                  final canSend =
+                      !sending &&
                       (value.text.trim().isNotEmpty || _hasAttachment);
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -1608,13 +1666,13 @@ class _ReplyComposer extends StatelessWidget {
                           minLines: 1,
                           maxLines: 4,
                           maxLength: 600,
-                          buildCounter: (
-                            _, {
-                            required currentLength,
-                            required isFocused,
-                            required maxLength,
-                          }) =>
-                              null,
+                          buildCounter:
+                              (
+                                _, {
+                                required currentLength,
+                                required isFocused,
+                                required maxLength,
+                              }) => null,
                           textCapitalization: TextCapitalization.sentences,
                           keyboardType: TextInputType.multiline,
                           inputFormatters: [
@@ -1668,8 +1726,8 @@ class _ReplyComposer extends StatelessWidget {
                             style: FilledButton.styleFrom(
                               padding: EdgeInsets.zero,
                               shape: const CircleBorder(),
-                              disabledBackgroundColor:
-                                  scheme.onSurface.withOpacity(0.08),
+                              disabledBackgroundColor: scheme.onSurface
+                                  .withOpacity(0.08),
                             ),
                             child: sending
                                 ? const SizedBox(
@@ -1680,8 +1738,10 @@ class _ReplyComposer extends StatelessWidget {
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Icon(Icons.arrow_upward_rounded,
-                                    size: 21),
+                                : const Icon(
+                                    Icons.arrow_upward_rounded,
+                                    size: 21,
+                                  ),
                           ),
                         ),
                       ),
@@ -1753,16 +1813,14 @@ class _ReportSheet extends ConsumerWidget {
           children: [
             Text(
               'Report this post',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 4),
             Text(
               'Venttly moderators review reports anonymously, usually within minutes.',
-              style: TextStyle(
-                color: scheme.onSurface.withOpacity(0.65),
-              ),
+              style: TextStyle(color: scheme.onSurface.withOpacity(0.65)),
             ),
             const SizedBox(height: 16),
             for (final c in categories)
@@ -1773,10 +1831,9 @@ class _ReportSheet extends ConsumerWidget {
                 onTap: () async {
                   Navigator.pop(context);
                   try {
-                    await ref.read(repositoryProvider).reportPost(
-                          postId: postId,
-                          reason: c.$1,
-                        );
+                    await ref
+                        .read(repositoryProvider)
+                        .reportPost(postId: postId, reason: c.$1);
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -1830,10 +1887,7 @@ class _CrisisHelplineBanner extends ConsumerWidget {
                   level == 'high'
                       ? 'You\'re not alone. Help is one tap away.'
                       : 'If you\'re struggling, support is here.',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: accent,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w800, color: accent),
                 ),
               ),
             ],
@@ -1865,8 +1919,9 @@ class _CrisisHelplineBanner extends ConsumerWidget {
                           children: [
                             Text(
                               r.label,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w700),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             Text(
                               r.reach,
@@ -1875,8 +1930,11 @@ class _CrisisHelplineBanner extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      const Icon(Icons.chevron_right,
-                          size: 18, color: Colors.black38),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 18,
+                        color: Colors.black38,
+                      ),
                     ],
                   ),
                 ),
@@ -1891,8 +1949,8 @@ class _CrisisHelplineBanner extends ConsumerWidget {
     // their dialer / browser. We deliberately do NOT auto-dial: that would
     // be alarming, and a misfired tap shouldn't ring an emergency line.
     Clipboard.setData(ClipboardData(text: r.url ?? r.reach));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Copied: ${r.url ?? r.reach}')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Copied: ${r.url ?? r.reach}')));
   }
 }

@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/server";
+import {
+  createAdminClient,
+  createSsrClient,
+} from "@/lib/supabase/server";
 import { rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, Row as KV } from "@/components/ui/section";
@@ -10,6 +13,7 @@ import {
   Ban,
   CheckCircle2,
   ChevronLeft,
+  RefreshCw,
   Sparkles,
   Trash2,
   Users2,
@@ -78,6 +82,18 @@ async function removeMember(formData: FormData) {
   revalidatePath(`/tribes/${id}`);
 }
 
+async function restoreTribe(formData: FormData) {
+  "use server";
+  const id = String(formData.get("tribe_id") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  await rpc("admin_restore_tribe", {
+    p_tribe_id: id,
+    p_reason: reason || "Restored from the Super Admin console",
+  });
+  revalidatePath(`/tribes/${id}`);
+  revalidatePath("/tribes");
+}
+
 export default async function TribeDetailPage({
   params,
 }: {
@@ -85,11 +101,25 @@ export default async function TribeDetailPage({
 }) {
   const { tribeId } = await params;
   const db = await createAdminClient();
+  const ssr = await createSsrClient();
+  const {
+    data: { user: actor },
+  } = await ssr.auth.getUser();
+  const { data: actorProfile } = actor
+    ? await ssr
+        .from("users")
+        .select("user_role")
+        .eq("user_id", actor.id)
+        .maybeSingle()
+    : { data: null };
+  const canRestore =
+    actorProfile?.user_role === "super_admin" ||
+    actorProfile?.user_role === "admin";
 
   const { data: tribe } = await db
     .from("tribes")
     .select(
-      "tribe_id, name, slug, description, category, is_private, is_featured, is_active, member_count, keeper_id, created_at"
+      "tribe_id, name, slug, description, category, is_private, is_featured, is_active, member_count, keeper_id, created_at, lifecycle_status, lifecycle_reason, deletion_requested_at, deletion_purge_at"
     )
     .eq("tribe_id", tribeId)
     .maybeSingle();
@@ -181,6 +211,19 @@ export default async function TribeDetailPage({
                 <Badge tone={tribe.is_active ? "ok" : "danger"}>
                   {tribe.is_active ? "active" : "deactivated"}
                 </Badge>
+                {tribe.lifecycle_status &&
+                  tribe.lifecycle_status !==
+                    (tribe.is_active ? "active" : "paused") && (
+                    <Badge
+                      tone={
+                        tribe.lifecycle_status === "pending_deletion"
+                          ? "danger"
+                          : "warn"
+                      }
+                    >
+                      {tribe.lifecycle_status.replaceAll("_", " ")}
+                    </Badge>
+                  )}
               </div>
             </div>
           </div>
@@ -216,6 +259,26 @@ export default async function TribeDetailPage({
                 {tribe.is_featured ? "Unfeature" : "Feature"}
               </button>
             </form>
+            {canRestore &&
+              tribe.lifecycle_status === "pending_deletion" &&
+              tribe.deletion_purge_at &&
+              new Date(tribe.deletion_purge_at).getTime() > Date.now() && (
+                <form action={restoreTribe}>
+                  <input type="hidden" name="tribe_id" value={tribeId} />
+                  <input
+                    type="hidden"
+                    name="reason"
+                    value="Recovered during the 30-day deletion window"
+                  />
+                  <button
+                    type="submit"
+                    className="btn-secondary text-green-700 border-green-300 hover:bg-green-50 inline-flex items-center gap-1"
+                  >
+                    <RefreshCw size={14} />
+                    Restore tribe
+                  </button>
+                </form>
+              )}
           </div>
         </div>
       </div>
@@ -309,6 +372,19 @@ export default async function TribeDetailPage({
             <KV label="Slug" value={`/${tribe.slug}`} />
             <KV label="Category" value={tribe.category} />
             <KV label="Visibility" value={tribe.is_private ? "private" : "public"} />
+            <KV
+              label="Lifecycle"
+              value={tribe.lifecycle_status?.replaceAll("_", " ") ?? "active"}
+            />
+            {tribe.deletion_purge_at && (
+              <KV
+                label="Recovery ends"
+                value={new Date(tribe.deletion_purge_at).toLocaleString()}
+              />
+            )}
+            {tribe.lifecycle_reason && (
+              <KV label="Lifecycle reason" value={tribe.lifecycle_reason} />
+            )}
             <KV label="Created" value={new Date(tribe.created_at).toLocaleString()} />
             {tribe.description && (
               <div className="py-2">

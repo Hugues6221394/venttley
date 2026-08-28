@@ -7,6 +7,7 @@ import '../tribe/tribe_chat_hub.dart';
 class AppUser {
   final String userId;
   final String anonymousPseudonym;
+  final String? _displayName;
   final String avatarSeed;
   final String currentMood;
   final String userRole; // normal | plug | super_admin
@@ -19,6 +20,14 @@ class AppUser {
   final String? homeCountry;
   final String? homeCampus;
   final String? profilePhotoUrl;
+
+  /// Chosen profile background image (migration 20260817100000).
+  final String? profileBannerUrl;
+
+  /// Vertical crop anchor for that image, 0 = top … 1 = bottom
+  /// (migration 20260822100000). Lives on the row rather than baked into the
+  /// file so re-anchoring never means re-uploading.
+  final double profileBannerOffset;
 
   /// Public, user-authored profile copy. Both optional and shown on the
   /// public profile when set. `pronouns` is a free short string (e.g. "she/her",
@@ -35,6 +44,7 @@ class AppUser {
   const AppUser({
     required this.userId,
     required this.anonymousPseudonym,
+    String? displayName,
     required this.avatarSeed,
     required this.currentMood,
     required this.userRole,
@@ -47,10 +57,20 @@ class AppUser {
     this.homeCountry,
     this.homeCampus,
     this.profilePhotoUrl,
+    this.profileBannerUrl,
+    this.profileBannerOffset = 0.5,
     this.bio,
     this.pronouns,
     this.emailVerified = false,
-  });
+  }) : _displayName = displayName;
+
+  /// Human-facing anonymous persona name. The fallback keeps an older API or
+  /// cached row renderable while the display-name migration rolls out.
+  String get displayName {
+    final value = _displayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return anonymousPseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
 
   bool get isRestrictedMinor => safetyTier == 'restricted_minor';
   bool get isPlug => userRole == 'plug' || userRole == 'super_admin';
@@ -66,11 +86,13 @@ class AppUser {
 
   AppUser copyWith({
     String? anonymousPseudonym,
+    String? displayName,
     String? avatarSeed,
     String? currentMood,
     String? safetyTier,
     String? userRole,
     bool? isVerified,
+    Object? birthYear = _unset,
     int? karmaPoints,
     String? homeCity,
     String? homeCountry,
@@ -83,13 +105,14 @@ class AppUser {
     return AppUser(
       userId: userId,
       anonymousPseudonym: anonymousPseudonym ?? this.anonymousPseudonym,
+      displayName: displayName ?? this.displayName,
       avatarSeed: avatarSeed ?? this.avatarSeed,
       currentMood: currentMood ?? this.currentMood,
       userRole: userRole ?? this.userRole,
       isVerified: isVerified ?? this.isVerified,
       safetyTier: safetyTier ?? this.safetyTier,
       accountStatus: accountStatus,
-      birthYear: birthYear,
+      birthYear: birthYear == _unset ? this.birthYear : birthYear as int?,
       karmaPoints: karmaPoints ?? this.karmaPoints,
       homeCity: homeCity ?? this.homeCity,
       homeCountry: homeCountry ?? this.homeCountry,
@@ -97,6 +120,11 @@ class AppUser {
       profilePhotoUrl: profilePhotoUrl == _unset
           ? this.profilePhotoUrl
           : profilePhotoUrl as String?,
+      // Not exposed as a copyWith parameter: the banner only ever changes via
+      // the upload/clear RPCs, which return a freshly restored AppUser. Adding
+      // a setter here would invite a second, divergent way to change it.
+      profileBannerUrl: profileBannerUrl,
+      profileBannerOffset: profileBannerOffset,
       bio: bio == _unset ? this.bio : bio as String?,
       pronouns: pronouns == _unset ? this.pronouns : pronouns as String?,
       emailVerified: emailVerified ?? this.emailVerified,
@@ -110,6 +138,7 @@ class AppUser {
 class TribeMemberRow {
   final String userId;
   final String pseudonym;
+  final String? _displayName;
   final String avatarSeed;
   final String? profilePhotoUrl;
   final String role; // member | mod | keeper
@@ -125,12 +154,21 @@ class TribeMemberRow {
     required this.avatarSeed,
     required this.role,
     required this.joinedAt,
+    String? displayName,
     this.profilePhotoUrl,
     this.mutedUntil,
     this.warningCount = 0,
     this.lastWarnedAt,
     this.memberNote,
-  });
+  }) : _displayName = displayName;
+
+  /// Same contract as [AppUser.displayName] — the fallback keeps an older API
+  /// or a cached row renderable while the display-name migration rolls out.
+  String get displayName {
+    final value = _displayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return pseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
 
   bool get isKeeper => role == 'keeper';
   bool get isMod => role == 'mod';
@@ -172,6 +210,26 @@ class UserStreak {
   });
 }
 
+class StoryReactionUser {
+  final String userId;
+  final String pseudonym;
+  final String avatarSeed;
+  final String? profilePhotoUrl;
+  final bool isVerified;
+  final String reactionType;
+  final DateTime reactedAt;
+
+  const StoryReactionUser({
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.isVerified,
+    required this.reactionType,
+    required this.reactedAt,
+    this.profilePhotoUrl,
+  });
+}
+
 class PlugProfile {
   final String plugId;
   final String displayName;
@@ -199,7 +257,7 @@ class Tribe {
   final String slug;
   final String? description;
   final String
-      category; // campus | city | interest_group | hobby | support | venting
+  category; // campus | city | interest_group | hobby | support | venting
   final int memberCount;
   final bool isPrivate;
   final String? avatarUrl;
@@ -495,6 +553,8 @@ class Post {
   /// chip and report flows to identify the author.
   final String? authorId;
   final String authorPseudonym;
+  final String? _authorDisplayName;
+  final String? personaId;
   final String authorAvatarSeed;
   final String? authorProfilePhotoUrl;
   final bool authorIsVerified;
@@ -504,13 +564,27 @@ class Post {
   final String? tribeSlug;
   final String? spaceId;
   final String categoryName;
+
+  /// When the author marked this goal as reached (migration 20260816140000).
+  /// Only ever set on `dreams_goals` posts, and only by their author.
+  final DateTime? goalReachedAt;
+
+  bool get isGoal => categoryName == 'dreams_goals';
+  bool get isGoalReached => goalReachedAt != null;
   final String postType; // user_post | plug_prompt
   final String content;
   final String postMood;
   final bool isWhisper;
+  final bool isStory;
+  final String storyAudience;
   final int likesCount;
   final int commentsCount;
   final int viewCount;
+
+  /// Optional, server-validated colors selected by the author. Values are
+  /// opaque hex strings so the domain layer does not depend on Flutter.
+  final String? cardBackgroundColor;
+  final String? cardTextColor;
 
   /// Optional attached image URL (post-media bucket, public). Drives the
   /// rounded image card on the feed.
@@ -520,6 +594,14 @@ class Post {
   /// the waveform playback card on the feed.
   final String? audioUrl;
   final int? audioDurationSeconds;
+
+  /// Optional, rights-validated music preview. This is independent of a
+  /// user-recorded voice note and never prevents the Vent body from rendering.
+  final String? musicTrackId;
+  final MusicTrack? musicTrack;
+  final int? musicStartMs;
+  final int? musicDurationMs;
+  final double? musicVolume;
   final DateTime createdAt;
 
   /// Author-only edit timestamp (migration 0047). Drives the "(edited)"
@@ -539,7 +621,7 @@ class Post {
   final bool isKeeperPick;
   final DateTime? keeperPickAt;
   final String?
-      myReaction; // null | hug | love | strong | hope | pray | felt | proud
+  myReaction; // null | hug | love | strong | hope | pray | felt | proud
   final bool savedByMe;
 
   /// Null when the safety classifier saw nothing concerning. `'elevated'` for
@@ -557,8 +639,10 @@ class Post {
   const Post({
     required this.postId,
     required this.authorPseudonym,
+    String? authorDisplayName,
     required this.authorAvatarSeed,
     required this.categoryName,
+    this.goalReachedAt,
     required this.postType,
     required this.content,
     required this.postMood,
@@ -566,6 +650,7 @@ class Post {
     required this.commentsCount,
     required this.createdAt,
     this.authorId,
+    this.personaId,
     this.authorProfilePhotoUrl,
     this.authorIsVerified = false,
     this.authorKarma = 0,
@@ -574,10 +659,19 @@ class Post {
     this.tribeSlug,
     this.spaceId,
     this.isWhisper = false,
+    this.isStory = false,
+    this.storyAudience = 'everyone',
     this.viewCount = 0,
+    this.cardBackgroundColor,
+    this.cardTextColor,
     this.imageUrl,
     this.audioUrl,
     this.audioDurationSeconds,
+    this.musicTrackId,
+    this.musicTrack,
+    this.musicStartMs,
+    this.musicDurationMs,
+    this.musicVolume,
     this.editedAt,
     this.deletedAt,
     this.lockedAt,
@@ -587,10 +681,17 @@ class Post {
     this.savedByMe = false,
     this.crisisLevel,
     this.mediaStatus = 'clean',
-  });
+  }) : _authorDisplayName = authorDisplayName;
+
+  String get authorDisplayName {
+    final value = _authorDisplayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return authorPseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
 
   bool get hasImage => imageUrl != null && imageUrl!.isNotEmpty;
   bool get hasAudio => audioUrl != null && audioUrl!.isNotEmpty;
+  bool get hasMusic => musicTrackId != null;
   bool get isDeleted => deletedAt != null;
   bool get isEdited => editedAt != null;
   bool get isLocked => lockedAt != null;
@@ -608,6 +709,7 @@ class Post {
   }
 
   Post copyWith({
+    String? authorDisplayName,
     int? likesCount,
     int? commentsCount,
     int? viewCount,
@@ -618,24 +720,51 @@ class Post {
     DateTime? editedAt,
     DateTime? deletedAt,
     Object? spaceId = _unset,
+    Object? musicTrackId = _unset,
+    Object? musicTrack = _unset,
+    Object? musicStartMs = _unset,
+    Object? musicDurationMs = _unset,
+    Object? musicVolume = _unset,
   }) {
     return Post(
       postId: postId,
       authorId: authorId,
       authorPseudonym: authorPseudonym,
+      authorDisplayName: authorDisplayName ?? this.authorDisplayName,
+      personaId: personaId,
       authorAvatarSeed: authorAvatarSeed,
       authorProfilePhotoUrl: authorProfilePhotoUrl,
       authorIsVerified: authorIsVerified,
       authorKarma: authorKarma,
       categoryName: categoryName,
+      goalReachedAt: goalReachedAt,
       postType: postType,
       content: content ?? this.content,
       postMood: postMood,
       isWhisper: isWhisper,
+      isStory: isStory,
+      storyAudience: storyAudience,
       viewCount: viewCount ?? this.viewCount,
+      cardBackgroundColor: cardBackgroundColor,
+      cardTextColor: cardTextColor,
       imageUrl: imageUrl,
       audioUrl: audioUrl,
       audioDurationSeconds: audioDurationSeconds,
+      musicTrackId: musicTrackId == _unset
+          ? this.musicTrackId
+          : musicTrackId as String?,
+      musicTrack: musicTrack == _unset
+          ? this.musicTrack
+          : musicTrack as MusicTrack?,
+      musicStartMs: musicStartMs == _unset
+          ? this.musicStartMs
+          : musicStartMs as int?,
+      musicDurationMs: musicDurationMs == _unset
+          ? this.musicDurationMs
+          : musicDurationMs as int?,
+      musicVolume: musicVolume == _unset
+          ? this.musicVolume
+          : musicVolume as double?,
       editedAt: editedAt ?? this.editedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       lockedAt: lockedAt,
@@ -648,16 +777,65 @@ class Post {
       tribeName: tribeName,
       tribeSlug: tribeSlug,
       spaceId: spaceId == _unset ? this.spaceId : spaceId as String?,
-      myReaction:
-          myReaction == _unset ? this.myReaction : myReaction as String?,
+      myReaction: myReaction == _unset
+          ? this.myReaction
+          : myReaction as String?,
       savedByMe: savedByMe ?? this.savedByMe,
-      crisisLevel:
-          crisisLevel == _unset ? this.crisisLevel : crisisLevel as String?,
+      crisisLevel: crisisLevel == _unset
+          ? this.crisisLevel
+          : crisisLevel as String?,
       mediaStatus: mediaStatus,
     );
   }
 
   static const Object _unset = Object();
+}
+
+/// Metadata for a short preview that Venttly is contractually allowed to use.
+/// Commercial audio bytes are never uploaded by members or stored in Postgres.
+class MusicTrack {
+  final String trackId;
+  final String provider;
+  final String providerTrackId;
+  final String title;
+  final String artist;
+  final String? album;
+  final String? artworkUrl;
+  final String previewUrl;
+  final int previewDurationMs;
+  final String? genre;
+  final List<String> moodTags;
+  final String licenseCode;
+  final String? attributionText;
+  final bool cacheAllowed;
+
+  const MusicTrack({
+    required this.trackId,
+    required this.provider,
+    required this.providerTrackId,
+    required this.title,
+    required this.artist,
+    required this.previewUrl,
+    required this.previewDurationMs,
+    required this.licenseCode,
+    this.album,
+    this.artworkUrl,
+    this.genre,
+    this.moodTags = const [],
+    this.attributionText,
+    this.cacheAllowed = false,
+  });
+}
+
+/// Provider-neutral catalog boundary. Licensed, royalty-free, or external
+/// preview adapters can implement this without changing composer/feed UI.
+abstract interface class MusicProvider {
+  Future<List<MusicTrack>> searchMusic({
+    String query = '',
+    String? mood,
+    int limit = 24,
+    int offset = 0,
+  });
 }
 
 /// Static catalogue of the six emotion reactions. Kept in sync with the
@@ -783,6 +961,7 @@ class ThreadedComment {
   final String? parentId;
   final String? authorId;
   final String authorPseudonym;
+  final String? _authorDisplayName;
   final String authorAvatarSeed;
   final String? authorProfilePhotoUrl;
 
@@ -813,6 +992,7 @@ class ThreadedComment {
   ThreadedComment({
     required this.commentId,
     required this.authorPseudonym,
+    String? authorDisplayName,
     required this.authorAvatarSeed,
     required this.content,
     required this.path,
@@ -829,7 +1009,14 @@ class ThreadedComment {
     this.deletedAt,
     this.pinnedAt,
     List<ThreadedComment>? children,
-  }) : children = children ?? <ThreadedComment>[];
+  }) : _authorDisplayName = authorDisplayName,
+       children = children ?? <ThreadedComment>[];
+
+  String get authorDisplayName {
+    final value = _authorDisplayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return authorPseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
 
   bool get isDeleted => deletedAt != null;
   bool get isEdited => editedAt != null;
@@ -843,12 +1030,14 @@ class ThreadedComment {
     DateTime? editedAt,
     DateTime? deletedAt,
     DateTime? pinnedAt,
+    List<ThreadedComment>? children,
   }) {
     return ThreadedComment(
       commentId: commentId,
       parentId: parentId,
       authorId: authorId,
       authorPseudonym: authorPseudonym,
+      authorDisplayName: authorDisplayName,
       authorAvatarSeed: authorAvatarSeed,
       authorProfilePhotoUrl: authorProfilePhotoUrl,
       authorIsVerified: authorIsVerified,
@@ -862,7 +1051,7 @@ class ThreadedComment {
       deletedAt: deletedAt ?? this.deletedAt,
       pinnedAt: pinnedAt ?? this.pinnedAt,
       createdAt: createdAt,
-      children: children,
+      children: children ?? this.children,
     );
   }
 }
@@ -870,6 +1059,7 @@ class ThreadedComment {
 class ChatRoom {
   final String roomId;
   final String peerPseudonym;
+  final String? _peerDisplayName;
   final String peerAvatarSeed;
 
   /// Uploaded public profile photo for direct-message peers. Group rooms use
@@ -909,6 +1099,7 @@ class ChatRoom {
   const ChatRoom({
     required this.roomId,
     required this.peerPseudonym,
+    String? peerDisplayName,
     required this.peerAvatarSeed,
     required this.requestPreview,
     required this.roomStatus,
@@ -928,12 +1119,20 @@ class ChatRoom {
     this.groupInviteEnabled = false,
     this.groupAllowMemberInvites = false,
     this.isGroupOwner = false,
-  });
+  }) : _peerDisplayName = peerDisplayName;
+
+  String get peerDisplayName {
+    if (isGroup) return groupTitle ?? peerPseudonym;
+    final value = _peerDisplayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return peerPseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
 }
 
 class GroupChatMember {
   final String userId;
   final String pseudonym;
+  final String? publicDisplayName;
   final String avatarSeed;
   final String? profilePhotoUrl;
   final bool isVerified;
@@ -945,6 +1144,7 @@ class GroupChatMember {
   const GroupChatMember({
     required this.userId,
     required this.pseudonym,
+    this.publicDisplayName,
     required this.avatarSeed,
     required this.isVerified,
     required this.memberRole,
@@ -958,7 +1158,9 @@ class GroupChatMember {
   bool get isAdmin => memberRole == 'admin';
   String get displayName => nickname?.trim().isNotEmpty == true
       ? nickname!.trim()
-      : '@${pseudonym.replaceFirst('@', '')}';
+      : publicDisplayName?.trim().isNotEmpty == true
+      ? publicDisplayName!.trim()
+      : pseudonym.replaceFirst('@', '').replaceAll('_', ' ');
 }
 
 class GroupInvitePreview {
@@ -975,12 +1177,52 @@ class GroupInvitePreview {
   });
 }
 
+/// In-chat "system" notices (WhatsApp-style centered lines), e.g. when a
+/// participant turns disappearing messages on or off. They are ordinary chat
+/// messages carrying an invisible sentinel prefix so both participants receive
+/// them over the existing realtime channel; the sentinel makes the client
+/// render them as a centered pill instead of a normal bubble, while the inbox
+/// preview still shows the readable text (the sentinel is zero-width).
+class SystemNotice {
+  SystemNotice._();
+
+  /// Two INVISIBLE SEPARATOR code points — zero-width, so previews look clean.
+  static const String sentinel = '⁣⁣';
+
+  /// Notice text for a disappearing-messages change ([seconds] == 0 → off).
+  static String disappearing(int seconds) {
+    final label = seconds <= 0
+        ? 'Disappearing messages turned off'
+        : 'Disappearing messages turned on · ${_duration(seconds)}';
+    return '$sentinel⏳ $label';
+  }
+
+  static bool isSystem(String plaintext) => plaintext.startsWith(sentinel);
+
+  /// The human-readable body with the sentinel removed.
+  static String strip(String plaintext) =>
+      isSystem(plaintext) ? plaintext.substring(sentinel.length) : plaintext;
+
+  static String _duration(int s) {
+    if (s % 86400 == 0) {
+      final d = s ~/ 86400;
+      return d == 1 ? '24 hours' : '$d days';
+    }
+    if (s % 3600 == 0) {
+      final h = s ~/ 3600;
+      return '$h hour${h == 1 ? '' : 's'}';
+    }
+    final m = s ~/ 60;
+    return '$m minute${m == 1 ? '' : 's'}';
+  }
+}
+
 class ChatMessage {
   final String messageId;
   final String roomId;
   final String senderId;
   final String
-      plaintext; // stored server-side as plaintext for moderation review.
+  plaintext; // stored server-side as plaintext for moderation review.
   final DateTime createdAt;
   final bool sentByMe;
 
@@ -1115,6 +1357,7 @@ class SharedPostSnapshot {
   final String postId;
   final String content;
   final String? authorPseudonym;
+  final String? authorDisplayName;
   final String? authorAvatarSeed;
   final String? category;
   final String? mood;
@@ -1126,6 +1369,7 @@ class SharedPostSnapshot {
     required this.content,
     required this.createdAt,
     this.authorPseudonym,
+    this.authorDisplayName,
     this.authorAvatarSeed,
     this.category,
     this.mood,
@@ -1141,6 +1385,7 @@ class SharedPostSnapshot {
       postId: postId,
       content: (m['content'] as String?) ?? '',
       authorPseudonym: m['author_pseudonym'] as String?,
+      authorDisplayName: m['author_display_name'] as String?,
       authorAvatarSeed: m['author_avatar_seed'] as String?,
       category: m['category'] as String?,
       mood: m['mood'] as String?,
@@ -1189,8 +1434,11 @@ class PollOption {
 class PromptAnswer {
   final String answerId;
   final String promptId;
+  final String? authorId;
   final String authorPseudonym;
+  final String? authorDisplayName;
   final String authorAvatarSeed;
+  final String? authorProfilePhotoUrl;
   final String text;
   final DateTime createdAt;
 
@@ -1201,7 +1449,16 @@ class PromptAnswer {
     required this.authorAvatarSeed,
     required this.text,
     required this.createdAt,
+    this.authorId,
+    this.authorDisplayName,
+    this.authorProfilePhotoUrl,
   });
+
+  String get displayName {
+    final value = authorDisplayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return authorPseudonym.replaceFirst('@', '');
+  }
 }
 
 class PlugPrompt {
@@ -1211,13 +1468,55 @@ class PlugPrompt {
   final String promptText;
   final int answersCount;
 
+  /// Member author (migration 0069). Null for Plug/Keeper "question of the day"
+  /// prompts. When it matches the signed-in user the question is theirs to
+  /// edit or delete.
+  final String? authorId;
+
+  /// 'everyone' | 'friends' — friends-only questions are RLS-visible to the
+  /// author's accepted connections.
+  final String audience;
+  final DateTime? createdAt;
+
+  /// Question likes (migration 0120). [likedByMe] reflects the caller.
+  final int likeCount;
+  final bool likedByMe;
+
   const PlugPrompt({
     required this.promptId,
     required this.plugDisplayName,
     required this.plugAvatarSeed,
     required this.promptText,
     required this.answersCount,
+    this.authorId,
+    this.audience = 'everyone',
+    this.createdAt,
+    this.likeCount = 0,
+    this.likedByMe = false,
   });
+
+  /// True when this member question belongs to [myUserId].
+  bool isMine(String? myUserId) =>
+      myUserId != null && authorId != null && authorId == myUserId;
+
+  PlugPrompt copyWith({
+    String? promptText,
+    String? audience,
+    int? answersCount,
+    int? likeCount,
+    bool? likedByMe,
+  }) => PlugPrompt(
+    promptId: promptId,
+    plugDisplayName: plugDisplayName,
+    plugAvatarSeed: plugAvatarSeed,
+    promptText: promptText ?? this.promptText,
+    answersCount: answersCount ?? this.answersCount,
+    authorId: authorId,
+    audience: audience ?? this.audience,
+    createdAt: createdAt,
+    likeCount: likeCount ?? this.likeCount,
+    likedByMe: likedByMe ?? this.likedByMe,
+  );
 }
 
 /// A keeper-issued invitation to join a Tribe. Lifecycle:
@@ -1383,14 +1682,14 @@ enum FriendStatus {
   blockedMe;
 
   static FriendStatus parse(String? raw) => switch (raw) {
-        'self' => FriendStatus.self,
-        'friends' => FriendStatus.friends,
-        'pending_outgoing' => FriendStatus.pendingOutgoing,
-        'pending_incoming' => FriendStatus.pendingIncoming,
-        'blocked_by_me' => FriendStatus.blockedByMe,
-        'blocked_me' => FriendStatus.blockedMe,
-        _ => FriendStatus.none,
-      };
+    'self' => FriendStatus.self,
+    'friends' => FriendStatus.friends,
+    'pending_outgoing' => FriendStatus.pendingOutgoing,
+    'pending_incoming' => FriendStatus.pendingIncoming,
+    'blocked_by_me' => FriendStatus.blockedByMe,
+    'blocked_me' => FriendStatus.blockedMe,
+    _ => FriendStatus.none,
+  };
 }
 
 /// A friend (from the `my_friends` view).
@@ -1398,6 +1697,7 @@ class FriendSummary {
   final String friendshipId;
   final String userId;
   final String pseudonym;
+  final String? publicDisplayName;
   final String avatarSeed;
   final int karma;
   final bool isVerified;
@@ -1409,6 +1709,7 @@ class FriendSummary {
     required this.friendshipId,
     required this.userId,
     required this.pseudonym,
+    this.publicDisplayName,
     required this.avatarSeed,
     required this.karma,
     required this.isVerified,
@@ -1417,11 +1718,18 @@ class FriendSummary {
     this.profilePhotoUrl,
   });
 
-  FriendSummary copyWith({bool? isFavorite}) {
+  String get displayName {
+    final value = publicDisplayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return pseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
+
+  FriendSummary copyWith({bool? isFavorite, String? publicDisplayName}) {
     return FriendSummary(
       friendshipId: friendshipId,
       userId: userId,
       pseudonym: pseudonym,
+      publicDisplayName: publicDisplayName ?? this.publicDisplayName,
       avatarSeed: avatarSeed,
       karma: karma,
       isVerified: isVerified,
@@ -1437,6 +1745,7 @@ class Whisper {
   final String whisperId;
   final String? authorId;
   final String authorPseudonym;
+  final String? _authorDisplayName;
   final String authorAvatarSeed;
   final String? authorProfilePhotoUrl;
   final bool authorIsVerified;
@@ -1461,6 +1770,24 @@ class Whisper {
   final bool likedByMe;
   final bool savedByMe;
 
+  /// Background music bed (migration 20260816130000).
+  ///
+  /// A reference, never audio: the recorded whisper is untouched and the bed is
+  /// streamed from the track's authorised preview at playback time.
+  /// [musicVolume] is capped at 0.35 by a database CHECK and clamped again in
+  /// the player, because the voice is the content.
+  final String? musicTrackId;
+  final String? musicPreviewUrl;
+  final String? musicTitle;
+  final String? musicArtist;
+  final int musicStartMs;
+  final double musicVolume;
+
+  bool get hasMusicBed =>
+      musicTrackId != null &&
+      (musicPreviewUrl ?? '').isNotEmpty &&
+      musicVolume > 0;
+
   /// Per-reaction tallies (migration 0061). Keys match [PostReactions.all].
   final Map<String, int> reactionCounts;
 
@@ -1481,6 +1808,7 @@ class Whisper {
   const Whisper({
     required this.whisperId,
     required this.authorPseudonym,
+    String? authorDisplayName,
     required this.authorAvatarSeed,
     required this.audioUrl,
     required this.audioDurationSeconds,
@@ -1504,7 +1832,19 @@ class Whisper {
     this.reactionCounts = const {},
     this.myReaction,
     this.mediaStatus = 'clean',
-  });
+    this.musicTrackId,
+    this.musicPreviewUrl,
+    this.musicTitle,
+    this.musicArtist,
+    this.musicStartMs = 0,
+    this.musicVolume = 0,
+  }) : _authorDisplayName = authorDisplayName;
+
+  String get authorDisplayName {
+    final value = _authorDisplayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return authorPseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
 
   bool get isDeleted => deletedAt != null;
   bool get isEdited => editedAt != null;
@@ -1513,6 +1853,7 @@ class Whisper {
   static const Object _unset = Object();
 
   Whisper copyWith({
+    String? authorDisplayName,
     int? likesCount,
     bool? likedByMe,
     bool? savedByMe,
@@ -1522,35 +1863,48 @@ class Whisper {
     String? description,
     DateTime? editedAt,
     DateTime? deletedAt,
-  }) =>
-      Whisper(
-        whisperId: whisperId,
-        authorId: authorId,
-        authorPseudonym: authorPseudonym,
-        authorAvatarSeed: authorAvatarSeed,
-        authorProfilePhotoUrl: authorProfilePhotoUrl,
-        authorIsVerified: authorIsVerified,
-        audioUrl: audioUrl,
-        audioDurationSeconds: audioDurationSeconds,
-        backgroundImageUrl: backgroundImageUrl,
-        voiceFilter: voiceFilter,
-        category: category,
-        title: title ?? this.title,
-        description: description ?? this.description,
-        playsCount: playsCount,
-        likesCount: likesCount ?? this.likesCount,
-        commentsCount: commentsCount,
-        crisisLevel: crisisLevel,
-        editedAt: editedAt ?? this.editedAt,
-        deletedAt: deletedAt ?? this.deletedAt,
-        createdAt: createdAt,
-        likedByMe: likedByMe ?? this.likedByMe,
-        savedByMe: savedByMe ?? this.savedByMe,
-        reactionCounts: reactionCounts ?? this.reactionCounts,
-        myReaction:
-            myReaction == _unset ? this.myReaction : myReaction as String?,
-        mediaStatus: mediaStatus,
-      );
+    String? musicPreviewUrl,
+    String? musicTitle,
+    String? musicArtist,
+    String? mediaStatus,
+  }) => Whisper(
+    whisperId: whisperId,
+    authorId: authorId,
+    authorPseudonym: authorPseudonym,
+    authorDisplayName: authorDisplayName ?? this.authorDisplayName,
+    authorAvatarSeed: authorAvatarSeed,
+    authorProfilePhotoUrl: authorProfilePhotoUrl,
+    authorIsVerified: authorIsVerified,
+    audioUrl: audioUrl,
+    audioDurationSeconds: audioDurationSeconds,
+    backgroundImageUrl: backgroundImageUrl,
+    voiceFilter: voiceFilter,
+    category: category,
+    title: title ?? this.title,
+    description: description ?? this.description,
+    playsCount: playsCount,
+    likesCount: likesCount ?? this.likesCount,
+    commentsCount: commentsCount,
+    crisisLevel: crisisLevel,
+    editedAt: editedAt ?? this.editedAt,
+    deletedAt: deletedAt ?? this.deletedAt,
+    createdAt: createdAt,
+    likedByMe: likedByMe ?? this.likedByMe,
+    savedByMe: savedByMe ?? this.savedByMe,
+    reactionCounts: reactionCounts ?? this.reactionCounts,
+    myReaction: myReaction == _unset ? this.myReaction : myReaction as String?,
+    mediaStatus: mediaStatus ?? this.mediaStatus,
+    // These used to be omitted, which meant every copyWith silently erased the
+    // music bed — and _whispersWithMyFlags copies every whisper on the way to
+    // the screen, so a whisper could never keep its music no matter what the
+    // database returned.
+    musicTrackId: musicTrackId,
+    musicPreviewUrl: musicPreviewUrl ?? this.musicPreviewUrl,
+    musicTitle: musicTitle ?? this.musicTitle,
+    musicArtist: musicArtist ?? this.musicArtist,
+    musicStartMs: musicStartMs,
+    musicVolume: musicVolume,
+  );
 }
 
 /// A comment on an audio Whisper.
@@ -1559,6 +1913,7 @@ class WhisperComment {
   final String whisperId;
   final String? authorId;
   final String authorPseudonym;
+  final String? _authorDisplayName;
   final String authorAvatarSeed;
   final String content;
   final DateTime createdAt;
@@ -1576,6 +1931,7 @@ class WhisperComment {
     required this.commentId,
     required this.whisperId,
     required this.authorPseudonym,
+    String? authorDisplayName,
     required this.authorAvatarSeed,
     required this.content,
     required this.createdAt,
@@ -1584,7 +1940,13 @@ class WhisperComment {
     this.likesCount = 0,
     this.likedByMe = false,
     this.canDelete = false,
-  });
+  }) : _authorDisplayName = authorDisplayName;
+
+  String get authorDisplayName {
+    final value = _authorDisplayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return authorPseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
 }
 
 /// A resolved @tag target (migration 0116) — either a user or a tribe.
@@ -1723,6 +2085,7 @@ class TribeMessage {
   final String tribeId;
   final String? senderId;
   final String senderPseudonym;
+  final String? senderDisplayName;
   final String senderAvatarSeed;
   final String? senderProfilePhotoUrl;
 
@@ -1744,6 +2107,7 @@ class TribeMessage {
   final String? replyToMessageId;
   final String? replyContent;
   final String? replySenderPseudonym;
+  final String? replySenderDisplayName;
   final bool huggedByMe;
   final bool isPinned;
 
@@ -1762,6 +2126,7 @@ class TribeMessage {
     required this.senderAvatarSeed,
     required this.createdAt,
     required this.sentByMe,
+    this.senderDisplayName,
     this.senderId,
     this.senderProfilePhotoUrl,
     this.senderIsVerified = false,
@@ -1776,6 +2141,7 @@ class TribeMessage {
     this.replyToMessageId,
     this.replyContent,
     this.replySenderPseudonym,
+    this.replySenderDisplayName,
     this.huggedByMe = false,
     this.isPinned = false,
     this.metadata,
@@ -1791,6 +2157,18 @@ class TribeMessage {
   bool get hasImage => imageUrl != null && imageUrl!.isNotEmpty;
   bool get hasAudio => audioUrl != null && audioUrl!.isNotEmpty;
   bool get hasText => content != null && content!.trim().isNotEmpty;
+  String get displayName {
+    final value = senderDisplayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return senderPseudonym.replaceFirst('@', '');
+  }
+
+  String? get replyDisplayName {
+    final value = replySenderDisplayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    final username = replySenderPseudonym?.replaceFirst('@', '').trim();
+    return username == null || username.isEmpty ? null : username;
+  }
 
   /// WhatsApp-style windows, mirrored by the server RPCs — 30 min to edit,
   /// 24h to delete-for-everyone. Editing is limited to plain-text messages
@@ -1820,6 +2198,7 @@ class TribeMessage {
 class FriendSuggestion {
   final String userId;
   final String pseudonym;
+  final String? displayName;
   final String avatarSeed;
   final String? profilePhotoUrl;
   final bool isVerified;
@@ -1834,7 +2213,13 @@ class FriendSuggestion {
     required this.sharedTribes,
     required this.rationale,
     this.profilePhotoUrl,
+    this.displayName,
   });
+
+  String get primaryName {
+    final value = displayName?.trim();
+    return value == null || value.isEmpty ? pseudonym : value;
+  }
 }
 
 /// A pending friend request (incoming or outgoing).
@@ -1842,7 +2227,9 @@ class FriendRequest {
   final String friendshipId;
   final String otherUserId;
   final String otherPseudonym;
+  final String? otherDisplayName;
   final String otherAvatarSeed;
+  final String? profilePhotoUrl;
   final int otherKarma;
   final String? note;
   final DateTime createdAt;
@@ -1859,8 +2246,15 @@ class FriendRequest {
     required this.otherKarma,
     required this.createdAt,
     required this.isOutgoing,
+    this.profilePhotoUrl,
     this.note,
+    this.otherDisplayName,
   });
+
+  String get primaryName {
+    final value = otherDisplayName?.trim();
+    return value == null || value.isEmpty ? otherPseudonym : value;
+  }
 }
 
 /// One mood bucket in the friend-profile distribution.
@@ -1935,8 +2329,17 @@ class UserProfileView {
   // user
   final String userId;
   final String pseudonym;
+  final String? _displayName;
   final String avatarSeed;
   final String? profilePhotoUrl;
+
+  /// Chosen background image for the profile hero (migration 20260817100000).
+  /// Public like the bio — something the person decided to publish.
+  final String? profileBannerUrl;
+
+  /// The crop anchor its owner chose, 0 = top … 1 = bottom. Returned to every
+  /// viewer so a stranger sees the framing the author picked.
+  final double profileBannerOffset;
   final int karma;
   final bool isVerified;
   final DateTime joinedAt;
@@ -1985,8 +2388,11 @@ class UserProfileView {
     required this.relation,
     required this.userId,
     required this.pseudonym,
+    String? displayName,
     required this.avatarSeed,
     this.profilePhotoUrl,
+    this.profileBannerUrl,
+    this.profileBannerOffset = 0.5,
     required this.karma,
     required this.isVerified,
     required this.joinedAt,
@@ -2014,7 +2420,13 @@ class UserProfileView {
     this.mostCommented,
     this.bio,
     this.pronouns,
-  });
+  }) : _displayName = displayName;
+
+  String get displayName {
+    final value = _displayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return pseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
 
   bool get isFriend => relation == FriendStatus.friends;
   bool get isSelf => relation == FriendStatus.self;
@@ -2024,10 +2436,13 @@ class UserProfileView {
   /// full copyWith for one denormalized counter.
   UserProfileView copyWithConnections(
     int connectionsCount, {
+    String? displayName,
     String? bio,
     String? pronouns,
     int? postsTotal,
     int? hugsReceived,
+    String? profileBannerUrl,
+    double? profileBannerOffset,
   }) {
     return UserProfileView(
       postsTotal: postsTotal ?? this.postsTotal,
@@ -2035,8 +2450,11 @@ class UserProfileView {
       relation: relation,
       userId: userId,
       pseudonym: pseudonym,
+      displayName: displayName ?? this.displayName,
       avatarSeed: avatarSeed,
       profilePhotoUrl: profilePhotoUrl,
+      profileBannerUrl: profileBannerUrl ?? this.profileBannerUrl,
+      profileBannerOffset: profileBannerOffset ?? this.profileBannerOffset,
       karma: karma,
       isVerified: isVerified,
       joinedAt: joinedAt,
@@ -2129,8 +2547,12 @@ class HomeStats {
     required this.streakDays,
   });
 
-  static const HomeStats empty =
-      HomeStats(ventsToday: 0, supporters: 0, dailyHugs: 0, streakDays: 0);
+  static const HomeStats empty = HomeStats(
+    ventsToday: 0,
+    supporters: 0,
+    dailyHugs: 0,
+    streakDays: 0,
+  );
 }
 
 /// One Global Pulse chip. Returned by `trending_categories()`.
@@ -2180,6 +2602,7 @@ class SearchHit {
   bool get isTribe => hitKind == 'tribe';
   bool get isPost => hitKind == 'post';
   bool get isTopic => hitKind == 'topic';
+  bool get isUser => hitKind == 'user';
 }
 
 /// One Rising Voices card on the Discover screen. Returned by
@@ -2187,6 +2610,7 @@ class SearchHit {
 class TrendingVoice {
   final String userId;
   final String pseudonym;
+  final String? displayName;
   final String avatarSeed;
   final String? profilePhotoUrl;
   final bool isVerified;
@@ -2205,5 +2629,81 @@ class TrendingVoice {
     required this.topMood,
     required this.engagementScore,
     this.profilePhotoUrl,
+    this.displayName,
   });
+
+  String get primaryName {
+    final value = displayName?.trim();
+    return value == null || value.isEmpty ? pseudonym : value;
+  }
+}
+
+/// A friend who is around right now (RPC `online_friends`, migration
+/// 20260817110000).
+///
+/// Only ever contains people who opted into last-seen: the RPC omits everyone
+/// else rather than blanking their timestamp, because appearing in a
+/// "who is around" list is presence information on its own.
+class OnlineFriend {
+  const OnlineFriend({
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.state,
+    String? displayName,
+    this.profilePhotoUrl,
+    this.isVerified = false,
+    this.lastSeenAt,
+  }) : _displayName = displayName;
+
+  final String userId;
+  final String pseudonym;
+  final String? _displayName;
+  final String avatarSeed;
+  final String? profilePhotoUrl;
+  final bool isVerified;
+
+  /// 'online' (last 70s) or 'recent' (last 5 minutes). Same thresholds as
+  /// peer_presence so the two can never disagree about the same person.
+  final String state;
+  final DateTime? lastSeenAt;
+
+  bool get isOnline => state == 'online';
+
+  String get displayName {
+    final value = _displayName?.trim();
+    if (value != null && value.isNotEmpty) return value;
+    return pseudonym.replaceFirst('@', '').replaceAll('_', ' ');
+  }
+
+  factory OnlineFriend.fromJson(Map<String, dynamic> json) {
+    final seen = json['last_seen_at'] as String?;
+    return OnlineFriend(
+      userId: '${json['user_id']}',
+      pseudonym: (json['pseudonym'] as String?) ?? 'anonymous',
+      displayName: json['display_name'] as String?,
+      avatarSeed: (json['avatar_seed'] as String?) ?? 'default-orb',
+      profilePhotoUrl: json['profile_photo_url'] as String?,
+      isVerified: json['is_verified'] == true,
+      state: (json['state'] as String?) ?? 'recent',
+      lastSeenAt: seen == null ? null : DateTime.parse(seen),
+    );
+  }
+}
+
+
+/// Whether an account may create a Tribe, as decided by the server.
+class TribeCreationEligibility {
+  const TribeCreationEligibility({
+    required this.status,
+    required this.tribesKept,
+  });
+
+  /// 'adult' — may create. 'minor' — may not. 'month_required' — in its 18th
+  /// year with the birthday unknown, so one more question settles it.
+  final String status;
+  final int tribesKept;
+
+  bool get canCreate => status == 'adult';
+  bool get needsBirthMonth => status == 'month_required';
 }

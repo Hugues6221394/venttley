@@ -94,6 +94,22 @@ class PiiScrubber {
   static final _phonePattern = RegExp(r'(?:\+?\d[\s\-]?){7,}');
   static final _phrasePattern = RegExp(r'^(?:[A-Za-z]+\s+){10,}[A-Za-z]+$');
 
+  /// A whole-value canonical 8-4-4-4-12 identifier.
+  ///
+  /// We log opaque ids constantly (`user_id`, `post_id`, `room_id`). They
+  /// carry no personal data on their own, but a UUID's digit runs joined by
+  /// hyphens are indistinguishable from a phone number to [_phonePattern],
+  /// which rewrote them into unusable rubble — and with them our ability to
+  /// trace a Sentry breadcrumb back to an account.
+  ///
+  /// Anchored deliberately: only a value that is *entirely* an identifier
+  /// takes this path, so a phone number sitting in free text is still
+  /// scrubbed exactly as before.
+  static final _identifierPattern = RegExp(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    caseSensitive: false,
+  );
+
   static Map<String, Object?> scrub(Map<String, Object?> data) {
     final output = <String, Object?>{};
     for (final entry in data.entries) {
@@ -105,6 +121,7 @@ class PiiScrubber {
 
   /// Scrubs an unstructured error, breadcrumb, or transport message.
   static String scrubText(String value) {
+    if (_identifierPattern.hasMatch(value)) return value;
     if (value.length > 120) return '<scrubbed:length=${value.length}>';
     if (_phrasePattern.hasMatch(value.trim())) return '<scrubbed:phrase>';
 

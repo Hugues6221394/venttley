@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/analytics_events.dart';
 import 'core/constants.dart';
+import 'core/group_invite_links.dart';
 import 'core/logger.dart';
 import 'core/pii_scrubber.dart';
 import 'core/notification_prefs.dart';
@@ -16,6 +17,7 @@ import 'core/notification_routing.dart';
 import 'core/providers.dart';
 import 'data/services/analytics_service.dart';
 import 'data/services/push_registration_service.dart';
+import 'data/services/schema_ledger_check.dart';
 import 'data/services/notifications_service.dart';
 import 'data/services/telemetry_service.dart';
 import 'presentation/router/app_router.dart';
@@ -26,6 +28,17 @@ import 'presentation/widgets/vently_premium_background.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   VentlyConfig.validateBackendConfiguration();
+
+  // Firebase background handlers must be registered before runApp. Preparing
+  // is consent-gated and native auto-init remains disabled, so this does not
+  // generate a token for new or opted-out users.
+  try {
+    if (await readNotificationsEnabledPref()) {
+      await PushRegistrationService.instance.prepareForConsentedUser();
+    }
+  } catch (_) {
+    Logger.instance.warn('push.consent_restore_failed');
+  }
 
   // Performance — bump the Flutter image cache from its 100/100MB
   // defaults so the feed + Whispers + Discover surfaces (lots of
@@ -56,7 +69,9 @@ Future<void> main() async {
   try {
     final info = await PackageInfo.fromPlatform();
     release = '${info.packageName}@${info.version}+${info.buildNumber}';
-  } catch (_) {/* keep fallback */}
+  } catch (_) {
+    /* keep fallback */
+  }
 
   await SentryFlutter.init(
     (options) {
@@ -64,7 +79,7 @@ Future<void> main() async {
       options.environment = VentlyConfig.env;
       options.release = release;
       options.tracesSampleRate = VentlyConfig.sentryTracesSampleRate;
-      options.sendDefaultPii = false; // anonymous app — never ship PII
+      options.sendDefaultPii = false; // do not collect SDK-default identifiers
       options.attachScreenshot = false;
       // Defence in depth — strip any PII that slipped into tags or
       // contexts on top of [PiiScrubber] at the Logger boundary.
@@ -80,8 +95,9 @@ Future<void> main() async {
 
 SentryEvent _scrubSentryEvent(SentryEvent event) {
   final tags = <String, String>{};
-  for (final entry in event.tags?.entries ??
-      const Iterable<MapEntry<String, String>>.empty()) {
+  for (final entry
+      in event.tags?.entries ??
+          const Iterable<MapEntry<String, String>>.empty()) {
     final scrubbed = PiiScrubber.scrub({entry.key: entry.value});
     final value = scrubbed[entry.key];
     if (value != null) tags[entry.key] = value.toString();
@@ -94,9 +110,7 @@ SentryEvent _scrubSentryEvent(SentryEvent event) {
               : PiiScrubber.scrubText(breadcrumb.message!),
           data: breadcrumb.data == null
               ? null
-              : PiiScrubber.scrub(
-                  Map<String, Object?>.from(breadcrumb.data!),
-                ),
+              : PiiScrubber.scrub(Map<String, Object?>.from(breadcrumb.data!)),
         ),
       )
       .toList();
@@ -147,8 +161,9 @@ SentryEvent _scrubSentryEvent(SentryEvent event) {
         ? null
         : PiiScrubber.scrubError(event.throwable),
     level: event.level,
-    culprit:
-        event.culprit == null ? null : PiiScrubber.scrubText(event.culprit!),
+    culprit: event.culprit == null
+        ? null
+        : PiiScrubber.scrubText(event.culprit!),
     contexts: event.contexts,
     debugMeta: event.debugMeta,
     type: event.type,
@@ -227,14 +242,58 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
     ref.read(routerProvider).go(path);
   }
 
+  /// Restore the session without letting a transport failure end the launch.
+  ///
+  /// restore() rethrows anything that is not a recognised missing column, and
+  /// this call was awaited bare at startup — so a 401 took the app down before
+  /// it drew a frame. Seen for real: a simulator whose clock had drifted
+  /// answered PGRST303 "JWT issued at future" and the process died with "Lost
+  /// connection to device". A launch crash is the worst failure this app can
+  /// have; someone opening it to write something hard does not get a second
+  /// attempt at reaching for help.
+  ///
+  /// One retry, because the causes are overwhelmingly transient — clock skew,
+  /// a token refreshing, a network still coming up — and they clear in
+  /// seconds. If it fails twice the session stays unset and the router sends
+  /// them to sign-in, which is a truthful outcome rather than a dead app.
+  Future<void> _restoreSessionSafely() async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await ref.read(sessionProvider.notifier).restore();
+        return;
+      } catch (error, stack) {
+        final lastTry = attempt == 1;
+        Logger.instance.warn(
+          'session.restore_failed',
+          props: {'attempt': attempt + 1, 'giving_up': lastTry},
+          error: error,
+          stack: lastTry ? stack : null,
+        );
+        if (lastTry) return;
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        if (!mounted) return;
+      }
+    }
+  }
+
   void _startPresenceHeartbeat() {
     _presenceTimer?.cancel();
     if (ref.read(sessionProvider) == null) return;
-    ref.read(repositoryProvider).touchLastSeen();
+    unawaited(_touchLastSeenSafely());
     _presenceTimer = Timer.periodic(
       const Duration(seconds: 60),
-      (_) => ref.read(repositoryProvider).touchLastSeen(),
+      (_) => unawaited(_touchLastSeenSafely()),
     );
+  }
+
+  Future<void> _touchLastSeenSafely() async {
+    try {
+      await ref.read(repositoryProvider).touchLastSeen();
+    } catch (_) {
+      // Presence is best-effort. Offline transitions, expired sessions, and
+      // temporary clock skew must never become uncaught app exceptions.
+      Logger.instance.warn('presence.heartbeat_failed');
+    }
   }
 
   void _stopPresenceHeartbeat() {
@@ -242,13 +301,41 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
     _presenceTimer = null;
   }
 
+  void _handleRemoteNotificationOpen(Map<String, dynamic> data) {
+    final payload = NotificationPayload.fromFcmData(data);
+    if (payload == null) {
+      // Deliberately do not log attacker-controlled payload values.
+      Logger.instance.warn('push.notification_route_rejected');
+      return;
+    }
+    ref.read(pendingNotificationPayloadProvider.notifier).state = payload;
+    handlePendingNotificationNavigation(ref);
+  }
+
+  Future<void> _startPushForSession(String userId) async {
+    if (!await readNotificationsEnabledPref()) return;
+    if (!mounted || ref.read(sessionProvider)?.userId != userId) return;
+    await PushRegistrationService.instance.startForSession(
+      ref.read(repositoryProvider),
+      sessionKey: userId,
+    );
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _startPresenceHeartbeat();
-    } else if (state == AppLifecycleState.paused ||
+      final session = ref.read(sessionProvider);
+      if (session != null) unawaited(_startPushForSession(session.userId));
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       _stopPresenceHeartbeat();
+      // Audio previews are foreground-only. This also covers an interrupted
+      // story transition and prevents a clip continuing behind another app.
+      unawaited(ref.read(musicPlaybackProvider).stop());
+      unawaited(AnalyticsService.instance.track(Events.appBackgrounded));
     }
   }
 
@@ -256,6 +343,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   void dispose() {
     _stopPresenceHeartbeat();
     _appLinkSubscription?.cancel();
+    PushRegistrationService.instance.setNotificationOpenedHandler(null);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -264,20 +352,30 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    PushRegistrationService.instance.setNotificationOpenedHandler(
+      _handleRemoteNotificationOpen,
+    );
     _appLinkSubscription = AppLinks().uriLinkStream.listen(
-          _handleAppLink,
-          onError: (Object error, StackTrace stack) => Logger.instance.warn(
-            'app_link.invalid',
-            error: error,
-            stack: stack,
-          ),
-        );
+      _handleAppLink,
+      onError: (Object error, StackTrace stack) =>
+          Logger.instance.warn('app_link.invalid', error: error, stack: stack),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      ref.read(sessionProvider.notifier).restore();
+      await _restoreSessionSafely();
       AnalyticsService.instance.track(Events.appOpened);
-      // Init local notifications. OS-level push (FCM/APNs) hooks land
-      // through the registerPushToken RPC once Firebase is wired —
-      // see docs/notifications.md.
+      // Ask the database what it has actually run. Advisory and unawaited: a
+      // database behind the build degrades features, and blocking startup on it
+      // would turn a cosmetic gap into an outage.
+      if (!VentlyConfig.useMockBackend) {
+        unawaited(
+          SchemaLedgerCheck(
+            Supabase.instance.client,
+          ).report().catchError((_) {}),
+        );
+      }
+      // Foreground alerts stay on the existing Supabase realtime path. FCM is
+      // used for background delivery and tap routing only, avoiding duplicate
+      // alerts while the app is open.
       await NotificationsService.instance.init(
         onTap: (payload) {
           if (payload == null || payload.isEmpty) return;
@@ -288,7 +386,12 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       final notificationsOn = await readNotificationsEnabledPref();
       NotificationsService.instance.setEnabled(notificationsOn);
       if (notificationsOn) {
-        await NotificationsService.instance.requestPermissions();
+        final session = ref.read(sessionProvider);
+        if (session == null) {
+          await PushRegistrationService.instance.detachSession();
+        } else {
+          await _startPushForSession(session.userId);
+        }
       }
     });
   }
@@ -302,10 +405,11 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       if (next != null) {
         handlePendingNotificationNavigation(ref);
         _flushPendingDeepLink();
-        PushRegistrationService.instance.init(ref.read(repositoryProvider));
+        unawaited(_startPushForSession(next.userId));
         ref.invalidate(tribeChatInboxProvider);
         _startPresenceHeartbeat();
       } else {
+        unawaited(PushRegistrationService.instance.detachSession());
         _stopPresenceHeartbeat();
       }
     });
@@ -320,8 +424,9 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       // "Black" is our own third appearance: same dark theme, true-black
       // canvas — so it rides ThemeMode.dark with a pureBlack theme variant.
       darkTheme: VentlyTheme.dark(pureBlack: mode == VentlyThemeMode.black),
-      themeMode:
-          mode == VentlyThemeMode.light ? ThemeMode.light : ThemeMode.dark,
+      themeMode: mode == VentlyThemeMode.light
+          ? ThemeMode.light
+          : ThemeMode.dark,
       routerConfig: router,
       // Premium blush gradient painted once behind the whole navigator —
       // screens opt in by making their Scaffold transparent.
@@ -339,21 +444,5 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
 /// internal route. Keeping this parser strict prevents arbitrary deep links
 /// from bypassing the router's normal navigation and authentication rules.
 String? groupInvitePathFromUri(Uri uri) {
-  if (uri.scheme.toLowerCase() != 'venttly') return null;
-
-  String? token;
-  if (uri.host.toLowerCase() == 'group-invite' &&
-      uri.pathSegments.length == 1) {
-    token = uri.pathSegments.single;
-  } else if (uri.host.isEmpty &&
-      uri.pathSegments.length == 2 &&
-      uri.pathSegments.first.toLowerCase() == 'group-invite') {
-    token = uri.pathSegments.last;
-  }
-
-  final normalized = token?.trim();
-  if (normalized == null || normalized.isEmpty || normalized.length > 128) {
-    return null;
-  }
-  return '/group-invite/${Uri.encodeComponent(normalized)}';
+  return groupInviteRouteFromUri(uri);
 }

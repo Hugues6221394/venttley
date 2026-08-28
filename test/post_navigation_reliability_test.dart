@@ -92,4 +92,49 @@ void main() {
     expect(find.text(post.content), findsOneWidget);
     expect(find.text('Missing seed'), findsNothing);
   });
+
+  testWidgets('post notifications stay on the root navigator from chat',
+      (tester) async {
+    late GoRouter router;
+    router = GoRouter(
+      initialLocation: '/chat/room-id',
+      routes: [
+        GoRoute(
+          path: '/chat/:roomId',
+          builder: (context, _) => Material(
+            child: Center(
+              child: TextButton(
+                onPressed: () => navigateFromNotificationPayload(
+                  router,
+                  NotificationPayload.post('shared-post'),
+                ),
+                child: const Text('Open shared post'),
+              ),
+            ),
+          ),
+        ),
+        GoRoute(
+          path: '/post-preview/:id',
+          builder: (_, state) => Material(
+            child: Text('Preview ${state.pathParameters['id']}'),
+          ),
+        ),
+        GoRoute(
+          path: '/post/:id',
+          builder: (_, state) => Material(
+            child: Text('Shell ${state.pathParameters['id']}'),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.tap(find.text('Open shared post'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Preview shared-post'), findsOneWidget);
+    expect(find.text('Shell shared-post'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

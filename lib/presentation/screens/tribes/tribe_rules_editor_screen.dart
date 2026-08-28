@@ -23,11 +23,28 @@ class _TribeRulesEditorScreenState
   @override
   Widget build(BuildContext context) {
     final tribe = ref.watch(tribeBySlugProvider(widget.slug)).valueOrNull;
+    final me = ref.watch(sessionProvider);
     if (tribe == null) {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (me == null || tribe.keeperId != me.userId) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(title: const Text('Tribe rules')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(28),
+            child: Text(
+              'Only the current Plug can edit Tribe rules.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
       );
     }
     final overview = ref.watch(tribeManagementProvider(tribe.tribeId));

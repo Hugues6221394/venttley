@@ -608,7 +608,7 @@ BEGIN
            CASE cm.crisis_level WHEN 'high' THEN 3 ELSE 2 END,
            cm.message_id, NULL::UUID, NULL::TEXT, NULL::TEXT,
            cm.sender_id, u.anonymous_pseudonym::TEXT,
-           '(private DM - content encrypted)'::TEXT,
+           '(private DM - server-readable; access restricted)'::TEXT,
            TRUE, cm.created_at
       FROM public.chat_messages AS cm
       LEFT JOIN public.users AS u ON u.user_id = cm.sender_id
@@ -632,7 +632,7 @@ BEGIN
              left(p.content, 200),
              left(tm.content, 200),
              CASE WHEN r.target_chat_message_id IS NOT NULL
-               THEN '(private DM - content encrypted)' END,
+               THEN '(private DM - server-readable; access restricted)' END,
              CASE WHEN r.target_comment_id IS NOT NULL
                THEN '(reported comment)' END,
              CASE WHEN r.target_room_id IS NOT NULL

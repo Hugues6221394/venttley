@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/server";
-import { rpc } from "@/lib/audit";
+import {
+  createAdminClient,
+  createRequiredAuthAdminClient,
+  createSsrClient,
+} from "@/lib/supabase/server";
+import { audit, rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, Row as KV } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -89,10 +93,51 @@ async function resetPassword(formData: FormData) {
   const id = String(formData.get("user_id") ?? "");
   const pw = String(formData.get("password") ?? "");
   const reason = String(formData.get("reason") ?? "");
-  await rpc("admin_reset_user_password", {
-    p_target: id,
-    p_new_password: pw,
-    p_reason: reason || null,
+  if (pw.length < 12) {
+    throw new Error("Password must be at least 12 characters.");
+  }
+
+  const ssr = await createSsrClient();
+  const {
+    data: { user: actor },
+  } = await ssr.auth.getUser();
+  if (!actor) throw new Error("Unauthorized.");
+  const { data: actorProfile } = await ssr
+    .from("users")
+    .select("user_role, account_status")
+    .eq("user_id", actor.id)
+    .maybeSingle();
+  if (
+    actorProfile?.user_role !== "super_admin" ||
+    actorProfile.account_status !== "active"
+  ) {
+    throw new Error("Only an active super admin can reset passwords.");
+  }
+
+  const authAdmin = createRequiredAuthAdminClient();
+  const { data: recoveryState, error: recoveryStateError } = await authAdmin
+    .from("users")
+    .select("recovery_blob")
+    .eq("user_id", id)
+    .maybeSingle();
+  if (recoveryStateError || !recoveryState) {
+    throw new Error("Could not verify the account recovery state.");
+  }
+  if (recoveryState.recovery_blob) {
+    throw new Error(
+      "This account is protected by a recovery phrase. The member must recover or change the password with that phrase."
+    );
+  }
+  const { error } = await authAdmin.auth.admin.updateUserById(id, {
+    password: pw,
+  });
+  if (error) throw new Error(`Password reset failed: ${error.message}`);
+
+  await audit("user.reset_password", {
+    targetType: "user",
+    targetId: id,
+    reason: reason || undefined,
+    metadata: { method: "auth.admin.updateUserById" },
   });
   revalidatePath(`/users/${id}`);
 }
@@ -323,12 +368,16 @@ export default async function UserDetailPage({
                 <label className="h-eyebrow flex items-center gap-1">
                   <KeyRound size={11} /> Reset password (super_admin only)
                 </label>
+                <p className="text-xs text-muted">
+                  Phrase-protected accounts must use their recovery phrase; an
+                  admin reset cannot safely reseal it.
+                </p>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     name="password"
-                    placeholder="new password (8+ chars)"
-                    minLength={8}
+                    placeholder="new password (12+ chars)"
+                    minLength={12}
                     required
                     className="input flex-1"
                     autoComplete="off"

@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +13,7 @@ import '../../../domain/tribe/tribe_chat_hub.dart';
 import '../../widgets/tribe/tribe_chat_poll_sheet.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/tribe/online_avatar_ring.dart';
 import '../../widgets/tribe_avatar.dart';
@@ -52,6 +55,8 @@ class _HubBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final canManage = ref.watch(canManageTribeProvider(tribe.tribeId));
+    final me = ref.watch(sessionProvider);
+    final isOwner = me != null && tribe.keeperId == me.userId;
     final onlineAsync = ref.watch(tribeOnlineMembersProvider(tribe.tribeId));
     final membersAsync = ref.watch(tribeMembersProvider(tribe.tribeId));
     final promptsAsync = ref.watch(tribePromptsProvider(tribe.tribeId));
@@ -76,11 +81,35 @@ class _HubBody extends ConsumerWidget {
         foregroundColor: context.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
+        // The bar is transparent so the premium gradient shows through, and
+        // `topInset` below starts the content underneath it. That holds at
+        // rest and breaks the moment the list moves: a scheduled-prompt row
+        // and the "Chat settings" heading scrolled straight through the title
+        // and the Info/Media tabs with nothing between them.
+        //
+        // A blur keeps the gradient visible — an opaque bar would flatten it —
+        // while giving moving content something to pass behind. Always on
+        // rather than scroll-driven, because unlike the public profile there
+        // is no full-bleed hero here whose top edge needs protecting.
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).scaffoldBackgroundColor.withOpacity(0.72),
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
         bottom: TabBar(
           labelColor: VentlyColors.berryMagenta,
           unselectedLabelColor: context.ink.withOpacity(0.55),
           indicatorColor: VentlyColors.berryMagenta,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+          labelStyle:
+              const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
           unselectedLabelStyle:
               const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
           tabs: const [
@@ -103,7 +132,7 @@ class _HubBody extends ConsumerWidget {
               child: ListView(
                 padding: EdgeInsets.fromLTRB(20, topInset, 20, 32),
                 children: [
-                  _HeroSection(tribe: tribe, canManage: canManage)
+                  _HeroSection(tribe: tribe, canEditIdentity: isOwner)
                       .animate()
                       .fadeIn(duration: 280.ms)
                       .slideY(begin: 0.05, end: 0),
@@ -151,13 +180,18 @@ class _HubBody extends ConsumerWidget {
                     const SizedBox(height: 8),
                     _ChatSettingsCard(tribe: tribe),
                   ],
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: () => context.push('/tribe/${tribe.slug}/manage'),
-                    icon: const Icon(Icons.tune_rounded, size: 18),
-                    label: const Text('Full tribe manage',
-                        style: TextStyle(fontWeight: FontWeight.w900)),
-                  ),
+                  if (isOwner) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          context.push('/tribe/${tribe.slug}/manage'),
+                      icon: const Icon(Icons.tune_rounded, size: 18),
+                      label: const Text(
+                        'Full tribe manage',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -233,9 +267,12 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _HeroSection extends ConsumerWidget {
-  const _HeroSection({required this.tribe, required this.canManage});
+  const _HeroSection({
+    required this.tribe,
+    required this.canEditIdentity,
+  });
   final Tribe tribe;
-  final bool canManage;
+  final bool canEditIdentity;
 
   Future<void> _pickAvatar(BuildContext context, WidgetRef ref) async {
     final picked = await ImagePicker().pickImage(
@@ -282,7 +319,7 @@ class _HeroSection extends ConsumerWidget {
           alignment: Alignment.bottomRight,
           children: [
             TribeAvatar(avatarUrl: tribe.avatarUrl, size: 96),
-            if (canManage)
+            if (canEditIdentity)
               Material(
                 color: VentlyColors.berryMagenta,
                 shape: const CircleBorder(),
@@ -468,7 +505,7 @@ class _OnlineRow extends StatelessWidget {
               children: [
                 OnlineAvatarRing(
                   avatarSeed: m.avatarSeed,
-                  label: m.pseudonym,
+                  label: m.displayName,
                   profilePhotoUrl: m.profilePhotoUrl,
                   size: 48,
                   isOnline: m.isOnline,
@@ -477,11 +514,12 @@ class _OnlineRow extends StatelessWidget {
                 SizedBox(
                   width: 56,
                   child: Text(
-                    m.pseudonym,
+                    m.displayName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.w800),
                   ),
                 ),
               ],
@@ -522,21 +560,28 @@ class _MembersList extends ConsumerWidget {
                 profilePhotoUrl: m.profilePhotoUrl,
                 size: 40,
               ),
-              title: Text('@${m.pseudonym}',
+              // Display name leads, handle follows. This roster was the last
+              // list in the app still headed by "@pseudonym" after the
+              // display-name rollout reached the feed, threads, chat and the
+              // friends list — so the same person read as "Healing Slow"
+              // everywhere else and "@HealingSlow" here.
+              title: Text(m.displayName,
                   style: const TextStyle(fontWeight: FontWeight.w800)),
               subtitle: Text(
                 m.role == 'keeper'
-                    ? 'Plug'
+                    ? '@${m.pseudonym} · Plug'
                     : m.role == 'mod'
-                        ? 'Co-mod'
-                        : 'Member',
+                        ? '@${m.pseudonym} · Co-mod'
+                        : '@${m.pseudonym} · Member',
                 style: TextStyle(
                   fontSize: 11,
                   color: VentlyColors.berryMagenta.withOpacity(0.85),
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              trailing: canManage && m.userId != me?.userId && m.role != 'keeper'
+              trailing: canManage &&
+                      m.userId != me?.userId &&
+                      m.role != 'keeper'
                   ? PopupMenuButton<String>(
                       onSelected: (v) async {
                         final repo = ref.read(repositoryProvider);
@@ -620,9 +665,9 @@ class _RulesSectionState extends ConsumerState<_RulesSection> {
 
   Future<void> _save() async {
     await ref.read(repositoryProvider).setTribeRules(
-          tribeId: widget.tribe.tribeId,
-          rules: {'text': _ctl.text.trim()},
-        );
+      tribeId: widget.tribe.tribeId,
+      rules: {'text': _ctl.text.trim()},
+    );
     ref.invalidate(tribeBySlugProvider(widget.tribe.slug));
     setState(() => _editing = false);
   }
@@ -763,8 +808,7 @@ class _PromptsSection extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, ctl.text.trim()),
             child: const Text('Save'),
@@ -928,7 +972,8 @@ class _ChatSettingsCard extends ConsumerWidget {
                   style: TextStyle(fontWeight: FontWeight.w800)),
               subtitle: Text(s.dailyCheckinPrompt),
               trailing: const Icon(Icons.edit_outlined, size: 18),
-              onTap: () => _editCheckinPrompt(context, ref, s.dailyCheckinPrompt),
+              onTap: () =>
+                  _editCheckinPrompt(context, ref, s.dailyCheckinPrompt),
             ),
           ],
         ],
@@ -949,32 +994,34 @@ class _ChatSettingsCard extends ConsumerWidget {
     WidgetRef ref,
     String current,
   ) async {
-    final ctrl = TextEditingController(text: current);
     final updated = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Daily check-in prompt'),
-        content: TextField(
-          controller: ctrl,
-          maxLines: 2,
-          maxLength: 200,
-          decoration: const InputDecoration(
-            hintText: 'How is everyone feeling today?',
+      builder: (ctx) => ModalTextControllerScope(
+        initialValues: [current],
+        builder: (ctx, controllers) => AlertDialog(
+          title: const Text('Daily check-in prompt'),
+          content: TextField(
+            controller: controllers.single,
+            maxLines: 2,
+            maxLength: 200,
+            decoration: const InputDecoration(
+              hintText: 'How is everyone feeling today?',
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(ctx, controllers.single.text.trim()),
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
-    ctrl.dispose();
     if (updated == null || updated.isEmpty) return;
     await _patch(ref, {'daily_checkin_prompt': updated});
   }

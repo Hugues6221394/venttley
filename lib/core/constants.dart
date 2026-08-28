@@ -48,9 +48,7 @@ class VentlyConfig {
     final configuredAnonKey = anonKey ?? supabaseAnonKey;
 
     if (isRelease && mockRequested) {
-      throw StateError(
-        'USE_MOCK_BACKEND is forbidden in release builds.',
-      );
+      throw StateError('USE_MOCK_BACKEND is forbidden in release builds.');
     }
     if (!mockRequested &&
         (configuredUrl.trim().isEmpty || configuredAnonKey.trim().isEmpty)) {
@@ -78,8 +76,9 @@ class VentlyConfig {
 
   static bool get gifSearchEnabled => tenorApiKey.isNotEmpty;
 
-  /// COPPA / FTC compliance — registration is hard-blocked under 13,
-  /// users 13–17 are placed in a restricted safety tier.
+  /// Product age floor. The server rejects a declared age below 13 and places
+  /// declared ages 13–17 in a restricted safety tier. This is not, by itself,
+  /// a claim of legal compliance or independent age assurance.
   static const int minAge = 13;
   static const int restrictedMaxAge = 17;
 
@@ -130,10 +129,14 @@ class VentlyConfig {
   /// Clerk — identity provider. When unset, falls back to the existing
   /// Supabase Auth flows (anonymous username + email + recovery phrase).
   /// See docs/architecture.md → Auth migration.
-  static const String clerkPublishableKey =
-      String.fromEnvironment('CLERK_PUBLISHABLE_KEY', defaultValue: '');
-  static const String clerkFrontendApi =
-      String.fromEnvironment('CLERK_FRONTEND_API', defaultValue: '');
+  static const String clerkPublishableKey = String.fromEnvironment(
+    'CLERK_PUBLISHABLE_KEY',
+    defaultValue: '',
+  );
+  static const String clerkFrontendApi = String.fromEnvironment(
+    'CLERK_FRONTEND_API',
+    defaultValue: '',
+  );
 
   /// PostHog — product analytics + feature flags.
   /// Project: Venttly (US Cloud, project id 480284).
@@ -150,17 +153,25 @@ class VentlyConfig {
 
   /// Upstash Redis (REST). Used by CacheService for cross-process cache.
   /// When empty, CacheService stays in-memory-only.
-  static const String upstashRedisRestUrl =
-      String.fromEnvironment('UPSTASH_REDIS_REST_URL', defaultValue: '');
-  static const String upstashRedisRestToken =
-      String.fromEnvironment('UPSTASH_REDIS_REST_TOKEN', defaultValue: '');
+  static const String upstashRedisRestUrl = String.fromEnvironment(
+    'UPSTASH_REDIS_REST_URL',
+    defaultValue: '',
+  );
+  static const String upstashRedisRestToken = String.fromEnvironment(
+    'UPSTASH_REDIS_REST_TOKEN',
+    defaultValue: '',
+  );
 
   /// Meilisearch host + admin / search key. When empty, SearchService
   /// falls through to the Postgres `search_global` RPC.
-  static const String meilisearchHost =
-      String.fromEnvironment('MEILISEARCH_HOST', defaultValue: '');
-  static const String meilisearchKey =
-      String.fromEnvironment('MEILISEARCH_KEY', defaultValue: '');
+  static const String meilisearchHost = String.fromEnvironment(
+    'MEILISEARCH_HOST',
+    defaultValue: '',
+  );
+  static const String meilisearchKey = String.fromEnvironment(
+    'MEILISEARCH_KEY',
+    defaultValue: '',
+  );
 
   /// Resend — transactional email. Wired through the email-dispatcher
   /// edge function, never called from the client (so the API key stays
@@ -170,39 +181,53 @@ class VentlyConfig {
     'RESEND_FROM_ADDRESS',
     defaultValue: 'hello@venttly.app',
   );
-  static const bool resendEnabled =
-      bool.fromEnvironment('RESEND_ENABLED', defaultValue: false);
+  static const bool resendEnabled = bool.fromEnvironment(
+    'RESEND_ENABLED',
+    defaultValue: false,
+  );
 
   /// Deep-link the OAuth (Google) flow returns to. Must be allow-listed in
   /// Supabase → Authentication → URL Configuration and registered as a native
   /// deep link (Android intent-filter / iOS URL scheme). Empty ⇒ let the SDK
   /// use its platform default. Example: 'rw.vently.vently_app://login-callback'.
-  static const String oauthRedirectUrl =
-      String.fromEnvironment('OAUTH_REDIRECT_URL', defaultValue: '');
+  static const String oauthRedirectUrl = String.fromEnvironment(
+    'OAUTH_REDIRECT_URL',
+    defaultValue: '',
+  );
 
   /// Whether to surface the optional Google / phone sign-in buttons. Off by
   /// default so the buttons only appear once their providers are configured.
-  static const bool socialAuthEnabled =
-      bool.fromEnvironment('SOCIAL_AUTH_ENABLED', defaultValue: true);
+  static const bool socialAuthEnabled = bool.fromEnvironment(
+    'SOCIAL_AUTH_ENABLED',
+    defaultValue: true,
+  );
 
   /// Stripe — publishable key for the Flutter SDK. The secret key lives
   /// only in the payment-webhook edge function.
-  static const String stripePublishableKey =
-      String.fromEnvironment('STRIPE_PUBLISHABLE_KEY', defaultValue: '');
+  static const String stripePublishableKey = String.fromEnvironment(
+    'STRIPE_PUBLISHABLE_KEY',
+    defaultValue: '',
+  );
 
   /// Firebase Cloud Messaging. The client uses Firebase iOS/Android
   /// config files at build time (GoogleService-Info.plist /
   /// google-services.json) — this env var is just a feature flag to
   /// skip FCM init when no Firebase project is wired.
-  static const bool fcmEnabled =
-      bool.fromEnvironment('FCM_ENABLED', defaultValue: false);
+  static const bool fcmEnabled = bool.fromEnvironment(
+    'FCM_ENABLED',
+    defaultValue: false,
+  );
 
   /// OpenTelemetry collector endpoint (Honeycomb / Tempo / Grafana).
   /// When empty, the OTEL exporter no-ops.
-  static const String otelEndpoint =
-      String.fromEnvironment('OTEL_ENDPOINT', defaultValue: '');
-  static const String otelHeaders =
-      String.fromEnvironment('OTEL_HEADERS', defaultValue: '');
+  static const String otelEndpoint = String.fromEnvironment(
+    'OTEL_ENDPOINT',
+    defaultValue: '',
+  );
+  static const String otelHeaders = String.fromEnvironment(
+    'OTEL_HEADERS',
+    defaultValue: '',
+  );
 
   // Convenience getters — true only when the corresponding integration
   // has been provisioned in the ops dashboard.
@@ -250,7 +275,7 @@ class FeedCategories {
   static const Set<String> crisisAware = {
     'dark_thoughts',
     'trauma',
-    'mental_health'
+    'mental_health',
   };
 
   static String label(String key) {

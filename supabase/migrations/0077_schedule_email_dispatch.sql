@@ -9,9 +9,9 @@
 -- Every minute is the pg_cron floor and is fine for launch. Verification
 -- codes tolerate a sub-minute delay; if you later want instant sends, add a
 -- dashboard Database Webhook on email_outbox INSERT that POSTs to the same
--- function with the same x-cron-secret header (both callers are idempotent —
--- the dispatcher only pulls status = 'queued' and flips each row, so a webhook
--- and this cron can safely coexist).
+-- function with the same x-cron-secret header. The hardened dispatcher leases
+-- rows with SKIP LOCKED and uses the outbox UUID as Resend's idempotency key,
+-- so the webhook and cron can safely coexist and retry lost responses.
 --
 -- Security: like account-purge (0076), the endpoint has verify_jwt = false and
 -- is gated by the shared internal-cron secret. The secret value is the same

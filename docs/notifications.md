@@ -1,10 +1,17 @@
-# Push notifications — wiring guide
+# Push notifications — rollout and operations guide
 
-The app ships with the **foundation** for OS-level push but the
-external services (Firebase + Apple) need a one-time ops setup that
-can't be automated from the codebase. Once those are wired, the
-existing `register_push_token` RPC + edge function below take over
-and pushes land on real devices.
+The client and server lifecycle is implemented, but remote delivery is not a
+production claim until Firebase/APNs credentials and the real-device canary
+below are complete. Both kill switches remain off by default:
+
+- `FCM_ENABLED=false` prevents client Firebase initialization.
+- `PUSH_DELIVERY_ENABLED=off` prevents server delivery.
+
+Notification consent defaults off. Firebase auto-init is disabled in Android
+and iOS metadata; enabling alerts requests OS permission before creating and
+uploading a token. Disabling alerts or signing out unregisters the token while
+the Supabase session still exists, then deletes it locally. “Sign out
+everywhere” first deletes every push-token row owned by that account.
 
 ## What's already in place
 
@@ -15,142 +22,104 @@ and pushes land on real devices.
 | `unregister_push_token(token)` RPC | ✅ |
 | Repo methods `registerPushToken` / `unregisterPushToken` | ✅ |
 | `NotificationsService` (foreground local notifications) | ✅ |
-| `flutter_local_notifications` package | ✅ in pubspec |
-| FCM / APNs token capture in the client | ⏳ needs Firebase wiring |
-| Server-side fan-out (Supabase Edge Function) | ⏳ needs deploy |
+| Foreground Supabase-realtime alerts | ✅ (kept separate to avoid duplicates) |
+| FCM permission, token refresh, retry, and sign-out cleanup | ✅ |
+| Server registration quota + ten-installation fanout cap | ✅ |
+| Background/terminated notification tap routing | ✅ strict allowlist |
+| Firebase Android/iOS configuration + APNs key | ⏳ operations |
+| Durable server-side fan-out | ✅ source + migration; staging evidence pending |
 
 ## Step 1 — Firebase project
 
 1. Create a Firebase project at <https://console.firebase.google.com>.
-2. Register both an Android app (package `app.venttly`) and an iOS app
-   (bundle id `app.venttly`).
+2. Register the Android app as `rw.vently.vently_app` and the iOS app as
+   `rw.vently.ventlyApp`. These identifiers must match the checked-in native
+   projects exactly.
 3. Download `google-services.json` → drop into `android/app/`.
-4. Download `GoogleService-Info.plist` → drop into `ios/Runner/`.
+4. Download `GoogleService-Info.plist`, add it to `ios/Runner/` through Xcode,
+   and include it in the Runner target's **Copy Bundle Resources** phase.
 
-## Step 2 — Add `firebase_core` + `firebase_messaging`
+The Google Services Gradle plugin is applied only when the Android config file
+exists, so credential-free local and mock builds still work. Do not commit a
+production service-account JSON; that server credential belongs only in
+Supabase secrets.
 
-```yaml
-dependencies:
-  firebase_core: ^3.6.0
-  firebase_messaging: ^15.1.2
-```
-
-Then in `lib/main.dart`, before `runApp(...)`:
-
-```dart
-await Firebase.initializeApp();
-final messaging = FirebaseMessaging.instance;
-await messaging.requestPermission();
-final token = await messaging.getToken();
-if (token != null) {
-  await repo.registerPushToken(
-    token: token,
-    platform: Platform.isAndroid ? 'android' : 'ios',
-  );
-}
-FirebaseMessaging.onTokenRefresh.listen((newToken) {
-  unawaited(repo.registerPushToken(token: newToken, platform: '...'));
-});
-```
-
-## Step 3 — Android manifest
-
-Add to `android/app/src/main/AndroidManifest.xml`:
-
-```xml
-<service
-  android:name="com.google.firebase.messaging.FirebaseMessagingService"
-  android:exported="false">
-  <intent-filter>
-    <action android:name="com.google.firebase.MESSAGING_EVENT" />
-  </intent-filter>
-</service>
-```
-
-## Step 4 — iOS APNs
+## Step 2 — iOS APNs
 
 1. In Apple Developer Console, generate an APNs auth key (`.p8`).
 2. Upload the key to Firebase project settings → Cloud Messaging.
-3. In Xcode: turn on **Push Notifications** capability + add the
-   `Background Modes → Remote notifications` capability.
-4. Add to `ios/Runner/Info.plist`:
+3. In Xcode, enable **Push Notifications** for the Runner target and ensure the
+   provisioning profile carries the `aps-environment` entitlement.
+4. Keep Firebase method swizzling enabled. The Flutter FCM token lifecycle
+   depends on it. `Remote notifications` background mode is already checked in.
 
-```xml
-<key>FirebaseAppDelegateProxyEnabled</key>
-<false/>
-```
+## Step 3 — Deploy the durable fan-out worker
 
-## Step 5 — Edge function for fan-out
+`notification-fanout` accepts only a Database Webhook pointer (table + primary
+key), validates `x-webhook-secret`, and re-reads the canonical row in Postgres.
+Postgres expands recipients into `push_delivery_outbox` with a unique event/user
+key. The worker leases bounded batches, retries with backoff, removes invalid
+tokens, and sends generic copy only. User-authored message or Tribe text never
+enters Firebase.
 
-Deploy a Supabase Edge Function that runs on a postgres webhook from
-`chat_messages` INSERT / `friendships` INSERT / `notifications`
-INSERT and sends to FCM for each token in `push_tokens`.
-
-Skeleton (`supabase/functions/push-fanout/index.ts`):
-
-```ts
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-Deno.serve(async (req) => {
-  const { record, table } = await req.json();
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  // Figure out who should receive the push
-  let recipientUserId: string | null = null;
-  let title = "Venttly";
-  let body = "";
-  if (table === "chat_messages") {
-    const { data: room } = await supabase
-      .from("chat_rooms").select("initiated_by, received_by")
-      .eq("room_id", record.room_id).single();
-    recipientUserId = room.initiated_by === record.sender_id
-      ? room.received_by : room.initiated_by;
-    title = "New message";
-    body = record.encrypted_payload?.slice(0, 80) ?? "";
-  }
-  // ...handle friendships, notifications similarly...
-
-  if (!recipientUserId) return new Response("no-op");
-
-  const { data: tokens } = await supabase
-    .from("push_tokens").select("token, platform")
-    .eq("user_id", recipientUserId);
-
-  // Send via FCM HTTP v1 API — needs a Google service-account JWT.
-  // Pseudocode:
-  for (const t of tokens ?? []) {
-    await fetch("https://fcm.googleapis.com/v1/projects/<id>/messages:send", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${await fcmAccessToken()}` },
-      body: JSON.stringify({
-        message: {
-          token: t.token,
-          notification: { title, body },
-          data: { kind: table, id: record.message_id },
-        },
-      }),
-    });
-  }
-  return new Response("ok");
-});
-```
-
-Deploy:
+Set secrets and keep the rollout disabled initially:
 
 ```sh
-supabase functions deploy push-fanout
+supabase secrets set \
+  WEBHOOK_SECRET='<random 32+ byte value>' \
+  FCM_PROJECT_ID='<firebase project id>' \
+  FCM_SERVICE_ACCOUNT_JSON='<service account json>' \
+  PUSH_DELIVERY_ENABLED='off'
+
+supabase functions deploy notification-fanout --no-verify-jwt
 ```
 
-Then wire a Postgres webhook (Supabase dashboard → Database → Webhooks)
-that POSTs to the function on insert for the three tables above.
+Wire INSERT webhooks for `chat_messages`, `tribe_messages`, `friendships`, and
+`notifications`. Every webhook must include the same `x-webhook-secret`. Also
+schedule a periodic POST body such as `{"batch":100}` so queued retries drain
+even when no new webhook arrives.
 
-## Local foreground notifications today
+Before enabling the canary, verify:
 
-Without any of the above, `NotificationsService.instance.show(...)`
-already fires local notifications when the app is foreground. The
-`messagesProvider` realtime stream is the natural place to trigger
-one on new inbound messages — wire that in
-`lib/presentation/screens/inbox/inbox_screen.dart` next.
+- repeated delivery of the same webhook creates one outbox row per recipient;
+- forged table names and missing/wrong secrets return 4xx;
+- muted and non-member recipients are excluded by the canonical SQL query;
+- FCM payload captures contain only generic copy and routing IDs;
+- partial device failure does not duplicate a push on a device that succeeded;
+- invalid tokens are removed, leases recover after worker death, and rows become
+  `dead` after the bounded attempt limit;
+- p95 enqueue-to-device latency and outbox age have dashboards and alerts.
+
+Then enable only in the isolated staging/canary environment:
+
+```sh
+supabase secrets set PUSH_DELIVERY_ENABLED='on'
+```
+
+Build the canary with `--dart-define=FCM_ENABLED=true`. Roll back either side
+independently by disabling its kill switch; do not turn both on globally in the
+first release.
+
+## Required runtime verification
+
+Exercise at least one low-end Android device and one physical iPhone (simulators
+do not prove APNs delivery):
+
+- permission allowed, denied, and later revoked in OS settings;
+- fresh install defaults off and does not create a Firebase token;
+- foreground events create only one realtime-driven alert;
+- background and terminated taps route to member-authorized destinations;
+- malformed/raw-route FCM data is ignored;
+- token refresh registers the replacement before removing the old token;
+- alerts-off, normal logout, global logout, account switch, and expired session
+  stop delivery to the prior account;
+- offline registration retries after reconnect/resume without duplicate rows;
+- notification copy and telemetry contain no vent, Tribe, or chat body.
+
+Record enqueue-to-device p50/p95, delivery failures, invalid-token removal,
+outbox age, and notification-open success before expanding the canary.
+
+## Foreground behavior
+
+`NotificationsService` already surfaces Supabase realtime events while the app
+is open. The FCM client deliberately does not show a second foreground alert.

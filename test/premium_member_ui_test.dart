@@ -29,14 +29,7 @@ void main() {
   test('member footer keeps Friends among all six destinations', () {
     expect(
       HomeShell.memberDestinationLabels,
-      equals(const [
-        'Home',
-        'Whispers',
-        'Post',
-        'Friends',
-        'Inbox',
-        'Profile',
-      ]),
+      equals(const ['Home', 'Whispers', 'Post', 'Friends', 'Inbox', 'Profile']),
     );
   });
 
@@ -54,8 +47,9 @@ void main() {
     );
   });
 
-  testWidgets('empty personal feed falls back to community conversations',
-      (tester) async {
+  testWidgets('empty personal feed falls back to community conversations', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       const FeedScreen(),
@@ -74,8 +68,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('empty Whispers keeps real community discovery visible',
-      (tester) async {
+  testWidgets('empty Whispers keeps real community discovery visible', (
+    tester,
+  ) async {
     await _pumpScreen(tester, const WhispersScreen());
 
     expect(find.text('Be the first voice today'), findsOneWidget);
@@ -84,8 +79,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('premium notifications stay scannable on a compact phone',
-      (tester) async {
+  testWidgets('premium notifications stay scannable on a compact phone', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       NotificationsScreen(referenceTime: _notificationReferenceTime),
@@ -93,7 +89,12 @@ void main() {
 
     expect(find.text('Notifications'), findsOneWidget);
     expect(find.text('All'), findsOneWidget);
-    expect(find.text('Unread  2'), findsOneWidget);
+    // The unread count moved out of the label and into a badge when the stock
+    // SegmentedButton was replaced with Venttly pills, so "Unread  2" as one
+    // string no longer exists. Both halves are still asserted — the filter and
+    // the count it carries — which is what this line was ever about.
+    expect(find.text('Unread'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
     expect(find.text('Today'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await expectLater(
@@ -131,12 +132,17 @@ void main() {
     );
   });
 
-  testWidgets('premium circle stays composed on a compact phone',
-      (tester) async {
+  testWidgets('premium circle stays composed on a compact phone', (
+    tester,
+  ) async {
     await _pumpScreen(tester, const FriendsScreen());
 
     expect(find.text('Your circle'), findsOneWidget);
-    expect(find.text('Instant connect'), findsOneWidget);
+    // Anchored on the two actions rather than on the "Instant connect" heading
+    // that used to sit above them. The heading was explanatory copy; these are
+    // the affordances, and they are what the assertion is actually about.
+    expect(find.text('Share link'), findsOneWidget);
+    expect(find.text('My QR'), findsOneWidget);
     final exception = tester.takeException();
     expect(exception, isNull);
     await expectLater(
@@ -145,8 +151,9 @@ void main() {
     );
   });
 
-  testWidgets('circle exposes fast Tribe discovery without leaving the tab',
-      (tester) async {
+  testWidgets('circle exposes fast Tribe discovery without leaving the tab', (
+    tester,
+  ) async {
     await _pumpScreen(tester, const FriendsScreen());
 
     await tester.tap(find.text('Explore Tribes'));
@@ -182,10 +189,7 @@ Future<void> _pumpScreen(
     routes: [
       GoRoute(
         path: '/',
-        builder: (_, __) => RepaintBoundary(
-          key: _surfaceKey,
-          child: screen,
-        ),
+        builder: (_, __) => RepaintBoundary(key: _surfaceKey, child: screen),
       ),
     ],
   );
@@ -199,17 +203,14 @@ Future<void> _pumpScreen(
           (_) => Stream.value(feedPosts ?? _posts),
         ),
         if (discoveryPosts != null)
-          homeDiscoveryPostsProvider.overrideWith(
-            (_) async => discoveryPosts,
-          ),
+          homeDiscoveryPostsProvider.overrideWith((_) async => discoveryPosts),
         myFriendsProvider.overrideWith((_) async => _friends),
         incomingFriendRequestsProvider.overrideWith((_) async => _requests),
         outgoingFriendRequestsProvider.overrideWith((_) async => const []),
         friendSuggestionsProvider.overrideWith((_) async => const []),
-        inboxCountsProvider.overrideWith((_) async => const {
-              'requests': 1,
-              'active': 3,
-            }),
+        inboxCountsProvider.overrideWith(
+          (_) async => const {'requests': 1, 'active': 3},
+        ),
         tribeChatInboxProvider.overrideWith((_) async => const []),
         inboxTimestampFormatterProvider.overrideWithValue((timestamp) {
           final age = DateTime.now().difference(timestamp);
@@ -249,10 +250,9 @@ Future<void> _pumpMemberShell(WidgetTester tester) async {
         incomingFriendRequestsProvider.overrideWith((_) async => _requests),
         outgoingFriendRequestsProvider.overrideWith((_) async => const []),
         friendSuggestionsProvider.overrideWith((_) async => const []),
-        inboxCountsProvider.overrideWith((_) async => const {
-              'requests': 1,
-              'active': 3,
-            }),
+        inboxCountsProvider.overrideWith(
+          (_) async => const {'requests': 1, 'active': 3},
+        ),
         navInboxBadgeCountProvider.overrideWith((_) async => 1),
         isKeeperProvider.overrideWith((_) async => false),
         connectionStatusProvider.overrideWith(
@@ -322,6 +322,7 @@ const _user = AppUser(
   isVerified: true,
   safetyTier: 'standard',
   accountStatus: 'active',
+  birthYear: 2000,
   emailVerified: true,
 );
 

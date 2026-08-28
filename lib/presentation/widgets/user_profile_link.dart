@@ -9,6 +9,7 @@ class UserProfileLink extends StatelessWidget {
     super.key,
     required this.userId,
     required this.pseudonym,
+    this.displayName,
     required this.avatarSeed,
     this.profilePhotoUrl,
     this.size = 40,
@@ -22,6 +23,7 @@ class UserProfileLink extends StatelessWidget {
 
   final String userId;
   final String pseudonym;
+  final String? displayName;
   final String avatarSeed;
   final String? profilePhotoUrl;
   final double size;
@@ -38,7 +40,7 @@ class UserProfileLink extends StatelessWidget {
   Widget build(BuildContext context) {
     final avatar = ProfileAvatar(
       avatarSeed: avatarSeed,
-      label: pseudonym,
+      label: displayName ?? pseudonym,
       profilePhotoUrl: profilePhotoUrl,
       size: size,
       showVerifiedBadge: showVerifiedBadge,
@@ -73,11 +75,11 @@ class UserProfileLink extends StatelessWidget {
               SizedBox(width: dense ? 8 : 10),
               Flexible(
                 child: Text(
-                  '$prefix$pseudonym',
+                  displayName ?? '$prefix$pseudonym',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: nameStyle ??
-                      const TextStyle(fontWeight: FontWeight.w900),
+                  style:
+                      nameStyle ?? const TextStyle(fontWeight: FontWeight.w900),
                 ),
               ),
             ],

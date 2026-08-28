@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,11 +22,10 @@ class TribeReactionTray extends ConsumerWidget {
 
   Future<void> _react(WidgetRef ref, String emoji) async {
     await VentlyHaptics.reaction();
-    await ref.read(repositoryProvider).setTribeMessageReaction(
-          messageId: messageId,
-          emoji: emoji,
-        );
-    ref.invalidate(tribeMessagesProvider(tribeId));
+    await ref
+        .read(repositoryProvider)
+        .setTribeMessageReaction(messageId: messageId, emoji: emoji);
+    unawaited(ref.read(repositoryProvider).refreshTribeMessages(tribeId));
   }
 
   @override
@@ -33,8 +33,8 @@ class TribeReactionTray extends ConsumerWidget {
     // A reaction the user picked from their keyboard that isn't one of the
     // four presets — surface it as its own selected chip so they can see and
     // toggle it off.
-    final customReaction = myReaction != null &&
-            !TribeChatReaction.isPreset(myReaction!)
+    final customReaction =
+        myReaction != null && !TribeChatReaction.isPreset(myReaction!)
         ? myReaction
         : null;
 
@@ -90,8 +90,7 @@ class _AddReactionChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add_reaction_outlined,
-                  size: 16, color: context.ink),
+              Icon(Icons.add_reaction_outlined, size: 16, color: context.ink),
               const SizedBox(width: 4),
               Text(
                 'More',
@@ -165,8 +164,7 @@ class _EmojiPickerSheetState extends State<_EmojiPickerSheet> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -216,8 +214,10 @@ class _EmojiPickerSheetState extends State<_EmojiPickerSheet> {
               ),
               filled: true,
               fillColor: VentlyColors.softMauve.withOpacity(0.12),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide.none,
@@ -326,9 +326,7 @@ class _ReactionChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
-                  color: selected
-                      ? VentlyColors.berryMagenta
-                      : context.ink,
+                  color: selected ? VentlyColors.berryMagenta : context.ink,
                 ),
               ),
             ],

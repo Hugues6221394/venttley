@@ -5,7 +5,7 @@ import { canAccess, isStaffRole, landingFor } from "@/lib/roles";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
-// Edge middleware = the console's front door. Three layers, in order:
+// The server-side proxy is the console's front door. Three layers, in order:
 //   1. IP allowlist   — network-level gate (ADMIN_IP_ALLOWLIST), applies to
 //                       every route incl. /login so attackers can't even reach
 //                       the form from a disallowed network.
@@ -23,7 +23,7 @@ function clientIp(req: NextRequest): string | null {
   );
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // 1) IP allowlist — before anything else.

@@ -9,15 +9,20 @@ import 'package:image_picker/image_picker.dart';
 import '../../../animation/widgets/animated_button.dart';
 import '../../../core/constants.dart';
 import '../../../core/connection.dart';
+import '../../../core/analytics_events.dart';
 import '../../../core/providers.dart';
 import '../../../data/services/draft_store.dart';
+import '../../../data/services/analytics_service.dart';
 import '../../../data/services/moderation_service.dart';
+import '../../../data/services/music_playback_service.dart';
 import '../../../data/services/outbox.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
+import '../../theme/vent_card_style.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/mood_chip.dart';
+import '../../widgets/music_track_card.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/tagged_text.dart';
 import '../../widgets/vently_premium_background.dart';
@@ -44,6 +49,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   bool _includePoll = false;
   bool _isWhisper = false;
   bool _storyFriendsOnly = true;
+  String? _cardBackgroundColor;
+  String? _cardTextColor;
+  MusicTrack? _selectedMusic;
+  late final MusicPlaybackController _musicPlayback;
 
   // Optional attached photo. Bytes live in memory until submit; we
   // only upload on send so a discard costs zero network.
@@ -56,6 +65,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   @override
   void initState() {
     super.initState();
+    _musicPlayback = ref.read(musicPlaybackProvider);
     // Reading providers here is safe; WRITING them is not — initState runs
     // during the route's first build and Riverpod throws "tried to modify a
     // provider while the widget tree was building". So: consume the one-shot
@@ -112,6 +122,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
 
   @override
   void dispose() {
+    unawaited(_musicPlayback.stop());
     _draftSaver?.dispose();
     _controller.dispose();
     _pollQ.dispose();
@@ -139,15 +150,20 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not pick image: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not pick image: $e')));
     }
   }
 
   Future<void> _openPhotoSourceSheet() async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
+      // Above the floating nav. HomeShell paints its pill in a Stack over the
+      // branch, so a sheet opened on the branch navigator sits underneath it —
+      // which put this sheet's own action row behind the nav and made Publish
+      // unreachable except at its bottom few pixels.
+      useRootNavigator: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -160,18 +176,26 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
             children: [
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.photo_library_outlined,
-                    color: VentlyColors.berryMagenta),
-                title: const Text('Choose from library',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                leading: const Icon(
+                  Icons.photo_library_outlined,
+                  color: VentlyColors.berryMagenta,
+                ),
+                title: const Text(
+                  'Choose from library',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () => Navigator.pop(ctx, ImageSource.gallery),
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.photo_camera_outlined,
-                    color: VentlyColors.berryMagenta),
-                title: const Text('Take a photo',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                leading: const Icon(
+                  Icons.photo_camera_outlined,
+                  color: VentlyColors.berryMagenta,
+                ),
+                title: const Text(
+                  'Take a photo',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 onTap: () => Navigator.pop(ctx, ImageSource.camera),
               ),
             ],
@@ -181,6 +205,255 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     );
     if (source != null) await _pickPhoto(source: source);
   }
+
+  Future<void> _openStyleSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      // Above the floating nav. HomeShell paints its pill in a Stack over the
+      // branch, so a sheet opened on the branch navigator sits underneath it —
+      // which put this sheet's own action row behind the nav and made Publish
+      // unreachable except at its bottom few pixels.
+      useRootNavigator: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final effectiveText = VentCardStyle.readableTextFor(
+            _cardBackgroundColor,
+            _cardTextColor,
+          );
+          final availableTextColors = _cardBackgroundColor == null
+              ? <String?>[null]
+              : VentCardStyle.textColors
+                    .where(
+                      (color) =>
+                          VentCardStyle.readableTextFor(
+                            _cardBackgroundColor,
+                            color,
+                          ) ==
+                          color,
+                    )
+                    .toList();
+
+          void refresh(VoidCallback update) {
+            setState(update);
+            setSheetState(() {});
+          }
+
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.16),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Vent style',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Choose a card and word color. Unreadable combinations are filtered out.',
+                    style: TextStyle(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.62),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Background',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      for (final color in VentCardStyle.backgrounds)
+                        _ComposeColorSwatch(
+                          color: color == null
+                              ? Theme.of(context).cardColor
+                              : VentCardStyle.parse(color)!,
+                          label: VentCardStyle.backgroundLabel(color),
+                          selected: _cardBackgroundColor == color,
+                          onTap: () => refresh(() {
+                            _cardBackgroundColor = color;
+                            _cardTextColor = VentCardStyle.readableTextFor(
+                              color,
+                              _cardTextColor,
+                            );
+                          }),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  const Text(
+                    'Words',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      for (final color in availableTextColors)
+                        _ComposeColorSwatch(
+                          color: color == null
+                              ? Theme.of(context).colorScheme.onSurface
+                              : VentCardStyle.parse(color)!,
+                          label: VentCardStyle.textLabel(color),
+                          selected: effectiveText == color,
+                          onTap: () => refresh(() => _cardTextColor = color),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      child: const Text('Done'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _openMusicPicker() async {
+    final picked = await showMusicPicker(context, selected: _selectedMusic);
+    if (picked == null || !mounted) return;
+    setState(() => _selectedMusic = picked);
+    unawaited(
+      AnalyticsService.instance.track(
+        Events.musicAttached,
+        props: {'provider': picked.provider},
+      ),
+    );
+  }
+
+  Future<bool> _confirmMusicPreview() async {
+    final track = _selectedMusic;
+    if (track == null) return true;
+    final me = ref.read(sessionProvider);
+    final persona = ref.read(activePersonaProvider);
+    final body = _controller.text.trim();
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      // Above the floating nav. HomeShell paints its pill in a Stack over the
+      // branch, so a sheet opened on the branch navigator sits underneath it —
+      // which put this sheet's own action row behind the nav and made Publish
+      // unreachable except at its bottom few pixels.
+      useRootNavigator: true,
+
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Preview your Vent',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22),
+            ),
+            const SizedBox(height: 14),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      persona?.pseudonym ?? me?.displayName ?? 'Anonymous',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    if (body.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(body, maxLines: 8, overflow: TextOverflow.ellipsis),
+                    ],
+                    const SizedBox(height: 12),
+                    MusicTrackCard(track: track),
+                    const SizedBox(height: 10),
+                    const Row(
+                      children: [
+                        Icon(Icons.favorite_border, size: 18),
+                        SizedBox(width: 4),
+                        Text('0'),
+                        SizedBox(width: 18),
+                        Icon(Icons.chat_bubble_outline, size: 18),
+                        SizedBox(width: 4),
+                        Text('0'),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(false),
+                    child: const Text('Back'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(true),
+                    child: const Text('Publish'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    await ref.read(musicPlaybackProvider).stop();
+    return result ?? false;
+  }
+
+  Map<String, Object?> _musicTrackPayload(MusicTrack track) => {
+    'trackId': track.trackId,
+    'provider': track.provider,
+    'providerTrackId': track.providerTrackId,
+    'title': track.title,
+    'artist': track.artist,
+    'album': track.album,
+    'artworkUrl': track.artworkUrl,
+    'previewUrl': track.previewUrl,
+    'previewDurationMs': track.previewDurationMs,
+    'genre': track.genre,
+    'moodTags': track.moodTags,
+    'licenseCode': track.licenseCode,
+    'attributionText': track.attributionText,
+    'cacheAllowed': track.cacheAllowed,
+  };
 
   Future<void> _submit() async {
     final text = _controller.text.trim();
@@ -192,11 +465,16 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-                'Add a poll question and two options, or untoggle the poll.'),
+              'Add a poll question and two options, or untoggle the poll.',
+            ),
           ),
         );
         return;
       }
+    }
+    if (_selectedMusic != null) {
+      final confirmed = await _confirmMusicPreview();
+      if (!confirmed || !mounted) return;
     }
     setState(() => _busy = true);
     final moderation = await ref.read(moderationServiceProvider).review(text);
@@ -216,20 +494,20 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     final space = ref.read(composeTargetSpaceProvider);
     final selectedTribe = ref.read(composeTargetTribeProvider);
     final repository = ref.read(repositoryProvider);
-    final tribe = selectedTribe ??
+    final tribe =
+        selectedTribe ??
         (space == null ? null : await repository.tribeBySlug(space.tribeSlug));
     if (!mounted) return;
     final effectiveTribeId = space?.tribeId ?? tribe?.tribeId;
     final effectiveTribeSlug = space?.tribeSlug ?? tribe?.slug;
     if (_includePoll &&
         tribe != null &&
-        !TribeGovernanceSettings.fromJson(tribe.managementSettings)
-            .allowPolls) {
+        !TribeGovernanceSettings.fromJson(
+          tribe.managementSettings,
+        ).allowPolls) {
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Polls are disabled in this Tribe.'),
-        ),
+        const SnackBar(content: Text('Polls are disabled in this Tribe.')),
       );
       return;
     }
@@ -239,22 +517,31 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
 
     StagedOutboxMedia? stagedMedia;
     Future<void> queuePost({String? imagePath, String? imageUrl}) async {
-      await outbox.enqueue(
-        OutboxKind.post,
-        {
-          'content': text,
-          'category': _category,
-          'mood': _mood,
-          'tribeId': effectiveTribeId,
-          'spaceId': space?.spaceId,
-          'personaId': persona?.personaId,
-          'isWhisper': _isWhisper,
-          'imagePath': imagePath,
-          'imageUrl': imageUrl,
-          if (stagedMedia != null) ...stagedMedia.toPayload(),
+      await outbox.enqueue(OutboxKind.post, {
+        'content': text,
+        'category': _category,
+        'mood': _mood,
+        'tribeId': effectiveTribeId,
+        'spaceId': space?.spaceId,
+        'personaId': persona?.personaId,
+        'isStory': _isWhisper,
+        'storyAudience': 'friends',
+        'imagePath': imagePath,
+        'imageUrl': imageUrl,
+        'cardBackgroundColor': _cardBackgroundColor,
+        'cardTextColor': VentCardStyle.readableTextFor(
+          _cardBackgroundColor,
+          _cardTextColor,
+        ),
+        if (_selectedMusic != null)
+          'musicTrack': _musicTrackPayload(_selectedMusic!),
+        if (_selectedMusic != null) ...{
+          'musicStartMs': 0,
+          'musicDurationMs': 15000,
+          'musicVolume': 0.75,
         },
-        operationId: operationId,
-      );
+        if (stagedMedia != null) ...stagedMedia.toPayload(),
+      }, operationId: operationId);
       await _draftSaver?.clear();
       if (!mounted) return;
       setState(() => _busy = false);
@@ -281,7 +568,9 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           contentType: _pendingImageMime,
           mediaType: 'image',
         );
-        final up = await ref.read(repositoryProvider).uploadPostImage(
+        final up = await ref
+            .read(repositoryProvider)
+            .uploadPostImage(
               bytes: _pendingImageBytes!,
               extension: _pendingImageExt,
               contentType: _pendingImageMime,
@@ -296,28 +585,38 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         }
         await outbox.discardStagedMedia(stagedMedia?.path);
         setState(() => _busy = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Photo upload failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Photo upload failed: $e')));
         return;
       }
     }
 
     final Post post;
     try {
-      post = await ref.read(repositoryProvider).createPost(
+      post = await ref
+          .read(repositoryProvider)
+          .createPost(
             content: text.isEmpty ? '' : text,
             category: _category,
             mood: _mood,
             tribeId: effectiveTribeId,
             spaceId: space?.spaceId,
             personaId: persona?.personaId,
-            isWhisper: _isWhisper,
+            isStory: _isWhisper,
+            storyAudience: 'friends',
             imagePath: imagePath,
             imageUrl: imageUrl,
             pollQuestion: _includePoll ? _pollQ.text.trim() : null,
-            pollOptions:
-                _includePoll ? [_pollA.text.trim(), _pollB.text.trim()] : null,
+            pollOptions: _includePoll
+                ? [_pollA.text.trim(), _pollB.text.trim()]
+                : null,
+            cardBackgroundColor: _cardBackgroundColor,
+            cardTextColor: VentCardStyle.readableTextFor(
+              _cardBackgroundColor,
+              _cardTextColor,
+            ),
+            musicTrack: _selectedMusic,
             idempotencyKey: operationId,
           );
     } catch (e) {
@@ -336,19 +635,19 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       return;
     }
     await outbox.discardStagedMedia(stagedMedia?.path);
+    final musicWasDropped = _selectedMusic != null && !post.hasMusic;
     await _draftSaver?.clear();
     // Crisis tag — readers see the helpline banner if the safety classifier
     // surfaced self-harm signals. 'high' = Tier-1 keyword match (more
     // confident), 'elevated' = Tier-2 LLM-only signal. Best-effort: the post
     // is already saved, we just decorate it.
     if (moderation.surfaceCrisisHelpline) {
-      final level = moderation.categories.contains(HazardCategory.selfHarm) &&
+      final level =
+          moderation.categories.contains(HazardCategory.selfHarm) &&
               moderation.reasons.any((r) => r.contains('care about you'))
           ? 'high'
           : 'elevated';
-      unawaited(
-        ref.read(repositoryProvider).setPostCrisis(post.postId, level),
-      );
+      unawaited(ref.read(repositoryProvider).setPostCrisis(post.postId, level));
     }
     ref.read(composeTargetTribeProvider.notifier).state = null;
     ref.read(composeTargetSpaceProvider.notifier).state = null;
@@ -365,10 +664,11 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         'trending',
         'helpful',
         'unanswered',
-        'keeper'
+        'keeper',
       ]) {
-        ref.invalidate(spacePostsProvider(
-            SpaceFeedQuery(spaceId: space.spaceId, sort: s)));
+        ref.invalidate(
+          spacePostsProvider(SpaceFeedQuery(spaceId: space.spaceId, sort: s)),
+        );
       }
       ref.invalidate(spaceByIdProvider(space.spaceId));
       ref.invalidate(spacesByTribeProvider(space.tribeId));
@@ -391,11 +691,15 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(tribe == null
-            ? (_isWhisper
-                ? 'Story posted for 24 hours.'
-                : 'Vent posted anonymously.')
-            : 'Posted to ${tribe.name}.'),
+        content: Text(
+          musicWasDropped
+              ? "Vent posted, but music isn't available right now."
+              : tribe == null
+              ? (_isWhisper
+                    ? 'Story posted for 24 hours.'
+                    : 'Vent posted anonymously.')
+              : 'Posted to ${tribe.name}.',
+        ),
       ),
     );
   }
@@ -437,31 +741,39 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 if (target != null)
                   GlassCard(
                     margin: const EdgeInsets.only(bottom: 12),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     borderRadius: 14,
                     child: Row(
                       children: [
-                        Icon(Icons.diversity_3,
-                            size: 16, color: scheme.primary),
+                        Icon(
+                          Icons.diversity_3,
+                          size: 16,
+                          color: scheme.primary,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             'Posting in ${target.name}',
                             style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: scheme.primary),
+                              fontWeight: FontWeight.w700,
+                              color: scheme.primary,
+                            ),
                           ),
                         ),
                         IconButton(
                           icon: const Icon(Icons.close, size: 16),
                           onPressed: () {
                             ref
-                                .read(composeTargetTribeProvider.notifier)
-                                .state = null;
+                                    .read(composeTargetTribeProvider.notifier)
+                                    .state =
+                                null;
                             ref
-                                .read(composeTargetSpaceProvider.notifier)
-                                .state = null;
+                                    .read(composeTargetSpaceProvider.notifier)
+                                    .state =
+                                null;
                           },
                           tooltip: 'Post to general feed instead',
                         ),
@@ -471,13 +783,18 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 if (personas.isNotEmpty)
                   GlassCard(
                     margin: const EdgeInsets.only(bottom: 12),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     borderRadius: 14,
                     child: Row(
                       children: [
-                        Icon(Icons.theater_comedy_outlined,
-                            size: 16, color: scheme.secondary),
+                        Icon(
+                          Icons.theater_comedy_outlined,
+                          size: 16,
+                          color: scheme.secondary,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
@@ -492,7 +809,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                         ),
                         TextButton(
                           onPressed: () => _showPersonaPicker(
-                              context, personas, activePersona),
+                            context,
+                            personas,
+                            activePersona,
+                          ),
                           child: const Text('Switch'),
                         ),
                       ],
@@ -500,8 +820,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                   ),
                 Row(
                   children: [
-                    const Text('Category',
-                        style: TextStyle(fontWeight: FontWeight.w800)),
+                    const Text(
+                      'Category',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: SizedBox(
@@ -511,8 +833,9 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                           children: [
                             for (final c in FeedCategories.all)
                               Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
                                 child: ChoiceChip(
                                   label: Text(FeedCategories.label(c)),
                                   selected: _category == c,
@@ -529,8 +852,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Text('Mood',
-                        style: TextStyle(fontWeight: FontWeight.w800)),
+                    const Text(
+                      'Mood',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: SizedBox(
@@ -540,8 +865,9 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                           children: [
                             for (final m in Moods.all)
                               Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
                                 child: ChoiceChip(
                                   avatar: Text(Moods.emoji(m)),
                                   label: Text(Moods.label(m)),
@@ -565,18 +891,61 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                   child: GlassCard(
                     padding: const EdgeInsets.all(12),
                     borderRadius: 20,
+                    tint: VentCardStyle.parse(_cardBackgroundColor),
+                    borderColor: _cardBackgroundColor == null
+                        ? null
+                        : VentCardStyle.parse(
+                            VentCardStyle.readableTextFor(
+                              _cardBackgroundColor,
+                              _cardTextColor,
+                            ),
+                          )?.withOpacity(0.16),
                     child: TagAutocomplete(
                       controller: _controller,
                       fill: true,
                       child: TextField(
                         controller: _controller,
+                        cursorColor: VentCardStyle.parse(
+                          VentCardStyle.readableTextFor(
+                            _cardBackgroundColor,
+                            _cardTextColor,
+                          ),
+                        ),
+                        style: TextStyle(
+                          color: VentCardStyle.parse(
+                            VentCardStyle.readableTextFor(
+                              _cardBackgroundColor,
+                              _cardTextColor,
+                            ),
+                          ),
+                          fontSize: 16,
+                          height: 1.45,
+                        ),
                         maxLength: 1000,
                         maxLines: null,
                         expands: true,
                         textAlignVertical: TextAlignVertical.top,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText:
                               'Drop the thought. Keep names out, keep it real.',
+                          filled: true,
+                          fillColor: Colors.transparent,
+                          hintStyle: TextStyle(
+                            color: VentCardStyle.parse(
+                              VentCardStyle.readableTextFor(
+                                _cardBackgroundColor,
+                                _cardTextColor,
+                              ),
+                            )?.withOpacity(0.55),
+                          ),
+                          counterStyle: TextStyle(
+                            color: VentCardStyle.parse(
+                              VentCardStyle.readableTextFor(
+                                _cardBackgroundColor,
+                                _cardTextColor,
+                              ),
+                            )?.withOpacity(0.72),
+                          ),
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
@@ -601,7 +970,17 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                           color: scheme.primary,
                         ),
                         label: Text(
-                            _pendingImageBytes != null ? 'Photo on' : 'Photo'),
+                          _pendingImageBytes != null ? 'Photo on' : 'Photo',
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: _openStyleSheet,
+                        icon: Icon(
+                          Icons.palette_outlined,
+                          size: 18,
+                          color: scheme.primary,
+                        ),
+                        label: const Text('Style'),
                       ),
                       TextButton.icon(
                         onPressed: () =>
@@ -613,6 +992,20 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                         ),
                         label: Text(_includePoll ? 'Poll on' : 'Poll'),
                       ),
+                      if (flagEnabled(ref, 'vent_music', fallback: false))
+                        TextButton.icon(
+                          onPressed: _openMusicPicker,
+                          icon: Icon(
+                            _selectedMusic == null
+                                ? Icons.music_note_outlined
+                                : Icons.music_note_rounded,
+                            size: 18,
+                            color: scheme.primary,
+                          ),
+                          label: Text(
+                            _selectedMusic == null ? 'Music' : 'Music on',
+                          ),
+                        ),
                       TextButton.icon(
                         onPressed: () =>
                             setState(() => _isWhisper = !_isWhisper),
@@ -630,6 +1023,20 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                     ],
                   ),
                 ),
+                if (_selectedMusic != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: MusicTrackCard(
+                      track: _selectedMusic!,
+                      onChange: _openMusicPicker,
+                      onRemove: () {
+                        unawaited(
+                          AnalyticsService.instance.track(Events.musicRemoved),
+                        );
+                        setState(() => _selectedMusic = null);
+                      },
+                    ),
+                  ),
                 if (_includePoll)
                   GlassCard(
                     margin: const EdgeInsets.only(top: 4),
@@ -681,8 +1088,8 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                     state: _success
                         ? VentlyButtonState.success
                         : _busy
-                            ? VentlyButtonState.loading
-                            : VentlyButtonState.idle,
+                        ? VentlyButtonState.loading
+                        : VentlyButtonState.idle,
                     onPressed: _submit,
                   ),
                 ),
@@ -721,9 +1128,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                     ),
                     const Spacer(),
                     IconButton(
+                      tooltip: 'Story settings',
                       icon: const Icon(Icons.settings_outlined),
                       color: context.ink,
-                      onPressed: () {},
+                      onPressed: () => context.push('/settings'),
                     ),
                   ],
                 ),
@@ -750,8 +1158,9 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color:
-                                  VentlyColors.berryMagenta.withOpacity(0.20),
+                              color: VentlyColors.berryMagenta.withOpacity(
+                                0.20,
+                              ),
                               blurRadius: 24,
                               offset: const Offset(0, 16),
                             ),
@@ -762,10 +1171,13 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 7),
+                                horizontal: 12,
+                                vertical: 7,
+                              ),
                               decoration: BoxDecoration(
-                                color:
-                                    VentlyColors.deepBurgundy.withOpacity(0.16),
+                                color: VentlyColors.deepBurgundy.withOpacity(
+                                  0.16,
+                                ),
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: const Text(
@@ -789,8 +1201,11 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                                     color: Colors.white.withOpacity(0.22),
                                   ),
                                 ),
-                                child: const Icon(Icons.favorite_rounded,
-                                    color: Colors.white, size: 48),
+                                child: const Icon(
+                                  Icons.favorite_rounded,
+                                  color: Colors.white,
+                                  size: 48,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 18),
@@ -883,8 +1298,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                           children: [
                             Row(
                               children: [
-                                const Icon(Icons.visibility_outlined,
-                                    color: VentlyColors.berryMagenta),
+                                const Icon(
+                                  Icons.visibility_outlined,
+                                  color: VentlyColors.berryMagenta,
+                                ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
@@ -922,8 +1339,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                             ),
                             Row(
                               children: [
-                                const Icon(Icons.timer_outlined,
-                                    color: VentlyColors.berryMagenta),
+                                const Icon(
+                                  Icons.timer_outlined,
+                                  color: VentlyColors.berryMagenta,
+                                ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
@@ -1000,10 +1419,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     );
   }
 
-  void _selectStoryPreset({
-    required String category,
-    required String mood,
-  }) {
+  void _selectStoryPreset({required String category, required String mood}) {
     setState(() {
       _category = category;
       _mood = mood;
@@ -1011,9 +1427,17 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   }
 
   void _showPersonaPicker(
-      BuildContext context, List<Persona> personas, Persona? active) {
+    BuildContext context,
+    List<Persona> personas,
+    Persona? active,
+  ) {
     showModalBottomSheet(
       context: context,
+      // Above the floating nav. HomeShell paints its pill in a Stack over the
+      // branch, so a sheet opened on the branch navigator sits underneath it —
+      // which put this sheet's own action row behind the nav and made Publish
+      // unreachable except at its bottom few pixels.
+      useRootNavigator: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -1026,9 +1450,9 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
             children: [
               Text(
                 'Post as',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 10),
               ListTile(
@@ -1045,7 +1469,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: AnonymousAvatar(
-                      seed: p.avatarSeed, label: p.pseudonym, size: 30),
+                    seed: p.avatarSeed,
+                    label: p.pseudonym,
+                    size: 30,
+                  ),
                   title: Text('@${p.pseudonym}'),
                   trailing: active?.personaId == p.personaId
                       ? const Icon(Icons.check)
@@ -1069,8 +1496,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Row(
           children: [
-            Icon(Icons.shield_outlined,
-                color: Theme.of(ctx).colorScheme.primary),
+            Icon(
+              Icons.shield_outlined,
+              color: Theme.of(ctx).colorScheme.primary,
+            ),
             const SizedBox(width: 8),
             const Text('Held back by safety AI'),
           ],
@@ -1106,8 +1535,9 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     return await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
             title: const Text('Heads up'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1135,6 +1565,81 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           ),
         ) ??
         false;
+  }
+}
+
+class _ComposeColorSwatch extends StatelessWidget {
+  const _ComposeColorSwatch({
+    required this.color,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Color color;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final outline = selected
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).dividerColor.withOpacity(0.55);
+    final checkColor =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF21161B);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 64,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: outline, width: selected ? 3 : 1),
+                  boxShadow: selected
+                      ? [
+                          BoxShadow(
+                            color: outline.withOpacity(0.2),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: selected
+                    ? Icon(Icons.check_rounded, color: checkColor, size: 22)
+                    : null,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1175,11 +1680,7 @@ class _StoryCreateOption extends StatelessWidget {
                 color: pale ? const Color(0xFFFFEAF1) : color,
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                icon,
-                color: pale ? color : Colors.white,
-                size: 26,
-              ),
+              child: Icon(icon, color: pale ? color : Colors.white, size: 26),
             ),
             const SizedBox(height: 14),
             Text(
@@ -1234,8 +1735,11 @@ class _PendingImageChip extends StatelessWidget {
                   color: Colors.black.withOpacity(0.55),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.close_rounded,
-                    color: Colors.white, size: 18),
+                child: const Icon(
+                  Icons.close_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
               ),
             ),
           ),

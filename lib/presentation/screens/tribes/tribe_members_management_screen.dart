@@ -6,6 +6,7 @@ import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_premium_background.dart';
 
@@ -26,11 +27,28 @@ class _TribeMembersManagementScreenState
   @override
   Widget build(BuildContext context) {
     final tribe = ref.watch(tribeBySlugProvider(widget.slug)).valueOrNull;
+    final me = ref.watch(sessionProvider);
     if (tribe == null) {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(),
         body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (me == null || tribe.keeperId != me.userId) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(title: const Text('Members')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(28),
+            child: Text(
+              'Only the current Plug can manage Tribe members.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
       );
     }
     final members = ref.watch(tribeMembersProvider(tribe.tribeId));
@@ -39,8 +57,10 @@ class _TribeMembersManagementScreenState
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('Members',
-            style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Members',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         actions: [
           IconButton(
             tooltip: 'Invite member',
@@ -111,8 +131,9 @@ class _TribeMembersManagementScreenState
                   final visible = _filterMembers(items);
                   if (visible.isEmpty) {
                     return const SliverFillRemaining(
-                      child:
-                          Center(child: Text('No members match this filter.')),
+                      child: Center(
+                        child: Text('No members match this filter.'),
+                      ),
                     );
                   }
                   return SliverPadding(
@@ -141,16 +162,19 @@ class _TribeMembersManagementScreenState
 
   List<TribeMemberRow> _filterMembers(List<TribeMemberRow> members) {
     final normalized = query.trim().replaceAll('@', '').toLowerCase();
-    return members.where((member) {
-      if (normalized.isNotEmpty &&
-          !member.pseudonym.toLowerCase().contains(normalized)) return false;
-      return switch (filter) {
-        'mods' => member.isKeeper || member.isMod,
-        'muted' => member.isMuted,
-        'warned' => member.hasWarnings,
-        _ => true,
-      };
-    }).toList(growable: false);
+    return members
+        .where((member) {
+          if (normalized.isNotEmpty &&
+              !member.pseudonym.toLowerCase().contains(normalized))
+            return false;
+          return switch (filter) {
+            'mods' => member.isKeeper || member.isMod,
+            'muted' => member.isMuted,
+            'warned' => member.hasWarnings,
+            _ => true,
+          };
+        })
+        .toList(growable: false);
   }
 
   void _refresh(String tribeId) {
@@ -165,7 +189,9 @@ class _TribeMembersManagementScreenState
     bool approve,
   ) async {
     try {
-      await ref.read(repositoryProvider).respondTribeJoinRequest(
+      await ref
+          .read(repositoryProvider)
+          .respondTribeJoinRequest(
             requestId: request.requestId,
             approve: approve,
           );
@@ -212,7 +238,9 @@ class _TribeMembersManagementScreenState
       muteUntil = DateTime.now().add(duration);
     }
     try {
-      await ref.read(repositoryProvider).manageTribeMember(
+      await ref
+          .read(repositoryProvider)
+          .manageTribeMember(
             tribeId: tribeId,
             userId: member.userId,
             action: action,
@@ -233,84 +261,94 @@ class _TribeMembersManagementScreenState
   }
 
   Future<String?> _reasonDialog(String action, String pseudonym) async {
-    final controller = TextEditingController();
     final result = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-            '${action[0].toUpperCase()}${action.substring(1)} @$pseudonym'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 240,
-          minLines: 2,
-          maxLines: 4,
-          decoration: const InputDecoration(labelText: 'Reason'),
+      builder: (dialogContext) => ModalTextControllerScope(
+        initialValues: const [''],
+        builder: (dialogContext, controllers) => AlertDialog(
+          title: Text(
+            '${action[0].toUpperCase()}${action.substring(1)} @$pseudonym',
+          ),
+          content: TextField(
+            controller: controllers.single,
+            autofocus: true,
+            maxLength: 240,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(labelText: 'Reason'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, controllers.single.text.trim()),
+              child: const Text('Confirm'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Confirm'),
-          ),
-        ],
       ),
     );
-    controller.dispose();
     return result;
   }
 
   Future<void> _showInviteDialog(Tribe tribe) async {
-    final controller = TextEditingController();
     final username = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Invite member'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Username',
-            prefixText: '@',
-            prefixIcon: Icon(Icons.person_search_outlined),
+      builder: (dialogContext) => ModalTextControllerScope(
+        initialValues: const [''],
+        builder: (dialogContext, controllers) => AlertDialog(
+          title: const Text('Invite member'),
+          content: TextField(
+            controller: controllers.single,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Username',
+              prefixText: '@',
+              prefixIcon: Icon(Icons.person_search_outlined),
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, controllers.single.text.trim()),
+              child: const Text('Invite'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Invite'),
-          ),
-        ],
       ),
     );
-    controller.dispose();
     if (username == null || username.isEmpty || !mounted) return;
-    final user =
-        await ref.read(repositoryProvider).findUserByPseudonym(username);
-    if (user == null) {
+    try {
+      final user = await ref
+          .read(repositoryProvider)
+          .findUserByPseudonym(username);
+      if (user == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No user found with that username.')),
+        );
+        return;
+      }
+      await ref
+          .read(repositoryProvider)
+          .inviteToTribe(tribeId: tribe.tribeId, invitedUserId: user.userId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No user found with that username.')),
+        SnackBar(content: Text('Invitation sent to @${user.pseudonym}.')),
       );
-      return;
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send this invitation: $error')),
+      );
     }
-    await ref.read(repositoryProvider).inviteToTribe(
-          tribeId: tribe.tribeId,
-          invitedUserId: user.userId,
-        );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Invitation sent to @${user.pseudonym}.')),
-    );
   }
 }
 
@@ -326,12 +364,14 @@ class _RequestsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Join requests · ${requests.length}',
-              style: TextStyle(
-                color: context.ink,
-                fontWeight: FontWeight.w900,
-                fontSize: 15,
-              )),
+          Text(
+            'Join requests · ${requests.length}',
+            style: TextStyle(
+              color: context.ink,
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
+            ),
+          ),
           const SizedBox(height: 9),
           for (final request in requests)
             Padding(
@@ -352,12 +392,16 @@ class _RequestsSection extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('@${request.pseudonym}',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w900)),
+                          Text(
+                            '@${request.pseudonym}',
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
                           if (request.note?.isNotEmpty == true)
-                            Text(request.note!,
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(
+                              request.note!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                         ],
                       ),
                     ),
@@ -402,6 +446,7 @@ class _MemberCard extends StatelessWidget {
             UserProfileLink(
               userId: member.userId,
               pseudonym: member.pseudonym,
+              displayName: member.displayName,
               avatarSeed: member.avatarSeed,
               profilePhotoUrl: member.profilePhotoUrl,
               size: 46,
@@ -411,16 +456,20 @@ class _MemberCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('@${member.pseudonym}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w900)),
-                  Text(member.role.toUpperCase(),
-                      style: const TextStyle(
-                        color: VentlyColors.berryMagenta,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                      )),
+                  Text(
+                    member.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  Text(
+                    '@${member.pseudonym} · ${member.role.toUpperCase()}',
+                    style: const TextStyle(
+                      color: VentlyColors.berryMagenta,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                   if (member.isMuted || member.hasWarnings)
                     Text(
                       [
@@ -444,21 +493,27 @@ class _MemberCard extends StatelessWidget {
                 itemBuilder: (_) => [
                   PopupMenuItem(
                     value: member.isMod ? 'demote' : 'promote',
-                    child: Text(member.isMod
-                        ? 'Demote moderator'
-                        : 'Promote moderator'),
+                    child: Text(
+                      member.isMod ? 'Demote moderator' : 'Promote moderator',
+                    ),
                   ),
                   const PopupMenuItem(
-                      value: 'warn', child: Text('Warn member')),
+                    value: 'warn',
+                    child: Text('Warn member'),
+                  ),
                   const PopupMenuItem(
-                      value: 'mute', child: Text('Mute member')),
+                    value: 'mute',
+                    child: Text('Mute member'),
+                  ),
                   if (member.isMuted)
                     const PopupMenuItem(
                       value: 'unmute',
                       child: Text('Remove mute'),
                     ),
                   const PopupMenuItem(
-                      value: 'remove', child: Text('Remove member')),
+                    value: 'remove',
+                    child: Text('Remove member'),
+                  ),
                   const PopupMenuItem(value: 'ban', child: Text('Ban member')),
                 ],
               ),

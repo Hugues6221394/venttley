@@ -8,7 +8,7 @@ import 'package:record/record.dart';
 import 'vently_audio_session.dart';
 
 /// Thin wrapper around the `record` package for Whisper voice capture.
-/// Exposes a tiny surface — start / stop / cancel + duration polling —
+/// Exposes a small lifecycle surface — start / pause / resume / stop / cancel —
 /// so the UI doesn't reach into AudioRecorder directly.
 ///
 /// Files are written to the app's temp dir and returned as bytes after
@@ -19,11 +19,21 @@ class WhisperRecorder {
   static final WhisperRecorder instance = WhisperRecorder._();
 
   final AudioRecorder _recorder = AudioRecorder();
+  final Stopwatch _activeSegmentClock = Stopwatch();
   String? _activePath;
-  DateTime? _startedAt;
+  Duration _capturedDuration = Duration.zero;
+  bool _paused = false;
 
   bool get isRecording => _activePath != null;
-  DateTime? get startedAt => _startedAt;
+  bool get isPaused => _paused;
+
+  /// Captured speech time. Time spent paused is deliberately excluded.
+  Duration get elapsed {
+    if (_activePath == null || _paused) {
+      return _capturedDuration;
+    }
+    return _capturedDuration + _activeSegmentClock.elapsed;
+  }
 
   /// Asks for the mic permission and starts capture in AAC. Returns
   /// false if the user denied or the platform refused. Safe to call
@@ -48,11 +58,44 @@ class WhisperRecorder {
         path: path,
       );
       _activePath = path;
-      _startedAt = DateTime.now();
+      _capturedDuration = Duration.zero;
+      _activeSegmentClock
+        ..reset()
+        ..start();
+      _paused = false;
       return true;
     } catch (_) {
-      _activePath = null;
-      _startedAt = null;
+      _resetState();
+      return false;
+    }
+  }
+
+  Future<bool> pause() async {
+    if (_activePath == null || _paused) return false;
+    try {
+      await _recorder.pause();
+      _capturedDuration += _activeSegmentClock.elapsed;
+      _activeSegmentClock
+        ..stop()
+        ..reset();
+      _paused = true;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> resume() async {
+    if (_activePath == null || !_paused) return false;
+    try {
+      await VentlyAudioSession.instance.ensureRecording();
+      await _recorder.resume();
+      _activeSegmentClock
+        ..reset()
+        ..start();
+      _paused = false;
+      return true;
+    } catch (_) {
       return false;
     }
   }
@@ -61,20 +104,16 @@ class WhisperRecorder {
   /// nothing was recorded (or capture failed) returns null.
   Future<({Uint8List bytes, Duration duration})?> stop() async {
     if (_activePath == null) return null;
+    final duration = elapsed;
     try {
       await _recorder.stop();
     } catch (_) {/* ignore — file may already be sealed */}
     final path = _activePath!;
-    final startedAt = _startedAt;
-    _activePath = null;
-    _startedAt = null;
+    _resetState();
     try {
       final file = File(path);
       if (!await file.exists()) return null;
       final bytes = await file.readAsBytes();
-      final duration = startedAt == null
-          ? Duration.zero
-          : DateTime.now().difference(startedAt);
       return (bytes: bytes, duration: duration);
     } catch (_) {
       return null;
@@ -87,8 +126,7 @@ class WhisperRecorder {
       await _recorder.stop();
     } catch (_) {/* ignore */}
     final path = _activePath;
-    _activePath = null;
-    _startedAt = null;
+    _resetState();
     if (path != null) {
       try {
         await File(path).delete();
@@ -99,6 +137,15 @@ class WhisperRecorder {
   Future<bool> _ensureMicPermission() async {
     final status = await Permission.microphone.request();
     return status.isGranted || status.isLimited;
+  }
+
+  void _resetState() {
+    _activePath = null;
+    _activeSegmentClock
+      ..stop()
+      ..reset();
+    _capturedDuration = Duration.zero;
+    _paused = false;
   }
 
   Future<void> dispose() async {
