@@ -11,6 +11,7 @@ import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../home/home_shell.dart';
 
 class TribeSettingsScreen extends ConsumerWidget {
   const TribeSettingsScreen({super.key, required this.slug});
@@ -183,7 +184,16 @@ class TribeSettingsScreen extends ConsumerWidget {
                       onDelete: () => _showDeleteDialog(context, ref, overview),
                     ),
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                  // Clear the floating nav, not an arbitrary 40. HomeShell
+                  // paints its pill over the branch, so at 40 the last row —
+                  // Delete Tribe — sat at y~792 against a pill occupying
+                  // ~770-835: tapping the app's most destructive action
+                  // activated a nav tab instead. It was unreachable rather
+                  // than dangerous, but the same padding also swallowed
+                  // Archive and Transfer at the bottom of the list.
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: HomeShell.navClearance),
+                  ),
                 ],
               ),
             ),
