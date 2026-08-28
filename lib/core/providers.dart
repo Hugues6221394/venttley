@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/repositories/vently_repository.dart';
 import '../data/services/analytics_service.dart';
+import '../data/services/device_identity_service.dart';
 import '../data/services/feature_flags_service.dart';
 import '../data/services/moderation_service.dart';
 import '../data/services/music_playback_service.dart';
@@ -27,6 +28,11 @@ import 'logger.dart';
 
 final repositoryProvider = Provider<VentlyRepository>((ref) {
   return VentlyRepository();
+});
+
+/// This installation's stable identity, used to register device sessions.
+final deviceIdentityServiceProvider = Provider<DeviceIdentityService>((ref) {
+  return DeviceIdentityService();
 });
 
 final musicPlaybackProvider = ChangeNotifierProvider<MusicPlaybackController>(

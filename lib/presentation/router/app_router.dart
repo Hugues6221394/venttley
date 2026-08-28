@@ -29,6 +29,7 @@ import '../screens/onboarding/verify_email_screen.dart';
 import '../screens/notifications/notifications_screen.dart';
 import '../screens/onboarding/welcome_screen.dart';
 import '../screens/plugz/plug_profile_screen.dart';
+import '../screens/profile/active_devices_screen.dart';
 import '../screens/profile/avatar_builder_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
 import '../screens/profile/profile_screen.dart';
@@ -426,6 +427,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/profile/password-security',
                 builder: (_, __) => const PasswordSecurityScreen(),
+              ),
+              GoRoute(
+                path: '/profile/devices',
+                builder: (_, __) => const ActiveDevicesScreen(),
               ),
               GoRoute(
                 path: '/settings',

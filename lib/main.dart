@@ -294,6 +294,74 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       // temporary clock skew must never become uncaught app exceptions.
       Logger.instance.warn('presence.heartbeat_failed');
     }
+    await _verifyDeviceSessionSafely();
+  }
+
+  /// Notice a session that was revoked from another device.
+  ///
+  /// Deleting the GoTrue session stops the refresh token, but the access token
+  /// already in memory stays valid until it expires — up to an hour. Riding the
+  /// existing 60s presence heartbeat closes that gap: "sign this device out"
+  /// takes effect within a minute instead of within an hour.
+  ///
+  /// Only an explicit false signs out. A network error must never eject
+  /// someone from their own account.
+  Future<void> _verifyDeviceSessionSafely() async {
+    if (ref.read(sessionProvider) == null) return;
+    bool alive;
+    try {
+      alive = await ref.read(repositoryProvider).touchDeviceSession();
+    } catch (_) {
+      Logger.instance.warn('security.session_check_failed');
+      return;
+    }
+    if (alive || !mounted || ref.read(sessionProvider) == null) return;
+
+    Logger.instance.info('security.session_revoked_remotely');
+    _stopPresenceHeartbeat();
+    try {
+      await ref.read(sessionProvider.notifier).logout();
+    } catch (_) {
+      Logger.instance.warn('security.revoked_signout_failed');
+    }
+  }
+
+  /// Bind this installation to the session that just started.
+  ///
+  /// Runs on sign-in and on every cold start, because a session can outlive the
+  /// app process and would otherwise never appear in the user's device list.
+  Future<void> _registerDeviceSafely(String userId) async {
+    try {
+      final identity = await ref.read(deviceIdentityServiceProvider).read();
+      if (!mounted || ref.read(sessionProvider)?.userId != userId) return;
+
+      final registration = await ref
+          .read(repositoryProvider)
+          .registerDeviceSession(
+            deviceId: identity.deviceId,
+            deviceName: identity.deviceName,
+            deviceType: identity.deviceType,
+            osName: identity.osName,
+            osVersion: identity.osVersion,
+            appVersion: identity.appVersion,
+          );
+
+      if (registration == null || !mounted) return;
+      if (ref.read(sessionProvider)?.userId != userId) return;
+
+      // The user previously told us this device was not them. Honour that
+      // now rather than waiting for the next heartbeat.
+      if (registration.isBlocked) {
+        Logger.instance.info('security.blocked_device_signed_out');
+        _stopPresenceHeartbeat();
+        await ref.read(sessionProvider.notifier).logout();
+      }
+    } catch (_) {
+      // Never block sign-in on this. A device that fails to register is
+      // invisible in the session list, which is a worse list — not a worse
+      // login.
+      Logger.instance.warn('security.device_register_failed');
+    }
   }
 
   void _stopPresenceHeartbeat() {
@@ -406,6 +474,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
         handlePendingNotificationNavigation(ref);
         _flushPendingDeepLink();
         unawaited(_startPushForSession(next.userId));
+        unawaited(_registerDeviceSafely(next.userId));
         ref.invalidate(tribeChatInboxProvider);
         _startPresenceHeartbeat();
       } else {

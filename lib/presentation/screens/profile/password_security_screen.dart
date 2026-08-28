@@ -21,11 +21,31 @@ class _PasswordSecurityScreenState
     extends ConsumerState<PasswordSecurityScreen> {
   bool _twoFactorOn = false;
   bool _loadingFactors = true;
+  int? _deviceCount;
 
   @override
   void initState() {
     super.initState();
     _loadFactors();
+    _loadDeviceCount();
+  }
+
+  /// Just the count for the tile subtitle. The screen behind it does the real
+  /// work; this is only here so the row says something true before you tap it.
+  Future<void> _loadDeviceCount() async {
+    try {
+      final sessions = await ref.read(repositoryProvider).myDeviceSessions();
+      if (mounted) setState(() => _deviceCount = sessions.length);
+    } catch (_) {
+      // Leave the subtitle generic rather than showing a wrong number.
+    }
+  }
+
+  String _deviceSummary() {
+    final count = _deviceCount;
+    if (count == null) return 'See and manage your signed-in devices';
+    if (count <= 1) return 'This device only';
+    return '$count devices signed in';
   }
 
   Future<void> _loadFactors() async {
@@ -120,17 +140,12 @@ class _PasswordSecurityScreenState
           const SizedBox(height: 20),
           const _SectionLabel('Where you\'re logged in'),
           _Tile(
-            icon: Icons.phone_iphone_rounded,
-            title: 'This device',
-            subtitle: '${_platformName(context)} • active now',
-            trailing: Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: Color(0xFF2ECC71),
-                shape: BoxShape.circle,
-              ),
-            ),
+            icon: Icons.devices_rounded,
+            title: 'Active devices',
+            subtitle: _deviceSummary(),
+            onTap: () => context.push('/profile/devices').then((_) {
+              _loadDeviceCount();
+            }),
           ),
           _Tile(
             icon: Icons.logout_rounded,
@@ -758,21 +773,6 @@ class _PasswordSecurityScreenState
 
   // ---- Helpers -----------------------------------------------------------
 
-  String _platformName(BuildContext context) {
-    switch (Theme.of(context).platform) {
-      case TargetPlatform.iOS:
-        return 'iPhone';
-      case TargetPlatform.android:
-        return 'Android';
-      case TargetPlatform.macOS:
-        return 'Mac';
-      case TargetPlatform.windows:
-        return 'Windows';
-      default:
-        return 'This device';
-    }
-  }
-
   bool _looksLikeEmail(String v) =>
       RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v);
 
@@ -940,7 +940,6 @@ class _Tile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.onTap,
-    this.trailing,
     this.trailingBadge,
     this.danger = false,
   });
@@ -948,7 +947,6 @@ class _Tile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback? onTap;
-  final Widget? trailing;
   final String? trailingBadge;
   final bool danger;
 
@@ -1021,9 +1019,6 @@ class _Tile extends StatelessWidget {
                       ),
                     ),
                   ),
-                ] else if (trailing != null) ...[
-                  const SizedBox(width: 8),
-                  trailing!,
                 ] else if (onTap != null)
                   Icon(
                     Icons.chevron_right_rounded,

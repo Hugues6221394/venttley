@@ -31,4 +31,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20260827222451': 'complete_identity_mentions_music_rollout',
   '20260828120000': 'open_tribe_creation_with_age_floor',
   '20260828201411': 'revoke_client_truncate_defaults',
+  '20260828230000': 'device_sessions_and_security_events',
 };

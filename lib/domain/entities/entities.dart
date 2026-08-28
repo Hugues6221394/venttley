@@ -2707,3 +2707,167 @@ class TribeCreationEligibility {
   bool get canCreate => status == 'adult';
   bool get needsBirthMonth => status == 'month_required';
 }
+
+
+/// One place the account is currently signed in.
+class DeviceSession {
+  const DeviceSession({
+    required this.deviceSessionId,
+    required this.deviceRowId,
+    required this.deviceType,
+    required this.isCurrent,
+    required this.isTrusted,
+    required this.riskScore,
+    required this.startedAt,
+    required this.lastSeenAt,
+    this.deviceName,
+    this.osName,
+    this.osVersion,
+    this.appVersion,
+    this.country,
+  });
+
+  final String deviceSessionId;
+  final String deviceRowId;
+  final String? deviceName;
+  final String deviceType;
+  final String? osName;
+  final String? osVersion;
+  final String? appVersion;
+
+  /// ISO-3166 alpha-2, resolved at the CDN edge. Country granularity only —
+  /// the UI must never present this as a precise location.
+  final String? country;
+
+  final bool isCurrent;
+  final bool isTrusted;
+  final int riskScore;
+  final DateTime startedAt;
+  final DateTime lastSeenAt;
+
+  /// What to print on the row. Falls back through model, then OS, then a
+  /// generic label, so there is always something readable.
+  String get label {
+    final name = deviceName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    final os = osName?.trim();
+    if (os != null && os.isNotEmpty) return '$os device';
+    return 'Unknown device';
+  }
+
+  String get platformSummary {
+    final parts = <String>[
+      if (osName != null && osName!.trim().isNotEmpty) osName!.trim(),
+      if (osVersion != null && osVersion!.trim().isNotEmpty) osVersion!.trim(),
+    ];
+    return parts.join(' ');
+  }
+
+  factory DeviceSession.fromJson(Map<String, dynamic> json) => DeviceSession(
+    deviceSessionId: '${json['device_session_id']}',
+    deviceRowId: '${json['device_row_id']}',
+    deviceName: json['device_name'] as String?,
+    deviceType: (json['device_type'] as String?) ?? 'unknown',
+    osName: json['os_name'] as String?,
+    osVersion: json['os_version'] as String?,
+    appVersion: json['app_version'] as String?,
+    country: json['country'] as String?,
+    isCurrent: json['is_current'] == true,
+    isTrusted: json['is_trusted'] == true,
+    riskScore: (json['risk_score'] as num?)?.toInt() ?? 0,
+    startedAt:
+        DateTime.tryParse('${json['started_at']}') ?? DateTime.now().toUtc(),
+    lastSeenAt:
+        DateTime.tryParse('${json['last_seen_at']}') ?? DateTime.now().toUtc(),
+  );
+}
+
+
+/// One entry in the account's security history.
+class SecurityEvent {
+  const SecurityEvent({
+    required this.eventId,
+    required this.kind,
+    required this.severity,
+    required this.createdAt,
+    this.deviceName,
+    this.context = const <String, dynamic>{},
+  });
+
+  final String eventId;
+
+  /// Server-side enum. Unknown values are rendered generically rather than
+  /// dropped — a client that has not shipped yet must not hide history.
+  final String kind;
+
+  /// 'info' | 'warning' | 'critical'.
+  final String severity;
+
+  final String? deviceName;
+  final Map<String, dynamic> context;
+  final DateTime createdAt;
+
+  bool get isCritical => severity == 'critical';
+
+  String get title => switch (kind) {
+    'login' => 'Signed in',
+    'login_new_device' => 'New device signed in',
+    'login_blocked_device' => 'Blocked device tried to sign in',
+    'suspicious_login' => 'Unusual sign-in',
+    'suspicious_login_confirmed' => 'Sign-in confirmed as you',
+    'suspicious_login_rejected' => 'Sign-in reported as not you',
+    'password_changed' => 'Password changed',
+    'two_factor_enabled' => 'Two-factor authentication turned on',
+    'two_factor_disabled' => 'Two-factor authentication turned off',
+    'recovery_email_changed' => 'Recovery email updated',
+    'recovery_phrase_rotated' => 'Recovery phrase regenerated',
+    'device_trusted' => 'Device trusted',
+    'device_revoked' => 'Device signed out',
+    'device_blocked' => 'Device blocked',
+    'sessions_revoked_all' => 'Signed out of other devices',
+    _ => 'Security activity',
+  };
+
+  factory SecurityEvent.fromJson(Map<String, dynamic> json) => SecurityEvent(
+    eventId: '${json['event_id']}',
+    kind: (json['kind'] as String?) ?? 'unknown',
+    severity: (json['severity'] as String?) ?? 'info',
+    deviceName: json['device_name'] as String?,
+    context: (json['context'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{},
+    createdAt:
+        DateTime.tryParse('${json['created_at']}') ?? DateTime.now().toUtc(),
+  );
+}
+
+
+/// Outcome of registering this installation with the server after sign-in.
+class DeviceRegistration {
+  const DeviceRegistration({
+    required this.deviceRowId,
+    required this.isNewDevice,
+    required this.isBlocked,
+    required this.riskScore,
+    this.deviceSessionId,
+  });
+
+  final String deviceRowId;
+  final String? deviceSessionId;
+  final bool isNewDevice;
+
+  /// The user previously rejected this device. The client must sign itself out.
+  final bool isBlocked;
+
+  final int riskScore;
+
+  factory DeviceRegistration.fromJson(Map<String, dynamic> json) =>
+      DeviceRegistration(
+        deviceRowId: '${json['device_row_id']}',
+        deviceSessionId: json['device_session_id'] == null
+            ? null
+            : '${json['device_session_id']}',
+        isNewDevice: json['is_new_device'] == true,
+        isBlocked: json['is_blocked'] == true,
+        riskScore: (json['risk_score'] as num?)?.toInt() ?? 0,
+      );
+}

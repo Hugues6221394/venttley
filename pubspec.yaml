@@ -83,6 +83,11 @@ dependencies:
   qr_flutter: ^4.1.0
   connectivity_plus: ^6.1.0
 
+  # Model names for the device list. Without it every row reads "Android
+  # device", which tells nobody which session to end.
+  device_info_plus: ^12.4.0
+  device_info_plus: ^12.4.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

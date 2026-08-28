@@ -6084,6 +6084,122 @@ class SupabaseBackend {
     await _client.rpc('touch_last_seen');
   }
 
+  // ---- Devices, sessions, and the security ledger -------------------------
+
+  /// Bind this installation to the current auth session.
+  ///
+  /// Safe to call repeatedly: the same GoTrue session reattaches to its
+  /// existing row rather than opening a second one.
+  Future<DeviceRegistration> registerDeviceSession({
+    required String deviceId,
+    String? deviceName,
+    String deviceType = 'unknown',
+    String? osName,
+    String? osVersion,
+    String? appVersion,
+  }) async {
+    final rows =
+        await _client.rpc(
+              'register_device_session',
+              params: {
+                'p_device_id': deviceId,
+                'p_device_name': deviceName,
+                'p_device_type': deviceType,
+                'p_os_name': osName,
+                'p_os_version': osVersion,
+                'p_app_version': appVersion,
+              },
+            )
+            as List<dynamic>;
+    if (rows.isEmpty) {
+      throw StateError('Device registration returned no result.');
+    }
+    return DeviceRegistration.fromJson(rows.first as Map<String, dynamic>);
+  }
+
+  Future<List<DeviceSession>> myDeviceSessions() async {
+    final rows = await _client.rpc('my_device_sessions') as List<dynamic>;
+    return rows
+        .map((r) => DeviceSession.fromJson(r as Map<String, dynamic>))
+        .toList(growable: false);
+  }
+
+  Future<bool> revokeDeviceSession(String deviceSessionId) async {
+    final res = await _client.rpc(
+      'revoke_device_session',
+      params: {'p_device_session_id': deviceSessionId},
+    );
+    return res == true;
+  }
+
+  /// Ends every session except this one. Returns how many were closed.
+  Future<int> revokeOtherDeviceSessions() async {
+    final res = await _client.rpc('revoke_other_device_sessions');
+    return (res as int?) ?? 0;
+  }
+
+  /// Returns false when this session has been revoked elsewhere, or its device
+  /// blocked. The caller is expected to sign out locally when that happens.
+  Future<bool> touchDeviceSession() async {
+    final res = await _client.rpc('touch_device_session');
+    return res != false;
+  }
+
+  Future<bool> trustDevice(String deviceRowId) async {
+    final res = await _client.rpc(
+      'trust_device',
+      params: {'p_device_row_id': deviceRowId},
+    );
+    return res == true;
+  }
+
+  /// Blocks the device and ends its other sessions. Returns how many closed.
+  Future<int> blockDevice(String deviceRowId) async {
+    final res = await _client.rpc(
+      'block_device',
+      params: {'p_device_row_id': deviceRowId},
+    );
+    return (res as int?) ?? 0;
+  }
+
+  Future<List<SecurityEvent>> mySecurityEvents({
+    int limit = 30,
+    DateTime? before,
+  }) async {
+    final rows =
+        await _client.rpc(
+              'my_security_events',
+              params: {
+                'p_limit': limit,
+                'p_before': before?.toUtc().toIso8601String(),
+              },
+            )
+            as List<dynamic>;
+    return rows
+        .map((r) => SecurityEvent.fromJson(r as Map<String, dynamic>))
+        .toList(growable: false);
+  }
+
+  /// For changes GoTrue owns, where no trigger of ours can observe them.
+  /// The server enforces which kinds a client may report.
+  Future<void> logSecurityEvent(
+    String kind, {
+    Map<String, dynamic>? context,
+  }) async {
+    await _client.rpc(
+      'log_my_security_event',
+      params: {'p_kind': kind, 'p_context': context ?? <String, dynamic>{}},
+    );
+  }
+
+  /// Callable before authentication, so it never assumes a session.
+  Future<void> recordFailedLogin(String identifier) async {
+    await _client.rpc(
+      'record_failed_login',
+      params: {'p_identifier': identifier},
+    );
+  }
+
   /// Peer presence tier: online | recent | offline | hidden (+ last_seen).
   Future<({String state, DateTime? lastSeen})> peerPresence(
     String userId,

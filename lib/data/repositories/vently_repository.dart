@@ -3312,6 +3312,88 @@ class VentlyRepository implements MusicProvider {
     return Future.value();
   }
 
+  // ---- Devices, sessions, and the security ledger -------------------------
+
+  /// Bind this installation to the current session. Idempotent per session.
+  Future<DeviceRegistration?> registerDeviceSession({
+    required String deviceId,
+    String? deviceName,
+    String deviceType = 'unknown',
+    String? osName,
+    String? osVersion,
+    String? appVersion,
+  }) {
+    final live = _live;
+    if (live == null) return Future.value();
+    return live.registerDeviceSession(
+      deviceId: deviceId,
+      deviceName: deviceName,
+      deviceType: deviceType,
+      osName: osName,
+      osVersion: osVersion,
+      appVersion: appVersion,
+    );
+  }
+
+  Future<List<DeviceSession>> myDeviceSessions() {
+    final live = _live;
+    if (live != null) return live.myDeviceSessions();
+    return Future.value(const <DeviceSession>[]);
+  }
+
+  Future<bool> revokeDeviceSession(String deviceSessionId) {
+    final live = _live;
+    if (live != null) return live.revokeDeviceSession(deviceSessionId);
+    return Future.value(false);
+  }
+
+  Future<int> revokeOtherDeviceSessions() {
+    final live = _live;
+    if (live != null) return live.revokeOtherDeviceSessions();
+    return Future.value(0);
+  }
+
+  /// False means this session was revoked elsewhere and the app should sign
+  /// out. The mock backend has no sessions to revoke, so it answers true.
+  Future<bool> touchDeviceSession() {
+    final live = _live;
+    if (live != null) return live.touchDeviceSession();
+    return Future.value(true);
+  }
+
+  Future<bool> trustDevice(String deviceRowId) {
+    final live = _live;
+    if (live != null) return live.trustDevice(deviceRowId);
+    return Future.value(false);
+  }
+
+  Future<int> blockDevice(String deviceRowId) {
+    final live = _live;
+    if (live != null) return live.blockDevice(deviceRowId);
+    return Future.value(0);
+  }
+
+  Future<List<SecurityEvent>> mySecurityEvents({
+    int limit = 30,
+    DateTime? before,
+  }) {
+    final live = _live;
+    if (live != null) return live.mySecurityEvents(limit: limit, before: before);
+    return Future.value(const <SecurityEvent>[]);
+  }
+
+  Future<void> logSecurityEvent(String kind, {Map<String, dynamic>? context}) {
+    final live = _live;
+    if (live != null) return live.logSecurityEvent(kind, context: context);
+    return Future.value();
+  }
+
+  Future<void> recordFailedLogin(String identifier) {
+    final live = _live;
+    if (live != null) return live.recordFailedLogin(identifier);
+    return Future.value();
+  }
+
   /// Peer presence tier: online | recent | offline | hidden.
   Future<({String state, DateTime? lastSeen})> peerPresence(String userId) {
     final live = _live;
