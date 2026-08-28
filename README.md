@@ -78,13 +78,16 @@ lib/
     ├── screens/                # onboarding, feed, tribes, questions, inbox, profile
     ├── theme/                  # VentlyTheme.light/dark + VentlyColors
     └── widgets/                # AnonymousAvatar, PostCard, PromptCard, etc.
+admin/
+├── app/(dashboard)/            # Next.js staff operations and moderation pages
+├── app/api/                    # authenticated admin/auth route handlers
+├── components/                 # console shell and shared UI
+├── lib/                        # RBAC, Supabase clients, audit, Redis, IP rules
+└── proxy.ts                    # session, IP, MFA, and route boundary
 supabase/
-└── migrations/
-    ├── 0001_init_schema.sql    # Core schema, indexes, triggers, RPCs
-    ├── 0003_security_hardening.sql
-    ├── 0004_username_auth_and_recovery.sql
-    ├── 0005_hybrid_tribes.sql
-    └── 0006_reports.sql
+├── migrations/                 # ordered schema, RLS, RPC, trigger changes
+├── functions/                  # authenticated/webhook Edge Functions
+└── tests/database/             # pgTAP authorization and behavior contracts
 ```
 
 `VentlyRepository` is the single data-layer facade. App runs use live Supabase
@@ -145,7 +148,60 @@ Key schema notes:
   and `is_verified` flag so the directory list paints in one query.
 * `feed_posts` view exposes `tribe_name` / `tribe_slug` alongside post data
   so the feed never round-trips per row.
-* `post_reports` (migration 0006) is write-anyone / read-admin via RLS.
+* `reports` (introduced in migration 0006 and consolidated in 0007) accepts
+  authenticated member reports and restricts review to authorized staff via
+  RLS and role-checked moderation RPCs.
+
+## Super Admin and Trust & Safety console
+
+The separate Next.js console in [`admin/`](admin/) is the internal operating
+surface for Venttly. It is not part of the Flutter binary and must be deployed
+on a restricted admin hostname. Its full developer handoff—including setup,
+route ownership, database dependencies, staff roles, trust boundaries, and the
+prioritized production gap—is in
+[`admin/README.md`](admin/README.md).
+
+### Implemented today
+
+- Staff roles: `super_admin`, `admin`, `moderator`, `support`, `analyst`, and
+  `read_only_auditor`, with route-level access mapping and stricter role checks
+  inside privileged database RPCs.
+- Report moderation, post removal, suspension/shadow-ban actions, an escalating
+  suspension ladder, media review, and dynamic automod rules.
+- A cross-surface crisis queue for Vents, Whispers, Tribe messages, DMs, and
+  self-harm reports, with careful server-readable-DM wording.
+- A super-admin-only CSAM incident ledger, session/IP views, verification
+  decisions, and staff-role assignment.
+- User and Tribe investigation pages, targeted broadcasts, analytics, cost and
+  health views, runtime feature flags/kill switches, and an append-only audit
+  ledger.
+- Supabase cookie authentication, optional IP allowlisting, TOTP/AAL2 flow,
+  and optional shared Upstash rate limiting.
+
+### Production gap
+
+The console builds and is connected to real backend controls, but it must not
+yet be described as ready for moderation at million-user scale. Most urgently:
+
+- Route authorization must become fail-closed. An unknown section currently
+  falls through for any staff role, and a legacy `/notifications` fanout route
+  is not in the role matrix.
+- Remaining direct service-role writes must move behind actor-bound,
+  transactional RPCs whose audit insert cannot fail independently.
+- Production must require MFA, restricted network access, distributed rate
+  limits, session revocation, origin/input checks, and adversarial RBAC tests.
+- Moderation needs unified cases/evidence across every content surface,
+  assignment and persistent SLAs, appeals/second review, reporter-abuse and
+  coordinated-abuse tooling, and safe legal-hold workflows.
+- Crisis and child-safety operations require qualified legal review,
+  jurisdiction-aware global playbooks, trained 24/7 ownership, paging, and
+  restore/incident drills. UI instructions are not evidence of compliance.
+- Admin browser E2E, complete pgTAP role matrices, sustained concurrent queue
+  testing, and user-outcome observability remain release gates.
+
+These gaps are intentionally explicit so a developer assigned only to the
+Super Admin system can work from a truthful production backlog rather than
+assuming that page coverage equals operational readiness.
 
 ## Safety & compliance
 
@@ -174,6 +230,20 @@ flutter pub get
 flutter run            # Live Supabase backend
 flutter analyze        # zero errors
 ```
+
+Run the staff console separately:
+
+```bash
+cd admin
+npm ci
+cp .env.local.example .env.local
+npm run typecheck
+npm run build
+npm run dev
+```
+
+See [`admin/README.md`](admin/README.md) before granting a staff role or
+configuring any server-only secret.
 
 ## Tech stack
 

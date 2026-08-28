@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vently_app/data/repositories/vently_repository.dart';
+import 'package:vently_app/data/services/mock_backend.dart';
 import 'package:vently_app/domain/entities/entities.dart';
 import 'package:vently_app/presentation/widgets/poll_card.dart';
 
@@ -37,6 +39,29 @@ void main() {
       );
 
       expect(user.displayName, '希望 の 声');
+    });
+
+    test('tribe messages and social discovery use readable fallbacks', () {
+      final message = TribeMessage(
+        messageId: 'message-a',
+        tribeId: 'tribe-a',
+        senderPseudonym: 'midnight_soul',
+        senderAvatarSeed: 'seed',
+        createdAt: DateTime.utc(2026),
+        sentByMe: false,
+      );
+      final request = FriendRequest(
+        friendshipId: 'friendship-a',
+        otherUserId: 'user-a',
+        otherPseudonym: 'midnight_soul',
+        otherAvatarSeed: 'seed',
+        otherKarma: 0,
+        createdAt: DateTime.utc(2026),
+        isOutgoing: false,
+      );
+
+      expect(message.displayName, 'midnight_soul');
+      expect(request.primaryName, 'midnight_soul');
     });
   });
 
@@ -79,6 +104,83 @@ void main() {
       final bytes = await rootBundle.load('assets/audio/afterglow.wav');
       expect(bytes.lengthInBytes, greaterThan(100000));
       expect(bytes.buffer.asUint8List(0, 4), [82, 73, 70, 70]); // RIFF
+    });
+
+    test(
+      'mock runtime keeps canonical music and display identity on publish',
+      () async {
+        const user = AppUser(
+          userId: 'mock-music-user',
+          anonymousPseudonym: 'midnight_soul',
+          displayName: 'Midnight Soul',
+          avatarSeed: 'seed',
+          currentMood: 'healing',
+          userRole: 'normal',
+          isVerified: false,
+          safetyTier: 'standard',
+          accountStatus: 'active',
+          birthYear: 2000,
+        );
+        MockBackend.instance.registerSession(user);
+        final repository = VentlyRepository(forceMock: true);
+        final catalog = await repository.searchMusic(query: 'afterglow');
+
+        expect(catalog, hasLength(1));
+        final post = await repository.createPost(
+          content: 'A music-backed Vent.',
+          category: 'confessions',
+          mood: 'healing',
+          musicTrack: catalog.single,
+        );
+
+        expect(post.authorDisplayName, 'Midnight Soul');
+        expect(post.musicTrackId, catalog.single.trackId);
+        expect(post.musicTrack, same(catalog.single));
+        expect(post.musicDurationMs, 15000);
+      },
+    );
+
+    test('mock runtime rejects client-invented catalog records', () async {
+      MockBackend.instance.registerSession(
+        const AppUser(
+          userId: 'mock-hostile-user',
+          anonymousPseudonym: 'hostile_client',
+          avatarSeed: 'seed',
+          currentMood: 'healing',
+          userRole: 'normal',
+          isVerified: false,
+          safetyTier: 'standard',
+          accountStatus: 'active',
+          birthYear: 2000,
+        ),
+      );
+      final repository = VentlyRepository(forceMock: true);
+      const invented = MusicTrack(
+        trackId: 'invented',
+        provider: 'unauthorized',
+        providerTrackId: 'pirated',
+        title: 'Invented',
+        artist: 'Hostile Client',
+        previewUrl: 'https://example.invalid/full-song.mp3',
+        previewDurationMs: 180000,
+        licenseCode: 'NONE',
+      );
+
+      await expectLater(
+        repository.createPost(
+          content: 'Hostile payload.',
+          category: 'confessions',
+          mood: 'healing',
+          musicTrack: invented,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'music_track_unavailable',
+          ),
+        ),
+      );
     });
   });
 

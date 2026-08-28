@@ -58,10 +58,11 @@ SELECT ok(
   'anonymous callers cannot mutate Vent reactions'
 );
 SELECT ok(
-  NOT (
-    SELECT enabled FROM public.feature_flags WHERE flag_key = 'vent_music'
+  (
+    SELECT enabled AND rollout_pct = 0
+      FROM public.feature_flags WHERE flag_key = 'vent_music'
   ),
-  'music ships behind a server-side kill switch that defaults off'
+  'music ships behind an enabled master switch with a zero-percent cohort'
 );
 SELECT ok(
   has_function_privilege(
