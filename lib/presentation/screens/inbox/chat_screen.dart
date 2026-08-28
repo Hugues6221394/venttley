@@ -22,6 +22,7 @@ import '../../widgets/report_reason_sheet.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/crisis_support_sheet.dart';
 import '../../widgets/chat_options_sheet.dart';
+import '../../widgets/emoji_picker_sheet.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/verified_badge.dart';
 
@@ -76,6 +77,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
       );
     });
+  }
+
+  /// Insert an emoji where the caret is, not at the end.
+  ///
+  /// Appending would be wrong the moment someone taps back into the middle of a
+  /// sentence to add one, and it is the sort of thing that makes a composer feel
+  /// broken without anyone being able to say why.
+  void _insertEmoji() {
+    showEmojiPicker(
+      context,
+      onEmoji: (emoji) {
+        final selection = _controller.selection;
+        final text = _controller.text;
+        // A fresh field reports an invalid selection; treat that as the end.
+        final start = selection.start < 0 ? text.length : selection.start;
+        final end = selection.end < 0 ? text.length : selection.end;
+        _controller.value = TextEditingValue(
+          text: text.replaceRange(start, end, emoji),
+          selection: TextSelection.collapsed(offset: start + emoji.length),
+        );
+      },
+    );
   }
 
   Future<void> _pickImage() async {
@@ -625,6 +648,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               controller: _controller,
               pendingImageBytes: _pendingImageBytes,
               onAttachImage: _pickImage,
+              onEmoji: _insertEmoji,
               onMicTap: _toggleVoice,
               recording: _recordingVoice,
               onClearImage: () => setState(() => _pendingImageBytes = null),
@@ -1773,6 +1797,7 @@ class _Composer extends StatelessWidget {
     required this.controller,
     required this.onSend,
     required this.onAttachImage,
+    required this.onEmoji,
     required this.onMicTap,
     this.recording = false,
     this.pendingImageBytes,
@@ -1782,6 +1807,10 @@ class _Composer extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
   final VoidCallback onAttachImage;
+
+  /// Opens the emoji picker. Insertion happens in the parent, which owns the
+  /// controller and therefore the caret.
+  final VoidCallback onEmoji;
 
   /// Voice note: tap to record, tap again to send. [recording] drives the
   /// pulsing red state.
@@ -1847,6 +1876,11 @@ class _Composer extends StatelessWidget {
                   icon: const Icon(Icons.image_outlined),
                   tooltip: 'Attach image',
                   onPressed: onAttachImage,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.emoji_emotions_outlined),
+                  tooltip: 'Emoji',
+                  onPressed: onEmoji,
                 ),
                 IconButton(
                   icon: Icon(
@@ -1943,7 +1977,9 @@ class _SharedPostCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text(
-                      snapshot.authorPseudonym ?? '@anonymous',
+                      snapshot.authorDisplayName ??
+                          snapshot.authorPseudonym ??
+                          'Anonymous',
                       style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w800,
