@@ -11,6 +11,7 @@ import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../../core/user_friendly_errors.dart';
+import '../home/home_shell.dart';
 
 class CreateTribeScreen extends ConsumerStatefulWidget {
   const CreateTribeScreen({super.key});
@@ -244,7 +245,12 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
       ),
       body: VentlyPremiumBackground(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+          // Clear the floating nav. At 40 the last rows of this form sat under
+          // the nav pill, which paints over the branch: the category chips
+          // landed at y~806 against a pill occupying ~770-835, so tapping
+          // "Interest" activated a nav tab instead. Same defect as the compose
+          // Publish button, and the reason there is a shared constant for it.
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, HomeShell.navClearance),
           children: [
             _CreationMedia(
               avatarBytes: _avatarBytes,
