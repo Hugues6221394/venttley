@@ -10,6 +10,7 @@ import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../../core/user_friendly_errors.dart';
 
 class CreateTribeScreen extends ConsumerStatefulWidget {
   const CreateTribeScreen({super.key});
@@ -91,7 +92,9 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
     }
     setState(() => _submitting = true);
     try {
-      final tribe = await ref.read(repositoryProvider).createTribe(
+      final tribe = await ref
+          .read(repositoryProvider)
+          .createTribe(
             name: name,
             category: category,
             description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
@@ -130,7 +133,9 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
       String? bannerUrl;
       try {
         if (_avatarBytes != null) {
-          final upload = await ref.read(repositoryProvider).uploadTribeAvatar(
+          final upload = await ref
+              .read(repositoryProvider)
+              .uploadTribeAvatar(
                 tribeId: tribe.tribeId,
                 bytes: _avatarBytes!,
                 extension: _avatarExtension,
@@ -139,7 +144,9 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
           avatarUrl = upload.url;
         }
         if (_bannerBytes != null) {
-          final upload = await ref.read(repositoryProvider).uploadTribeAvatar(
+          final upload = await ref
+              .read(repositoryProvider)
+              .uploadTribeAvatar(
                 tribeId: tribe.tribeId,
                 bytes: _bannerBytes!,
                 extension: _bannerExtension,
@@ -148,7 +155,9 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
           bannerUrl = upload.url;
         }
         if (avatarUrl != null || bannerUrl != null) {
-          await ref.read(repositoryProvider).updateTribeConfiguration(
+          await ref
+              .read(repositoryProvider)
+              .updateTribeConfiguration(
                 tribeId: tribe.tribeId,
                 avatarUrl: avatarUrl,
                 bannerUrl: bannerUrl,
@@ -171,7 +180,15 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
         );
       }
     } catch (e) {
-      _toast('Could not create this Tribe: $e');
+      // Was interpolating the raw exception, so a person saw
+      // "PostgrestException(message: adults_only...)". Named server errors are
+      // translated centrally now.
+      _toast(
+        UserFriendlyErrors.message(
+          e,
+          fallback: "Couldn't create this Tribe. Please try again.",
+        ),
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -278,8 +295,10 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text('Category',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            const Text(
+              'Category',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -299,8 +318,11 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
                 ChoiceChip(
                   selected: _customMode,
                   onSelected: (_) => setState(() => _customMode = true),
-                  avatar:
-                      Icon(Icons.add_rounded, size: 16, color: scheme.primary),
+                  avatar: Icon(
+                    Icons.add_rounded,
+                    size: 16,
+                    color: scheme.primary,
+                  ),
                   label: const Text('Custom'),
                 ),
               ],
@@ -327,11 +349,10 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            Text('Visibility',
-                style: TextStyle(
-                  color: context.ink,
-                  fontWeight: FontWeight.w900,
-                )),
+            Text(
+              'Visibility',
+              style: TextStyle(color: context.ink, fontWeight: FontWeight.w900),
+            ),
             const SizedBox(height: 8),
             SegmentedButton<String>(
               showSelectedIcon: false,
@@ -357,8 +378,9 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
               value: _useSafetyTemplate,
               onChanged: (value) => setState(() => _useSafetyTemplate = value),
               title: const Text('Start with safety rules'),
-              subtitle:
-                  const Text('Respect, privacy, and anti-harassment baseline'),
+              subtitle: const Text(
+                'Respect, privacy, and anti-harassment baseline',
+              ),
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
@@ -389,11 +411,11 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
       .toList(growable: false);
 
   static String _contentType(String extension) => switch (extension) {
-        'png' => 'image/png',
-        'webp' => 'image/webp',
-        'heic' || 'heif' => 'image/heic',
-        _ => 'image/jpeg',
-      };
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    'heic' || 'heif' => 'image/heic',
+    _ => 'image/jpeg',
+  };
 }
 
 class _CreationMedia extends StatelessWidget {
@@ -451,8 +473,9 @@ class _CreationMedia extends StatelessWidget {
                 ),
                 child: CircleAvatar(
                   backgroundColor: VentlyColors.roseTint,
-                  backgroundImage:
-                      avatarBytes == null ? null : MemoryImage(avatarBytes!),
+                  backgroundImage: avatarBytes == null
+                      ? null
+                      : MemoryImage(avatarBytes!),
                   child: avatarBytes == null
                       ? const Icon(
                           Icons.add_a_photo_outlined,

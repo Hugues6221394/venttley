@@ -2690,3 +2690,20 @@ class OnlineFriend {
     );
   }
 }
+
+
+/// Whether an account may create a Tribe, as decided by the server.
+class TribeCreationEligibility {
+  const TribeCreationEligibility({
+    required this.status,
+    required this.tribesKept,
+  });
+
+  /// 'adult' — may create. 'minor' — may not. 'month_required' — in its 18th
+  /// year with the birthday unknown, so one more question settles it.
+  final String status;
+  final int tribesKept;
+
+  bool get canCreate => status == 'adult';
+  bool get needsBirthMonth => status == 'month_required';
+}

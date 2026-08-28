@@ -2,7 +2,10 @@
 class UserFriendlyErrors {
   UserFriendlyErrors._();
 
-  static String message(Object? error, {String fallback = 'Something went wrong. Please try again.'}) {
+  static String message(
+    Object? error, {
+    String fallback = 'Something went wrong. Please try again.',
+  }) {
     if (error == null) return fallback;
     final raw = error.toString().toLowerCase();
 
@@ -36,6 +39,40 @@ class UserFriendlyErrors {
     if (raw.contains('duplicate') || raw.contains('already exists')) {
       return 'That already exists. Try a different option.';
     }
+
+    // Named errors raised by the Tribe RPCs. These reach the client as the bare
+    // identifier, which is meaningless to a person — and the create screen used
+    // to interpolate the whole exception into a snackbar.
+    if (raw.contains('adults_only')) {
+      return 'Keeping a Tribe is for 18 and over.';
+    }
+    if (raw.contains('age_verification_required')) {
+      return 'We need one more detail about your age first.';
+    }
+    if (raw.contains('rate_limited')) {
+      return "That's a lot of Tribes for one day. Try again tomorrow.";
+    }
+    if (raw.contains('tribe_name_length')) {
+      return 'Tribe names need to be between 3 and 50 characters.';
+    }
+    if (raw.contains('tribe_description_length')) {
+      return 'That description is too long.';
+    }
+    if (raw.contains('tribe_category_length') ||
+        raw.contains('invalid_visibility')) {
+      return 'Pick a category and visibility, then try again.';
+    }
+    if (raw.contains('too_many_tags')) {
+      return 'That is too many tags — trim a few.';
+    }
+    if (raw.contains('plug_approval_required')) {
+      // Only reachable against a database that predates the age floor.
+      return 'Tribe creation is not enabled on this server yet.';
+    }
+    if (raw.contains('birth_month_already_set')) {
+      return 'Your birth month is already recorded and cannot be changed here.';
+    }
+
     return fallback;
   }
 }

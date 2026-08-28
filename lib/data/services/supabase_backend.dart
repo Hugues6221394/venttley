@@ -5252,6 +5252,37 @@ class SupabaseBackend {
     return row == null ? null : _tribeFromRow(row);
   }
 
+  /// Whether this account may create a Tribe, and why not if it may not.
+  ///
+  /// Asked before the flow opens so a refusal can be explained on a screen
+  /// rather than surfacing as a failed submit at the end of a form someone has
+  /// just spent five minutes filling in.
+  ///
+  /// Returns one of 'adult', 'minor', 'month_required'. The decision is the
+  /// server's; this only carries it.
+  Future<TribeCreationEligibility> tribeCreationEligibility() async {
+    final res = await _client.rpc('my_tribe_creation_eligibility');
+    final map = (res as Map).cast<String, dynamic>();
+    return TribeCreationEligibility(
+      status: (map['status'] as String?) ?? 'minor',
+      tribesKept: (map['tribes_kept'] as int?) ?? 0,
+    );
+  }
+
+  /// Record the birth month for an account in its 18th year. Write-once on the
+  /// server, so a wrong answer cannot be retried into a right one.
+  Future<TribeCreationEligibility> setMyBirthMonth(int month) async {
+    final res = await _client.rpc(
+      'set_my_birth_month',
+      params: {'p_month': month},
+    );
+    final map = (res as Map).cast<String, dynamic>();
+    return TribeCreationEligibility(
+      status: (map['status'] as String?) ?? 'minor',
+      tribesKept: (map['tribes_kept'] as int?) ?? 0,
+    );
+  }
+
   Future<Tribe> createTribe({
     required String name,
     required String category,

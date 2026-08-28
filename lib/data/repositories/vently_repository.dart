@@ -1266,6 +1266,26 @@ class VentlyRepository implements MusicProvider {
     return live.whisperMediaStatuses(ids);
   }
 
+  Future<TribeCreationEligibility> tribeCreationEligibility() {
+    final live = _live;
+    if (live == null) {
+      return Future.value(
+        const TribeCreationEligibility(status: 'adult', tribesKept: 0),
+      );
+    }
+    return live.tribeCreationEligibility();
+  }
+
+  Future<TribeCreationEligibility> setMyBirthMonth(int month) {
+    final live = _live;
+    if (live == null) {
+      return Future.value(
+        const TribeCreationEligibility(status: 'adult', tribesKept: 0),
+      );
+    }
+    return live.setMyBirthMonth(month);
+  }
+
   Future<void> refreshMessages(String roomId) {
     final live = _live;
     if (live == null) return Future.value();
