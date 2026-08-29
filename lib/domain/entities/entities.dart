@@ -2849,6 +2849,7 @@ class DeviceRegistration {
     required this.isBlocked,
     required this.riskScore,
     this.deviceSessionId,
+    this.needsConfirmation = false,
   });
 
   final String deviceRowId;
@@ -2858,7 +2859,13 @@ class DeviceRegistration {
   /// The user previously rejected this device. The client must sign itself out.
   final bool isBlocked;
 
+  /// Server-scored, 0–200. Informational here; act on [needsConfirmation]
+  /// rather than comparing this against a threshold the client invented.
   final int riskScore;
+
+  /// The server wants an explicit "was this you?" answer before it treats this
+  /// session as normal.
+  final bool needsConfirmation;
 
   factory DeviceRegistration.fromJson(Map<String, dynamic> json) =>
       DeviceRegistration(
@@ -2869,5 +2876,94 @@ class DeviceRegistration {
         isNewDevice: json['is_new_device'] == true,
         isBlocked: json['is_blocked'] == true,
         riskScore: (json['risk_score'] as num?)?.toInt() ?? 0,
+        needsConfirmation: json['needs_confirmation'] == true,
       );
+}
+
+
+/// A flagged sign-in the account has not yet adjudicated.
+///
+/// Mirrors my_unresolved_security_alerts(). The prompt built from this is the
+/// only place in the app that asks the user to make a security decision, so it
+/// carries enough context to make that decision answerable: what device, from
+/// where, and why we thought it was odd.
+class SecurityAlert {
+  const SecurityAlert({
+    required this.deviceSessionId,
+    required this.deviceRowId,
+    required this.deviceType,
+    required this.riskScore,
+    required this.isCurrent,
+    required this.startedAt,
+    this.deviceName,
+    this.osName,
+    this.country,
+    this.signals = const <String, dynamic>{},
+  });
+
+  final String deviceSessionId;
+  final String deviceRowId;
+  final String? deviceName;
+  final String deviceType;
+  final String? osName;
+
+  /// ISO-3166 alpha-2, country granularity only.
+  final String? country;
+
+  final int riskScore;
+
+  /// Which weights fired, as recorded by the server. Rendered as plain English
+  /// by [reasons]; unknown keys are dropped rather than shown raw.
+  final Map<String, dynamic> signals;
+
+  /// True when the flagged session is the one asking. Rare but real: a user can
+  /// be prompted about the device in their hand after travelling.
+  final bool isCurrent;
+
+  final DateTime startedAt;
+
+  String get label {
+    final name = deviceName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    final os = osName?.trim();
+    if (os != null && os.isNotEmpty) return '$os device';
+    return 'Unknown device';
+  }
+
+  /// Why this sign-in was flagged, in words the user can act on. An alert that
+  /// only says "unusual" gives someone no way to tell a holiday from a theft.
+  List<String> get reasons {
+    final out = <String>[];
+    if (signals['new_device'] == true) {
+      out.add('First time we\'ve seen this device');
+    }
+    final where = signals['new_country'];
+    if (where is String && where.trim().isNotEmpty) {
+      out.add('New location for your account ($where)');
+    }
+    final failures = signals['recent_failures'];
+    if (failures is num && failures > 0) {
+      out.add('$failures failed sign-in attempts beforehand');
+    }
+    if (signals['dormant_since'] != null) {
+      out.add('Your account had been quiet for a while');
+    }
+    return out;
+  }
+
+  factory SecurityAlert.fromJson(Map<String, dynamic> json) => SecurityAlert(
+    deviceSessionId: '${json['device_session_id']}',
+    deviceRowId: '${json['device_row_id']}',
+    deviceName: json['device_name'] as String?,
+    deviceType: (json['device_type'] as String?) ?? 'unknown',
+    osName: json['os_name'] as String?,
+    country: json['country'] as String?,
+    riskScore: (json['risk_score'] as num?)?.toInt() ?? 0,
+    signals:
+        (json['risk_signals'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{},
+    isCurrent: json['is_current'] == true,
+    startedAt:
+        DateTime.tryParse('${json['started_at']}') ?? DateTime.now().toUtc(),
+  );
 }

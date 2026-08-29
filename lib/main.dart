@@ -224,6 +224,13 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   StreamSubscription<Uri>? _appLinkSubscription;
   String? _pendingDeepLinkPath;
 
+  /// Throttles the unanswered-alert poll. Resume fires on every task-switch,
+  /// and a security question re-asked every time you glance at another app is
+  /// a question that stops being read.
+  DateTime? _lastSecurityCheck;
+
+  static const String _securityCheckRoute = '/security-check';
+
   void _handleAppLink(Uri uri) {
     final path = groupInvitePathFromUri(uri);
     if (path == null) return;
@@ -355,6 +362,14 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
         Logger.instance.info('security.blocked_device_signed_out');
         _stopPresenceHeartbeat();
         await ref.read(sessionProvider.notifier).logout();
+        return;
+      }
+
+      // The server scored this sign-in high enough to want an answer. Ask now,
+      // while the user still remembers whether they just did something unusual.
+      if (registration.needsConfirmation) {
+        Logger.instance.info('security.login_challenge_raised');
+        _openSecurityCheck();
       }
     } catch (_) {
       // Never block sign-in on this. A device that fails to register is
@@ -362,6 +377,44 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       // login.
       Logger.instance.warn('security.device_register_failed');
     }
+  }
+
+  /// Catch up on prompts raised while the app was closed.
+  ///
+  /// The sign-in worth asking about is usually the one the user was not
+  /// present for, so registration alone is not enough — that path only fires
+  /// for the session being opened right now.
+  Future<void> _checkSecurityAlertsSafely() async {
+    if (ref.read(sessionProvider) == null) return;
+    final now = DateTime.now();
+    final last = _lastSecurityCheck;
+    if (last != null && now.difference(last) < const Duration(minutes: 30)) {
+      return;
+    }
+    _lastSecurityCheck = now;
+
+    try {
+      final alerts = await ref
+          .read(repositoryProvider)
+          .myUnresolvedSecurityAlerts();
+      if (alerts.isEmpty || !mounted) return;
+      if (ref.read(sessionProvider) == null) return;
+      _openSecurityCheck();
+    } catch (_) {
+      // A failed check must not surface as an error. The notification row and
+      // the email are the durable channels; this is the convenient one.
+      _lastSecurityCheck = null;
+      Logger.instance.warn('security.alert_check_failed');
+    }
+  }
+
+  /// Never stack the prompt on top of itself — a resume while the user is
+  /// already answering would push a second copy over the first.
+  void _openSecurityCheck() {
+    final router = ref.read(routerProvider);
+    final location = router.routerDelegate.currentConfiguration.uri.path;
+    if (location == _securityCheckRoute) return;
+    router.push(_securityCheckRoute);
   }
 
   void _stopPresenceHeartbeat() {
@@ -394,7 +447,10 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
     if (state == AppLifecycleState.resumed) {
       _startPresenceHeartbeat();
       final session = ref.read(sessionProvider);
-      if (session != null) unawaited(_startPushForSession(session.userId));
+      if (session != null) {
+        unawaited(_startPushForSession(session.userId));
+        unawaited(_checkSecurityAlertsSafely());
+      }
     } else if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
@@ -480,6 +536,9 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       } else {
         unawaited(PushRegistrationService.instance.detachSession());
         _stopPresenceHeartbeat();
+        // The next account to sign in on this handset gets its own check
+        // rather than inheriting this one's throttle window.
+        _lastSecurityCheck = null;
       }
     });
     ref.listen(pendingNotificationPayloadProvider, (prev, next) {

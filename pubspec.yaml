@@ -86,7 +86,6 @@ dependencies:
   # Model names for the device list. Without it every row reads "Android
   # device", which tells nobody which session to end.
   device_info_plus: ^12.4.0
-  device_info_plus: ^12.4.0
 
 dev_dependencies:
   flutter_test:

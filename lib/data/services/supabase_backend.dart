@@ -6200,6 +6200,31 @@ class SupabaseBackend {
     );
   }
 
+  /// Sign-ins the server flagged and the user has not answered for yet.
+  ///
+  /// Polled on resume rather than only handled at sign-in: the whole point is
+  /// the session the user was not present for.
+  Future<List<SecurityAlert>> myUnresolvedSecurityAlerts() async {
+    final rows =
+        await _client.rpc('my_unresolved_security_alerts') as List<dynamic>;
+    return rows
+        .map((r) => SecurityAlert.fromJson(r as Map<String, dynamic>))
+        .toList(growable: false);
+  }
+
+  /// Answer a "was this you?" prompt. True trusts the device; false blocks it
+  /// and ends its sessions.
+  Future<bool> resolveSuspiciousLogin({
+    required String deviceSessionId,
+    required bool wasMe,
+  }) async {
+    final res = await _client.rpc(
+      'resolve_suspicious_login',
+      params: {'p_device_session_id': deviceSessionId, 'p_was_me': wasMe},
+    );
+    return res == true;
+  }
+
   /// Peer presence tier: online | recent | offline | hidden (+ last_seen).
   Future<({String state, DateTime? lastSeen})> peerPresence(
     String userId,

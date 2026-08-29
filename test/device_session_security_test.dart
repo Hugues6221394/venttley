@@ -285,6 +285,32 @@ void main() {
       expect(repo.revokedSessionIds, isEmpty);
     });
 
+    testWidgets('a successful sign-out is not reported as a failure', (
+      tester,
+    ) async {
+      // The refresh after a successful action used to throw, so the user was
+      // told "that didn't go through" about something that had just gone
+      // through — and the row they signed out stayed on screen.
+      final repo = _FakeRepository([
+        _session(id: 'current', isCurrent: true),
+        _session(
+          id: 'other',
+          isCurrent: false,
+          name: 'iPhone 15',
+          deviceRowId: 'device-row-2',
+        ),
+      ]);
+      await _pumpDevices(tester, repo);
+
+      await tester.tap(find.text('Sign out').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Sign out'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('didn\'t go through'), findsNothing);
+      expect(find.text('iPhone 15'), findsNothing);
+    });
+
     testWidgets('a lone session offers no bulk sign-out', (tester) async {
       final repo = _FakeRepository([_session(id: 'current', isCurrent: true)]);
       await _pumpDevices(tester, repo);

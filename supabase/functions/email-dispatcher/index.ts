@@ -161,6 +161,31 @@ If you didn't request this, you can safely ignore it.`,
 
 If this wasn't you, change your password immediately.`,
   },
+  // Account changes rather than sign-ins: a password rotation, two-factor
+  // being switched off, a device the user just blocked. security_alert is
+  // shaped around "we saw a sign-in" and reads as a non-sequitur for these,
+  // so they get their own headline/detail pair supplied by the caller.
+  security_account_change: {
+    subject: (v) =>
+      `Venttly security: ${plainValue(v.headline, "an account change", 120)}`,
+    html: (v) =>
+      `<p>${htmlValue(v.headline, "Something changed on your account", 120)}</p>
+      <p>${
+        htmlValue(v.detail, "Open the app to review your recent activity.", 400)
+      }</p>
+      <p>When: ${htmlValue(v.when, "just now", 100)}</p>
+      <p>You can review every device and security event in the app under
+      Profile → Password &amp; security.</p>`,
+    text: (v) =>
+      `${plainValue(v.headline, "Something changed on your account", 120)}
+
+${plainValue(v.detail, "Open the app to review your recent activity.", 400)}
+
+When: ${plainValue(v.when, "just now", 100)}
+
+You can review every device and security event in the app under
+Profile > Password & security.`,
+  },
   weekly_digest: {
     subject: () => "Your Venttly week — stories you might have missed",
     html: (v) =>

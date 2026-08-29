@@ -30,7 +30,13 @@ class _ActiveDevicesScreenState extends ConsumerState<ActiveDevicesScreen> {
 
   Future<void> _reload() async {
     final future = ref.read(repositoryProvider).myDeviceSessions();
-    setState(() => _future = future);
+    // Block body, not an arrow: `() => _future = future` evaluates to the
+    // Future itself, and setState rejects a callback that returns one. As an
+    // expression body this threw on every refresh, so a successful sign-out
+    // was reported to the user as a failure.
+    setState(() {
+      _future = future;
+    });
     await future;
   }
 

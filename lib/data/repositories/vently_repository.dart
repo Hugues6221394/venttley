@@ -3394,6 +3394,28 @@ class VentlyRepository implements MusicProvider {
     return Future.value();
   }
 
+  /// Flagged sign-ins still awaiting a "was this you?" answer.
+  Future<List<SecurityAlert>> myUnresolvedSecurityAlerts() {
+    final live = _live;
+    if (live != null) return live.myUnresolvedSecurityAlerts();
+    return Future.value(const <SecurityAlert>[]);
+  }
+
+  /// True trusts the device; false blocks it and ends its sessions.
+  Future<bool> resolveSuspiciousLogin({
+    required String deviceSessionId,
+    required bool wasMe,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.resolveSuspiciousLogin(
+        deviceSessionId: deviceSessionId,
+        wasMe: wasMe,
+      );
+    }
+    return Future.value(false);
+  }
+
   /// Peer presence tier: online | recent | offline | hidden.
   Future<({String state, DateTime? lastSeen})> peerPresence(String userId) {
     final live = _live;

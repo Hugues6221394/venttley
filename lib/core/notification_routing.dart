@@ -67,6 +67,13 @@ class NotificationPayload {
       case 'message_request':
         final roomId = payload['room_id'] as String?;
         return roomId == null ? null : chat(roomId);
+      // Security rows carry no user-controlled identifier, so they route to a
+      // fixed screen rather than being reconstructed from the payload.
+      case 'security_suspicious_login':
+        return '/security-check';
+      case 'security_new_device':
+      case 'security_alert':
+        return '/profile/devices';
       default:
         return null;
     }
