@@ -2967,3 +2967,18 @@ class SecurityAlert {
         DateTime.tryParse('${json['started_at']}') ?? DateTime.now().toUtc(),
   );
 }
+
+
+/// One entry in the Tribe category taxonomy.
+///
+/// Key and label come from the database; the icon does not. An icon is a
+/// Flutter symbol, and storing a widget reference in a table only moves the
+/// coupling somewhere harder to find — so the client maps key to icon and
+/// falls back to a neutral one for a key it has not seen. That is what lets a
+/// category added server-side appear without an app release.
+class TribeCategory {
+  const TribeCategory({required this.key, required this.label});
+
+  final String key;
+  final String label;
+}

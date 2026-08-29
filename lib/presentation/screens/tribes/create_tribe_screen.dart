@@ -1,18 +1,29 @@
-import 'package:uuid/uuid.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/providers.dart';
+import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../../core/user_friendly_errors.dart';
 import '../home/home_shell.dart';
+
+/// The Tribe category taxonomy, read from public.tribe_categories.
+///
+/// Screen-scoped: this is the only surface offering a category picker, so the
+/// live list and the fallback below sit together rather than a file apart.
+final tribeCategoriesProvider = FutureProvider.autoDispose<List<TribeCategory>>(
+  (ref) async {
+    return ref.watch(repositoryProvider).tribeCategories();
+  },
+);
 
 class CreateTribeScreen extends ConsumerStatefulWidget {
   const CreateTribeScreen({super.key});
@@ -47,7 +58,11 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   String _avatarExtension = 'jpg';
   String _bannerExtension = 'jpg';
 
-  static const _options = <(String key, String label, IconData icon)>[
+  /// Fallback only. The live list comes from public.tribe_categories via
+  /// tribeCategoriesProvider; this is what shows when that table is not there
+  /// yet, because a Tribe form with no categories is a form nobody can submit.
+  /// Keep it in step with the seed in 20260830090000.
+  static const _fallbackOptions = <(String key, String label, IconData icon)>[
     ('campus', 'Campus', Icons.school_outlined),
     ('city', 'City', Icons.location_city_outlined),
     ('interest_group', 'Interest', Icons.interests_outlined),
@@ -65,6 +80,37 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
     ('music', 'Music', Icons.music_note_outlined),
     ('fitness', 'Fitness', Icons.fitness_center_outlined),
   ];
+
+  /// Icons stay client-side: a Flutter symbol does not belong in a table.
+  /// A key the app has not seen gets a neutral icon rather than being dropped,
+  /// so a category added server-side appears without an app release.
+  static const _iconByKey = <String, IconData>{
+    'campus': Icons.school_outlined,
+    'city': Icons.location_city_outlined,
+    'interest_group': Icons.interests_outlined,
+    'hobby': Icons.palette_outlined,
+    'support': Icons.favorite_outline,
+    'venting': Icons.bedtime_outlined,
+    'wellness': Icons.spa_outlined,
+    'creativity': Icons.brush_outlined,
+    'faith': Icons.auto_awesome_outlined,
+    'lgbtq': Icons.diversity_1_outlined,
+    'grief': Icons.filter_vintage_outlined,
+    'growth': Icons.trending_up_rounded,
+    'study': Icons.menu_book_outlined,
+    'gaming': Icons.sports_esports_outlined,
+    'music': Icons.music_note_outlined,
+    'fitness': Icons.fitness_center_outlined,
+  };
+
+  List<(String, String, IconData)> _categoryOptions(WidgetRef ref) {
+    final live = ref.watch(tribeCategoriesProvider).valueOrNull;
+    if (live == null || live.isEmpty) return _fallbackOptions;
+    return [
+      for (final c in live)
+        (c.key, c.label, _iconByKey[c.key] ?? Icons.tag_rounded),
+    ];
+  }
 
   @override
   void dispose() {
@@ -320,7 +366,7 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final (key, label, icon) in _options)
+                for (final (key, label, icon) in _categoryOptions(ref))
                   ChoiceChip(
                     selected: !_customMode && _category == key,
                     onSelected: (_) => setState(() {

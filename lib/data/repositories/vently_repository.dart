@@ -2979,6 +2979,12 @@ class VentlyRepository implements MusicProvider {
     return Future.value(_mock.tribeBySlug(slug));
   }
 
+  Future<List<TribeCategory>> tribeCategories() {
+    final live = _live;
+    if (live == null) return Future.value(const []);
+    return live.tribeCategories();
+  }
+
   Future<Tribe> createTribe({
     required String name,
     required String category,
@@ -3621,6 +3627,21 @@ class VentlyRepository implements MusicProvider {
       return live.verifyMfa(factorId: factorId, code: code);
     }
     return Future.value();
+  }
+
+  /// Factor still waiting on a TOTP code, or null. Mock never challenges.
+  Future<String?> pendingMfaFactorId() {
+    final live = _live;
+    if (live != null) return live.pendingMfaFactorId();
+    return Future.value(null);
+  }
+
+  /// When this account last rotated its password. Null = never since the
+  /// column landed. Used by the Security Center checkup, not by restore.
+  Future<DateTime?> myPasswordChangedAt() {
+    final live = _live;
+    if (live != null) return live.myPasswordChangedAt();
+    return Future.value(null);
   }
 
   // ─── Phase 2 (migration 0051) ──────────────────────────────────────

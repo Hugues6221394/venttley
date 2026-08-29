@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants.dart';
+import '../../core/image_magic_bytes.dart';
 import '../../core/image_metadata_scrubber.dart';
 import '../../core/logger.dart';
 import 'row_shape_guard.dart';
@@ -290,25 +291,43 @@ class SupabaseBackend {
     return user;
   }
 
-  /// Throws [MfaChallengeRequiredException] when the freshly-signed-in
-  /// session is AAL1 but the user has a verified TOTP factor.
-  Future<void> _maybeRequireMfa() async {
+  /// Factor id that still needs a TOTP code, or null when this session
+  /// is allowed to enter the app. Safe to call with only an AAL1 JWT.
+  Future<String?> pendingMfaFactorId() async {
     try {
       final factors = await _client.auth.mfa.listFactors();
       final verified = factors.totp
           .where((f) => f.status == FactorStatus.verified)
           .toList();
-      if (verified.isEmpty) return;
+      if (verified.isEmpty) return null;
       final aal = _client.auth.mfa.getAuthenticatorAssuranceLevel();
       if (aal.nextLevel == AuthenticatorAssuranceLevels.aal2 &&
           aal.currentLevel != AuthenticatorAssuranceLevels.aal2) {
-        throw MfaChallengeRequiredException(verified.first.id);
+        return verified.first.id;
       }
-    } on MfaChallengeRequiredException {
-      rethrow;
+      return null;
     } catch (_) {
       // Swallow listing errors — if we can't tell, let the user proceed
       // rather than locking them out of their account.
+      return null;
+    }
+  }
+
+  /// Throws [MfaChallengeRequiredException] when the freshly-signed-in
+  /// session is AAL1 but the user has a verified TOTP factor.
+  Future<void> _maybeRequireMfa() async {
+    final factorId = await pendingMfaFactorId();
+    if (factorId != null) throw MfaChallengeRequiredException(factorId);
+  }
+
+  /// Last time this account's password was rotated. Null means never
+  /// since the column landed — the checkup must not pretend otherwise.
+  Future<DateTime?> myPasswordChangedAt() async {
+    try {
+      final res = await _client.rpc('my_password_changed_at');
+      return _coerceDate(res);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -445,6 +464,7 @@ class SupabaseBackend {
     required String token,
   }) async {
     await _client.auth.verifyOTP(phone: phone, token: token, type: OtpType.sms);
+    await _maybeRequireMfa();
     final user = await restore();
     if (user == null) {
       throw StateError('Verified phone but no matching profile row');
@@ -594,6 +614,7 @@ class SupabaseBackend {
     final email = _client.auth.currentUser?.email;
     if (email == null) throw StateError('You are not signed in.');
     await _client.auth.signInWithPassword(email: email, password: password);
+    await _maybeRequireMfa();
   }
 
   /// Attach (or change) a real recovery email on an account. Supabase emails
@@ -1053,6 +1074,14 @@ class SupabaseBackend {
     return scrubbed.bytes;
   }
 
+  /// Image uploads only. Filename and Content-Type are claims; the first
+  /// bytes have to actually be a JPEG, PNG, GIF, WebP or HEIC.
+  Uint8List _imageUploadBytes(List<int> bytes) {
+    final input = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+    assertSupportedImage(input);
+    return _scrubbedUploadBytes(input);
+  }
+
   Future<({String path, String url})> uploadPostImage({
     required List<int> bytes,
     required String extension,
@@ -1070,7 +1099,7 @@ class SupabaseBackend {
         .from('post-media')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('post-media').getPublicUrl(path);
@@ -1820,7 +1849,7 @@ class SupabaseBackend {
         .from('tribe-chat-media')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('tribe-chat-media').getPublicUrl(path);
@@ -2595,7 +2624,9 @@ class SupabaseBackend {
         .from('whispers-media')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          contentType.startsWith('image/')
+              ? _imageUploadBytes(bytes)
+              : _scrubbedUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('whispers-media').getPublicUrl(path);
@@ -2755,7 +2786,7 @@ class SupabaseBackend {
         .from('post-media')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: true),
         );
     final url = _client.storage.from('post-media').getPublicUrl(path);
@@ -3602,7 +3633,7 @@ class SupabaseBackend {
         .from('profile-photos')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('profile-photos').getPublicUrl(path);
@@ -3761,7 +3792,7 @@ class SupabaseBackend {
         .from('profile-photos')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('profile-photos').getPublicUrl(path);
@@ -5283,6 +5314,45 @@ class SupabaseBackend {
     );
   }
 
+  /// The Tribe category taxonomy, newest source of truth.
+  ///
+  /// Returns an empty list when the table is not there yet — the caller falls
+  /// back to the built-in set rather than showing a Tribe form with no
+  /// categories, which would make the screen unusable against a database that
+  /// is one migration behind.
+  Future<List<TribeCategory>> tribeCategories() async {
+    try {
+      final rows = await _client
+          .from('tribe_categories')
+          .select('category_key, label, sort_order')
+          .eq('is_active', true)
+          .order('sort_order');
+      return [
+        for (final row in (rows as List).cast<Map<String, dynamic>>())
+          TribeCategory(
+            key: row['category_key'] as String,
+            label: row['label'] as String,
+          ),
+      ];
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST205' ||
+          e.code == '42P01' ||
+          e.message.contains('does not exist')) {
+        log.warn(
+          'db.missing_columns',
+          props: {
+            'source': 'tribe_categories',
+            'count': 1,
+            'columns': const ['tribe_categories'],
+            'migrations': const ['tribe_category_taxonomy'],
+          },
+        );
+        return const [];
+      }
+      rethrow;
+    }
+  }
+
   Future<Tribe> createTribe({
     required String name,
     required String category,
@@ -6438,7 +6508,7 @@ class SupabaseBackend {
         .from('chat-media')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     return (path: path, messageId: messageId);
@@ -6460,7 +6530,7 @@ class SupabaseBackend {
         .from('chat-media')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     return path;

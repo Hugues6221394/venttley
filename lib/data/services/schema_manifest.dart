@@ -35,4 +35,6 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20260829090000': 'idempotent_tribe_creation',
   '20260829180000': 'login_risk_scoring_and_security_alerts',
   '20260829200000': 'enforce_blocks_on_replies_and_existing_dms',
+  '20260830090000': 'tribe_category_taxonomy',
+  '20260830120000': 'media_quarantine_and_security_checkup',
 };
