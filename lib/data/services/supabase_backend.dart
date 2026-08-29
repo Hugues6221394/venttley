@@ -5293,11 +5293,18 @@ class SupabaseBackend {
     String? welcomeMessage,
     TribeGovernanceSettings settings = const TribeGovernanceSettings(),
     List<TribeRuleItem> rules = const [],
+    required String idempotencyKey,
   }) async {
     if (_uid == null) throw StateError('Not signed in');
+    // Required, not optional. A Tribe is not a post: a duplicate carries
+    // members, spaces, rules and an audit trail, and the owner cannot tell
+    // which copy people actually joined. The key comes from the caller so it
+    // survives a retry — generating one here would make every retry a new
+    // Tribe, which is the bug.
     final tribeId = await _client.rpc(
-      'create_managed_tribe',
+      'create_managed_tribe_idempotent',
       params: {
+        'p_mutation_id': idempotencyKey,
         'p_name': name,
         'p_category': category,
         if (description != null) 'p_description': description,

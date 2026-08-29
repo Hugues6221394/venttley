@@ -32,5 +32,7 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20260828120000': 'open_tribe_creation_with_age_floor',
   '20260828201411': 'revoke_client_truncate_defaults',
   '20260828230000': 'device_sessions_and_security_events',
+  '20260829090000': 'idempotent_tribe_creation',
   '20260829180000': 'login_risk_scoring_and_security_alerts',
+  '20260829200000': 'enforce_blocks_on_replies_and_existing_dms',
 };

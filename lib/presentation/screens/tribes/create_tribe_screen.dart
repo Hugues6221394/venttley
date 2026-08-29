@@ -1,3 +1,4 @@
+import 'package:uuid/uuid.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -28,6 +29,14 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   final _welcome = TextEditingController();
   final _picker = ImagePicker();
   String _category = 'interest_group';
+
+  /// One key for this form, minted when the screen opens.
+  ///
+  /// Per-form and not per-tap: the whole point is that a second submit — a
+  /// double tap, or a retry after the response was lost — carries the *same*
+  /// key and so returns the Tribe the first attempt already made. Minting it at
+  /// submit time would make every retry a fresh Tribe, which is the bug.
+  final String _mutationId = const Uuid().v4();
   bool _customMode = false;
   String _visibility = 'public';
   bool _joinApproval = false;
@@ -99,6 +108,7 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
             name: name,
             category: category,
             description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
+            idempotencyKey: _mutationId,
             isPrivate: _visibility != 'public',
             tags: tags,
             visibility: _visibility,

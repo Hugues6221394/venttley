@@ -2989,6 +2989,7 @@ class VentlyRepository implements MusicProvider {
     String? welcomeMessage,
     TribeGovernanceSettings settings = const TribeGovernanceSettings(),
     List<TribeRuleItem> rules = const [],
+    required String idempotencyKey,
   }) {
     final live = _live;
     if (live != null) {
@@ -3002,6 +3003,7 @@ class VentlyRepository implements MusicProvider {
         welcomeMessage: welcomeMessage,
         settings: settings,
         rules: rules,
+        idempotencyKey: idempotencyKey,
       );
     }
     return Future.value(
@@ -3378,7 +3380,8 @@ class VentlyRepository implements MusicProvider {
     DateTime? before,
   }) {
     final live = _live;
-    if (live != null) return live.mySecurityEvents(limit: limit, before: before);
+    if (live != null)
+      return live.mySecurityEvents(limit: limit, before: before);
     return Future.value(const <SecurityEvent>[]);
   }
 

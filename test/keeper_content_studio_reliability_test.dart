@@ -17,16 +17,19 @@ void main() {
       final studio = File(
         'lib/presentation/widgets/keeper_content_studio_sheet.dart',
       ).readAsStringSync();
-      final router =
-          File('lib/presentation/router/app_router.dart').readAsStringSync();
+      final router = File(
+        'lib/presentation/router/app_router.dart',
+      ).readAsStringSync();
       final prompt = File(
         'lib/presentation/widgets/keeper_prompt_composer_sheet.dart',
       ).readAsStringSync();
       final memberSurfaces = [
-        File('lib/presentation/screens/home/keeper_members_screen.dart')
-            .readAsStringSync(),
-        File('lib/presentation/screens/keeper/keeper_comod_screen.dart')
-            .readAsStringSync(),
+        File(
+          'lib/presentation/screens/home/keeper_members_screen.dart',
+        ).readAsStringSync(),
+        File(
+          'lib/presentation/screens/keeper/keeper_comod_screen.dart',
+        ).readAsStringSync(),
       ].join();
 
       expect(studio, isNot(contains('/manage?tab=')));
@@ -53,9 +56,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            primaryKeeperTribeProvider.overrideWithValue(_testTribe),
-          ],
+          overrides: [primaryKeeperTribeProvider.overrideWithValue(_testTribe)],
           child: MaterialApp(
             theme: VentlyTheme.light(),
             home: Consumer(
@@ -90,8 +91,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('prompt publishing persists through the repository',
-        (tester) async {
+    testWidgets('prompt publishing persists through the repository', (
+      tester,
+    ) async {
       final repository = VentlyRepository(forceMock: true);
       const tribeId = 'content-studio-prompt-test';
       await tester.pumpWidget(
@@ -103,10 +105,8 @@ void main() {
               builder: (context, ref, _) => Scaffold(
                 body: Center(
                   child: FilledButton(
-                    onPressed: () => showKeeperPromptComposer(
-                      context,
-                      tribeId: tribeId,
-                    ),
+                    onPressed: () =>
+                        showKeeperPromptComposer(context, tribeId: tribeId),
                     child: const Text('Create prompt'),
                   ),
                 ),
@@ -131,8 +131,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('scheduled prompts remain pending until their future time',
-        (tester) async {
+    testWidgets('scheduled prompts remain pending until their future time', (
+      tester,
+    ) async {
       final repository = VentlyRepository(forceMock: true);
       const tribeId = 'content-studio-schedule-test';
       await tester.pumpWidget(
@@ -174,80 +175,85 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    test('Space lifecycle persists create, update, archive, restore and delete',
-        () async {
-      final mock = MockBackend.instance;
-      addTearDown(mock.logout);
-      final user = AppUser(
-        userId: 'studio-owner-${DateTime.now().microsecondsSinceEpoch}',
-        anonymousPseudonym: 'StudioOwner',
-        avatarSeed: 'studio-owner',
-        currentMood: 'hopeful',
-        userRole: 'plug',
-        isVerified: true,
-        safetyTier: 'standard',
-        accountStatus: 'active',
-      );
-      mock.registerSession(user);
-      final repository = VentlyRepository(mock: mock, forceMock: true);
-      final tribe = await repository.createTribe(
-        name: 'Workflow ${DateTime.now().microsecondsSinceEpoch}',
-        category: 'support',
-      );
+    test(
+      'Space lifecycle persists create, update, archive, restore and delete',
+      () async {
+        final mock = MockBackend.instance;
+        addTearDown(mock.logout);
+        final user = AppUser(
+          userId: 'studio-owner-${DateTime.now().microsecondsSinceEpoch}',
+          anonymousPseudonym: 'StudioOwner',
+          avatarSeed: 'studio-owner',
+          currentMood: 'hopeful',
+          userRole: 'plug',
+          isVerified: true,
+          safetyTier: 'standard',
+          accountStatus: 'active',
+        );
+        mock.registerSession(user);
+        final repository = VentlyRepository(mock: mock, forceMock: true);
+        final tribe = await repository.createTribe(
+          name: 'Workflow ${DateTime.now().microsecondsSinceEpoch}',
+          category: 'support',
+          idempotencyKey: 'test-${DateTime.now().microsecondsSinceEpoch}',
+        );
 
-      final initial = await repository.spacesByTribe(tribe.tribeId);
-      expect(initial.single.isDefault, isTrue);
+        final initial = await repository.spacesByTribe(tribe.tribeId);
+        expect(initial.single.isDefault, isTrue);
 
-      final spaceId = await repository.manageTribeSpace(
-        tribeId: tribe.tribeId,
-        action: 'create',
-        name: 'Weekly Wins',
-        description: 'Celebrate meaningful progress.',
-        weeklyTheme: 'One small win',
-        iconName: 'spark',
-        postingPermission: 'members',
-        isPinned: true,
-      );
-      var space = await repository.spaceById(spaceId);
-      expect(space?.name, 'Weekly Wins');
-      expect(space?.isPinned, isTrue);
+        final spaceId = await repository.manageTribeSpace(
+          tribeId: tribe.tribeId,
+          action: 'create',
+          name: 'Weekly Wins',
+          description: 'Celebrate meaningful progress.',
+          weeklyTheme: 'One small win',
+          iconName: 'spark',
+          postingPermission: 'members',
+          isPinned: true,
+        );
+        var space = await repository.spaceById(spaceId);
+        expect(space?.name, 'Weekly Wins');
+        expect(space?.isPinned, isTrue);
 
-      await repository.manageTribeSpace(
-        tribeId: tribe.tribeId,
-        action: 'update',
-        spaceId: spaceId,
-        name: 'Weekly Bright Spots',
-        postingPermission: 'mods',
-      );
-      space = await repository.spaceById(spaceId);
-      expect(space?.name, 'Weekly Bright Spots');
-      expect(space?.postingPermission, 'mods');
+        await repository.manageTribeSpace(
+          tribeId: tribe.tribeId,
+          action: 'update',
+          spaceId: spaceId,
+          name: 'Weekly Bright Spots',
+          postingPermission: 'mods',
+        );
+        space = await repository.spaceById(spaceId);
+        expect(space?.name, 'Weekly Bright Spots');
+        expect(space?.postingPermission, 'mods');
 
-      await repository.manageTribeSpace(
-        tribeId: tribe.tribeId,
-        action: 'archive',
-        spaceId: spaceId,
-        reason: 'Season complete',
-      );
-      expect((await repository.spaceById(spaceId))?.isArchived, isTrue);
+        await repository.manageTribeSpace(
+          tribeId: tribe.tribeId,
+          action: 'archive',
+          spaceId: spaceId,
+          reason: 'Season complete',
+        );
+        expect((await repository.spaceById(spaceId))?.isArchived, isTrue);
 
-      await repository.manageTribeSpace(
-        tribeId: tribe.tribeId,
-        action: 'restore',
-        spaceId: spaceId,
-      );
-      expect((await repository.spaceById(spaceId))?.isArchived, isFalse);
+        await repository.manageTribeSpace(
+          tribeId: tribe.tribeId,
+          action: 'restore',
+          spaceId: spaceId,
+        );
+        expect((await repository.spaceById(spaceId))?.isArchived, isFalse);
 
-      await repository.manageTribeSpace(
-        tribeId: tribe.tribeId,
-        action: 'delete',
-        spaceId: spaceId,
-        reason: 'Merged into General',
-      );
-      expect(await repository.spaceById(spaceId), isNull);
-      expect((await repository.spacesByTribe(tribe.tribeId)).single.isDefault,
-          isTrue);
-    });
+        await repository.manageTribeSpace(
+          tribeId: tribe.tribeId,
+          action: 'delete',
+          spaceId: spaceId,
+          reason: 'Merged into General',
+        );
+        expect(await repository.spaceById(spaceId), isNull);
+        expect(
+          (await repository.spacesByTribe(tribe.tribeId)).single.isDefault,
+          isTrue,
+        );
+      },
+    );
 
     test('Space management RPC remains owner-gated and audited', () {
       final migration = File(
