@@ -11,6 +11,7 @@ import '../../../data/services/supabase_backend.dart'
     show UsernameTakenException, EmailConfirmationStillOnException;
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
+import '../../widgets/turnstile_gate.dart';
 
 /// Create-Identity screen — DOB age gate + username + password.
 ///
@@ -104,6 +105,8 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       _error = null;
     });
     try {
+      final captcha = await TurnstileGate.token(context);
+      if (!mounted) return;
       final result = await ref
           .read(sessionProvider.notifier)
           .register(
@@ -111,9 +114,16 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
             username: username,
             password: _password.text,
             avatarSeed: _avatarSeed,
+            captchaToken: captcha,
           );
       if (!mounted) return;
       context.go('/onboarding/key', extra: result.recoveryPhrase);
+    } on TurnstileUnavailable {
+      if (!mounted) return;
+      setState(
+        () => _error =
+            'We could not finish the security check. Try again in a moment.',
+      );
     } on AgeGateBlocked catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());

@@ -157,6 +157,7 @@ class SupabaseBackend {
     required String safetyTier,
     required String recoveryBlob,
     required String recoverySalt,
+    String? captchaToken,
   }) async {
     final email = IdentityService.syntheticEmail(username);
     final AuthResponse res;
@@ -164,6 +165,7 @@ class SupabaseBackend {
       res = await _client.auth.signUp(
         email: email,
         password: password,
+        captchaToken: captchaToken,
         data: {
           'pseudonym': username,
           'avatar_seed': avatarSeed,
@@ -290,9 +292,14 @@ class SupabaseBackend {
   Future<AppUser> signInWithEmail({
     required String email,
     required String password,
+    String? captchaToken,
   }) async {
     try {
-      await _client.auth.signInWithPassword(email: email, password: password);
+      await _client.auth.signInWithPassword(
+        email: email,
+        password: password,
+        captchaToken: captchaToken,
+      );
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
       if (msg.contains('invalid') || msg.contains('credentials')) {
@@ -364,10 +371,15 @@ class SupabaseBackend {
   Future<AppUser> signIn({
     required String username,
     required String password,
+    String? captchaToken,
   }) async {
     final email = IdentityService.syntheticEmail(username);
     try {
-      await _client.auth.signInWithPassword(email: email, password: password);
+      await _client.auth.signInWithPassword(
+        email: email,
+        password: password,
+        captchaToken: captchaToken,
+      );
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
       if (msg.contains('invalid') || msg.contains('credentials')) {

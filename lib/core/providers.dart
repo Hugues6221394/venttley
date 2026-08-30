@@ -164,12 +164,14 @@ class SessionController extends StateNotifier<AppUser?> {
     required String username,
     required String password,
     required String avatarSeed,
+    String? captchaToken,
   }) async {
     final result = await _repo.registerAccount(
       birthDate: birthDate,
       username: username,
       password: password,
       avatarSeed: avatarSeed,
+      captchaToken: captchaToken,
     );
     state = result.user;
     _identifyDownstream(result.user);
@@ -346,9 +348,14 @@ class SessionController extends StateNotifier<AppUser?> {
   Future<AppUser> signIn({
     required String username,
     required String password,
+    String? captchaToken,
   }) async {
     final user = await _withMfaGate(
-      () => _repo.signIn(username: username, password: password),
+      () => _repo.signIn(
+        username: username,
+        password: password,
+        captchaToken: captchaToken,
+      ),
     );
     await _repo
         .reactivateMyAccount(); // restore if deactivated / cancel deletion
