@@ -48,6 +48,7 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   /// key and so returns the Tribe the first attempt already made. Minting it at
   /// submit time would make every retry a fresh Tribe, which is the bug.
   final String _mutationId = const Uuid().v4();
+  bool _nameWasValid = false;
   bool _customMode = false;
   String _visibility = 'public';
   bool _joinApproval = false;
@@ -113,7 +114,30 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    // The footer's Continue button is disabled until there is a name, and the
+    // footer only learns the name changed if something rebuilds it. A
+    // TextField repaints its own character counter without rebuilding the rest
+    // of the screen, so without this listener the button stays greyed out no
+    // matter how much you type — which is worse than no validation at all,
+    // because the form looks broken rather than incomplete.
+    _name.addListener(_onNameChanged);
+  }
+
+  void _onNameChanged() {
+    final canAdvanceNow = _name.text.trim().length >= 3;
+    if (canAdvanceNow != _nameWasValid) {
+      _nameWasValid = canAdvanceNow;
+      // Only on the transition, not on every keystroke: rebuilding a form this
+      // size per character is work nobody asked for.
+      if (mounted) setState(() {});
+    }
+  }
+
+  @override
   void dispose() {
+    _name.removeListener(_onNameChanged);
     _name.dispose();
     _desc.dispose();
     _customCategory.dispose();
