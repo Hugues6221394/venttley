@@ -89,7 +89,6 @@ class VentlyRepository implements MusicProvider {
     required String username,
     required String password,
     required String avatarSeed,
-    String? captchaToken,
   }) async {
     if (!IdentityService.usernamePattern.hasMatch(username)) {
       throw const FormatException(
@@ -124,7 +123,6 @@ class VentlyRepository implements MusicProvider {
         safetyTier: tier,
         recoveryBlob: sealed.blob,
         recoverySalt: sealed.salt,
-        captchaToken: captchaToken,
       );
     } else {
       user = _mock.signUp(
@@ -479,16 +477,11 @@ class VentlyRepository implements MusicProvider {
   Future<AppUser> signIn({
     required String username,
     required String password,
-    String? captchaToken,
   }) async {
     final AppUser user;
     final live = _live;
     if (live != null) {
-      user = await live.signIn(
-        username: username,
-        password: password,
-        captchaToken: captchaToken,
-      );
+      user = await live.signIn(username: username, password: password);
     } else {
       user = _mock.signIn(username: username, password: password);
     }

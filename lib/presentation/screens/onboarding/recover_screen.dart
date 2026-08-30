@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../animation/widgets/animated_button.dart';
 import '../../../core/providers.dart';
 import '../../../core/user_friendly_errors.dart';
-import '../../widgets/turnstile_gate.dart';
 import '../../../data/services/identity_service.dart';
 import '../../../data/services/supabase_backend.dart'
     show InvalidCredentialsException, MfaChallengeRequiredException;
@@ -88,44 +87,22 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
       _error = null;
     });
     try {
-      // Obtained before the attempt, because Supabase refuses a sign-in with
-      // no token once CAPTCHA is on — the password is never even checked.
-      // Returns null while the gate is off, which is what makes shipping this
-      // ahead of enforcement safe.
-      final captcha = await TurnstileGate.token(context);
-      if (!mounted) return;
-      await ref
-          .read(sessionProvider.notifier)
-          .signIn(
+      await ref.read(sessionProvider.notifier).signIn(
             username: _username.text.trim(),
             password: _password.text,
-            captchaToken: captcha,
           );
       if (!mounted) return;
       context.go('/feed');
     } on MfaChallengeRequiredException {
       if (!mounted) return;
       context.go('/onboarding/mfa');
-    } on TurnstileUnavailable {
-      // Not a wrong password, and saying so would send someone off changing a
-      // password that was fine.
-      setState(
-        () => _error =
-            'We could not finish the security check. Try again in a moment.',
-      );
     } on InvalidCredentialsException {
-      setState(
-        () => _error = UserFriendlyErrors.message(
-          'invalid credentials',
-          fallback:
-              'That username or password didn\'t work. Double-check and try again.',
-        ),
-      );
+      setState(() => _error = UserFriendlyErrors.message(
+            'invalid credentials',
+            fallback: 'That username or password didn\'t work. Double-check and try again.',
+          ));
     } catch (e) {
-      setState(
-        () =>
-            _error = UserFriendlyErrors.message(e, fallback: _friendlyError(e)),
-      );
+      setState(() => _error = UserFriendlyErrors.message(e, fallback: _friendlyError(e)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -143,10 +120,8 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
       return;
     }
     if (words.length != 12) {
-      setState(
-        () =>
-            _error = 'Recovery phrase is 12 words — you have ${words.length}.',
-      );
+      setState(() => _error =
+          'Recovery phrase is 12 words — you have ${words.length}.');
       return;
     }
     setState(() {
@@ -154,9 +129,10 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
       _error = null;
     });
     try {
-      final user = await ref
-          .read(sessionProvider.notifier)
-          .recoverWithPhrase(username: username, phrase: phrase);
+      final user = await ref.read(sessionProvider.notifier).recoverWithPhrase(
+            username: username,
+            phrase: phrase,
+          );
       if (!mounted) return;
       if (user == null) {
         setState(
@@ -176,10 +152,8 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
     }
   }
 
-  String _friendlyError(Object error) => UserFriendlyErrors.message(
-    error,
-    fallback: 'Could not sign in right now. Please try again.',
-  );
+  String _friendlyError(Object error) =>
+      UserFriendlyErrors.message(error, fallback: 'Could not sign in right now. Please try again.');
 
   @override
   Widget build(BuildContext context) {
@@ -202,10 +176,8 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
                 }),
               ),
               const SizedBox(height: 20),
-              if (_mode == _Mode.signIn)
-                ..._signInForm(scheme)
-              else
-                ..._phraseForm(scheme),
+              if (_mode == _Mode.signIn) ..._signInForm(scheme)
+              else ..._phraseForm(scheme),
               const SizedBox(height: 16),
               if (_error != null)
                 Container(
@@ -217,17 +189,13 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.warning_amber_outlined,
-                        color: scheme.error,
-                        size: 18,
-                      ),
+                      Icon(Icons.warning_amber_outlined,
+                          color: scheme.error, size: 18),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          _error!,
-                          style: TextStyle(color: scheme.error, fontSize: 12),
-                        ),
+                        child: Text(_error!,
+                            style:
+                                TextStyle(color: scheme.error, fontSize: 12)),
                       ),
                     ],
                   ),
@@ -258,13 +226,12 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
 
   List<Widget> _signInForm(ColorScheme scheme) {
     return [
-      Text(
-        'Welcome back',
-        textAlign: TextAlign.center,
-        style: Theme.of(
-          context,
-        ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-      ),
+      Text('Welcome back',
+          textAlign: TextAlign.center,
+          style: Theme.of(context)
+              .textTheme
+              .headlineSmall
+              ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
       Text(
         'Sign in to your sanctuary with your username and password.',
@@ -297,13 +264,12 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
 
   List<Widget> _phraseForm(ColorScheme scheme) {
     return [
-      Text(
-        'Restore from phrase',
-        textAlign: TextAlign.center,
-        style: Theme.of(
-          context,
-        ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-      ),
+      Text('Restore from phrase',
+          textAlign: TextAlign.center,
+          style: Theme.of(context)
+              .textTheme
+              .headlineSmall
+              ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
       Text(
         'Enter your username and the 12 words you saved when you joined.',
