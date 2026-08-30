@@ -62,6 +62,19 @@ ON CONFLICT (id) DO NOTHING;
 
 REVOKE ALL ON private.auth_guard_settings FROM PUBLIC, anon, authenticated;
 
+-- Stated here rather than left to whatever the SQL editor offers, so the
+-- repository describes the database that actually exists.
+--
+-- Safe because the hook reads this through a SECURITY DEFINER function owned
+-- by postgres, and a table's owner bypasses RLS unless FORCE ROW LEVEL
+-- SECURITY is set. Do not add FORCE: the settings read would then fail, the
+-- function would take its NOT FOUND branch, and the guard would quietly stop
+-- guarding while still reporting success.
+--
+-- The table also lives in `private`, which PostgREST does not expose, so this
+-- is a third layer over a schema boundary and a revoked grant.
+ALTER TABLE private.auth_guard_settings ENABLE ROW LEVEL SECURITY;
+
 -- ---------------------------------------------------------------------------
 -- 2. The hook
 -- ---------------------------------------------------------------------------
