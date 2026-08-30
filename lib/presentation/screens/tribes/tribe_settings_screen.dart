@@ -119,6 +119,15 @@ class TribeSettingsScreen extends ConsumerWidget {
                           ),
                         ),
                         _ManagementTile(
+                          icon: Icons.handshake_outlined,
+                          title: 'Helpers',
+                          subtitle:
+                              'Give someone one job without giving them everything',
+                          onTap: () => context.push(
+                            '/tribe/$slug/manage/settings/helpers',
+                          ),
+                        ),
+                        _ManagementTile(
                           icon: Icons.view_quilt_outlined,
                           title: 'Spaces',
                           subtitle:

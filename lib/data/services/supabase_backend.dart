@@ -4400,6 +4400,40 @@ class SupabaseBackend {
     );
   }
 
+  Future<List<String>> myTribePermissions(String tribeId) async {
+    final raw = await _client.rpc(
+      'my_tribe_permissions',
+      params: {'p_tribe_id': tribeId},
+    );
+    return [for (final key in (raw as List? ?? const [])) key as String];
+  }
+
+  Future<TribePermissionGrants> tribePermissionGrants(String tribeId) async {
+    final raw = await _client.rpc(
+      'tribe_permission_grants',
+      params: {'p_tribe_id': tribeId},
+    );
+    return TribePermissionGrants.fromJson(
+      Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<List<String>> setTribeMemberPermissions(
+    String tribeId,
+    String userId,
+    List<String> permissions,
+  ) async {
+    final raw = await _client.rpc(
+      'set_tribe_member_permissions',
+      params: {
+        'p_tribe_id': tribeId,
+        'p_user_id': userId,
+        'p_permissions': permissions,
+      },
+    );
+    return [for (final key in (raw as List? ?? const [])) key as String];
+  }
+
   Future<TribeRulesStatus> myTribeRulesStatus(String tribeId) async {
     final raw = await _client.rpc(
       'my_tribe_rules_status',

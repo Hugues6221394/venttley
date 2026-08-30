@@ -2449,6 +2449,35 @@ class VentlyRepository implements MusicProvider {
     return Future.value(_mock.replaceTribeRules(tribeId, rules));
   }
 
+  /// What the signed-in account may do in this Tribe.
+  ///
+  /// Offline the answer is empty rather than permissive. A mock that granted
+  /// everything would show a management surface that the server would refuse,
+  /// which is a worse lie than showing nothing.
+  Future<List<String>> myTribePermissions(String tribeId) {
+    final live = _live;
+    if (live != null) return live.myTribePermissions(tribeId);
+    return Future.value(const <String>[]);
+  }
+
+  Future<TribePermissionGrants> tribePermissionGrants(String tribeId) {
+    final live = _live;
+    if (live != null) return live.tribePermissionGrants(tribeId);
+    return Future.value(const TribePermissionGrants());
+  }
+
+  Future<List<String>> setTribeMemberPermissions(
+    String tribeId,
+    String userId,
+    List<String> permissions,
+  ) {
+    final live = _live;
+    if (live != null) {
+      return live.setTribeMemberPermissions(tribeId, userId, permissions);
+    }
+    return Future.value(permissions);
+  }
+
   /// Whether the signed-in member is being asked to read a newer rule set.
   ///
   /// Offline this always answers "nothing to read": inventing a rules change

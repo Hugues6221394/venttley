@@ -8,10 +8,10 @@
 //   * sensitive → borderline (suggestive / gore) → shown behind a warning veil.
 //   * clean     → shown normally.
 //
-// Provider: Sightengine (nudity-2.1 + gore), a simple REST API — set
-// SIGHTENGINE_USER / SIGHTENGINE_SECRET. If not configured, we FAIL SAFE and
-// mark the media 'sensitive' (veiled), never 'clean' — nudity must not slip
-// through unscanned.
+// Providers: optional self-hosted NudeNet (NSFW_CLASSIFIER_URL) first, then
+// Sightengine (SIGHTENGINE_USER / SIGHTENGINE_SECRET). Worst verdict wins.
+// CSAM stays on Sightengine only. If neither provider answers, we FAIL SAFE
+// and mark the media 'sensitive' (veiled), never 'clean'.
 //
 // CSAM: Sightengine also offers a separately enabled CSAM model. When enabled,
 // a hit is quarantined through record_csam_incident for mandated human review;
@@ -24,6 +24,7 @@
 import { adminClient } from "../_shared/supabase.ts";
 import { corsHeaders, handleOptions } from "../_shared/cors.ts";
 import { rolloutEnabled } from "../_shared/internal_auth.ts";
+import { looksLikeSupportedImage } from "./image_magic.ts";
 import { isOwnedStoragePath, ownedPathFromPublicUrl } from "./ownership.ts";
 
 type Verdict = "clean" | "sensitive" | "blocked";
@@ -62,21 +63,52 @@ function csamProb(body: Record<string, unknown>): number {
   return Math.max(0, ...candidates.map((n) => (typeof n === "number" ? n : 0)));
 }
 
-async function scan(
-  imageUrl: string,
-): Promise<
-  { verdict: Verdict; labels: Record<string, unknown>; csam: boolean }
-> {
-  const user = Deno.env.get("SIGHTENGINE_USER");
-  const secret = Deno.env.get("SIGHTENGINE_SECRET");
-  // Fail safe: no scanner configured → veil, never show unscanned nudity.
-  if (!user || !secret) {
+type ScanResult = {
+  verdict: Verdict;
+  labels: Record<string, unknown>;
+  csam: boolean;
+};
+
+function worse(a: Verdict, b: Verdict): Verdict {
+  const rank: Record<Verdict, number> = {
+    clean: 0,
+    sensitive: 1,
+    blocked: 2,
+  };
+  return rank[a] >= rank[b] ? a : b;
+}
+
+async function scanLocal(bytes: Uint8Array): Promise<ScanResult | null> {
+  const base = Deno.env.get("NSFW_CLASSIFIER_URL")?.replace(/\/$/, "");
+  if (!base) return null;
+  try {
+    const form = new FormData();
+    form.append("file", new Blob([bytes]), "image.bin");
+    const res = await fetch(`${base}/classify`, {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const verdict = body.verdict;
+    if (verdict !== "clean" && verdict !== "sensitive" && verdict !== "blocked") {
+      return null;
+    }
     return {
-      verdict: "sensitive",
-      labels: { reason: "scanner_not_configured" },
+      verdict,
+      labels: (body.labels as Record<string, unknown>) ?? {},
       csam: false,
     };
+  } catch (_) {
+    return null;
   }
+}
+
+async function scanSightengine(imageUrl: string): Promise<ScanResult | null> {
+  const user = Deno.env.get("SIGHTENGINE_USER");
+  const secret = Deno.env.get("SIGHTENGINE_SECRET");
+  if (!user || !secret) return null;
   const models = Deno.env.get("SIGHTENGINE_MODELS") ?? "nudity-2.1,gore";
   const api = new URL("https://api.sightengine.com/1.0/check.json");
   api.searchParams.set("url", imageUrl);
@@ -112,6 +144,52 @@ async function scan(
       labels: { reason: "scan_exception" },
       csam: false,
     };
+  }
+}
+
+async function scan(
+  imageUrl: string,
+  bytes: Uint8Array,
+): Promise<ScanResult> {
+  if (!looksLikeSupportedImage(bytes)) {
+    return {
+      verdict: "blocked",
+      labels: { reason: "invalid_image_magic" },
+      csam: false,
+    };
+  }
+  const local = await scanLocal(bytes);
+  const remote = await scanSightengine(imageUrl);
+  if (remote?.csam) return remote;
+  if (!local && !remote) {
+    return {
+      verdict: "sensitive",
+      labels: { reason: "scanner_not_configured" },
+      csam: false,
+    };
+  }
+  return {
+    verdict: worse(local?.verdict ?? "clean", remote?.verdict ?? "clean"),
+    labels: { local: local?.labels, remote: remote?.labels },
+    csam: false,
+  };
+}
+
+async function copyToQuarantine(
+  sb: ReturnType<typeof adminClient>,
+  sourceBucket: string,
+  storedPath: string,
+  kind: string,
+  id: string,
+  bytes: Uint8Array,
+): Promise<void> {
+  const dest = `${kind}/${id}/${storedPath}`;
+  const { error } = await sb.storage.from("media-quarantine").upload(dest, bytes, {
+    contentType: "application/octet-stream",
+    upsert: true,
+  });
+  if (error) {
+    console.error("quarantine copy failed", sourceBucket);
   }
 }
 
@@ -243,6 +321,14 @@ Deno.serve(async (req) => {
       },
     );
   }
+  const downloaded = await sb.storage.from(bucket).download(storedPath);
+  if (downloaded.error || !downloaded.data) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "media_download_failed" }),
+      { status: 500, headers },
+    );
+  }
+  const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
   const imageUrl =
     sb.storage.from(bucket).getPublicUrl(storedPath).data.publicUrl;
   const leaseId = crypto.randomUUID();
@@ -270,7 +356,10 @@ Deno.serve(async (req) => {
       { status: 409, headers },
     );
   }
-  const { verdict, labels, csam } = await scan(imageUrl);
+  const { verdict, labels, csam } = await scan(imageUrl, bytes);
+  if (verdict === "blocked" || verdict === "sensitive") {
+    await copyToQuarantine(sb, bucket, storedPath, kind, id, bytes);
+  }
 
   // CSAM hit → route to the incident pipeline: quarantine (preserve, don't
   // delete) + open a super-admin incident for mandated review/reporting.

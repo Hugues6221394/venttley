@@ -1,0 +1,7 @@
+services:
+  nsfw-classifier:
+    build: .
+    ports:
+      - "8090:8090"
+    environment:
+      OMP_NUM_THREADS: "2"

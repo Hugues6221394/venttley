@@ -51,6 +51,7 @@ import '../screens/tribes/tribe_content_management_screen.dart';
 import '../screens/tribes/tribe_detail_screen.dart';
 import '../screens/tribes/tribe_members_management_screen.dart';
 import '../screens/tribes/space_home_screen.dart';
+import '../screens/tribes/tribe_helpers_screen.dart';
 import '../screens/tribes/tribe_manage_screen.dart';
 import '../screens/tribes/tribe_moderation_screen.dart';
 import '../screens/tribes/tribe_reports_screen.dart';
@@ -346,6 +347,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                           GoRoute(
                             path: 'audit',
                             builder: (ctx, st) => TribeAuditScreen(
+                              slug: st.pathParameters['slug']!,
+                            ),
+                          ),
+                          GoRoute(
+                            path: 'helpers',
+                            builder: (ctx, st) => TribeHelpersScreen(
                               slug: st.pathParameters['slug']!,
                             ),
                           ),
