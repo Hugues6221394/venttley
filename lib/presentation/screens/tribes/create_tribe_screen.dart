@@ -226,7 +226,11 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
       ref.invalidate(tribesProvider);
       ref.invalidate(tribesIKeepProvider);
       if (!mounted) return;
-      context.go('/tribe/${tribe.slug}/manage/settings');
+      // Show the moment instead of jumping to the console. Landing straight in
+      // Manage Tribe never said the Tribe existed, never said the account had
+      // just become a Keeper, and offered no idea what to do next — the person
+      // simply found themselves in an administration screen.
+      setState(() => _created = tribe);
       if (mediaError != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -284,13 +288,48 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
         }
       });
     } catch (error) {
-      _toast('Could not open this image: $error');
+      _toast(
+        UserFriendlyErrors.message(
+          error,
+          fallback: "Couldn't open that image.",
+        ),
+      );
     }
+  }
+
+  /// Which step of the flow is on screen.
+  ///
+  /// Three, not the eight the brief sketches. Forcing spaces, invites and
+  /// purpose before a Tribe can exist contradicts the same brief's own rule
+  /// that only name, category and visibility are required — and a fifteen
+  /// minute form before you own anything is how people abandon this. The rest
+  /// moves to the checklist on the other side of creation, where it can be
+  /// done in any order or not at all.
+  int _step = 0;
+  static const _stepCount = 3;
+
+  /// Set once creation succeeds, which swaps the whole screen for the
+  /// "you're a Keeper" moment rather than dropping the user into an
+  /// administration console with no acknowledgement that anything happened.
+  Tribe? _created;
+
+  bool get _canAdvance {
+    if (_step == 0) return _name.text.trim().length >= 3;
+    return true;
+  }
+
+  void _goTo(int step) {
+    setState(() => _step = step.clamp(0, _stepCount - 1));
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+
+    if (_created case final Tribe tribe) {
+      return _TribeCreatedView(tribe: tribe);
+    }
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -298,170 +337,282 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
           'Create a Tribe',
           style: TextStyle(fontWeight: FontWeight.w900),
         ),
+        leading: IconButton(
+          tooltip: _step == 0 ? 'Close' : 'Back',
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: _submitting
+              ? null
+              : () => _step == 0 ? context.pop() : _goTo(_step - 1),
+        ),
       ),
       body: VentlyPremiumBackground(
-        child: ListView(
-          // Clear the floating nav. At 40 the last rows of this form sat under
-          // the nav pill, which paints over the branch: the category chips
-          // landed at y~806 against a pill occupying ~770-835, so tapping
-          // "Interest" activated a nav tab instead. Same defect as the compose
-          // Publish button, and the reason there is a shared constant for it.
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, HomeShell.navClearance),
+        child: Column(
           children: [
-            _CreationMedia(
-              avatarBytes: _avatarBytes,
-              bannerBytes: _bannerBytes,
-              onAvatar: () => _pickImage(banner: false),
-              onBanner: () => _pickImage(banner: true),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Set a clear identity, access level, and safety baseline before the doors open.',
-              style: TextStyle(color: scheme.onSurface.withOpacity(0.7)),
-            ),
-            const SizedBox(height: 16),
-            GlassCard(
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _name,
-                    maxLength: 50,
-                    decoration: const InputDecoration(
-                      labelText: 'Tribe name',
-                      hintText: 'e.g. Quiet Mornings, Kigali Lo-Fi',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _desc,
-                    maxLength: 500,
-                    minLines: 3,
-                    maxLines: 5,
-                    decoration: const InputDecoration(
-                      labelText: 'Description (optional)',
-                      hintText: 'What is this Tribe a sanctuary for?',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _welcome,
-                    maxLength: 240,
-                    minLines: 2,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      labelText: 'Welcome message',
-                      hintText: 'Shown when someone joins',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Category',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final (key, label, icon) in _categoryOptions(ref))
-                  ChoiceChip(
-                    selected: !_customMode && _category == key,
-                    onSelected: (_) => setState(() {
-                      _customMode = false;
-                      _category = key;
-                    }),
-                    avatar: Icon(icon, size: 14, color: scheme.primary),
-                    label: Text(label),
-                  ),
-                // Create-your-own category.
-                ChoiceChip(
-                  selected: _customMode,
-                  onSelected: (_) => setState(() => _customMode = true),
-                  avatar: Icon(
-                    Icons.add_rounded,
-                    size: 16,
-                    color: scheme.primary,
-                  ),
-                  label: const Text('Custom'),
+            _StepBar(step: _step, total: _stepCount),
+            Expanded(
+              child: ListView(
+                // Clear the floating nav. At 40 the last rows sat under the
+                // pill, which paints over the branch, so the category chips at
+                // y~806 met a nav occupying ~770-835 and tapping "Interest"
+                // switched tabs instead.
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  8,
+                  20,
+                  HomeShell.navClearance,
                 ),
-              ],
-            ),
-            if (_customMode) ...[
-              const SizedBox(height: 12),
-              TextField(
-                controller: _customCategory,
-                maxLength: 40,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Your category',
-                  hintText: 'e.g. Night owls, Recovery, K-pop',
-                ),
-              ),
-            ],
-            const SizedBox(height: 14),
-            TextField(
-              controller: _tags,
-              decoration: const InputDecoration(
-                labelText: 'Discovery tags',
-                hintText: 'support, campus, healing',
-                helperText: 'Up to 8, separated by commas',
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Visibility',
-              style: TextStyle(color: context.ink, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 8),
-            SegmentedButton<String>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: 'public', label: Text('Public')),
-                ButtonSegment(value: 'private', label: Text('Private')),
-                ButtonSegment(value: 'invite_only', label: Text('Invite')),
-              ],
-              selected: {_visibility},
-              onSelectionChanged: (value) =>
-                  setState(() => _visibility = value.first),
-            ),
-            const SizedBox(height: 10),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              value: _joinApproval,
-              onChanged: (value) => setState(() => _joinApproval = value),
-              title: const Text('Approve new members'),
-              subtitle: const Text('Review requests before membership starts'),
-            ),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              value: _useSafetyTemplate,
-              onChanged: (value) => setState(() => _useSafetyTemplate = value),
-              title: const Text('Start with safety rules'),
-              subtitle: const Text(
-                'Respect, privacy, and anti-harassment baseline',
-              ),
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: _submitting ? null : _submit,
-              icon: _submitting
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+                children: switch (_step) {
+                  0 => [
+                    _CreationMedia(
+                      avatarBytes: _avatarBytes,
+                      bannerBytes: _bannerBytes,
+                      onAvatar: () => _pickImage(banner: false),
+                      onBanner: () => _pickImage(banner: true),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Set a clear identity, access level, and safety baseline before the doors open.',
+                      style: TextStyle(
+                        color: scheme.onSurface.withOpacity(0.7),
                       ),
-                    )
-                  : const Icon(Icons.add_rounded),
-              label: const Text('Create Tribe'),
+                    ),
+                    const SizedBox(height: 16),
+                    GlassCard(
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: _name,
+                            maxLength: 50,
+                            decoration: const InputDecoration(
+                              labelText: 'Tribe name',
+                              hintText: 'e.g. Quiet Mornings, Kigali Lo-Fi',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _desc,
+                            maxLength: 500,
+                            minLines: 3,
+                            maxLines: 5,
+                            decoration: const InputDecoration(
+                              labelText: 'Description (optional)',
+                              hintText: 'What is this Tribe a sanctuary for?',
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _welcome,
+                            maxLength: 240,
+                            minLines: 2,
+                            maxLines: 4,
+                            decoration: const InputDecoration(
+                              labelText: 'Welcome message',
+                              hintText: 'Shown when someone joins',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Category',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final (key, label, icon) in _categoryOptions(ref))
+                          ChoiceChip(
+                            selected: !_customMode && _category == key,
+                            onSelected: (_) => setState(() {
+                              _customMode = false;
+                              _category = key;
+                            }),
+                            avatar: Icon(icon, size: 14, color: scheme.primary),
+                            label: Text(label),
+                          ),
+                        // Create-your-own category.
+                        ChoiceChip(
+                          selected: _customMode,
+                          onSelected: (_) => setState(() => _customMode = true),
+                          avatar: Icon(
+                            Icons.add_rounded,
+                            size: 16,
+                            color: scheme.primary,
+                          ),
+                          label: const Text('Custom'),
+                        ),
+                      ],
+                    ),
+                    if (_customMode) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _customCategory,
+                        maxLength: 40,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(
+                          labelText: 'Your category',
+                          hintText: 'e.g. Night owls, Recovery, K-pop',
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _tags,
+                      decoration: const InputDecoration(
+                        labelText: 'Discovery tags',
+                        hintText: 'support, campus, healing',
+                        helperText: 'Up to 8, separated by commas',
+                      ),
+                    ),
+                  ],
+                  1 => [
+                    const SizedBox(height: 18),
+                    Text(
+                      'Visibility',
+                      style: TextStyle(
+                        color: context.ink,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<String>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(value: 'public', label: Text('Public')),
+                        ButtonSegment(value: 'private', label: Text('Private')),
+                        ButtonSegment(
+                          value: 'invite_only',
+                          label: Text('Invite'),
+                        ),
+                      ],
+                      selected: {_visibility},
+                      onSelectionChanged: (value) =>
+                          setState(() => _visibility = value.first),
+                    ),
+                    const SizedBox(height: 10),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      value: _joinApproval,
+                      onChanged: (value) =>
+                          setState(() => _joinApproval = value),
+                      title: const Text('Approve new members'),
+                      subtitle: const Text(
+                        'Review requests before membership starts',
+                      ),
+                    ),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      value: _useSafetyTemplate,
+                      onChanged: (value) =>
+                          setState(() => _useSafetyTemplate = value),
+                      title: const Text('Start with safety rules'),
+                      subtitle: const Text(
+                        'Respect, privacy, and anti-harassment baseline',
+                      ),
+                    ),
+                  ],
+                  _ => [_reviewBody(scheme)],
+                },
+              ),
+            ),
+            _StepFooter(
+              step: _step,
+              total: _stepCount,
+              busy: _submitting,
+              canAdvance: _canAdvance,
+              onBack: () => _goTo(_step - 1),
+              onNext: () => _goTo(_step + 1),
+              onSubmit: _submit,
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// The last look before anything is created.
+  ///
+  /// Not decoration: this is the only place the whole thing is visible at
+  /// once, and creation is the point after which a name is public and members
+  /// can arrive. Everything shown here is the value that will actually be
+  /// sent, read back off the same controllers the submit uses, so it cannot
+  /// drift from what happens next.
+  Widget _reviewBody(ColorScheme scheme) {
+    final name = _name.text.trim();
+    final desc = _desc.text.trim();
+    final category = _customMode ? _customCategory.text.trim() : _category;
+    final categoryLabel = _categoryOptions(
+      ref,
+    ).where((o) => o.$1 == category).map((o) => o.$2).firstOrNull;
+    final tags = _parseTags(_tags.text);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Review your Tribe',
+          style: TextStyle(
+            color: context.ink,
+            fontWeight: FontWeight.w900,
+            fontSize: 19,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'This is what people will see. You can change any of it later.',
+          style: TextStyle(color: scheme.onSurface.withOpacity(0.7)),
+        ),
+        const SizedBox(height: 14),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name.isEmpty ? 'Untitled Tribe' : name,
+                style: TextStyle(
+                  color: context.ink,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                ),
+              ),
+              if (desc.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  desc,
+                  style: TextStyle(color: scheme.onSurface.withOpacity(0.78)),
+                ),
+              ],
+              const SizedBox(height: 14),
+              _ReviewRow(label: 'Category', value: categoryLabel ?? category),
+              _ReviewRow(
+                label: 'Visibility',
+                value: switch (_visibility) {
+                  'private' => 'Private — invite only',
+                  'invite_only' => 'Invite — people request to join',
+                  _ => 'Public — anyone can find it',
+                },
+              ),
+              _ReviewRow(
+                label: 'Joining',
+                value: _joinApproval
+                    ? 'You approve each new member'
+                    : 'Anyone allowed by visibility can join',
+              ),
+              _ReviewRow(
+                label: 'Rules',
+                value: _useSafetyTemplate
+                    ? 'Safety baseline included'
+                    : 'None yet — you can add them after',
+              ),
+              if (tags.isNotEmpty)
+                _ReviewRow(label: 'Tags', value: tags.join(', ')),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -558,6 +709,357 @@ class _CreationMedia extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Where you are, and how much is left.
+///
+/// A three-segment bar rather than "Step 2 of 3" alone: the point of showing
+/// progress on a creation flow is to promise it is short, and a number does
+/// not communicate short as quickly as a nearly-full bar does.
+class _StepBar extends StatelessWidget {
+  const _StepBar({required this.step, required this.total});
+
+  final int step;
+  final int total;
+
+  static const _titles = ['Identity', 'Access', 'Review'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              for (var i = 0; i < total; i++) ...[
+                Expanded(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: i <= step
+                          ? VentlyColors.berryMagenta
+                          : VentlyColors.softMauve.withOpacity(0.28),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                if (i != total - 1) const SizedBox(width: 6),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${_titles[step]}  ·  step ${step + 1} of $total',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 12.5,
+              color: context.ink.withOpacity(0.65),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Back / Next, and Create only on the last step.
+///
+/// Pinned rather than scrolled with the form, so the way forward is never
+/// something you have to go looking for — and because the previous version put
+/// its only submit button at the bottom of a long list, underneath the nav.
+class _StepFooter extends StatelessWidget {
+  const _StepFooter({
+    required this.step,
+    required this.total,
+    required this.busy,
+    required this.canAdvance,
+    required this.onBack,
+    required this.onNext,
+    required this.onSubmit,
+  });
+
+  final int step;
+  final int total;
+  final bool busy;
+  final bool canAdvance;
+  final VoidCallback onBack;
+  final VoidCallback onNext;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final last = step == total - 1;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
+        child: Row(
+          children: [
+            if (step > 0) ...[
+              Expanded(
+                child: SizedBox(
+                  height: 50,
+                  child: OutlinedButton(
+                    onPressed: busy ? null : onBack,
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      'Back',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              flex: 2,
+              child: SizedBox(
+                height: 50,
+                child: FilledButton(
+                  // Disabled rather than failing on submit: a Tribe needs a
+                  // name, and finding that out after three screens is worse
+                  // than a button that waits.
+                  onPressed: busy || (!last && !canAdvance)
+                      ? null
+                      : (last ? onSubmit : onNext),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: VentlyColors.berryMagenta,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: busy
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          last ? 'Create Tribe' : 'Continue',
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReviewRow extends StatelessWidget {
+  const _ReviewRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 92,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 12.5,
+                color: context.ink.withOpacity(0.55),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13.5,
+                color: context.ink,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The moment after creation.
+///
+/// Before this, a successful create dropped straight into Manage Tribe — a
+/// full administration console, with no acknowledgement that anything had
+/// happened and no indication that the person's account had just gained a
+/// role. The Tribe existed; nothing said so.
+///
+/// Four things this has to land, in order: the Tribe is real, you are its
+/// Keeper, here is what is still worth doing, and none of it is required now.
+/// The checklist is explicitly optional — the whole reason creation asks for
+/// three things instead of eight is that the rest belongs here, done in any
+/// order, or not at all.
+class _TribeCreatedView extends StatelessWidget {
+  const _TribeCreatedView({required this.tribe});
+
+  final Tribe tribe;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: VentlyPremiumBackground(
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              22,
+              32,
+              22,
+              HomeShell.navClearance,
+            ),
+            children: [
+              const Text('🎉', style: TextStyle(fontSize: 40)),
+              const SizedBox(height: 12),
+              Text(
+                '${tribe.name} is live',
+                style: TextStyle(
+                  color: context.ink,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 26,
+                  height: 1.15,
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Names the role change plainly. Creating a Tribe is what makes
+              // someone a Keeper — the capability is real from this moment —
+              // and an app that grants authority silently leaves people
+              // guessing what they are now allowed to do.
+              Text(
+                "You're its Keeper now. That's on top of everything you "
+                'already do here — your vents, whispers, friends and chats '
+                'are untouched.',
+                style: TextStyle(
+                  color: scheme.onSurface.withOpacity(0.75),
+                  fontSize: 15,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 26),
+              Text(
+                'When you feel like it',
+                style: TextStyle(
+                  color: context.ink,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'None of this is required. Your Tribe works without it.',
+                style: TextStyle(
+                  color: scheme.onSurface.withOpacity(0.65),
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _NextStep(
+                icon: Icons.forum_outlined,
+                title: 'Start the first conversation',
+                subtitle: 'A Tribe with something in it is easier to join',
+                onTap: () => context.push('/tribe/${tribe.slug}'),
+              ),
+              _NextStep(
+                icon: Icons.person_add_alt_1_outlined,
+                title: 'Invite people',
+                subtitle: 'Share a link, a QR code, or pick from your friends',
+                onTap: () => context.push('/tribe/${tribe.slug}/members'),
+              ),
+              _NextStep(
+                icon: Icons.rule_rounded,
+                title: 'Set the ground rules',
+                subtitle: 'What this space is, and what it is not',
+                onTap: () => context.push('/tribe/${tribe.slug}/rules'),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 50,
+                child: FilledButton(
+                  onPressed: () => context.push('/tribe/${tribe.slug}/manage'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: VentlyColors.berryMagenta,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    'Open Keeper Studio',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 46,
+                child: TextButton(
+                  onPressed: () => context.pop(),
+                  child: const Text(
+                    'Not now',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NextStep extends StatelessWidget {
+  const _NextStep({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GlassCard(
+        padding: EdgeInsets.zero,
+        child: ListTile(
+          leading: Icon(icon, color: VentlyColors.berryMagenta),
+          title: Text(
+            title,
+            style: TextStyle(fontWeight: FontWeight.w800, color: context.ink),
+          ),
+          subtitle: Text(subtitle),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: onTap,
+        ),
       ),
     );
   }
