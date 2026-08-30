@@ -4417,6 +4417,14 @@ class SupabaseBackend {
     );
   }
 
+  /// The weak-password wordlist. Readable before sign-in, because that is
+  /// exactly when it is needed.
+  Future<Set<String>> weakPasswordBases() async {
+    final rows = await _client.from('weak_password_bases').select('base');
+    return {for (final row in (rows as List)) (row['base'] as String?) ?? ''}
+      ..removeWhere((b) => b.isEmpty);
+  }
+
   Future<List<String>> myTribePermissions(String tribeId) async {
     final raw = await _client.rpc(
       'my_tribe_permissions',

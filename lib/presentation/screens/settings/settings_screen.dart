@@ -63,7 +63,7 @@ class SettingsScreen extends ConsumerWidget {
                       me.userRole == 'super_admin'
                           ? 'Super Admin'
                           : me.isPlug
-                          ? 'Verified Plug'
+                          ? 'Verified Keeper'
                           : 'Member',
                       style: TextStyle(
                         color: scheme.onSurface.withOpacity(0.6),
@@ -73,7 +73,7 @@ class SettingsScreen extends ConsumerWidget {
                       me.userRole == 'super_admin'
                           ? 'Super Admin'
                           : me.isPlug
-                          ? 'Verified Plug'
+                          ? 'Verified Keeper'
                           : 'Member',
                       style: TextStyle(
                         color: scheme.onSurface.withOpacity(0.6),
@@ -182,7 +182,7 @@ class SettingsScreen extends ConsumerWidget {
                 color: VentlyColors.berryMagenta,
               ),
               title: const Text(
-                'Plug dashboard',
+                'Keeper dashboard',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
               subtitle: const Text('Manage tribes, prompts, and reports'),

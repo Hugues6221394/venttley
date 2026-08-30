@@ -241,9 +241,7 @@ class _FormatTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: format.tint,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: format.accent.withOpacity(0.12),
-            ),
+            border: Border.all(color: format.accent.withOpacity(0.12)),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),

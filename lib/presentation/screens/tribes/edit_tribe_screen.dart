@@ -67,7 +67,7 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(title: const Text('Edit identity')),
-        body: const Center(child: Text('Only the Plug can edit this Tribe.')),
+        body: const Center(child: Text('Only the Keeper can edit this Tribe.')),
       );
     }
     if (!hydrated) {
@@ -91,8 +91,10 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('Edit identity',
-            style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Edit identity',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         actions: [
           TextButton(
             onPressed: saving ? null : () => _save(tribe.tribeId),
@@ -102,8 +104,10 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Save',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                : const Text(
+                    'Save',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
           ),
         ],
       ),
@@ -210,11 +214,13 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
                           : null,
                     ),
                     const SizedBox(height: 18),
-                    Text('Visibility',
-                        style: TextStyle(
-                          color: context.ink,
-                          fontWeight: FontWeight.w900,
-                        )),
+                    Text(
+                      'Visibility',
+                      style: TextStyle(
+                        color: context.ink,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     SegmentedButton<String>(
                       segments: const [
@@ -262,8 +268,10 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
                 child: FilledButton.icon(
                   onPressed: saving ? null : () => _save(tribe.tribeId),
                   icon: const Icon(Icons.check_rounded),
-                  label: const Text('Save identity',
-                      style: TextStyle(fontWeight: FontWeight.w900)),
+                  label: const Text(
+                    'Save identity',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
                 ),
               ),
             ],
@@ -296,7 +304,9 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
       final extension = image.name.contains('.')
           ? image.name.split('.').last.toLowerCase()
           : 'jpg';
-      final upload = await ref.read(repositoryProvider).uploadTribeAvatar(
+      final upload = await ref
+          .read(repositoryProvider)
+          .uploadTribeAvatar(
             tribeId: tribeId,
             bytes: bytes,
             extension: extension,
@@ -312,9 +322,9 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not upload image: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not upload image: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -329,7 +339,9 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => saving = true);
     try {
-      await ref.read(repositoryProvider).updateTribeConfiguration(
+      await ref
+          .read(repositoryProvider)
+          .updateTribeConfiguration(
             tribeId: tribeId,
             name: _name.text.trim(),
             description: _sanitizeMarkdown(_description.text),
@@ -350,15 +362,15 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
       ref.invalidate(tribesIKeepProvider);
       ref.invalidate(tribeManagementProvider(tribeId));
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tribe identity saved.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Tribe identity saved.')));
       context.pop();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save: $error')));
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -379,11 +391,11 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
       .trim();
 
   static String _contentType(String extension) => switch (extension) {
-        'png' => 'image/png',
-        'webp' => 'image/webp',
-        'heic' || 'heif' => 'image/heic',
-        _ => 'image/jpeg',
-      };
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    'heic' || 'heif' => 'image/heic',
+    _ => 'image/jpeg',
+  };
 }
 
 class _MediaEditor extends StatelessWidget {
@@ -413,14 +425,16 @@ class _MediaEditor extends StatelessWidget {
             children: [
               InkWell(
                 onTap: uploadingBanner ? null : onBanner,
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
                 child: SizedBox(
                   height: 132,
                   width: double.infinity,
                   child: ClipRRect(
-                    borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(20)),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
@@ -495,8 +509,11 @@ class _MediaEditor extends StatelessWidget {
                                 color: Colors.white,
                               ),
                             )
-                          : const Icon(Icons.edit_rounded,
-                              color: Colors.white, size: 16),
+                          : const Icon(
+                              Icons.edit_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            ),
                     ),
                   ),
                 ],
@@ -560,12 +577,14 @@ class _EditMediaButton extends StatelessWidget {
           else
             Icon(icon, color: Colors.white, size: 16),
           const SizedBox(width: 7),
-          Text(label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-              )),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
         ],
       ),
     );
@@ -583,12 +602,14 @@ class _SectionTitle extends StatelessWidget {
       children: [
         Icon(icon, color: VentlyColors.berryMagenta, size: 20),
         const SizedBox(width: 8),
-        Text(title,
-            style: TextStyle(
-              color: context.ink,
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-            )),
+        Text(
+          title,
+          style: TextStyle(
+            color: context.ink,
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
       ],
     );
   }

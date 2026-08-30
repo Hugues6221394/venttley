@@ -22,8 +22,7 @@ class TribeModerationScreen extends ConsumerStatefulWidget {
       _TribeModerationScreenState();
 }
 
-class _TribeModerationScreenState
-    extends ConsumerState<TribeModerationScreen> {
+class _TribeModerationScreenState extends ConsumerState<TribeModerationScreen> {
   final TextEditingController _keywordCtl = TextEditingController();
   final TextEditingController _rulesCtl = TextEditingController();
   String _kwSeverity = 'soft';
@@ -41,7 +40,9 @@ class _TribeModerationScreenState
     final kw = _keywordCtl.text.trim();
     if (kw.length < 2) return;
     try {
-      await ref.read(repositoryProvider).addKeywordFilter(
+      await ref
+          .read(repositoryProvider)
+          .addKeywordFilter(
             tribeId: tribeId,
             keyword: kw,
             severity: _kwSeverity,
@@ -50,30 +51,29 @@ class _TribeModerationScreenState
       ref.invalidate(_keywordFiltersProvider(tribeId));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not add: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not add: $e')));
     }
   }
 
   Future<void> _saveRules(String tribeId) async {
     setState(() => _savingRules = true);
     try {
-      await ref.read(repositoryProvider).setTribeRules(
-            tribeId: tribeId,
-            rules: {'text': _rulesCtl.text},
-          );
+      await ref
+          .read(repositoryProvider)
+          .setTribeRules(tribeId: tribeId, rules: {'text': _rulesCtl.text});
       ref.invalidate(tribeBySlugProvider(widget.slug));
       setState(() => _rulesDirty = false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Rules saved.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Rules saved.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save: $e')));
     } finally {
       if (mounted) setState(() => _savingRules = false);
     }
@@ -99,15 +99,16 @@ class _TribeModerationScreenState
             backgroundColor: Colors.transparent,
             appBar: AppBar(title: const Text('Moderation')),
             body: const Center(
-              child: Text('Only the tribe Plug can open moderation.',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
+              child: Text(
+                'Only the tribe Keeper can open moderation.',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
             ),
           );
         }
 
         // Seed the rules editor once from the loaded tribe.
-        final loadedRules =
-            (tribe.toString().contains('rules') ? null : null);
+        final loadedRules = (tribe.toString().contains('rules') ? null : null);
         // (rules aren't on the entity — we stash them via JSONB on the
         // server; the textarea defaults to empty and writes through.)
         if (_rulesCtl.text.isEmpty && !_rulesDirty) {
@@ -118,8 +119,10 @@ class _TribeModerationScreenState
         return Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
-            title: Text(tribe.name,
-                style: const TextStyle(fontWeight: FontWeight.w900)),
+            title: Text(
+              tribe.name,
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
             backgroundColor: Colors.transparent,
             foregroundColor: context.ink,
             elevation: 0,
@@ -138,8 +141,7 @@ class _TribeModerationScreenState
                   children: [
                     TextField(
                       controller: _rulesCtl,
-                      onChanged: (_) =>
-                          setState(() => _rulesDirty = true),
+                      onChanged: (_) => setState(() => _rulesDirty = true),
                       maxLines: 6,
                       maxLength: 1200,
                       decoration: const InputDecoration(
@@ -169,8 +171,7 @@ class _TribeModerationScreenState
                                 )
                               : const Text(
                                   'Save rules',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w900),
+                                  style: TextStyle(fontWeight: FontWeight.w900),
                                 ),
                         ),
                       ),
@@ -205,15 +206,19 @@ class _TribeModerationScreenState
                           underline: const SizedBox.shrink(),
                           items: const [
                             DropdownMenuItem(
-                                value: 'soft',
-                                child: Text('Soft',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w800))),
+                              value: 'soft',
+                              child: Text(
+                                'Soft',
+                                style: TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                            ),
                             DropdownMenuItem(
-                                value: 'hard',
-                                child: Text('Hard',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w800))),
+                              value: 'hard',
+                              child: Text(
+                                'Hard',
+                                style: TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                            ),
                           ],
                           onChanged: (v) =>
                               setState(() => _kwSeverity = v ?? 'soft'),
@@ -224,8 +229,10 @@ class _TribeModerationScreenState
                           style: FilledButton.styleFrom(
                             backgroundColor: VentlyColors.berryMagenta,
                           ),
-                          child: const Text('Add',
-                              style: TextStyle(fontWeight: FontWeight.w900)),
+                          child: const Text(
+                            'Add',
+                            style: TextStyle(fontWeight: FontWeight.w900),
+                          ),
                         ),
                       ],
                     ),
@@ -233,19 +240,20 @@ class _TribeModerationScreenState
                     Consumer(
                       builder: (ctx, ref, _) {
                         final async = ref.watch(
-                            _keywordFiltersProvider(tribe.tribeId));
+                          _keywordFiltersProvider(tribe.tribeId),
+                        );
                         return async.when(
                           loading: () => const Padding(
                             padding: EdgeInsets.all(12),
-                            child: Center(
-                                child: CircularProgressIndicator()),
+                            child: Center(child: CircularProgressIndicator()),
                           ),
                           error: (e, _) => Text('Could not load: $e'),
                           data: (list) {
                             if (list.isEmpty) {
                               return const _Hint(
-                                  text:
-                                      'No filters yet — start with the obvious slurs + scam words.');
+                                text:
+                                    'No filters yet — start with the obvious slurs + scam words.',
+                              );
                             }
                             return Wrap(
                               spacing: 8,
@@ -259,8 +267,8 @@ class _TribeModerationScreenState
                                           .read(repositoryProvider)
                                           .removeKeywordFilter(f.filterId);
                                       ref.invalidate(
-                                          _keywordFiltersProvider(
-                                              tribe.tribeId));
+                                        _keywordFiltersProvider(tribe.tribeId),
+                                      );
                                     },
                                   ),
                               ],
@@ -279,8 +287,9 @@ class _TribeModerationScreenState
                     'Issue gentle, formal, or final warnings before kicking.',
                 child: Consumer(
                   builder: (ctx, ref, _) {
-                    final async = ref
-                        .watch(_memberWarningsProvider(tribe.tribeId));
+                    final async = ref.watch(
+                      _memberWarningsProvider(tribe.tribeId),
+                    );
                     return async.when(
                       loading: () => const Padding(
                         padding: EdgeInsets.all(12),
@@ -293,14 +302,17 @@ class _TribeModerationScreenState
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               const _Hint(
-                                  text:
-                                      'No warnings issued. Use the Members tab to warn someone.'),
+                                text:
+                                    'No warnings issued. Use the Members tab to warn someone.',
+                              ),
                               const SizedBox(height: 8),
                               OutlinedButton.icon(
-                                onPressed: () => context.push(
-                                    '/tribe/${tribe.slug}/manage'),
-                                icon:
-                                    const Icon(Icons.group_outlined, size: 16),
+                                onPressed: () =>
+                                    context.push('/tribe/${tribe.slug}/manage'),
+                                icon: const Icon(
+                                  Icons.group_outlined,
+                                  size: 16,
+                                ),
                                 label: const Text('Open members'),
                               ),
                             ],
@@ -400,8 +412,11 @@ class _ReportsQuickLink extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: const Icon(Icons.flag_rounded,
-                    color: VentlyColors.berryMagenta, size: 22),
+                child: const Icon(
+                  Icons.flag_rounded,
+                  color: VentlyColors.berryMagenta,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -427,8 +442,7 @@ class _ReportsQuickLink extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right_rounded,
-                  color: context.ink),
+              Icon(Icons.chevron_right_rounded, color: context.ink),
             ],
           ),
         ),
@@ -463,9 +477,7 @@ class _KeywordChip extends StatelessWidget {
           Icon(
             hard ? Icons.block : Icons.flag_outlined,
             size: 12,
-            color: hard
-                ? VentlyColors.berryMagenta
-                : context.ink,
+            color: hard ? VentlyColors.berryMagenta : context.ink,
           ),
           const SizedBox(width: 6),
           Text(
@@ -527,7 +539,9 @@ class _WarningRow extends StatelessWidget {
                     const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 7, vertical: 2),
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: color.withOpacity(0.16),
                         borderRadius: BorderRadius.circular(8),
@@ -590,14 +604,14 @@ class _Hint extends StatelessWidget {
 // PROVIDERS
 // =========================================================================
 
-final _keywordFiltersProvider =
-    FutureProvider.autoDispose.family<List<TribeKeywordFilter>, String>(
-  (ref, tribeId) =>
-      ref.watch(repositoryProvider).tribeKeywordFilters(tribeId),
-);
+final _keywordFiltersProvider = FutureProvider.autoDispose
+    .family<List<TribeKeywordFilter>, String>(
+      (ref, tribeId) =>
+          ref.watch(repositoryProvider).tribeKeywordFilters(tribeId),
+    );
 
-final _memberWarningsProvider =
-    FutureProvider.autoDispose.family<List<TribeMemberWarning>, String>(
-  (ref, tribeId) =>
-      ref.watch(repositoryProvider).tribeMemberWarnings(tribeId),
-);
+final _memberWarningsProvider = FutureProvider.autoDispose
+    .family<List<TribeMemberWarning>, String>(
+      (ref, tribeId) =>
+          ref.watch(repositoryProvider).tribeMemberWarnings(tribeId),
+    );

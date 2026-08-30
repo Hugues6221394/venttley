@@ -370,10 +370,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: '/questions',
                 builder: (_, __) => const QuestionsScreen(),
               ),
-              GoRoute(
-                path: '/goals',
-                builder: (_, __) => const GoalsScreen(),
-              ),
+              GoRoute(path: '/goals', builder: (_, __) => const GoalsScreen()),
               GoRoute(
                 path: '/user/:userId',
                 builder: (ctx, st) =>

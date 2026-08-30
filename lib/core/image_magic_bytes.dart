@@ -32,7 +32,10 @@ DetectedImageKind? detectImageKind(Uint8List bytes) {
       bytes[7] == 0x0A) {
     return DetectedImageKind.png;
   }
-  if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38) {
+  if (bytes[0] == 0x47 &&
+      bytes[1] == 0x49 &&
+      bytes[2] == 0x46 &&
+      bytes[3] == 0x38) {
     return DetectedImageKind.gif;
   }
   if (bytes[0] == 0x52 &&
@@ -46,7 +49,10 @@ DetectedImageKind? detectImageKind(Uint8List bytes) {
     return DetectedImageKind.webp;
   }
   // HEIC/HEIF: ISO-BMFF with a brand at offset 8.
-  if (bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70) {
+  if (bytes[4] == 0x66 &&
+      bytes[5] == 0x74 &&
+      bytes[6] == 0x79 &&
+      bytes[7] == 0x70) {
     final brand = String.fromCharCodes(bytes.sublist(8, 12));
     if (brand.startsWith('heic') ||
         brand.startsWith('heix') ||

@@ -28,9 +28,8 @@ class TribeChatHubScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tribeAsync = ref.watch(tribeBySlugProvider(slug));
     return tribeAsync.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(
         appBar: AppBar(),
         body: Center(child: Text('Error: $e')),
@@ -39,10 +38,7 @@ class TribeChatHubScreen extends ConsumerWidget {
         if (tribe == null) {
           return const Scaffold(body: Center(child: Text('Tribe not found')));
         }
-        return DefaultTabController(
-          length: 2,
-          child: _HubBody(tribe: tribe),
-        );
+        return DefaultTabController(length: 2, child: _HubBody(tribe: tribe));
       },
     );
   }
@@ -64,7 +60,8 @@ class _HubBody extends ConsumerWidget {
     // transparent AppBar, but content must start BELOW the app bar + tab bar —
     // otherwise the hero (and its camera badge) render behind the bar and the
     // badge isn't even tappable.
-    final topInset = MediaQuery.of(context).padding.top +
+    final topInset =
+        MediaQuery.of(context).padding.top +
         kToolbarHeight +
         kTextTabBarHeight +
         12;
@@ -108,10 +105,14 @@ class _HubBody extends ConsumerWidget {
           labelColor: VentlyColors.berryMagenta,
           unselectedLabelColor: context.ink.withOpacity(0.55),
           indicatorColor: VentlyColors.berryMagenta,
-          labelStyle:
-              const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-          unselectedLabelStyle:
-              const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 13,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 13,
+          ),
           tabs: const [
             Tab(text: 'Info'),
             Tab(text: 'Media'),
@@ -137,9 +138,10 @@ class _HubBody extends ConsumerWidget {
                       .fadeIn(duration: 280.ms)
                       .slideY(begin: 0.05, end: 0),
                   const SizedBox(height: 18),
-                  _QuickActions(tribe: tribe, canManage: canManage)
-                      .animate()
-                      .fadeIn(delay: 60.ms, duration: 280.ms),
+                  _QuickActions(
+                    tribe: tribe,
+                    canManage: canManage,
+                  ).animate().fadeIn(delay: 60.ms, duration: 280.ms),
                   const SizedBox(height: 18),
                   const _SectionTitle('Active now'),
                   const SizedBox(height: 8),
@@ -267,10 +269,7 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _HeroSection extends ConsumerWidget {
-  const _HeroSection({
-    required this.tribe,
-    required this.canEditIdentity,
-  });
+  const _HeroSection({required this.tribe, required this.canEditIdentity});
   final Tribe tribe;
   final bool canEditIdentity;
 
@@ -285,28 +284,29 @@ class _HeroSection extends ConsumerWidget {
     try {
       final bytes = await picked.readAsBytes();
       final ext = picked.name.split('.').last;
-      final upload = await ref.read(repositoryProvider).uploadTribeAvatar(
+      final upload = await ref
+          .read(repositoryProvider)
+          .uploadTribeAvatar(
             tribeId: tribe.tribeId,
             bytes: bytes,
             extension: ext,
             contentType: picked.mimeType ?? 'image/jpeg',
           );
-      await ref.read(repositoryProvider).setTribeAvatar(
-            tribeId: tribe.tribeId,
-            avatarUrl: upload.url,
-          );
+      await ref
+          .read(repositoryProvider)
+          .setTribeAvatar(tribeId: tribe.tribeId, avatarUrl: upload.url);
       ref.invalidate(tribeBySlugProvider(tribe.slug));
       ref.invalidate(tribesIKeepProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tribe photo updated')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Tribe photo updated')));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
       }
     }
   }
@@ -328,8 +328,11 @@ class _HeroSection extends ConsumerWidget {
                   onTap: () => _pickAvatar(context, ref),
                   child: const Padding(
                     padding: EdgeInsets.all(8),
-                    child: Icon(Icons.camera_alt_rounded,
-                        color: Colors.white, size: 16),
+                    child: Icon(
+                      Icons.camera_alt_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
                   ),
                 ),
               ),
@@ -519,7 +522,9 @@ class _OnlineRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                        fontSize: 10, fontWeight: FontWeight.w800),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ],
@@ -565,23 +570,24 @@ class _MembersList extends ConsumerWidget {
               // display-name rollout reached the feed, threads, chat and the
               // friends list — so the same person read as "Healing Slow"
               // everywhere else and "@HealingSlow" here.
-              title: Text(m.displayName,
-                  style: const TextStyle(fontWeight: FontWeight.w800)),
+              title: Text(
+                m.displayName,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
               subtitle: Text(
                 m.role == 'keeper'
-                    ? '@${m.pseudonym} · Plug'
+                    ? '@${m.pseudonym} · Keeper'
                     : m.role == 'mod'
-                        ? '@${m.pseudonym} · Co-mod'
-                        : '@${m.pseudonym} · Member',
+                    ? '@${m.pseudonym} · Co-mod'
+                    : '@${m.pseudonym} · Member',
                 style: TextStyle(
                   fontSize: 11,
                   color: VentlyColors.berryMagenta.withOpacity(0.85),
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              trailing: canManage &&
-                      m.userId != me?.userId &&
-                      m.role != 'keeper'
+              trailing:
+                  canManage && m.userId != me?.userId && m.role != 'keeper'
                   ? PopupMenuButton<String>(
                       onSelected: (v) async {
                         final repo = ref.read(repositoryProvider);
@@ -606,9 +612,9 @@ class _MembersList extends ConsumerWidget {
                           ref.invalidate(tribeMembersProvider(tribe.tribeId));
                         } catch (e) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('$e')),
-                            );
+                            ScaffoldMessenger.of(
+                              context,
+                            ).showSnackBar(SnackBar(content: Text('$e')));
                           }
                         }
                       },
@@ -625,8 +631,10 @@ class _MembersList extends ConsumerWidget {
                           ),
                         const PopupMenuItem(
                           value: 'kick',
-                          child: Text('Remove from tribe',
-                              style: TextStyle(color: VentlyColors.dangerRed)),
+                          child: Text(
+                            'Remove from tribe',
+                            style: TextStyle(color: VentlyColors.dangerRed),
+                          ),
                         ),
                       ],
                     )
@@ -664,10 +672,12 @@ class _RulesSectionState extends ConsumerState<_RulesSection> {
   }
 
   Future<void> _save() async {
-    await ref.read(repositoryProvider).setTribeRules(
-      tribeId: widget.tribe.tribeId,
-      rules: {'text': _ctl.text.trim()},
-    );
+    await ref
+        .read(repositoryProvider)
+        .setTribeRules(
+          tribeId: widget.tribe.tribeId,
+          rules: {'text': _ctl.text.trim()},
+        );
     ref.invalidate(tribeBySlugProvider(widget.tribe.slug));
     setState(() => _editing = false);
   }
@@ -763,9 +773,13 @@ class _PromptsSection extends ConsumerWidget {
                 color: VentlyColors.berryMagenta,
                 size: 20,
               ),
-              title: Text(p.text,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w800)),
+              title: Text(
+                p.text,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               subtitle: Text(
                 p.scheduledFor == null
                     ? (p.isLive ? 'Live' : 'Draft')
@@ -781,8 +795,11 @@ class _PromptsSection extends ConsumerWidget {
                           onPressed: () => _editPrompt(context, ref, p),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.delete_outline,
-                              size: 18, color: VentlyColors.dangerRed),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            size: 18,
+                            color: VentlyColors.dangerRed,
+                          ),
                           onPressed: () => _deletePrompt(context, ref, p),
                         ),
                       ],
@@ -795,20 +812,21 @@ class _PromptsSection extends ConsumerWidget {
   }
 
   Future<void> _editPrompt(
-      BuildContext context, WidgetRef ref, ScheduledPrompt p) async {
+    BuildContext context,
+    WidgetRef ref,
+    ScheduledPrompt p,
+  ) async {
     final ctl = TextEditingController(text: p.text);
     final updated = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Edit prompt'),
-        content: TextField(
-          controller: ctl,
-          maxLines: 3,
-          autofocus: true,
-        ),
+        content: TextField(controller: ctl, maxLines: 3, autofocus: true),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, ctl.text.trim()),
             child: const Text('Save'),
@@ -817,7 +835,9 @@ class _PromptsSection extends ConsumerWidget {
       ),
     );
     if (updated == null || updated.length < 4) return;
-    await ref.read(repositoryProvider).updatePrompt(
+    await ref
+        .read(repositoryProvider)
+        .updatePrompt(
           tribeId: tribe.tribeId,
           promptId: p.promptId,
           text: updated,
@@ -827,7 +847,10 @@ class _PromptsSection extends ConsumerWidget {
   }
 
   Future<void> _deletePrompt(
-      BuildContext context, WidgetRef ref, ScheduledPrompt p) async {
+    BuildContext context,
+    WidgetRef ref,
+    ScheduledPrompt p,
+  ) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -835,8 +858,9 @@ class _PromptsSection extends ConsumerWidget {
         content: const Text('This removes the prompt from your tribe hub.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
@@ -882,34 +906,44 @@ class _ChatSettingsCard extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           SwitchListTile(
-            title: const Text('Members can invite',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            title: const Text(
+              'Members can invite',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text('Let members add friends to this tribe'),
             value: s.membersCanInvite,
             onChanged: (v) => _patch(ref, {'members_can_invite': v}),
           ),
           SwitchListTile(
-            title: const Text('Members can send media',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            title: const Text(
+              'Members can send media',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             value: s.membersCanSendMedia,
             onChanged: (v) => _patch(ref, {'members_can_send_media': v}),
           ),
           SwitchListTile(
-            title: const Text('Announce joins',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            title: const Text(
+              'Announce joins',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             value: s.announceJoins,
             onChanged: (v) => _patch(ref, {'announce_joins': v}),
           ),
           SwitchListTile(
-            title: const Text('Disappearing messages',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            title: const Text(
+              'Disappearing messages',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text('Auto-clear after 7 days (beta)'),
             value: s.disappearingMessages,
             onChanged: (v) => _patch(ref, {'disappearing_messages': v}),
           ),
           ListTile(
-            title: const Text('Wallpaper style',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            title: const Text(
+              'Wallpaper style',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             trailing: DropdownButton<String>(
               value: s.wallpaperStyle,
               items: const [
@@ -922,11 +956,15 @@ class _ChatSettingsCard extends ConsumerWidget {
             ),
           ),
           ListTile(
-            title: const Text('Slow mode',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text(s.slowModeSeconds == 0
-                ? 'Off'
-                : '${s.slowModeSeconds}s between messages'),
+            title: const Text(
+              'Slow mode',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            subtitle: Text(
+              s.slowModeSeconds == 0
+                  ? 'Off'
+                  : '${s.slowModeSeconds}s between messages',
+            ),
             trailing: DropdownButton<int>(
               value: s.slowModeSeconds,
               items: const [
@@ -942,17 +980,22 @@ class _ChatSettingsCard extends ConsumerWidget {
           ),
           const Divider(height: 24),
           SwitchListTile(
-            title: const Text('Daily check-in ritual',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            title: const Text(
+              'Daily check-in ritual',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: const Text(
-                'Plug posts a morning question automatically (UTC hour)'),
+              'Keeper posts a morning question automatically (UTC hour)',
+            ),
             value: s.dailyCheckinEnabled,
             onChanged: (v) => _patch(ref, {'daily_checkin_enabled': v}),
           ),
           if (s.dailyCheckinEnabled) ...[
             ListTile(
-              title: const Text('Check-in hour (UTC)',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
+              title: const Text(
+                'Check-in hour (UTC)',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
               trailing: DropdownButton<int>(
                 value: s.dailyCheckinHour.clamp(0, 23),
                 items: [
@@ -968,8 +1011,10 @@ class _ChatSettingsCard extends ConsumerWidget {
               ),
             ),
             ListTile(
-              title: const Text('Check-in prompt',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
+              title: const Text(
+                'Check-in prompt',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
               subtitle: Text(s.dailyCheckinPrompt),
               trailing: const Icon(Icons.edit_outlined, size: 18),
               onTap: () =>
@@ -982,10 +1027,9 @@ class _ChatSettingsCard extends ConsumerWidget {
   }
 
   Future<void> _patch(WidgetRef ref, Map<String, dynamic> patch) async {
-    await ref.read(repositoryProvider).setTribeChatSettings(
-          tribeId: tribe.tribeId,
-          patch: patch,
-        );
+    await ref
+        .read(repositoryProvider)
+        .setTribeChatSettings(tribeId: tribe.tribeId, patch: patch);
     ref.invalidate(tribeBySlugProvider(tribe.slug));
   }
 
@@ -1050,17 +1094,16 @@ class _PromptComposerState extends ConsumerState<_PromptComposer> {
     if (text.length < 4) return;
     setState(() => _busy = true);
     try {
-      await ref.read(repositoryProvider).schedulePrompt(
-            tribeId: widget.tribeId,
-            text: text,
-          );
+      await ref
+          .read(repositoryProvider)
+          .schedulePrompt(tribeId: widget.tribeId, text: text);
       ref.invalidate(tribePromptsProvider(widget.tribeId));
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not create: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not create: $e')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1102,8 +1145,10 @@ class _PromptComposerState extends ConsumerState<_PromptComposer> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Post prompt',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                : const Text(
+                    'Post prompt',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
           ),
         ],
       ),

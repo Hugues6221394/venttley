@@ -91,7 +91,8 @@ class TribeChatSettings {
       disappearingMessages: json['disappearing_messages'] == true,
       dailyCheckinEnabled: json['daily_checkin_enabled'] == true,
       dailyCheckinHour: (json['daily_checkin_hour'] as num?)?.toInt() ?? 13,
-      dailyCheckinPrompt: (json['daily_checkin_prompt'] as String?) ??
+      dailyCheckinPrompt:
+          (json['daily_checkin_prompt'] as String?) ??
           'How is everyone feeling today?',
     );
   }

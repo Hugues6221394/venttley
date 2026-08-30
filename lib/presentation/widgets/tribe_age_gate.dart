@@ -153,8 +153,18 @@ class _BirthMonthSheet extends ConsumerStatefulWidget {
 
 class _BirthMonthSheetState extends ConsumerState<_BirthMonthSheet> {
   static const _months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   int? _month;

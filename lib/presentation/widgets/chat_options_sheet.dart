@@ -83,13 +83,15 @@ class _ChatOptionsSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final prefs = ref.watch(dmRoomPrefsProvider(room.roomId)).valueOrNull ??
+    final prefs =
+        ref.watch(dmRoomPrefsProvider(room.roomId)).valueOrNull ??
         DmRoomPrefs.empty;
     final disappearing =
         ref.watch(roomDisappearingProvider(room.roomId)).valueOrNull ?? 0;
     final blocks =
         ref.watch(myBlocksProvider).valueOrNull ?? const <BlockedUser>[];
-    final isBlocked = room.peerUserId != null &&
+    final isBlocked =
+        room.peerUserId != null &&
         blocks.any((b) => b.userId == room.peerUserId);
     final displayName = prefs.peerNickname?.trim().isNotEmpty == true
         ? prefs.peerNickname!.trim()
@@ -132,11 +134,14 @@ class _ChatOptionsSheet extends ConsumerWidget {
             ),
             const SizedBox(height: 10),
             Center(
-              child: Text(displayName,
-                  style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 19,
-                      color: context.ink)),
+              child: Text(
+                displayName,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 19,
+                  color: context.ink,
+                ),
+              ),
             ),
             const SizedBox(height: 16),
             // Quick actions
@@ -147,18 +152,14 @@ class _ChatOptionsSheet extends ConsumerWidget {
                   _Quick(
                     icon: Icons.person_outline_rounded,
                     label: 'Profile',
-                    onTap: () => Navigator.pop(
-                      context,
-                      _ChatOptionsAction.profile,
-                    ),
+                    onTap: () =>
+                        Navigator.pop(context, _ChatOptionsAction.profile),
                   ),
                 _Quick(
                   icon: Icons.search_rounded,
                   label: 'Search',
-                  onTap: () => Navigator.pop(
-                    context,
-                    _ChatOptionsAction.search,
-                  ),
+                  onTap: () =>
+                      Navigator.pop(context, _ChatOptionsAction.search),
                 ),
                 _Quick(
                   icon: prefs.muted
@@ -197,10 +198,8 @@ class _ChatOptionsSheet extends ConsumerWidget {
               _Tile(
                 icon: Icons.group_add_outlined,
                 title: 'Create a group chat',
-                onTap: () => Navigator.pop(
-                  context,
-                  _ChatOptionsAction.createGroup,
-                ),
+                onTap: () =>
+                    Navigator.pop(context, _ChatOptionsAction.createGroup),
               ),
             _Tile(
               icon: Icons.flag_outlined,
@@ -221,13 +220,18 @@ class _ChatOptionsSheet extends ConsumerWidget {
     );
   }
 
-  Future<void> _set(WidgetRef ref, String roomId,
-      {bool? muted,
-      int? disappearingSeconds,
-      String? theme,
-      String? nickname,
-      bool clearNickname = false}) async {
-    await ref.read(repositoryProvider).setDmRoomPref(
+  Future<void> _set(
+    WidgetRef ref,
+    String roomId, {
+    bool? muted,
+    int? disappearingSeconds,
+    String? theme,
+    String? nickname,
+    bool clearNickname = false,
+  }) async {
+    await ref
+        .read(repositoryProvider)
+        .setDmRoomPref(
           roomId: roomId,
           muted: muted,
           disappearingSeconds: disappearingSeconds,
@@ -239,7 +243,10 @@ class _ChatOptionsSheet extends ConsumerWidget {
   }
 
   Future<void> _pickTheme(
-      BuildContext context, WidgetRef ref, String current) async {
+    BuildContext context,
+    WidgetRef ref,
+    String current,
+  ) async {
     final picked = await showModalBottomSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -262,7 +269,10 @@ class _ChatOptionsSheet extends ConsumerWidget {
   }
 
   Future<void> _pickDisappearing(
-      BuildContext context, WidgetRef ref, int current) async {
+    BuildContext context,
+    WidgetRef ref,
+    int current,
+  ) async {
     final picked = await showModalBottomSheet<int>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -293,12 +303,17 @@ class _ChatOptionsSheet extends ConsumerWidget {
           roomId: room.roomId,
           plaintext: SystemNotice.disappearing(picked),
         );
-      } catch (_) {/* setting already applied; notice is best-effort */}
+      } catch (_) {
+        /* setting already applied; notice is best-effort */
+      }
     }
   }
 
   Future<void> _setNickname(
-      BuildContext context, WidgetRef ref, String? current) async {
+    BuildContext context,
+    WidgetRef ref,
+    String? current,
+  ) async {
     final controller = TextEditingController(text: current ?? '');
     final result = await showDialog<String>(
       context: context,
@@ -313,13 +328,17 @@ class _ChatOptionsSheet extends ConsumerWidget {
         actions: [
           if ((current ?? '').isNotEmpty)
             TextButton(
-                onPressed: () => Navigator.pop(ctx, '__clear__'),
-                child: const Text('Remove')),
+              onPressed: () => Navigator.pop(ctx, '__clear__'),
+              child: const Text('Remove'),
+            ),
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-              child: const Text('Save')),
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
@@ -332,8 +351,10 @@ class _ChatOptionsSheet extends ConsumerWidget {
   }
 
   Future<void> _report(BuildContext context, WidgetRef ref) async {
-    final reason =
-        await showReportReasonSheet(context, title: 'Report this chat');
+    final reason = await showReportReasonSheet(
+      context,
+      title: 'Report this chat',
+    );
     if (reason == null) return;
     await ref
         .read(repositoryProvider)
@@ -347,7 +368,10 @@ class _ChatOptionsSheet extends ConsumerWidget {
   }
 
   Future<void> _toggleBlock(
-      BuildContext context, WidgetRef ref, bool isBlocked) async {
+    BuildContext context,
+    WidgetRef ref,
+    bool isBlocked,
+  ) async {
     final id = room.peerUserId;
     if (id == null) return;
     if (isBlocked) {
@@ -398,11 +422,14 @@ class _Quick extends StatelessWidget {
               child: Icon(icon, color: VentlyColors.berryMagenta, size: 22),
             ),
             const SizedBox(height: 6),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: context.ink)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: context.ink,
+              ),
+            ),
           ],
         ),
       ),
@@ -434,21 +461,29 @@ class _Tile extends StatelessWidget {
       leading: accent != null
           ? CircleAvatar(backgroundColor: accent, radius: 12)
           : Icon(icon, color: color),
-      title: Text(title,
-          style: TextStyle(fontWeight: FontWeight.w800, color: color)),
+      title: Text(
+        title,
+        style: TextStyle(fontWeight: FontWeight.w800, color: color),
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (trailing != null)
             Flexible(
-              child: Text(trailing!,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 12, color: context.ink.withOpacity(0.5))),
+              child: Text(
+                trailing!,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.ink.withOpacity(0.5),
+                ),
+              ),
             ),
           const SizedBox(width: 4),
-          const Icon(Icons.chevron_right_rounded,
-              color: VentlyColors.softMauve),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: VentlyColors.softMauve,
+          ),
         ],
       ),
       onTap: onTap,

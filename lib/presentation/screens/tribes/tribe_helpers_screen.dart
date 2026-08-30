@@ -14,15 +14,17 @@ import '../../widgets/vently_premium_background.dart';
 /// Every screen that shows a management control should ask this first. Hiding
 /// a control is only a courtesy — the server re-checks each action — but
 /// offering a button that always fails is its own kind of broken.
-final myTribePermissionsProvider =
-    FutureProvider.family<List<String>, String>((ref, tribeId) async {
+final myTribePermissionsProvider = FutureProvider.family<List<String>, String>((
+  ref,
+  tribeId,
+) async {
   return ref.read(repositoryProvider).myTribePermissions(tribeId);
 });
 
 final tribePermissionGrantsProvider =
     FutureProvider.family<TribePermissionGrants, String>((ref, tribeId) async {
-  return ref.read(repositoryProvider).tribePermissionGrants(tribeId);
-});
+      return ref.read(repositoryProvider).tribePermissionGrants(tribeId);
+    });
 
 /// The Keeper's screen for handing out individual capabilities.
 ///
@@ -68,8 +70,10 @@ class TribeHelpersScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('Helpers',
-            style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Helpers',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
       ),
       body: VentlyPremiumBackground(
         child: grants.when(
@@ -77,8 +81,10 @@ class TribeHelpersScreen extends ConsumerWidget {
           error: (error, _) => Center(
             child: Padding(
               padding: const EdgeInsets.all(28),
-              child: Text(UserFriendlyErrors.message(error),
-                  textAlign: TextAlign.center),
+              child: Text(
+                UserFriendlyErrors.message(error),
+                textAlign: TextAlign.center,
+              ),
             ),
           ),
           data: (data) => ListView(
@@ -91,7 +97,9 @@ class TribeHelpersScreen extends ConsumerWidget {
                     const Text(
                       'Share the load, not the keys',
                       style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w900),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -115,8 +123,11 @@ class TribeHelpersScreen extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(vertical: 28),
                   child: Column(
                     children: [
-                      Icon(Icons.group_outlined,
-                          size: 34, color: context.ink.withOpacity(.3)),
+                      Icon(
+                        Icons.group_outlined,
+                        size: 34,
+                        color: context.ink.withOpacity(.3),
+                      ),
                       const SizedBox(height: 10),
                       const Text(
                         'No helpers yet',
@@ -194,7 +205,9 @@ class _HelperCardState extends ConsumerState<_HelperCard> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await ref.read(repositoryProvider).setTribeMemberPermissions(
+      await ref
+          .read(repositoryProvider)
+          .setTribeMemberPermissions(
             widget.tribeId,
             widget.helper.userId,
             _selected.toList(),
@@ -208,7 +221,7 @@ class _HelperCardState extends ConsumerState<_HelperCard> {
             _selected.isEmpty
                 ? '@${widget.helper.pseudonym} is a regular member again.'
                 : '@${widget.helper.pseudonym} can now help with '
-                    '${_selected.length} thing${_selected.length == 1 ? '' : 's'}.',
+                      '${_selected.length} thing${_selected.length == 1 ? '' : 's'}.',
           ),
         ),
       );
@@ -240,8 +253,10 @@ class _HelperCardState extends ConsumerState<_HelperCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('@${widget.helper.pseudonym}',
-                        style: const TextStyle(fontWeight: FontWeight.w900)),
+                    Text(
+                      '@${widget.helper.pseudonym}',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
                     Text(
                       _selected.isEmpty
                           ? 'No permissions'
@@ -267,15 +282,19 @@ class _HelperCardState extends ConsumerState<_HelperCard> {
               onChanged: _saving
                   ? null
                   : (on) => setState(() {
-                        if (on == true) {
-                          _selected.add(option.key);
-                        } else {
-                          _selected.remove(option.key);
-                        }
-                      }),
-              title: Text(option.label,
-                  style: const TextStyle(
-                      fontSize: 13.5, fontWeight: FontWeight.w800)),
+                      if (on == true) {
+                        _selected.add(option.key);
+                      } else {
+                        _selected.remove(option.key);
+                      }
+                    }),
+              title: Text(
+                option.label,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               subtitle: Text(
                 option.description,
                 style: TextStyle(

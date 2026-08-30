@@ -27,7 +27,8 @@ class _DailyPromptCardState extends ConsumerState<DailyPromptCard> {
   Future<void> _loadDismissed() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = 'daily_prompt_dismissed_${DateTime.now().toIso8601String().substring(0, 10)}';
+      final key =
+          'daily_prompt_dismissed_${DateTime.now().toIso8601String().substring(0, 10)}';
       if (mounted) setState(() => _dismissed = prefs.getBool(key) ?? false);
     } catch (_) {}
   }
@@ -36,7 +37,8 @@ class _DailyPromptCardState extends ConsumerState<DailyPromptCard> {
     setState(() => _dismissed = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = 'daily_prompt_dismissed_${DateTime.now().toIso8601String().substring(0, 10)}';
+      final key =
+          'daily_prompt_dismissed_${DateTime.now().toIso8601String().substring(0, 10)}';
       await prefs.setBool(key, true);
     } catch (_) {}
   }
@@ -62,8 +64,11 @@ class _DailyPromptCardState extends ConsumerState<DailyPromptCard> {
                 color: VentlyTokens.growthTeal.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.bolt_rounded,
-                  color: VentlyTokens.growthTeal, size: 20),
+              child: const Icon(
+                Icons.bolt_rounded,
+                color: VentlyTokens.growthTeal,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -94,8 +99,10 @@ class _DailyPromptCardState extends ConsumerState<DailyPromptCard> {
                 ref.read(composeStoryModeProvider.notifier).state = false;
                 context.go('/compose');
               },
-              child: const Text('Vent',
-                  style: TextStyle(fontWeight: FontWeight.w900)),
+              child: const Text(
+                'Vent',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
             ),
             IconButton(
               icon: const Icon(Icons.close_rounded, size: 18),

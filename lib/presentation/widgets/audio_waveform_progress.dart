@@ -16,8 +16,30 @@ class AudioWaveformProgress extends StatelessWidget {
   final double height;
 
   static const _heights = <double>[
-    10, 18, 14, 24, 18, 28, 16, 20, 14, 24, 18, 12, 22, 16, 24, 18,
-    14, 22, 16, 26, 14, 18, 12, 24,
+    10,
+    18,
+    14,
+    24,
+    18,
+    28,
+    16,
+    20,
+    14,
+    24,
+    18,
+    12,
+    22,
+    16,
+    24,
+    18,
+    14,
+    22,
+    16,
+    26,
+    14,
+    18,
+    12,
+    24,
   ];
 
   @override
@@ -27,8 +49,10 @@ class AudioWaveformProgress extends StatelessWidget {
       height: height,
       child: LayoutBuilder(
         builder: (_, __) {
-          final filledBars =
-              (_heights.length * progress).round().clamp(0, _heights.length);
+          final filledBars = (_heights.length * progress).round().clamp(
+            0,
+            _heights.length,
+          );
           return Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [

@@ -49,18 +49,15 @@ class _KeeperLoadingShell extends StatelessWidget {
             children: [
               const SizedBox(height: 24),
               Text(
-                'Plug Studio',
+                'Keeper Studio',
                 style: TextStyle(
-                  color: context.ink,
-                  fontWeight: FontWeight.w800,
+                  color: VentlyColors.berryMagenta.withOpacity(0.9),
+                  fontWeight: FontWeight.w900,
                   fontSize: 18,
-                  letterSpacing: -0.4,
                 ),
               ),
               const Spacer(),
-              const CircularProgressIndicator(
-                color: VentlyColors.berryMagenta,
-              ),
+              const CircularProgressIndicator(color: VentlyColors.berryMagenta),
               const Spacer(flex: 2),
             ],
           ),

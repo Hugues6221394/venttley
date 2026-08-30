@@ -47,7 +47,7 @@ class _TribeSpacesManagementScreenState
           child: Padding(
             padding: EdgeInsets.all(28),
             child: Text(
-              'Only the current Plug can manage Tribe Spaces.',
+              'Only the current Keeper can manage Tribe Spaces.',
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
@@ -111,10 +111,7 @@ class _TribeSpacesManagementScreenState
                       ),
                   if (archived.isNotEmpty) ...[
                     const SizedBox(height: 18),
-                    _SectionLabel(
-                      label: 'Archived',
-                      count: archived.length,
-                    ),
+                    _SectionLabel(label: 'Archived', count: archived.length),
                     const SizedBox(height: 9),
                     for (final space in archived)
                       _SpaceCard(
@@ -150,7 +147,9 @@ class _TribeSpacesManagementScreenState
     if (value == null || !mounted) return;
     setState(() => busySpaceId = space?.spaceId ?? 'create');
     try {
-      await ref.read(repositoryProvider).manageTribeSpace(
+      await ref
+          .read(repositoryProvider)
+          .manageTribeSpace(
             tribeId: tribe.tribeId,
             action: space == null ? 'create' : 'update',
             spaceId: space?.spaceId,
@@ -180,15 +179,12 @@ class _TribeSpacesManagementScreenState
     }
   }
 
-  Future<void> _spaceAction(
-    Tribe tribe,
-    Space space,
-    String action,
-  ) async {
+  Future<void> _spaceAction(Tribe tribe, Space space, String action) async {
     if (space.isDefault && (action == 'archive' || action == 'delete')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('The General Space must remain available.')),
+          content: Text('The General Space must remain available.'),
+        ),
       );
       return;
     }
@@ -199,8 +195,9 @@ class _TribeSpacesManagementScreenState
         builder: (dialogContext) => ModalTextControllerScope(
           initialValues: const [''],
           builder: (dialogContext, controllers) => AlertDialog(
-            title:
-                Text(action == 'delete' ? 'Delete Space?' : 'Archive Space?'),
+            title: Text(
+              action == 'delete' ? 'Delete Space?' : 'Archive Space?',
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,7 +236,9 @@ class _TribeSpacesManagementScreenState
     }
     setState(() => busySpaceId = space.spaceId);
     try {
-      await ref.read(repositoryProvider).manageTribeSpace(
+      await ref
+          .read(repositoryProvider)
+          .manageTribeSpace(
             tribeId: tribe.tribeId,
             action: action,
             spaceId: space.spaceId,
@@ -473,8 +472,9 @@ class _EmptySpaces extends StatelessWidget {
     return const GlassCard(
       child: Padding(
         padding: EdgeInsets.all(12),
-        child:
-            Text('No active Spaces yet. Create one to start a focused room.'),
+        child: Text(
+          'No active Spaces yet. Create one to start a focused room.',
+        ),
       ),
     );
   }
@@ -513,10 +513,12 @@ class _SpaceEditor extends StatefulWidget {
 
 class _SpaceEditorState extends State<_SpaceEditor> {
   late final name = TextEditingController(text: widget.initial?.name);
-  late final description =
-      TextEditingController(text: widget.initial?.description);
-  late final weeklyTheme =
-      TextEditingController(text: widget.initial?.weeklyTheme);
+  late final description = TextEditingController(
+    text: widget.initial?.description,
+  );
+  late final weeklyTheme = TextEditingController(
+    text: widget.initial?.weeklyTheme,
+  );
   late String iconName = widget.initial?.iconName ?? 'chat';
   late String postingPermission =
       widget.initial?.postingPermission ?? 'members';
@@ -614,7 +616,7 @@ class _SpaceEditorState extends State<_SpaceEditor> {
               items: const [
                 DropdownMenuItem(value: 'members', child: Text('All members')),
                 DropdownMenuItem(value: 'mods', child: Text('Moderators')),
-                DropdownMenuItem(value: 'keeper', child: Text('Plug only')),
+                DropdownMenuItem(value: 'keeper', child: Text('Keeper only')),
                 DropdownMenuItem(value: 'read_only', child: Text('Read only')),
               ],
               onChanged: (value) =>
@@ -648,21 +650,22 @@ class _SpaceEditorState extends State<_SpaceEditor> {
               onPressed: name.text.trim().length < 2
                   ? null
                   : () => Navigator.pop(
-                        context,
-                        _SpaceDraft(
-                          name: name.text.trim(),
-                          description: description.text.trim(),
-                          iconName: iconName,
-                          weeklyTheme: weeklyTheme.text.trim(),
-                          postingPermission: postingPermission,
-                          isPinned: isPinned,
-                          activatesAt: activatesAt,
-                          deactivatesAt: deactivatesAt,
-                        ),
+                      context,
+                      _SpaceDraft(
+                        name: name.text.trim(),
+                        description: description.text.trim(),
+                        iconName: iconName,
+                        weeklyTheme: weeklyTheme.text.trim(),
+                        postingPermission: postingPermission,
+                        isPinned: isPinned,
+                        activatesAt: activatesAt,
+                        deactivatesAt: deactivatesAt,
                       ),
+                    ),
               icon: const Icon(Icons.check_rounded),
-              label:
-                  Text(widget.initial == null ? 'Create Space' : 'Save Space'),
+              label: Text(
+                widget.initial == null ? 'Create Space' : 'Save Space',
+              ),
             ),
           ],
         ),
@@ -689,9 +692,7 @@ class _ScheduleTile extends StatelessWidget {
       onTap: onTap,
       leading: const Icon(Icons.schedule_rounded),
       title: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
-      subtitle: Text(
-        value == null ? 'Not scheduled' : _formatDateTime(value!),
-      ),
+      subtitle: Text(value == null ? 'Not scheduled' : _formatDateTime(value!)),
       trailing: const Icon(Icons.chevron_right_rounded),
     );
   }
@@ -722,17 +723,17 @@ String _formatDateTime(DateTime value) {
 }
 
 String _permissionLabel(String value) => switch (value) {
-      'mods' => 'Moderators post',
-      'keeper' => 'Plug posts',
-      'read_only' => 'Read only',
-      _ => 'Members post',
-    };
+  'mods' => 'Moderators post',
+  'keeper' => 'Keeper posts',
+  'read_only' => 'Read only',
+  _ => 'Members post',
+};
 
 IconData _spaceIcon(String? value) => switch (value) {
-      'home' => Icons.home_rounded,
-      'heart' => Icons.favorite_outline_rounded,
-      'moon' => Icons.bedtime_outlined,
-      'spark' => Icons.auto_awesome_rounded,
-      'school' => Icons.school_outlined,
-      _ => Icons.chat_bubble_outline_rounded,
-    };
+  'home' => Icons.home_rounded,
+  'heart' => Icons.favorite_outline_rounded,
+  'moon' => Icons.bedtime_outlined,
+  'spark' => Icons.auto_awesome_rounded,
+  'school' => Icons.school_outlined,
+  _ => Icons.chat_bubble_outline_rounded,
+};

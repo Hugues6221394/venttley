@@ -16,14 +16,16 @@ export 'shared_axis.dart';
 class VentlyPageTransitions {
   VentlyPageTransitions._();
 
-  static const PageTransitionsTheme theme = PageTransitionsTheme(builders: {
-    TargetPlatform.android: SharedAxisPageTransitionsBuilder(),
-    TargetPlatform.iOS: CupertinoSharedAxisPageTransitionsBuilder(),
-    TargetPlatform.macOS: SharedAxisPageTransitionsBuilder(),
-    TargetPlatform.linux: SharedAxisPageTransitionsBuilder(),
-    TargetPlatform.windows: SharedAxisPageTransitionsBuilder(),
-    TargetPlatform.fuchsia: SharedAxisPageTransitionsBuilder(),
-  });
+  static const PageTransitionsTheme theme = PageTransitionsTheme(
+    builders: {
+      TargetPlatform.android: SharedAxisPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoSharedAxisPageTransitionsBuilder(),
+      TargetPlatform.macOS: SharedAxisPageTransitionsBuilder(),
+      TargetPlatform.linux: SharedAxisPageTransitionsBuilder(),
+      TargetPlatform.windows: SharedAxisPageTransitionsBuilder(),
+      TargetPlatform.fuchsia: SharedAxisPageTransitionsBuilder(),
+    },
+  );
 
   /// Available for one-off routes that want the modal feel instead.
   static const PageTransitionsBuilder fadeScale =

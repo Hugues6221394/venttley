@@ -168,9 +168,7 @@ class PiiScrubber {
 
     final tokens = normalized.split('_');
     if (tokens.any(_secretKeyTokens.contains)) return true;
-    return _contentKeySuffixes.any(
-      (suffix) => normalized.endsWith('_$suffix'),
-    );
+    return _contentKeySuffixes.any((suffix) => normalized.endsWith('_$suffix'));
   }
 }
 

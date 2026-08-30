@@ -163,7 +163,9 @@ ScrubbedImage _scrubPng(Uint8List bytes) {
 
   while (i + 8 <= bytes.length) {
     final length =
-        (bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) |
+        (bytes[i] << 24) |
+        (bytes[i + 1] << 16) |
+        (bytes[i + 2] << 8) |
         bytes[i + 3];
     if (length < 0 || i + 12 + length > bytes.length) {
       out.add(bytes.sublist(i));

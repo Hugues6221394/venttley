@@ -99,10 +99,7 @@ class _WhisperPreviewSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(18),
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: Image.memory(
-                    backgroundBytes!,
-                    fit: BoxFit.cover,
-                  ),
+                  child: Image.memory(backgroundBytes!, fit: BoxFit.cover),
                 ),
               ),
             if (backgroundBytes != null) const SizedBox(height: 16),

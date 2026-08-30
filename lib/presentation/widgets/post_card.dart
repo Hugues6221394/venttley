@@ -455,8 +455,8 @@ class PostCard extends ConsumerWidget {
                                   const SizedBox(width: 8),
                                   Text(
                                     post.isKeeperPick
-                                        ? 'Unpick from Plug\'s'
-                                        : 'Mark as Plug\'s Pick',
+                                        ? 'Unpick from Keeper\'s'
+                                        : 'Mark as Keeper\'s Pick',
                                   ),
                                 ],
                               ),

@@ -74,13 +74,13 @@ class KeeperAnalyticsScreen extends ConsumerWidget {
                       subtitle: health >= 80
                           ? 'Your tribe is thriving'
                           : health >= 50
-                              ? 'Room to grow engagement'
-                              : 'Needs attention today',
+                          ? 'Room to grow engagement'
+                          : 'Needs attention today',
                       color: health >= 80
                           ? const Color(0xFF3D9B6A)
                           : health >= 50
-                              ? const Color(0xFFD97706)
-                              : VentlyColors.berryMagenta,
+                          ? const Color(0xFFD97706)
+                          : VentlyColors.berryMagenta,
                     ),
                     const SizedBox(height: 14),
                     Row(
@@ -108,7 +108,8 @@ class KeeperAnalyticsScreen extends ConsumerWidget {
                         Expanded(
                           child: _MetricCard(
                             label: 'Vents · 24h',
-                            value: '${stats?.posts24h ?? overview.totalPosts24h}',
+                            value:
+                                '${stats?.posts24h ?? overview.totalPosts24h}',
                             icon: Icons.forum_outlined,
                           ),
                         ),
@@ -128,7 +129,8 @@ class KeeperAnalyticsScreen extends ConsumerWidget {
                         Expanded(
                           child: _MetricCard(
                             label: 'Active posters',
-                            value: '${stats?.activePosters7d ?? overview.totalActivePosters7d}',
+                            value:
+                                '${stats?.activePosters7d ?? overview.totalActivePosters7d}',
                             icon: Icons.person_outline,
                           ),
                         ),
@@ -136,8 +138,7 @@ class KeeperAnalyticsScreen extends ConsumerWidget {
                         Expanded(
                           child: _MetricCard(
                             label: 'Engagement',
-                            value:
-                                '${overview.engagementScoreFor(stats)}',
+                            value: '${overview.engagementScoreFor(stats)}',
                             icon: Icons.bolt_rounded,
                           ),
                         ),
@@ -216,8 +217,10 @@ class KeeperAnalyticsScreen extends ConsumerWidget {
 
   String _retention(TribeStudioStats? stats) {
     if (stats == null || stats.memberCount == 0) return '—';
-    final pct =
-        (stats.activePosters7d / stats.memberCount * 100).round().clamp(0, 100);
+    final pct = (stats.activePosters7d / stats.memberCount * 100).round().clamp(
+      0,
+      100,
+    );
     return '$pct%';
   }
 }
@@ -240,9 +243,7 @@ class _HeroMetric extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color, color.withOpacity(0.75)],
-        ),
+        gradient: LinearGradient(colors: [color, color.withOpacity(0.75)]),
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(

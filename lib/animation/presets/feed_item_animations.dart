@@ -35,15 +35,17 @@ class FeedItemEntrance extends StatefulWidget {
 
 class _FeedItemEntranceState extends State<FeedItemEntrance>
     with SingleTickerProviderStateMixin {
-  late final bool _shouldAnimate =
-      (widget.registry ?? feedAnimationRegistry).shouldAnimate(widget.id);
+  late final bool _shouldAnimate = (widget.registry ?? feedAnimationRegistry)
+      .shouldAnimate(widget.id);
 
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: MotionTokens.feedback.duration,
   );
-  late final CurvedAnimation _curved =
-      CurvedAnimation(parent: _controller, curve: AppCurves.standard);
+  late final CurvedAnimation _curved = CurvedAnimation(
+    parent: _controller,
+    curve: AppCurves.standard,
+  );
 
   @override
   void initState() {

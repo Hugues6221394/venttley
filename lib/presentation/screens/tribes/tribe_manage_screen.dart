@@ -269,7 +269,7 @@ class _HeaderCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       stats != null && stats!.openReports > 0
-                          ? 'Plug · ${stats!.openReports} open report${stats!.openReports == 1 ? '' : 's'}'
+                          ? 'Keeper · ${stats!.openReports} open report${stats!.openReports == 1 ? '' : 's'}'
                           : 'Kept by you',
                       style: TextStyle(
                         fontSize: 11,
@@ -1474,7 +1474,7 @@ class _MemberRow extends ConsumerWidget {
   String _roleLabel(String role) {
     switch (role) {
       case 'keeper':
-        return 'Plug';
+        return 'Keeper';
       case 'mod':
         return 'Mod';
       default:
@@ -1678,7 +1678,7 @@ class _MemberRow extends ConsumerWidget {
             context,
             title: 'Transfer keepership?',
             body:
-                'You will become a mod. @${member.pseudonym} will be the new Plug of ${tribe.name}.',
+                'You will become a mod. @${member.pseudonym} will be the new Keeper of ${tribe.name}.',
             confirm: 'Transfer',
             destructive: true,
           );
@@ -1687,7 +1687,7 @@ class _MemberRow extends ConsumerWidget {
             tribeId: tribe.tribeId,
             toUserId: member.userId,
           );
-          _snack(context, 'Plug role transferred to @${member.pseudonym}.');
+          _snack(context, 'Keeper role transferred to @${member.pseudonym}.');
           invalidate();
           break;
       }

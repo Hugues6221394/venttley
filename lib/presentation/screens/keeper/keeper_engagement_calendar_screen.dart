@@ -48,27 +48,34 @@ class KeeperEngagementCalendarScreen extends ConsumerWidget {
                   scheduleRequired: true,
                 ),
                 icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Schedule new prompt',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                label: const Text(
+                  'Schedule new prompt',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
               ),
             const SizedBox(height: 18),
             _SectionTitle('Upcoming', count: cal.scheduled.length),
             const SizedBox(height: 8),
             if (cal.scheduled.isEmpty)
               const _EmptyHint(
-                  'Nothing scheduled yet — plan your next check-in.')
+                'Nothing scheduled yet — plan your next check-in.',
+              )
             else
-              ...cal.scheduled
-                  .map((p) => _PromptTile(prompt: p, upcoming: true)),
+              ...cal.scheduled.map(
+                (p) => _PromptTile(prompt: p, upcoming: true),
+              ),
             const SizedBox(height: 18),
-            _SectionTitle('Recently published',
-                count: cal.recentPublished.length),
+            _SectionTitle(
+              'Recently published',
+              count: cal.recentPublished.length,
+            ),
             const SizedBox(height: 8),
             if (cal.recentPublished.isEmpty)
               const _EmptyHint('Published prompts will appear here.')
             else
-              ...cal.recentPublished
-                  .map((p) => _PromptTile(prompt: p, upcoming: false)),
+              ...cal.recentPublished.map(
+                (p) => _PromptTile(prompt: p, upcoming: false),
+              ),
             const SizedBox(height: 18),
             _SectionTitle('Suggested cadence', count: cal.suggestions.length),
             const SizedBox(height: 8),
@@ -199,10 +206,7 @@ class _SuggestionTile extends StatelessWidget {
           children: [
             Text(
               suggestion.title,
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                color: context.ink,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w900, color: context.ink),
             ),
             const SizedBox(height: 4),
             Text(

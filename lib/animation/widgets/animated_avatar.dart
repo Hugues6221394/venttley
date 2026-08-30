@@ -36,8 +36,7 @@ class _AnimatedAvatarState extends State<AnimatedAvatar>
 
   @override
   Widget build(BuildContext context) {
-    final ambient =
-        widget.showPresence && MotionConfig.ambientEnabled(context);
+    final ambient = widget.showPresence && MotionConfig.ambientEnabled(context);
     if (ambient && !_controller.isAnimating) {
       _controller.repeat(reverse: true);
     } else if (!ambient && _controller.isAnimating) {
@@ -66,8 +65,9 @@ class _AnimatedAvatarState extends State<AnimatedAvatar>
                   border: Border.all(color: Colors.white, width: 2),
                   boxShadow: [
                     BoxShadow(
-                      color: VentlyColors.onlineGreen
-                          .withOpacity(0.30 + 0.25 * t),
+                      color: VentlyColors.onlineGreen.withOpacity(
+                        0.30 + 0.25 * t,
+                      ),
                       blurRadius: 4 + 4 * t,
                     ),
                   ],

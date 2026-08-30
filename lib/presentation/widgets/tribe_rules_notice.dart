@@ -13,8 +13,8 @@ import '../theme/colors.dart';
 /// imports.
 final tribeRulesStatusProvider =
     FutureProvider.family<TribeRulesStatus, String>((ref, tribeId) async {
-  return ref.read(repositoryProvider).myTribeRulesStatus(tribeId);
-});
+      return ref.read(repositoryProvider).myTribeRulesStatus(tribeId);
+    });
 
 /// Shown to a member when the Keeper has published rules since they joined.
 ///
@@ -48,8 +48,11 @@ class TribeRulesUpdatedBanner extends ConsumerWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.gavel_rounded,
-                    size: 18, color: VentlyColors.berryMagenta),
+                const Icon(
+                  Icons.gavel_rounded,
+                  size: 18,
+                  color: VentlyColors.berryMagenta,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -58,7 +61,9 @@ class TribeRulesUpdatedBanner extends ConsumerWidget {
                       const Text(
                         'The rules changed',
                         style: TextStyle(
-                            fontSize: 12.5, fontWeight: FontWeight.w900),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -75,8 +80,11 @@ class TribeRulesUpdatedBanner extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                const Icon(Icons.chevron_right_rounded,
-                    size: 20, color: VentlyColors.berryMagenta),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: VentlyColors.berryMagenta,
+                ),
               ],
             ),
           ),
@@ -176,8 +184,7 @@ class _RulesSheetState extends ConsumerState<_RulesSheet> {
                 children: [
                   const Text(
                     'The rules changed',
-                    style:
-                        TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -241,7 +248,9 @@ class _RulesSheetState extends ConsumerState<_RulesSheet> {
                             Text(
                               rule.title,
                               style: const TextStyle(
-                                  fontWeight: FontWeight.w800, fontSize: 14),
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                              ),
                             ),
                             if ((rule.description ?? '').trim().isNotEmpty) ...[
                               const SizedBox(height: 3),
@@ -301,8 +310,18 @@ class _RulesSheetState extends ConsumerState<_RulesSheet> {
 
   static String _shortDate(DateTime when) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[when.month - 1]} ${when.day}, ${when.year}';
   }

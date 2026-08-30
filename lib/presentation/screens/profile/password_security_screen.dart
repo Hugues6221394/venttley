@@ -115,10 +115,7 @@ class _PasswordSecurityScreenState
                 label: checkup.twoFactorLabel,
                 ok: checkup.twoFactorOn,
               ),
-              _CheckItem(
-                label: checkup.recoveryLabel,
-                ok: checkup.recoveryOk,
-              ),
+              _CheckItem(label: checkup.recoveryLabel, ok: checkup.recoveryOk),
             ],
           ),
           const SizedBox(height: 20),

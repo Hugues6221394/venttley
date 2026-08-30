@@ -101,8 +101,9 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
         );
         context.go('/feed');
       } else {
-        setState(() =>
-            _error = 'That code is wrong or expired. Try again or resend.');
+        setState(
+          () => _error = 'That code is wrong or expired. Try again or resend.',
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -145,17 +146,20 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                   color: scheme.primary.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.mark_email_read_outlined,
-                    color: scheme.primary, size: 34),
+                child: Icon(
+                  Icons.mark_email_read_outlined,
+                  color: scheme.primary,
+                  size: 34,
+                ),
               ),
               const SizedBox(height: 18),
               Text(
                 'Check your inbox',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: context.ink,
-                    ),
+                  fontWeight: FontWeight.w900,
+                  color: context.ink,
+                ),
               ),
               const SizedBox(height: 10),
               Text(
@@ -201,8 +205,9 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                   _error!,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                      color: VentlyColors.dangerRed,
-                      fontWeight: FontWeight.w700),
+                    color: VentlyColors.dangerRed,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
               const SizedBox(height: 22),
@@ -211,14 +216,17 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(54),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28)),
+                    borderRadius: BorderRadius.circular(28),
+                  ),
                 ),
                 child: _busy
                     ? const SizedBox(
                         width: 22,
                         height: 22,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2.4, color: Colors.white),
+                          strokeWidth: 2.4,
+                          color: Colors.white,
+                        ),
                       )
                     : const Text('Verify email'),
               ),
@@ -229,8 +237,8 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                   _sending
                       ? 'Sending…'
                       : _cooldown > 0
-                          ? 'Resend code in ${_cooldown}s'
-                          : 'Resend code',
+                      ? 'Resend code in ${_cooldown}s'
+                      : 'Resend code',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),

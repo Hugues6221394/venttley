@@ -34,8 +34,10 @@ class _NotificationForegroundListenerState
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AsyncValue<List<ChatRoom>>>(allInboxRoomsStreamProvider,
-        (prev, next) {
+    ref.listen<AsyncValue<List<ChatRoom>>>(allInboxRoomsStreamProvider, (
+      prev,
+      next,
+    ) {
       final rooms = next.valueOrNull;
       if (rooms == null) return;
 
@@ -72,37 +74,39 @@ class _NotificationForegroundListenerState
       }
     });
 
-    ref.listen<AsyncValue<List<TribeChatInboxSummary>>>(tribeChatInboxProvider,
-        (prev, next) {
-      final summaries = next.valueOrNull;
-      if (summaries == null) return;
+    ref.listen<AsyncValue<List<TribeChatInboxSummary>>>(
+      tribeChatInboxProvider,
+      (prev, next) {
+        final summaries = next.valueOrNull;
+        if (summaries == null) return;
 
-      final location = widget.router.routeInformationProvider.value.uri.path;
+        final location = widget.router.routeInformationProvider.value.uri.path;
 
-      for (final s in summaries) {
-        final prevUnread = _lastUnreadByTribe[s.tribeId] ?? 0;
-        final prevPreview = _lastPreviewByTribe[s.tribeId];
-        _lastUnreadByTribe[s.tribeId] = s.unreadCount;
-        _lastPreviewByTribe[s.tribeId] = s.lastMessagePreview;
+        for (final s in summaries) {
+          final prevUnread = _lastUnreadByTribe[s.tribeId] ?? 0;
+          final prevPreview = _lastPreviewByTribe[s.tribeId];
+          _lastUnreadByTribe[s.tribeId] = s.unreadCount;
+          _lastPreviewByTribe[s.tribeId] = s.lastMessagePreview;
 
-        if (s.unreadCount <= prevUnread) continue;
-        if (location.startsWith('/tribe/${s.slug}/chat')) continue;
+          if (s.unreadCount <= prevUnread) continue;
+          if (location.startsWith('/tribe/${s.slug}/chat')) continue;
 
-        final preview = s.lastMessagePreview?.trim();
-        final isNewMessage =
-            preview != null && preview.isNotEmpty && preview != prevPreview;
+          final preview = s.lastMessagePreview?.trim();
+          final isNewMessage =
+              preview != null && preview.isNotEmpty && preview != prevPreview;
 
-        if (!isNewMessage && prevUnread > 0) continue;
+          if (!isNewMessage && prevUnread > 0) continue;
 
-        NotificationsService.instance.show(
-          title: s.name,
-          body: preview == null || preview.isEmpty
-              ? 'New message in tribe chat'
-              : preview,
-          payload: NotificationPayload.tribeChat(s.slug),
-        );
-      }
-    });
+          NotificationsService.instance.show(
+            title: s.name,
+            body: preview == null || preview.isEmpty
+                ? 'New message in tribe chat'
+                : preview,
+            payload: NotificationPayload.tribeChat(s.slug),
+          );
+        }
+      },
+    );
 
     return widget.child;
   }

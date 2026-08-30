@@ -23,7 +23,8 @@ class VentlyPremiumBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isPureBlack = context.isPureBlack;
-    final hasPhoto = wallpaperUrl != null &&
+    final hasPhoto =
+        wallpaperUrl != null &&
         wallpaperUrl!.trim().isNotEmpty &&
         wallpaperStyle == 'photo';
     final canvas = _canvasColor(context, isPureBlack: isPureBlack);
@@ -32,11 +33,12 @@ class VentlyPremiumBackground extends StatelessWidget {
       return ColoredBox(color: canvas, child: child);
     }
 
-    final wallpaperDecodeWidth = (MediaQuery.sizeOf(context).width *
-            MediaQuery.devicePixelRatioOf(context))
-        .ceil()
-        .clamp(1, 4096)
-        .toInt();
+    final wallpaperDecodeWidth =
+        (MediaQuery.sizeOf(context).width *
+                MediaQuery.devicePixelRatioOf(context))
+            .ceil()
+            .clamp(1, 4096)
+            .toInt();
 
     return Stack(
       fit: StackFit.expand,
@@ -46,9 +48,7 @@ class VentlyPremiumBackground extends StatelessWidget {
           fit: BoxFit.cover,
           cacheWidth: wallpaperDecodeWidth,
           filterQuality: FilterQuality.medium,
-          errorBuilder: (_, __, ___) => ColoredBox(
-            color: canvas,
-          ),
+          errorBuilder: (_, __, ___) => ColoredBox(color: canvas),
         ),
         DecoratedBox(
           decoration: BoxDecoration(

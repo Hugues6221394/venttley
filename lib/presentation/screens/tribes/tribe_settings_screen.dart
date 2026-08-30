@@ -967,7 +967,7 @@ class _AdvancedSettingsSheetState extends State<_AdvancedSettingsSheet> {
                     choices: const {
                       'All members': 'members',
                       'Moderators': 'mods',
-                      'Plug only': 'keeper',
+                      'Keeper only': 'keeper',
                     },
                     onChanged: (next) => setState(
                       () => value = value.copyWith(postingPermission: next),

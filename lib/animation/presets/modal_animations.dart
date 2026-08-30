@@ -17,9 +17,8 @@ Future<T?> showGlassSheet<T>(
     backgroundColor: Colors.transparent,
     isScrollControlled: isScrollControlled,
     barrierColor: Colors.black.withOpacity(0.32),
-    builder: (ctx) => GlassSheet(
-      child: SafeArea(top: false, child: builder(ctx)),
-    ),
+    builder: (ctx) =>
+        GlassSheet(child: SafeArea(top: false, child: builder(ctx))),
   );
 }
 

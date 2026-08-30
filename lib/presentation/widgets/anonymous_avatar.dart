@@ -40,7 +40,12 @@ class AnonymousAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final design = AvatarDesign.tryParse(seed);
     final core = design != null
-        ? _DesignedAvatar(design: design, size: size, label: label, animate: animate)
+        ? _DesignedAvatar(
+            design: design,
+            size: size,
+            label: label,
+            animate: animate,
+          )
         : _LegacyAvatar(seed: seed, label: label, size: size);
 
     if (!showVerifiedBadge) return core;
@@ -105,10 +110,7 @@ class _LegacyAvatar extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(size * 0.32),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.6),
-          width: 1.5,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.5),
       ),
       alignment: Alignment.center,
       child: Text(
@@ -165,8 +167,7 @@ class _DesignedAvatarState extends State<_DesignedAvatar>
   /// the chosen aura actually has motion to show — saves a tick per
   /// frame for "animate + aura.none" avatars.
   void _maybeStart() {
-    final wantsTicker =
-        widget.animate && widget.design.aura != AvatarAura.none;
+    final wantsTicker = widget.animate && widget.design.aura != AvatarAura.none;
     if (wantsTicker && _ctrl == null) {
       _ctrl = AnimationController(
         vsync: this,
@@ -216,11 +217,7 @@ class _DesignedAvatarState extends State<_DesignedAvatar>
 }
 
 class _AvatarPainter extends CustomPainter {
-  _AvatarPainter({
-    required this.design,
-    required this.initial,
-    this.phase = 0,
-  });
+  _AvatarPainter({required this.design, required this.initial, this.phase = 0});
   final AvatarDesign design;
   final String initial;
 
@@ -254,11 +251,7 @@ class _AvatarPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     canvas.save();
     canvas.clipPath(basePath);
-    canvas.drawCircle(
-      Offset(w * 0.34, h * 0.30),
-      w * 0.18,
-      highlightPaint,
-    );
+    canvas.drawCircle(Offset(w * 0.34, h * 0.30), w * 0.18, highlightPaint);
     canvas.restore();
 
     // ── Outfit layer, clipped inside the silhouette ─────────────────
@@ -306,8 +299,12 @@ class _AvatarPainter extends CustomPainter {
     final p = Path();
     switch (s) {
       case AvatarSilhouette.orb:
-        p.addRRect(RRect.fromRectAndRadius(
-            r.deflate(r.width * 0.02), Radius.circular(r.width * 0.32)));
+        p.addRRect(
+          RRect.fromRectAndRadius(
+            r.deflate(r.width * 0.02),
+            Radius.circular(r.width * 0.32),
+          ),
+        );
       case AvatarSilhouette.blob:
         // Hand-tuned organic blob — six anchor points around the centre.
         final c = r.center;
@@ -329,18 +326,28 @@ class _AvatarPainter extends CustomPainter {
         // Pointed leaf with a slight tilt.
         p.moveTo(r.center.dx, r.top + r.height * 0.04);
         p.quadraticBezierTo(
-            r.right * 0.96, r.center.dy * 0.55, r.center.dx, r.bottom * 0.96);
+          r.right * 0.96,
+          r.center.dy * 0.55,
+          r.center.dx,
+          r.bottom * 0.96,
+        );
         p.quadraticBezierTo(
-            r.left + r.width * 0.04, r.center.dy * 1.45, r.center.dx, r.top + r.height * 0.04);
+          r.left + r.width * 0.04,
+          r.center.dy * 1.45,
+          r.center.dx,
+          r.top + r.height * 0.04,
+        );
         p.close();
       case AvatarSilhouette.crescent:
         // Half-moon arc.
         final big = Path()..addOval(r.deflate(r.width * 0.04));
         final smaller = Path()
-          ..addOval(Rect.fromCircle(
-            center: Offset(r.center.dx + r.width * 0.18, r.center.dy),
-            radius: r.width * 0.40,
-          ));
+          ..addOval(
+            Rect.fromCircle(
+              center: Offset(r.center.dx + r.width * 0.18, r.center.dy),
+              radius: r.width * 0.40,
+            ),
+          );
         return Path.combine(PathOperation.difference, big, smaller);
       case AvatarSilhouette.diamond:
         p.moveTo(r.center.dx, r.top + r.height * 0.04);
@@ -354,14 +361,20 @@ class _AvatarPainter extends CustomPainter {
         final h = r.height;
         p.moveTo(r.center.dx, r.top + h * 0.92);
         p.cubicTo(
-          r.left - w * 0.05, r.top + h * 0.55,
-          r.left + w * 0.05, r.top + h * 0.05,
-          r.center.dx, r.top + h * 0.32,
+          r.left - w * 0.05,
+          r.top + h * 0.55,
+          r.left + w * 0.05,
+          r.top + h * 0.05,
+          r.center.dx,
+          r.top + h * 0.32,
         );
         p.cubicTo(
-          r.right - w * 0.05, r.top + h * 0.05,
-          r.right + w * 0.05, r.top + h * 0.55,
-          r.center.dx, r.top + h * 0.92,
+          r.right - w * 0.05,
+          r.top + h * 0.05,
+          r.right + w * 0.05,
+          r.top + h * 0.55,
+          r.center.dx,
+          r.top + h * 0.92,
         );
         p.close();
     }
@@ -392,12 +405,14 @@ class _AvatarPainter extends CustomPainter {
           final angle = base + phase * math.pi * 2;
           final x = r.center.dx + math.cos(angle) * w * 0.48;
           final y = r.center.dy + math.sin(angle) * w * 0.48;
-          final twinkle =
-              (math.sin(phase * math.pi * 4 + i * 1.7) + 1) / 2;
+          final twinkle = (math.sin(phase * math.pi * 4 + i * 1.7) + 1) / 2;
           paint.color = colors.accent.withOpacity(0.55 + 0.35 * twinkle);
           canvas.drawCircle(Offset(x, y), w * 0.045, paint);
           canvas.drawCircle(
-              Offset(x, y), w * 0.015, Paint()..color = Colors.white);
+            Offset(x, y),
+            w * 0.015,
+            Paint()..color = Colors.white,
+          );
         }
       case AvatarAura.pulse:
         // Two concentric rings expanding outward + fading. When static
@@ -444,41 +459,46 @@ class _AvatarPainter extends CustomPainter {
         final p = Path();
         p.moveTo(r.left + r.width * 0.18, r.top + r.height * 0.30);
         p.quadraticBezierTo(
-          r.center.dx, r.top - r.height * 0.05,
-          r.right - r.width * 0.18, r.top + r.height * 0.30,
+          r.center.dx,
+          r.top - r.height * 0.05,
+          r.right - r.width * 0.18,
+          r.top + r.height * 0.30,
         );
         p.quadraticBezierTo(
-          r.center.dx, r.top + r.height * 0.10,
-          r.left + r.width * 0.18, r.top + r.height * 0.30,
+          r.center.dx,
+          r.top + r.height * 0.10,
+          r.left + r.width * 0.18,
+          r.top + r.height * 0.30,
         );
         p.close();
         canvas.drawPath(p, paint);
       case AvatarHair.spike:
         for (final dx in [0.30, 0.50, 0.70]) {
           final p = Path();
-          p.moveTo(r.left + r.width * (dx - 0.05),
-              r.top + r.height * 0.22);
+          p.moveTo(r.left + r.width * (dx - 0.05), r.top + r.height * 0.22);
           p.lineTo(r.left + r.width * dx, r.top + r.height * 0.02);
-          p.lineTo(r.left + r.width * (dx + 0.05),
-              r.top + r.height * 0.22);
+          p.lineTo(r.left + r.width * (dx + 0.05), r.top + r.height * 0.22);
           p.close();
           canvas.drawPath(p, paint);
         }
       case AvatarHair.bun:
         canvas.drawCircle(
-            Offset(r.center.dx, r.top + r.height * 0.06),
-            r.width * 0.10,
-            paint);
+          Offset(r.center.dx, r.top + r.height * 0.06),
+          r.width * 0.10,
+          paint,
+        );
       case AvatarHair.curl:
         // Two side curls.
         canvas.drawCircle(
-            Offset(r.left + r.width * 0.16, r.top + r.height * 0.22),
-            r.width * 0.09,
-            paint);
+          Offset(r.left + r.width * 0.16, r.top + r.height * 0.22),
+          r.width * 0.09,
+          paint,
+        );
         canvas.drawCircle(
-            Offset(r.right - r.width * 0.16, r.top + r.height * 0.22),
-            r.width * 0.09,
-            paint);
+          Offset(r.right - r.width * 0.16, r.top + r.height * 0.22),
+          r.width * 0.09,
+          paint,
+        );
     }
   }
 
@@ -511,11 +531,19 @@ class _AvatarPainter extends CustomPainter {
         );
         final hood = Path()
           ..moveTo(r.left + w * 0.28, top + h * 0.06)
-          ..quadraticBezierTo(r.center.dx, top - h * 0.16,
-              r.right - w * 0.28, top + h * 0.06)
+          ..quadraticBezierTo(
+            r.center.dx,
+            top - h * 0.16,
+            r.right - w * 0.28,
+            top + h * 0.06,
+          )
           ..lineTo(r.right - w * 0.34, top + h * 0.18)
           ..quadraticBezierTo(
-              r.center.dx, top + h * 0.05, r.left + w * 0.34, top + h * 0.18)
+            r.center.dx,
+            top + h * 0.05,
+            r.left + w * 0.34,
+            top + h * 0.18,
+          )
           ..close();
         canvas.drawPath(hood, Paint()..color = colors.accent.withOpacity(0.92));
         canvas.drawLine(
@@ -541,8 +569,12 @@ class _AvatarPainter extends CustomPainter {
           trimPaint,
         );
         canvas.drawRect(
-          Rect.fromLTRB(r.left + w * 0.18, top + h * 0.13,
-              r.right - w * 0.18, top + h * 0.18),
+          Rect.fromLTRB(
+            r.left + w * 0.18,
+            top + h * 0.13,
+            r.right - w * 0.18,
+            top + h * 0.18,
+          ),
           accentPaint,
         );
       case AvatarOutfit.jacket:
@@ -582,8 +614,12 @@ class _AvatarPainter extends CustomPainter {
         );
         canvas.drawRRect(
           RRect.fromRectAndRadius(
-            Rect.fromLTRB(r.center.dx, top + h * 0.06,
-                r.center.dx + w * 0.12, r.bottom - h * 0.02),
+            Rect.fromLTRB(
+              r.center.dx,
+              top + h * 0.06,
+              r.center.dx + w * 0.12,
+              r.bottom - h * 0.02,
+            ),
             Radius.circular(w * 0.05),
           ),
           Paint()..color = colors.accent.withOpacity(0.90),
@@ -605,10 +641,8 @@ class _AvatarPainter extends CustomPainter {
           ..strokeWidth = math.max(1.5, r.width * 0.025);
         final y = r.top + r.height * 0.46;
         final rad = r.width * 0.10;
-        canvas.drawCircle(
-            Offset(r.left + r.width * 0.32, y), rad, stroke);
-        canvas.drawCircle(
-            Offset(r.right - r.width * 0.32, y), rad, stroke);
+        canvas.drawCircle(Offset(r.left + r.width * 0.32, y), rad, stroke);
+        canvas.drawCircle(Offset(r.right - r.width * 0.32, y), rad, stroke);
         canvas.drawLine(
           Offset(r.left + r.width * 0.32 + rad, y),
           Offset(r.right - r.width * 0.32 - rad, y),
@@ -660,9 +694,10 @@ class _AvatarPainter extends CustomPainter {
       case AvatarAccessory.earring:
         final earringPaint = Paint()..color = colors.detail;
         canvas.drawCircle(
-            Offset(r.right - r.width * 0.06, r.center.dy + r.height * 0.04),
-            r.width * 0.05,
-            earringPaint);
+          Offset(r.right - r.width * 0.06, r.center.dy + r.height * 0.04),
+          r.width * 0.05,
+          earringPaint,
+        );
     }
   }
 

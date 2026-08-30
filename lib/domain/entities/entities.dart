@@ -249,7 +249,7 @@ class PlugProfile {
 }
 
 /// Hybrid Tribe — both a community (members join, posts belong to it) and a
-/// creator ecosystem (a keeper moderates it; keeper may be a verified Plug).
+/// creator ecosystem (a keeper moderates it; keeper may be a verified Keeper).
 /// Mirrors `public.tribe_directory` from migration 0005.
 class Tribe {
   final String tribeId;
@@ -280,7 +280,7 @@ class Tribe {
   final String? spotlightNote;
   final DateTime? spotlightSetAt;
 
-  // Plug dashboard additions (migration 0049)
+  // Keeper dashboard additions (migration 0049)
   final String? rules;
   final bool isPremium;
 
@@ -1468,7 +1468,7 @@ class PlugPrompt {
   final String promptText;
   final int answersCount;
 
-  /// Member author (migration 0069). Null for Plug/Keeper "question of the day"
+  /// Member author (migration 0069). Null for Keeper/Keeper "question of the day"
   /// prompts. When it matches the signed-in user the question is theirs to
   /// edit or delete.
   final String? authorId;
@@ -2691,7 +2691,6 @@ class OnlineFriend {
   }
 }
 
-
 /// Whether an account may create a Tribe, as decided by the server.
 class TribeCreationEligibility {
   const TribeCreationEligibility({
@@ -2707,7 +2706,6 @@ class TribeCreationEligibility {
   bool get canCreate => status == 'adult';
   bool get needsBirthMonth => status == 'month_required';
 }
-
 
 /// One place the account is currently signed in.
 class DeviceSession {
@@ -2782,7 +2780,6 @@ class DeviceSession {
   );
 }
 
-
 /// One entry in the account's security history.
 class SecurityEvent {
   const SecurityEvent({
@@ -2833,13 +2830,12 @@ class SecurityEvent {
     kind: (json['kind'] as String?) ?? 'unknown',
     severity: (json['severity'] as String?) ?? 'info',
     deviceName: json['device_name'] as String?,
-    context: (json['context'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{},
+    context:
+        (json['context'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
     createdAt:
         DateTime.tryParse('${json['created_at']}') ?? DateTime.now().toUtc(),
   );
 }
-
 
 /// Outcome of registering this installation with the server after sign-in.
 class DeviceRegistration {
@@ -2879,7 +2875,6 @@ class DeviceRegistration {
         needsConfirmation: json['needs_confirmation'] == true,
       );
 }
-
 
 /// A flagged sign-in the account has not yet adjudicated.
 ///
@@ -2967,7 +2962,6 @@ class SecurityAlert {
         DateTime.tryParse('${json['started_at']}') ?? DateTime.now().toUtc(),
   );
 }
-
 
 /// One entry in the Tribe category taxonomy.
 ///

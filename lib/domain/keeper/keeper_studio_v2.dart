@@ -151,8 +151,9 @@ class KeeperEngagementCalendar {
       scheduled: parseList('scheduled'),
       recentPublished: parseList('recent_published'),
       suggestions: sugRaw
-          .map((e) =>
-              KeeperCalendarSuggestion.fromJson(e as Map<String, dynamic>))
+          .map(
+            (e) => KeeperCalendarSuggestion.fromJson(e as Map<String, dynamic>),
+          )
           .toList(),
     );
   }
@@ -283,10 +284,7 @@ class KeeperComodMatrix {
   final List<KeeperComodRow> mods;
   final bool callerIsKeeper;
 
-  const KeeperComodMatrix({
-    required this.mods,
-    this.callerIsKeeper = false,
-  });
+  const KeeperComodMatrix({required this.mods, this.callerIsKeeper = false});
 
   factory KeeperComodMatrix.fromJson(Map<String, dynamic> json) {
     final raw = json['mods'] as List? ?? const [];

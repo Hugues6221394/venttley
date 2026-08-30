@@ -7,10 +7,7 @@ import '../theme/colors.dart';
 import 'glass_card.dart';
 
 /// Deep link + native share sheet for a Whisper.
-Future<void> showWhisperShareSheet(
-  BuildContext context,
-  Whisper whisper,
-) {
+Future<void> showWhisperShareSheet(BuildContext context, Whisper whisper) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -82,9 +79,9 @@ class _WhisperShareSheet extends StatelessWidget {
                 await Clipboard.setData(ClipboardData(text: _link));
                 if (context.mounted) {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Link copied')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('Link copied')));
                 }
               },
             ),

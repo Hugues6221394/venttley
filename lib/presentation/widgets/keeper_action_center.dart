@@ -46,9 +46,8 @@ class KeeperActionCenter extends StatelessWidget {
           label: 'New members · 7d',
           count: newMembers7d,
           color: VentlyColors.successGreen,
-          onTap: () => context.push(
-            '/tribe/${tribe.slug}/manage/settings/members',
-          ),
+          onTap: () =>
+              context.push('/tribe/${tribe.slug}/manage/settings/members'),
         ),
     ];
 
@@ -59,13 +58,17 @@ class KeeperActionCenter extends StatelessWidget {
         decoration: BoxDecoration(
           color: VentlyColors.successGreen.withOpacity(0.08),
           borderRadius: BorderRadius.circular(22),
-          border:
-              Border.all(color: VentlyColors.successGreen.withOpacity(0.25)),
+          border: Border.all(
+            color: VentlyColors.successGreen.withOpacity(0.25),
+          ),
         ),
         child: Row(
           children: [
-            const Icon(Icons.check_circle_outline,
-                color: VentlyColors.successGreen, size: 22),
+            const Icon(
+              Icons.check_circle_outline,
+              color: VentlyColors.successGreen,
+              size: 22,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -106,13 +109,13 @@ class KeeperActionCenter extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: item.color.withOpacity(0.22),
-                      ),
+                      border: Border.all(color: item.color.withOpacity(0.22)),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
                       child: Row(
                         children: [
                           Container(
@@ -136,7 +139,9 @@ class KeeperActionCenter extends StatelessWidget {
                           ),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: item.color,
                               borderRadius: BorderRadius.circular(14),
@@ -151,8 +156,10 @@ class KeeperActionCenter extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          Icon(Icons.chevron_right_rounded,
-                              color: scheme.onSurface.withOpacity(0.35)),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: scheme.onSurface.withOpacity(0.35),
+                          ),
                         ],
                       ),
                     ),

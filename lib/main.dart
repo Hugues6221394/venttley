@@ -502,13 +502,12 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
           Logger.instance.warn('app_link.invalid', error: error, stack: stack),
     );
     if (!VentlyConfig.useMockBackend) {
-      _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen(
-        (data) {
-          if (data.event == AuthChangeEvent.signedIn) {
-            unawaited(_restoreSessionSafely());
-          }
-        },
-      );
+      _authSubscription = Supabase.instance.client.auth.onAuthStateChange
+          .listen((data) {
+            if (data.event == AuthChangeEvent.signedIn) {
+              unawaited(_restoreSessionSafely());
+            }
+          });
     }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _restoreSessionSafely();

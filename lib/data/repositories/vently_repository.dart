@@ -2449,6 +2449,21 @@ class VentlyRepository implements MusicProvider {
     return Future.value(_mock.replaceTribeRules(tribeId, rules));
   }
 
+  /// Words that make a password guessable however it is decorated.
+  ///
+  /// Empty on failure rather than throwing: a wordlist that cannot be fetched
+  /// must not stop somebody creating an account. The length and character
+  /// rules still apply, and the server enforces those regardless.
+  Future<Set<String>> weakPasswordBases() async {
+    final live = _live;
+    if (live == null) return const <String>{};
+    try {
+      return await live.weakPasswordBases();
+    } catch (_) {
+      return const <String>{};
+    }
+  }
+
   /// What the signed-in account may do in this Tribe.
   ///
   /// Offline the answer is empty rather than permissive. A mock that granted

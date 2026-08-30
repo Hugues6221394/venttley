@@ -386,7 +386,7 @@ class _VentlyFeedTopBar extends ConsumerWidget {
     final links = <(IconData, String, String, bool)>[
       // Plugz get a shortcut back to their Studio (the /feed shell branch).
       if (isKeeper)
-        (Icons.dashboard_customize_rounded, 'Plug Studio', '/feed', true),
+        (Icons.dashboard_customize_rounded, 'Keeper Studio', '/feed', true),
       (Icons.explore_outlined, 'Discover', '/discover', false),
       (Icons.diversity_3_outlined, 'Tribes', '/tribes', false),
       (Icons.graphic_eq_rounded, 'Whispers', '/whispers', true),
@@ -437,7 +437,7 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                 Navigator.of(sheetCtx).pop();
                 // Returning to the Studio must exit "member view" first, or the
                 // /feed branch just re-renders the member feed.
-                if (label == 'Plug Studio') {
+                if (label == 'Keeper Studio') {
                   ref.read(keeperMemberViewProvider.notifier).state = false;
                 }
                 if (isBranch) {

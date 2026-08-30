@@ -83,8 +83,10 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
     }
   }
 
-  String _clean(Object e) =>
-      e.toString().replaceFirst('Exception: ', '').replaceFirst('StateError: ', '');
+  String _clean(Object e) => e
+      .toString()
+      .replaceFirst('Exception: ', '')
+      .replaceFirst('StateError: ', '');
 
   @override
   Widget build(BuildContext context) {
@@ -106,23 +108,27 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
                   color: scheme.primary.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.sms_outlined, color: scheme.primary, size: 32),
+                child: Icon(
+                  Icons.sms_outlined,
+                  color: scheme.primary,
+                  size: 32,
+                ),
               ),
               const SizedBox(height: 18),
               Text(
                 _codeSent ? 'Enter the code' : 'Your phone number',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: context.ink,
-                    ),
+                  fontWeight: FontWeight.w900,
+                  color: context.ink,
+                ),
               ),
               const SizedBox(height: 10),
               Text(
                 _codeSent
                     ? 'We texted a 6-digit code to $_e164.'
                     : 'We\'ll text you a one-time code. Include your country code, '
-                        'e.g. +250 788 123 456.',
+                          'e.g. +250 788 123 456.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: context.ink.withOpacity(0.66),
@@ -148,10 +154,14 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
                   maxLength: 6,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 10),
-                  decoration: _dec('6-digit code', null).copyWith(counterText: ''),
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 10,
+                  ),
+                  decoration: _dec(
+                    '6-digit code',
+                    null,
+                  ).copyWith(counterText: ''),
                   onSubmitted: (_) => _verify(),
                 ),
               if (_error != null) ...[
@@ -160,8 +170,9 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
                   _error!,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                      color: VentlyColors.dangerRed,
-                      fontWeight: FontWeight.w700),
+                    color: VentlyColors.dangerRed,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
               const SizedBox(height: 22),
@@ -170,14 +181,17 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(54),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28)),
+                    borderRadius: BorderRadius.circular(28),
+                  ),
                 ),
                 child: _busy
                     ? const SizedBox(
                         width: 22,
                         height: 22,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2.4, color: Colors.white),
+                          strokeWidth: 2.4,
+                          color: Colors.white,
+                        ),
                       )
                     : Text(_codeSent ? 'Verify & continue' : 'Send code'),
               ),
@@ -186,10 +200,10 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
                   onPressed: _busy
                       ? null
                       : () => setState(() {
-                            _codeSent = false;
-                            _otp.clear();
-                            _error = null;
-                          }),
+                          _codeSent = false;
+                          _otp.clear();
+                          _error = null;
+                        }),
                   child: const Text('Use a different number'),
                 ),
             ],
@@ -200,13 +214,13 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
   }
 
   InputDecoration _dec(String hint, IconData? icon) => InputDecoration(
-        hintText: hint,
-        prefixIcon: icon == null ? null : Icon(icon),
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.6),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide.none,
-        ),
-      );
+    hintText: hint,
+    prefixIcon: icon == null ? null : Icon(icon),
+    filled: true,
+    fillColor: Colors.white.withOpacity(0.6),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(18),
+      borderSide: BorderSide.none,
+    ),
+  );
 }

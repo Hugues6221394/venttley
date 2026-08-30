@@ -90,15 +90,15 @@ class _ChipForStatus extends ConsumerWidget {
         await fn();
         refresh();
         if (successMsg != null && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(successMsg)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(successMsg)));
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not update: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Could not update: $e')));
         }
       }
     }
@@ -178,7 +178,8 @@ class _ChipForStatus extends ConsumerWidget {
           label: 'Friends',
           filled: false,
           color: scheme.primary,
-          onTap: () => _showFriendMenu(context, ref, otherUserId, otherPseudonym),
+          onTap: () =>
+              _showFriendMenu(context, ref, otherUserId, otherPseudonym),
         );
 
       case FriendStatus.blockedByMe:
@@ -188,10 +189,7 @@ class _ChipForStatus extends ConsumerWidget {
           label: 'Blocked',
           filled: false,
           color: scheme.error,
-          onTap: () => wrap(
-            () => repo.unblockUser(otherUserId),
-            'Unblocked.',
-          ),
+          onTap: () => wrap(() => repo.unblockUser(otherUserId), 'Unblocked.'),
         );
     }
   }
@@ -237,8 +235,8 @@ class _ChipForStatus extends ConsumerWidget {
                   child: Text(
                     '@$otherPseudonym',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ListTile(
@@ -259,12 +257,13 @@ class _ChipForStatus extends ConsumerWidget {
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.block,
-                    color: Theme.of(context).colorScheme.error),
+                leading: Icon(
+                  Icons.block,
+                  color: Theme.of(context).colorScheme.error,
+                ),
                 title: Text(
                   'Block',
-                  style:
-                      TextStyle(color: Theme.of(context).colorScheme.error),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
                 onTap: () async {
                   Navigator.pop(ctx);
@@ -283,8 +282,9 @@ class _ChipForStatus extends ConsumerWidget {
                         FilledButton(
                           onPressed: () => Navigator.pop(d, true),
                           style: FilledButton.styleFrom(
-                            backgroundColor:
-                                Theme.of(context).colorScheme.error,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.error,
                           ),
                           child: const Text('Block'),
                         ),
@@ -297,9 +297,9 @@ class _ChipForStatus extends ConsumerWidget {
                   ref.invalidate(myFriendsProvider);
                   ref.invalidate(myBlocksProvider);
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Blocked.')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('Blocked.')));
                   }
                 },
               ),

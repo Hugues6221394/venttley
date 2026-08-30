@@ -925,9 +925,7 @@ class _MusicBedPicker extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(46),
           foregroundColor: VentlyColors.berryMagenta,
-          side: BorderSide(
-            color: VentlyColors.berryMagenta.withOpacity(0.35),
-          ),
+          side: BorderSide(color: VentlyColors.berryMagenta.withOpacity(0.35)),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -944,9 +942,7 @@ class _MusicBedPicker extends StatelessWidget {
       decoration: BoxDecoration(
         color: VentlyColors.berryMagenta.withOpacity(0.06),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: VentlyColors.berryMagenta.withOpacity(0.18),
-        ),
+        border: Border.all(color: VentlyColors.berryMagenta.withOpacity(0.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

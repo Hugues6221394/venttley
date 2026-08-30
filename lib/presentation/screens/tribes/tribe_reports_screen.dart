@@ -35,7 +35,7 @@ class TribeReportsScreen extends ConsumerWidget {
           child: Padding(
             padding: EdgeInsets.all(24),
             child: Text(
-              'Reports for this Tribe are visible to its Plug only.',
+              'Reports for this Tribe are visible to its Keeper only.',
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
@@ -74,17 +74,11 @@ class TribeReportsScreen extends ConsumerWidget {
                     )
                   else
                     for (final r in pending)
-                      _ReportCard(
-                        report: r,
-                        tribeId: tribe.tribeId,
-                      ),
+                      _ReportCard(report: r, tribeId: tribe.tribeId),
                   if (resolved.isNotEmpty) ...[
                     _SectionHeader(label: 'Resolved', count: resolved.length),
                     for (final r in resolved)
-                      _ReportCard(
-                        report: r,
-                        tribeId: tribe.tribeId,
-                      ),
+                      _ReportCard(report: r, tribeId: tribe.tribeId),
                   ],
                   const SizedBox(height: 24),
                 ],
@@ -152,7 +146,9 @@ class _ReportCard extends ConsumerWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? Theme.of(context).colorScheme.surface : Theme.of(context).cardColor,
+        color: isDark
+            ? Theme.of(context).colorScheme.surface
+            : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: report.isResolved
@@ -166,8 +162,7 @@ class _ReportCard extends ConsumerWidget {
           Row(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: scheme.primary.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(8),
@@ -193,8 +188,11 @@ class _ReportCard extends ConsumerWidget {
               if (report.isResolved)
                 const Row(
                   children: [
-                    Icon(Icons.check_circle,
-                        size: 14, color: VentlyColors.successGreen),
+                    Icon(
+                      Icons.check_circle,
+                      size: 14,
+                      color: VentlyColors.successGreen,
+                    ),
                     SizedBox(width: 4),
                     Text(
                       'Resolved',
@@ -239,8 +237,7 @@ class _ReportCard extends ConsumerWidget {
           Row(
             children: [
               OutlinedButton.icon(
-                onPressed: () =>
-                    context.push('/post/${report.postId}'),
+                onPressed: () => context.push('/post/${report.postId}'),
                 icon: const Icon(Icons.open_in_new, size: 14),
                 label: const Text('Open post'),
               ),

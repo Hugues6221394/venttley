@@ -38,8 +38,11 @@ class EmailVerificationBanner extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                const Icon(Icons.mark_email_unread_outlined,
-                    size: 20, color: VentlyColors.berryMagenta),
+                const Icon(
+                  Icons.mark_email_unread_outlined,
+                  size: 20,
+                  color: VentlyColors.berryMagenta,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -64,8 +67,10 @@ class EmailVerificationBanner extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded,
-                    color: VentlyColors.berryMagenta),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: VentlyColors.berryMagenta,
+                ),
               ],
             ),
           ),

@@ -527,7 +527,7 @@ class _JoinAction extends ConsumerWidget {
                 if (!context.mounted || status != 'pending') return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Request sent. The Plug will review it.'),
+                    content: Text('Request sent. The Keeper will review it.'),
                   ),
                 );
               } catch (error) {

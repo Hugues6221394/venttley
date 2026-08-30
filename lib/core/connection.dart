@@ -62,14 +62,12 @@ class _ListenableSub {
 /// short window right after connectivity returns, while we resync.
 final connectionStatusProvider =
     StateNotifierProvider<ConnectionController, ConnectionStatus>((ref) {
-  return ConnectionController(ref);
-});
+      return ConnectionController(ref);
+    });
 
 class ConnectionController extends StateNotifier<ConnectionStatus> {
-  ConnectionController(
-    this._ref, {
-    bool listenToConnectivity = true,
-  }) : super(ConnectionStatus.online) {
+  ConnectionController(this._ref, {bool listenToConnectivity = true})
+    : super(ConnectionStatus.online) {
     if (listenToConnectivity) {
       _sub = Connectivity().onConnectivityChanged.listen(_onChange);
     }

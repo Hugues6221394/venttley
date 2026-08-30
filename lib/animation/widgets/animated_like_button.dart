@@ -44,8 +44,10 @@ class _AnimatedLikeButtonState extends State<AnimatedLikeButton>
   late final Animation<double> _scale = TweenSequence<double>([
     TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.18), weight: 35),
     TweenSequenceItem(
-      tween: Tween(begin: 1.18, end: 1.0)
-          .chain(CurveTween(curve: AppCurves.softSpring)),
+      tween: Tween(
+        begin: 1.18,
+        end: 1.0,
+      ).chain(CurveTween(curve: AppCurves.softSpring)),
       weight: 65,
     ),
   ]).animate(_controller);
@@ -132,7 +134,8 @@ class _HeartBurstPainter extends CustomPainter {
     for (var i = 0; i < particles; i++) {
       final angle = (2 * math.pi / particles) * i - math.pi / 2;
       final distance = size.width * (0.55 + 0.75 * travel);
-      final pos = center +
+      final pos =
+          center +
           Offset(math.cos(angle) * distance, math.sin(angle) * distance);
       final r = size.width * 0.09 * (1 - 0.5 * travel);
       canvas.drawCircle(pos, r, paint);

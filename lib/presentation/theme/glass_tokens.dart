@@ -54,10 +54,10 @@ class GlassTokens {
   }
 
   static List<BoxShadow> composerShadow(BuildContext context) => [
-        BoxShadow(
-          color: VentlyColors.berryMagenta.withOpacity(0.12),
-          blurRadius: 20,
-          offset: const Offset(0, 6),
-        ),
-      ];
+    BoxShadow(
+      color: VentlyColors.berryMagenta.withOpacity(0.12),
+      blurRadius: 20,
+      offset: const Offset(0, 6),
+    ),
+  ];
 }

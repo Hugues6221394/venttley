@@ -50,22 +50,21 @@ class _AvatarBuilderScreenState extends ConsumerState<AvatarBuilderScreen> {
     // the signed-in user's current avatar so the builder starts on
     // "where they already are" rather than a random throw.
     final seed = widget.initialSeed ?? ref.read(sessionProvider)?.avatarSeed;
-    _design = AvatarDesign.tryParse(seed) ??
+    _design =
+        AvatarDesign.tryParse(seed) ??
         _randomDesign(math.Random(seed.hashCode));
     _initial = _design;
   }
 
   AvatarDesign _randomDesign(math.Random r) => AvatarDesign(
-        silhouette: AvatarSilhouette
-            .values[r.nextInt(AvatarSilhouette.values.length)],
-        palette:
-            AvatarPalette.values[r.nextInt(AvatarPalette.values.length)],
-        hair: AvatarHair.values[r.nextInt(AvatarHair.values.length)],
-        accessory:
-            AvatarAccessory.values[r.nextInt(AvatarAccessory.values.length)],
-        aura: AvatarAura.values[r.nextInt(AvatarAura.values.length)],
-        outfit: AvatarOutfit.values[r.nextInt(AvatarOutfit.values.length)],
-      );
+    silhouette:
+        AvatarSilhouette.values[r.nextInt(AvatarSilhouette.values.length)],
+    palette: AvatarPalette.values[r.nextInt(AvatarPalette.values.length)],
+    hair: AvatarHair.values[r.nextInt(AvatarHair.values.length)],
+    accessory: AvatarAccessory.values[r.nextInt(AvatarAccessory.values.length)],
+    aura: AvatarAura.values[r.nextInt(AvatarAura.values.length)],
+    outfit: AvatarOutfit.values[r.nextInt(AvatarOutfit.values.length)],
+  );
 
   Future<void> _save() async {
     if (_saving) return;
@@ -78,9 +77,9 @@ class _AvatarBuilderScreenState extends ConsumerState<AvatarBuilderScreen> {
         // re-renders with the new look immediately.
         await ref.read(sessionProvider.notifier).restore();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Avatar updated.')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Avatar updated.')));
           context.pop();
         }
       } else {
@@ -88,9 +87,9 @@ class _AvatarBuilderScreenState extends ConsumerState<AvatarBuilderScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not save: $e')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -129,9 +128,13 @@ class _AvatarBuilderScreenState extends ConsumerState<AvatarBuilderScreen> {
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
-                : Text(widget.persistAsMine ? 'Save avatar' : 'Use this avatar'),
+                : Text(
+                    widget.persistAsMine ? 'Save avatar' : 'Use this avatar',
+                  ),
           ),
         ),
       ),
@@ -156,10 +159,10 @@ class _AvatarBuilderScreenState extends ConsumerState<AvatarBuilderScreen> {
             current: _design.silhouette,
             values: AvatarSilhouette.values,
             labels: {for (final v in AvatarSilhouette.values) v: v.label},
-            previewFor: (v) =>
-                _design.copyWith(silhouette: v).toSeed(),
+            previewFor: (v) => _design.copyWith(silhouette: v).toSeed(),
             previewLabel: label,
-            onPick: (v) => setState(() => _design = _design.copyWith(silhouette: v)),
+            onPick: (v) =>
+                setState(() => _design = _design.copyWith(silhouette: v)),
           ),
           _AxisPicker<AvatarPalette>(
             title: 'Palette',
@@ -168,7 +171,8 @@ class _AvatarBuilderScreenState extends ConsumerState<AvatarBuilderScreen> {
             labels: {for (final v in AvatarPalette.values) v: v.label},
             previewFor: (v) => _design.copyWith(palette: v).toSeed(),
             previewLabel: label,
-            onPick: (v) => setState(() => _design = _design.copyWith(palette: v)),
+            onPick: (v) =>
+                setState(() => _design = _design.copyWith(palette: v)),
           ),
           _AxisPicker<AvatarHair>(
             title: 'Hair',
@@ -184,8 +188,7 @@ class _AvatarBuilderScreenState extends ConsumerState<AvatarBuilderScreen> {
             current: _design.accessory,
             values: AvatarAccessory.values,
             labels: {for (final v in AvatarAccessory.values) v: v.label},
-            previewFor: (v) =>
-                _design.copyWith(accessory: v).toSeed(),
+            previewFor: (v) => _design.copyWith(accessory: v).toSeed(),
             previewLabel: label,
             onPick: (v) =>
                 setState(() => _design = _design.copyWith(accessory: v)),
@@ -216,7 +219,9 @@ class _AvatarBuilderScreenState extends ConsumerState<AvatarBuilderScreen> {
               'Avatars stay playful and abstract. Profile photos are optional from your profile.',
               style: TextStyle(
                 fontSize: 11,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withOpacity(0.55),
               ),
             ),
           ),
@@ -301,8 +306,9 @@ class _AxisPicker<T extends Enum> extends StatelessWidget {
                         labels[v] ?? v.name,
                         style: TextStyle(
                           fontSize: 11,
-                          fontWeight:
-                              selected ? FontWeight.w800 : FontWeight.w500,
+                          fontWeight: selected
+                              ? FontWeight.w800
+                              : FontWeight.w500,
                           color: selected
                               ? scheme.primary
                               : scheme.onSurface.withOpacity(0.75),

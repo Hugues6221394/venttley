@@ -34,14 +34,14 @@ class ProfileStatsPanel extends StatelessWidget {
   }
 
   int _value(ProfileStatKind kind) => switch (kind) {
-        ProfileStatKind.connections => profile.connectionsCount,
-        ProfileStatKind.vents => profile.vents,
-        ProfileStatKind.comments => profile.comments ?? 0,
-        ProfileStatKind.reactions => profile.reactionsReceived ?? 0,
-        ProfileStatKind.tribes => profile.activeTribes,
-        ProfileStatKind.badges => profile.badgesCount ?? profile.badges.length,
-        ProfileStatKind.streak => profile.currentStreak ?? 0,
-      };
+    ProfileStatKind.connections => profile.connectionsCount,
+    ProfileStatKind.vents => profile.vents,
+    ProfileStatKind.comments => profile.comments ?? 0,
+    ProfileStatKind.reactions => profile.reactionsReceived ?? 0,
+    ProfileStatKind.tribes => profile.activeTribes,
+    ProfileStatKind.badges => profile.badgesCount ?? profile.badges.length,
+    ProfileStatKind.streak => profile.currentStreak ?? 0,
+  };
 
   String? _suffix(ProfileStatKind kind) {
     if (kind != ProfileStatKind.streak) return null;
@@ -55,13 +55,13 @@ class ProfileStatsPanel extends StatelessWidget {
     final values = [for (final k in _kinds) _value(k)];
 
     Widget cell(int i) => Expanded(
-          child: _StatCard(
-            kind: _kinds[i],
-            value: values[i],
-            suffix: _suffix(_kinds[i]),
-            onTap: () => _open(context, _kinds[i]),
-          ),
-        );
+      child: _StatCard(
+        kind: _kinds[i],
+        value: values[i],
+        suffix: _suffix(_kinds[i]),
+        onTap: () => _open(context, _kinds[i]),
+      ),
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
@@ -190,15 +190,15 @@ class _StatCard extends StatelessWidget {
   /// not been taught about — it falls through to a neutral glyph instead of
   /// failing to compile a switch.
   IconData get _icon => switch (kind.iconName) {
-        'people' => Icons.people_outline_rounded,
-        'edit_note' => Icons.edit_note_rounded,
-        'diversity_3' => Icons.diversity_3_rounded,
-        'chat_bubble' => Icons.chat_bubble_outline_rounded,
-        'favorite' => Icons.favorite_outline_rounded,
-        'military_tech' => Icons.military_tech_outlined,
-        'local_fire_department' => Icons.local_fire_department_outlined,
-        _ => Icons.insights_outlined,
-      };
+    'people' => Icons.people_outline_rounded,
+    'edit_note' => Icons.edit_note_rounded,
+    'diversity_3' => Icons.diversity_3_rounded,
+    'chat_bubble' => Icons.chat_bubble_outline_rounded,
+    'favorite' => Icons.favorite_outline_rounded,
+    'military_tech' => Icons.military_tech_outlined,
+    'local_fire_department' => Icons.local_fire_department_outlined,
+    _ => Icons.insights_outlined,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -224,15 +224,17 @@ class _StatCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
-                      color: VentlyColors.berryMagenta
-                          .withOpacity(zero ? 0.06 : 0.10),
+                      color: VentlyColors.berryMagenta.withOpacity(
+                        zero ? 0.06 : 0.10,
+                      ),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       _icon,
                       size: 16,
-                      color: VentlyColors.berryMagenta
-                          .withOpacity(zero ? 0.45 : 1),
+                      color: VentlyColors.berryMagenta.withOpacity(
+                        zero ? 0.45 : 1,
+                      ),
                     ),
                   ),
                   const Spacer(),

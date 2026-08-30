@@ -42,4 +42,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20260902090000': 'fix_permission_grants_read_only',
   '20260903090000': 'auth_login_guard_hook',
   '20260904090000': 'login_record_via_jwt_hook',
+  '20260905090000': 'weak_password_bases',
 };

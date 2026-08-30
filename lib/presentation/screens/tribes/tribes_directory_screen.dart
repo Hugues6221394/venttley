@@ -97,9 +97,7 @@ class _TribesDirectoryScreenState extends ConsumerState<TribesDirectoryScreen> {
                   icon: icon,
                   compact: true,
                   expanded: false,
-                  tone: selected
-                      ? WallButtonTone.brand
-                      : WallButtonTone.quiet,
+                  tone: selected ? WallButtonTone.brand : WallButtonTone.quiet,
                   onPressed: () => setState(() => _category = key),
                 );
               },
@@ -180,115 +178,114 @@ class _TribeCard extends ConsumerWidget {
       padding: const EdgeInsets.all(14),
       onTap: () => context.push('/tribe/${tribe.slug}'),
       child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TribeCoverPreview(
-                bannerUrl: tribe.bannerUrl,
-                avatarUrl: tribe.avatarUrl,
-                width: 72,
-                height: 62,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TribeCoverPreview(
+            bannerUrl: tribe.bannerUrl,
+            avatarUrl: tribe.avatarUrl,
+            width: 72,
+            height: 62,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            tribe.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 15,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                    Flexible(
+                      child: Text(
+                        tribe.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
                         ),
-                        if (tribe.isPrivate) ...[
-                          const SizedBox(width: 6),
-                          Icon(
-                            Icons.lock,
-                            size: 13,
-                            color: scheme.onSurface.withOpacity(0.5),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.people_alt_outlined,
-                          size: 12,
-                          color: scheme.onSurface.withOpacity(0.55),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${PostCard.compactNumber(tribe.memberCount)} • $categoryLabel',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: scheme.onSurface.withOpacity(0.65),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (tribe.description != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        tribe.description!,
-                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: scheme.onSurface.withOpacity(0.75),
-                        ),
                       ),
-                    ],
-                    if (tribe.keeperPseudonym != null) ...[
-                      const SizedBox(height: 8),
-                      UserProfileTap(
-                        userId: tribe.keeperId,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
-                            children: [
-                              ProfileAvatar(
-                                avatarSeed:
-                                    tribe.keeperAvatarSeed ?? 'default-orb',
-                                label: tribe.keeperPseudonym!,
-                                profilePhotoUrl: tribe.keeperProfilePhotoUrl,
-                                size: 20,
-                                showVerifiedBadge: tribe.keeperIsVerified,
-                              ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'Kept by @${tribe.keeperPseudonym}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: scheme.onSurface.withOpacity(0.7),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                    ),
+                    if (tribe.isPrivate) ...[
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.lock,
+                        size: 13,
+                        color: scheme.onSurface.withOpacity(0.5),
                       ),
                     ],
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: () {},
-                child: _JoinPill(tribe: tribe),
-              ),
-            ],
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.people_alt_outlined,
+                      size: 12,
+                      color: scheme.onSurface.withOpacity(0.55),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${PostCard.compactNumber(tribe.memberCount)} • $categoryLabel',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurface.withOpacity(0.65),
+                      ),
+                    ),
+                  ],
+                ),
+                if (tribe.description != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    tribe.description!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurface.withOpacity(0.75),
+                    ),
+                  ),
+                ],
+                if (tribe.keeperPseudonym != null) ...[
+                  const SizedBox(height: 8),
+                  UserProfileTap(
+                    userId: tribe.keeperId,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          ProfileAvatar(
+                            avatarSeed: tribe.keeperAvatarSeed ?? 'default-orb',
+                            label: tribe.keeperPseudonym!,
+                            profilePhotoUrl: tribe.keeperProfilePhotoUrl,
+                            size: 20,
+                            showVerifiedBadge: tribe.keeperIsVerified,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'Kept by @${tribe.keeperPseudonym}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: scheme.onSurface.withOpacity(0.7),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () {},
+            child: _JoinPill(tribe: tribe),
+          ),
+        ],
+      ),
     );
   }
 }

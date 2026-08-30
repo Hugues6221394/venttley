@@ -70,12 +70,15 @@ class _WallButtonState extends State<WallButton> {
             ),
           )
         : Row(
-            mainAxisSize:
-                widget.expanded ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisSize: widget.expanded ? MainAxisSize.max : MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (widget.icon != null) ...[
-                Icon(widget.icon, color: labelColor, size: widget.compact ? 15 : 18),
+                Icon(
+                  widget.icon,
+                  color: labelColor,
+                  size: widget.compact ? 15 : 18,
+                ),
                 SizedBox(width: widget.compact ? 6 : 8),
               ],
               if (widget.expanded)
@@ -198,7 +201,9 @@ class _WallPalette {
           ),
           extrusion: const Color(0xFF8A1038),
           gloss: Colors.white.withValues(alpha: 0.42),
-          wallShadow: const Color(0xFFC01A5B).withValues(alpha: dark ? 0.28 : 0.32),
+          wallShadow: const Color(
+            0xFFC01A5B,
+          ).withValues(alpha: dark ? 0.28 : 0.32),
         );
       case WallButtonTone.danger:
         return _WallPalette(
@@ -257,8 +262,7 @@ class _WallPanelState extends State<WallPanel> {
   Widget build(BuildContext context) {
     final dark = context.isDark;
     final lift = _pressed && widget.onTap != null ? 1.0 : 4.0;
-    final face = widget.tint ??
-        (dark ? const Color(0xFF22151A) : Colors.white);
+    final face = widget.tint ?? (dark ? const Color(0xFF22151A) : Colors.white);
     final extrusion = dark ? const Color(0xFF0A0608) : const Color(0xFFE4D0D8);
 
     final plate = AnimatedPadding(

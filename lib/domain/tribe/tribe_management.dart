@@ -16,37 +16,36 @@ class TribeRuleItem {
   });
 
   factory TribeRuleItem.fromJson(Map<String, dynamic> json) => TribeRuleItem(
-        ruleId: json['rule_id'] as String?,
-        position: (json['position'] as num?)?.toInt() ?? 0,
-        title: (json['title'] as String?) ?? '',
-        description: json['description'] as String?,
-        templateKey: json['template_key'] as String?,
-        isEnabled: json['is_enabled'] != false,
-      );
+    ruleId: json['rule_id'] as String?,
+    position: (json['position'] as num?)?.toInt() ?? 0,
+    title: (json['title'] as String?) ?? '',
+    description: json['description'] as String?,
+    templateKey: json['template_key'] as String?,
+    isEnabled: json['is_enabled'] != false,
+  );
 
   Map<String, dynamic> toJson() => {
-        'position': position,
-        'title': title.trim(),
-        if (description?.trim().isNotEmpty == true)
-          'description': description!.trim(),
-        if (templateKey != null) 'template_key': templateKey,
-        'is_enabled': isEnabled,
-      };
+    'position': position,
+    'title': title.trim(),
+    if (description?.trim().isNotEmpty == true)
+      'description': description!.trim(),
+    if (templateKey != null) 'template_key': templateKey,
+    'is_enabled': isEnabled,
+  };
 
   TribeRuleItem copyWith({
     int? position,
     String? title,
     String? description,
     bool? isEnabled,
-  }) =>
-      TribeRuleItem(
-        ruleId: ruleId,
-        position: position ?? this.position,
-        title: title ?? this.title,
-        description: description ?? this.description,
-        templateKey: templateKey,
-        isEnabled: isEnabled ?? this.isEnabled,
-      );
+  }) => TribeRuleItem(
+    ruleId: ruleId,
+    position: position ?? this.position,
+    title: title ?? this.title,
+    description: description ?? this.description,
+    templateKey: templateKey,
+    isEnabled: isEnabled ?? this.isEnabled,
+  );
 }
 
 /// The capabilities a Keeper can hand to someone else.
@@ -90,15 +89,15 @@ class TribeHelper {
   });
 
   factory TribeHelper.fromJson(Map<String, dynamic> json) => TribeHelper(
-        userId: (json['user_id'] as String?) ?? '',
-        pseudonym: (json['pseudonym'] as String?) ?? 'Someone',
-        avatarSeed: json['avatar_seed'] as String?,
-        role: (json['role'] as String?) ?? 'member',
-        permissions: [
-          for (final key in (json['permissions'] as List? ?? const []))
-            key as String,
-        ],
-      );
+    userId: (json['user_id'] as String?) ?? '',
+    pseudonym: (json['pseudonym'] as String?) ?? 'Someone',
+    avatarSeed: json['avatar_seed'] as String?,
+    role: (json['role'] as String?) ?? 'member',
+    permissions: [
+      for (final key in (json['permissions'] as List? ?? const []))
+        key as String,
+    ],
+  );
 }
 
 /// The grant screen's payload: what can be given, and who holds what.
@@ -115,7 +114,9 @@ class TribePermissionGrants {
       TribePermissionGrants(
         catalog: [
           for (final row in (json['catalog'] as List? ?? const []))
-            TribePermissionOption.fromJson(Map<String, dynamic>.from(row as Map)),
+            TribePermissionOption.fromJson(
+              Map<String, dynamic>.from(row as Map),
+            ),
         ],
         helpers: [
           for (final row in (json['members'] as List? ?? const []))
@@ -212,18 +213,18 @@ class TribeGovernanceSettings {
   }
 
   Map<String, dynamic> toJson() => {
-        'join_approval_required': joinApprovalRequired,
-        'minimum_account_age_days': minimumAccountAgeDays,
-        'post_approval_mode': postApprovalMode,
-        'posting_permission': postingPermission,
-        'slow_mode_seconds': slowModeSeconds,
-        'allow_whispers': allowWhispers,
-        'allow_polls': allowPolls,
-        'allow_anonymous_reactions': allowAnonymousReactions,
-        'content_sensitivity_filter': contentSensitivityFilter,
-        'show_content_when_paused': showContentWhenPaused,
-        'invite_links_enabled': inviteLinksEnabled,
-      };
+    'join_approval_required': joinApprovalRequired,
+    'minimum_account_age_days': minimumAccountAgeDays,
+    'post_approval_mode': postApprovalMode,
+    'posting_permission': postingPermission,
+    'slow_mode_seconds': slowModeSeconds,
+    'allow_whispers': allowWhispers,
+    'allow_polls': allowPolls,
+    'allow_anonymous_reactions': allowAnonymousReactions,
+    'content_sensitivity_filter': contentSensitivityFilter,
+    'show_content_when_paused': showContentWhenPaused,
+    'invite_links_enabled': inviteLinksEnabled,
+  };
 
   TribeGovernanceSettings copyWith({
     bool? joinApprovalRequired,
@@ -237,24 +238,21 @@ class TribeGovernanceSettings {
     String? contentSensitivityFilter,
     bool? showContentWhenPaused,
     bool? inviteLinksEnabled,
-  }) =>
-      TribeGovernanceSettings(
-        joinApprovalRequired: joinApprovalRequired ?? this.joinApprovalRequired,
-        minimumAccountAgeDays:
-            minimumAccountAgeDays ?? this.minimumAccountAgeDays,
-        postApprovalMode: postApprovalMode ?? this.postApprovalMode,
-        postingPermission: postingPermission ?? this.postingPermission,
-        slowModeSeconds: slowModeSeconds ?? this.slowModeSeconds,
-        allowWhispers: allowWhispers ?? this.allowWhispers,
-        allowPolls: allowPolls ?? this.allowPolls,
-        allowAnonymousReactions:
-            allowAnonymousReactions ?? this.allowAnonymousReactions,
-        contentSensitivityFilter:
-            contentSensitivityFilter ?? this.contentSensitivityFilter,
-        showContentWhenPaused:
-            showContentWhenPaused ?? this.showContentWhenPaused,
-        inviteLinksEnabled: inviteLinksEnabled ?? this.inviteLinksEnabled,
-      );
+  }) => TribeGovernanceSettings(
+    joinApprovalRequired: joinApprovalRequired ?? this.joinApprovalRequired,
+    minimumAccountAgeDays: minimumAccountAgeDays ?? this.minimumAccountAgeDays,
+    postApprovalMode: postApprovalMode ?? this.postApprovalMode,
+    postingPermission: postingPermission ?? this.postingPermission,
+    slowModeSeconds: slowModeSeconds ?? this.slowModeSeconds,
+    allowWhispers: allowWhispers ?? this.allowWhispers,
+    allowPolls: allowPolls ?? this.allowPolls,
+    allowAnonymousReactions:
+        allowAnonymousReactions ?? this.allowAnonymousReactions,
+    contentSensitivityFilter:
+        contentSensitivityFilter ?? this.contentSensitivityFilter,
+    showContentWhenPaused: showContentWhenPaused ?? this.showContentWhenPaused,
+    inviteLinksEnabled: inviteLinksEnabled ?? this.inviteLinksEnabled,
+  );
 }
 
 class TribePendingTransfer {

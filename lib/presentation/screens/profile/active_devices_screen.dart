@@ -127,15 +127,16 @@ class _ActiveDevicesScreenState extends ConsumerState<ActiveDevicesScreen> {
     }
     if (!await _confirm(
       title: 'Sign out ${session.label}?',
-      body:
-          'That device will need your username and password to sign back in.',
+      body: 'That device will need your username and password to sign back in.',
       action: 'Sign out',
     )) {
       return;
     }
-    await _run(() => ref.read(repositoryProvider).revokeDeviceSession(
-          session.deviceSessionId,
-        ));
+    await _run(
+      () => ref
+          .read(repositoryProvider)
+          .revokeDeviceSession(session.deviceSessionId),
+    );
   }
 
   Future<void> _notYou(DeviceSession session) async {
@@ -162,9 +163,7 @@ class _ActiveDevicesScreenState extends ConsumerState<ActiveDevicesScreen> {
     )) {
       return;
     }
-    await _run(
-      () => ref.read(repositoryProvider).revokeOtherDeviceSessions(),
-    );
+    await _run(() => ref.read(repositoryProvider).revokeOtherDeviceSessions());
   }
 
   Future<void> _run(Future<Object?> Function() action) async {
@@ -232,87 +231,86 @@ class _DeviceCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(_icon(session.deviceType),
-                        size: 20, color: accent),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(_icon(session.deviceType), size: 20, color: accent),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                session.label,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14.5,
-                                  color: context.ink,
-                                ),
-                              ),
+                        Flexible(
+                          child: Text(
+                            session.label,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14.5,
+                              color: context.ink,
                             ),
-                            if (session.isCurrent) ...[
-                              const SizedBox(width: 8),
-                              const _Chip(label: 'This device', color: accent),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          _subtitle(session),
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            height: 1.35,
-                            fontWeight: FontWeight.w600,
-                            color: context.ink.withValues(alpha: 0.58),
                           ),
                         ),
+                        if (session.isCurrent) ...[
+                          const SizedBox(width: 8),
+                          const _Chip(label: 'This device', color: accent),
+                        ],
                       ],
                     ),
-                  ),
-                ],
-              ),
-              if (!session.isCurrent) ...[
-                const SizedBox(height: 6),
-                // Wrap, not Row: "This wasn't me" plus "Sign out" overflow a
-                // card on a 390pt phone, and the second action is the one
-                // someone reaching for it most needs to be able to hit.
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    WallButton(
-                      label: 'Sign out',
-                      compact: true,
-                      expanded: false,
-                      tone: WallButtonTone.quiet,
-                      onPressed: busy ? null : onSignOut,
-                    ),
-                    WallButton(
-                      label: 'This wasn\'t me',
-                      compact: true,
-                      expanded: false,
-                      tone: WallButtonTone.danger,
-                      onPressed: busy ? null : onNotYou,
+                    const SizedBox(height: 3),
+                    Text(
+                      _subtitle(session),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                        color: context.ink.withValues(alpha: 0.58),
+                      ),
                     ),
                   ],
                 ),
-              ],
+              ),
             ],
           ),
+          if (!session.isCurrent) ...[
+            const SizedBox(height: 6),
+            // Wrap, not Row: "This wasn't me" plus "Sign out" overflow a
+            // card on a 390pt phone, and the second action is the one
+            // someone reaching for it most needs to be able to hit.
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                WallButton(
+                  label: 'Sign out',
+                  compact: true,
+                  expanded: false,
+                  tone: WallButtonTone.quiet,
+                  onPressed: busy ? null : onSignOut,
+                ),
+                WallButton(
+                  label: 'This wasn\'t me',
+                  compact: true,
+                  expanded: false,
+                  tone: WallButtonTone.danger,
+                  onPressed: busy ? null : onNotYou,
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -385,11 +383,7 @@ class _DangerButton extends StatelessWidget {
 }
 
 class _Message extends StatelessWidget {
-  const _Message({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
+  const _Message({required this.icon, required this.title, required this.body});
   final IconData icon;
   final String title;
   final String body;
@@ -400,11 +394,7 @@ class _Message extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(32, 96, 32, 32),
       children: [
-        Icon(
-          icon,
-          size: 44,
-          color: context.ink.withValues(alpha: 0.28),
-        ),
+        Icon(icon, size: 44, color: context.ink.withValues(alpha: 0.28)),
         const SizedBox(height: 14),
         Text(
           title,

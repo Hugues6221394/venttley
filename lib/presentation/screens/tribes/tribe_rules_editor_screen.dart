@@ -54,20 +54,25 @@ class _TribeRulesEditorScreenState
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('Tribe rules',
-            style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Tribe rules',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         actions: [
           TextButton(
-            onPressed:
-                saving || loaded == null ? null : () => _save(tribe.tribeId),
+            onPressed: saving || loaded == null
+                ? null
+                : () => _save(tribe.tribeId),
             child: saving
                 ? const SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Save',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                : const Text(
+                    'Save',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
           ),
         ],
       ),
@@ -98,8 +103,10 @@ class _TribeRulesEditorScreenState
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.touch_app_outlined,
-                            color: VentlyColors.berryMagenta),
+                        const Icon(
+                          Icons.touch_app_outlined,
+                          color: VentlyColors.berryMagenta,
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
@@ -124,7 +131,8 @@ class _TribeRulesEditorScreenState
                       final rule = current[index];
                       return _RuleCard(
                         key: ValueKey(
-                            rule.ruleId ?? 'rule-$index-${rule.title}'),
+                          rule.ruleId ?? 'rule-$index-${rule.title}',
+                        ),
                         index: index,
                         rule: rule,
                         onToggle: (enabled) => setState(() {
@@ -175,24 +183,28 @@ class _TribeRulesEditorScreenState
     setState(() {
       rules = const [
         TribeRuleItem(
-            position: 0,
-            title: 'Be respectful',
-            description:
-                'Disagree without attacking, mocking, or shaming people.'),
+          position: 0,
+          title: 'Be respectful',
+          description:
+              'Disagree without attacking, mocking, or shaming people.',
+        ),
         TribeRuleItem(
-            position: 1,
-            title: 'No hate speech',
-            description:
-                'Hate, harassment, and dehumanizing language are not allowed.'),
+          position: 1,
+          title: 'No hate speech',
+          description:
+              'Hate, harassment, and dehumanizing language are not allowed.',
+        ),
         TribeRuleItem(
-            position: 2,
-            title: 'Protect personal information',
-            description:
-                'Do not share names, phone numbers, addresses, or private screenshots.'),
+          position: 2,
+          title: 'Protect personal information',
+          description:
+              'Do not share names, phone numbers, addresses, or private screenshots.',
+        ),
         TribeRuleItem(
-            position: 3,
-            title: 'Stay on topic',
-            description: 'Use the right Space and keep discussions relevant.'),
+          position: 3,
+          title: 'Stay on topic',
+          description: 'Use the right Space and keep discussions relevant.',
+        ),
       ];
     });
   }
@@ -202,8 +214,12 @@ class _TribeRulesEditorScreenState
     // describe. Writing rules for the first time is not a change to anybody —
     // no member has read the old set, because there wasn't one.
     final hadRules =
-        ref.read(tribeManagementProvider(tribeId)).valueOrNull?.rules.isNotEmpty ??
-            false;
+        ref
+            .read(tribeManagementProvider(tribeId))
+            .valueOrNull
+            ?.rules
+            .isNotEmpty ??
+        false;
     String? note;
     if (hadRules) {
       final answer = await showDialog<String?>(
@@ -219,14 +235,10 @@ class _TribeRulesEditorScreenState
     if (!mounted) return;
     setState(() => saving = true);
     try {
-      await ref.read(repositoryProvider).replaceTribeRules(
-        tribeId,
-        [
-          for (var i = 0; i < (rules?.length ?? 0); i++)
-            rules![i].copyWith(position: i),
-        ],
-        changeNote: note,
-      );
+      await ref.read(repositoryProvider).replaceTribeRules(tribeId, [
+        for (var i = 0; i < (rules?.length ?? 0); i++)
+          rules![i].copyWith(position: i),
+      ], changeNote: note);
       ref.invalidate(tribeManagementProvider(tribeId));
       ref.invalidate(tribeBySlugProvider(widget.slug));
       if (!mounted) return;
@@ -241,9 +253,9 @@ class _TribeRulesEditorScreenState
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save rules: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save rules: $error')));
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -273,8 +285,10 @@ class _ChangeNoteDialogState extends State<_ChangeNoteDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('What changed?',
-          style: TextStyle(fontWeight: FontWeight.w900)),
+      title: const Text(
+        'What changed?',
+        style: TextStyle(fontWeight: FontWeight.w900),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,8 +328,10 @@ class _ChangeNoteDialogState extends State<_ChangeNoteDialog> {
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_ctl.text),
-          child: const Text('Publish',
-              style: TextStyle(fontWeight: FontWeight.w900)),
+          child: const Text(
+            'Publish',
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
         ),
       ],
     );
@@ -359,19 +375,23 @@ class _RuleCard extends StatelessWidget {
                     color: VentlyColors.berryMagenta.withOpacity(.10),
                     shape: BoxShape.circle,
                   ),
-                  child: Text('${index + 1}',
-                      style: const TextStyle(
-                        color: VentlyColors.berryMagenta,
-                        fontWeight: FontWeight.w900,
-                      )),
+                  child: Text(
+                    '${index + 1}',
+                    style: const TextStyle(
+                      color: VentlyColors.berryMagenta,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(rule.title,
-                          style: const TextStyle(fontWeight: FontWeight.w900)),
+                      Text(
+                        rule.title,
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
                       if (rule.description?.isNotEmpty == true)
                         Text(
                           rule.description!,
@@ -417,8 +437,9 @@ class _RuleDialog extends StatefulWidget {
 
 class _RuleDialogState extends State<_RuleDialog> {
   late final title = TextEditingController(text: widget.initial?.title);
-  late final description =
-      TextEditingController(text: widget.initial?.description);
+  late final description = TextEditingController(
+    text: widget.initial?.description,
+  );
 
   @override
   void dispose() {
@@ -453,21 +474,22 @@ class _RuleDialogState extends State<_RuleDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: title.text.trim().length < 2
               ? null
               : () => Navigator.pop(
-                    context,
-                    TribeRuleItem(
-                      ruleId: widget.initial?.ruleId,
-                      position: widget.position,
-                      title: title.text.trim(),
-                      description: description.text.trim(),
-                      isEnabled: widget.initial?.isEnabled ?? true,
-                    ),
+                  context,
+                  TribeRuleItem(
+                    ruleId: widget.initial?.ruleId,
+                    position: widget.position,
+                    title: title.text.trim(),
+                    description: description.text.trim(),
+                    isEnabled: widget.initial?.isEnabled ?? true,
                   ),
+                ),
           child: const Text('Save'),
         ),
       ],
@@ -488,11 +510,16 @@ class _EmptyRules extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.rule_rounded,
-                size: 48, color: VentlyColors.berryMagenta),
+            const Icon(
+              Icons.rule_rounded,
+              size: 48,
+              color: VentlyColors.berryMagenta,
+            ),
             const SizedBox(height: 12),
-            const Text('Set the tone for your Tribe',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const Text(
+              'Set the tone for your Tribe',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
             const SizedBox(height: 8),
             const Text(
               'Rules appear before joining and give moderators a shared standard.',

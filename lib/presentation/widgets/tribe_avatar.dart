@@ -93,8 +93,9 @@ class TribeCoverPreview extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(0xFFFFE3EC),
               borderRadius: BorderRadius.circular(borderRadius),
-              border:
-                  Border.all(color: VentlyColors.softMauve.withOpacity(0.48)),
+              border: Border.all(
+                color: VentlyColors.softMauve.withOpacity(0.48),
+              ),
             ),
             clipBehavior: Clip.antiAlias,
             child: _TribeNetworkImage(
@@ -173,8 +174,8 @@ class _TribeNetworkImage extends StatelessWidget {
           width: width,
           height: height,
           fit: BoxFit.cover,
-          memCacheWidth:
-              (width * MediaQuery.devicePixelRatioOf(context)).round(),
+          memCacheWidth: (width * MediaQuery.devicePixelRatioOf(context))
+              .round(),
           maxWidthDiskCache: (width * 3).round(),
           errorWidget: (_, __, ___) => Center(child: fallback),
         );

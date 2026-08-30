@@ -32,9 +32,11 @@ class GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final sigma = blur ?? (isDark ? GlassTokens.blurHeavy : GlassTokens.blurMedium);
+    final sigma =
+        blur ?? (isDark ? GlassTokens.blurHeavy : GlassTokens.blurMedium);
     final surfaceTint = tint ?? GlassTokens.tint(context);
-    final border = borderColor ??
+    final border =
+        borderColor ??
         (isDark
             ? VentlyColors.berryDesat.withOpacity(0.22)
             : GlassTokens.border(context));

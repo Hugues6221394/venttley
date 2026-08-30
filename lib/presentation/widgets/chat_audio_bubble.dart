@@ -108,8 +108,7 @@ class _ChatAudioBubbleState extends State<ChatAudioBubble> {
 
   Future<void> _seek(double progress) async {
     if (!_ready) return;
-    final total = _player.duration ??
-        Duration(seconds: widget.durationSeconds);
+    final total = _player.duration ?? Duration(seconds: widget.durationSeconds);
     final ms = (total.inMilliseconds * progress).round();
     await _player.seek(Duration(milliseconds: ms));
   }
@@ -156,12 +155,11 @@ class _ChatAudioBubbleState extends State<ChatAudioBubble> {
           stream: _player.positionStream,
           builder: (context, posSnap) {
             final pos = posSnap.data ?? Duration.zero;
-            final total = _player.duration ??
-                Duration(seconds: widget.durationSeconds);
+            final total =
+                _player.duration ?? Duration(seconds: widget.durationSeconds);
             final progress = total.inMilliseconds == 0
                 ? 0.0
-                : (pos.inMilliseconds / total.inMilliseconds)
-                    .clamp(0.0, 1.0);
+                : (pos.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
             final elapsed = playing || pos > Duration.zero
                 ? formatAudioDurationFromDuration(pos)
                 : formatAudioDuration(widget.durationSeconds);

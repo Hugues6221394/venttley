@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
-typedef ModalTextControllerBuilder = Widget Function(
-  BuildContext context,
-  List<TextEditingController> controllers,
-);
+typedef ModalTextControllerBuilder =
+    Widget Function(
+      BuildContext context,
+      List<TextEditingController> controllers,
+    );
 
 /// Owns text controllers for a dialog or sheet until its route is fully
 /// removed. Disposing controllers immediately after `showDialog` or

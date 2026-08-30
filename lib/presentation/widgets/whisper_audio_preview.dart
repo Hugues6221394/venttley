@@ -109,8 +109,8 @@ class _WhisperAudioPreviewState extends State<WhisperAudioPreview> {
       stream: _player.positionStream,
       builder: (context, posSnap) {
         final pos = posSnap.data ?? Duration.zero;
-        final total = _player.duration ??
-            Duration(seconds: widget.durationSeconds);
+        final total =
+            _player.duration ?? Duration(seconds: widget.durationSeconds);
         final progress = total.inMilliseconds == 0
             ? 0.0
             : (pos.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);

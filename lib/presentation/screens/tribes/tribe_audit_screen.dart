@@ -38,7 +38,7 @@ class _TribeAuditScreenState extends ConsumerState<TribeAuditScreen> {
           child: Padding(
             padding: EdgeInsets.all(28),
             child: Text(
-              'Only the current Plug can view Tribe audit history.',
+              'Only the current Keeper can view Tribe audit history.',
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
@@ -101,8 +101,10 @@ class _TribeAuditScreenState extends ConsumerState<TribeAuditScreen> {
                 ),
                 data: (items) {
                   final visible = items
-                      .where((event) =>
-                          filter == 'all' || event.targetType == filter)
+                      .where(
+                        (event) =>
+                            filter == 'all' || event.targetType == filter,
+                      )
                       .toList(growable: false);
                   if (visible.isEmpty) {
                     return const SliverFillRemaining(
@@ -214,10 +216,7 @@ class _AuditEventCard extends StatelessWidget {
                 ),
                 if (showLine)
                   Expanded(
-                    child: Container(
-                      width: 1,
-                      color: context.glassBorder,
-                    ),
+                    child: Container(width: 1, color: context.glassBorder),
                   ),
               ],
             ),
