@@ -21,18 +21,57 @@
 BEGIN;
 
 -- 'tribe' joins the kinds the receipts table accepts.
-ALTER TABLE private.client_mutation_receipts
-  DROP CONSTRAINT IF EXISTS client_mutation_receipts_operation_kind_check;
-ALTER TABLE private.client_mutation_receipts
-  ADD CONSTRAINT client_mutation_receipts_operation_kind_check
-    CHECK (operation_kind IN (
-      'post',
-      'comment',
-      'whisper_comment',
-      'dm',
-      'tribe_message',
-      'tribe'
-    ));
+--
+-- Replacing a CHECK means restating every value, and the list has to be the
+-- one currently in force, not the one the table was born with. 20260714182652
+-- created it with five kinds; 20260811222118 added 'whisper' when whispers got
+-- their own idempotent write. Restating the original five plus 'tribe' drops
+-- 'whisper' on the floor, and the ALTER then fails against the whisper
+-- receipts already in the table — which is exactly what happened the first
+-- time this ran.
+--
+-- Rather than trust this comment to stay true, the block below refuses to
+-- proceed if the table holds any kind the new list does not cover, and names
+-- it. A migration that is about to invalidate live rows should say which ones
+-- rather than leave a bare 23514 to be decoded.
+DO $$
+DECLARE
+  v_allowed TEXT[] := ARRAY[
+    'post',
+    'comment',
+    'whisper_comment',
+    'dm',
+    'tribe_message',
+    'whisper',
+    'tribe'
+  ];
+  v_orphans TEXT[];
+BEGIN
+  SELECT array_agg(DISTINCT r.operation_kind)
+    INTO v_orphans
+    FROM private.client_mutation_receipts r
+   WHERE NOT (r.operation_kind = ANY (v_allowed));
+
+  IF v_orphans IS NOT NULL THEN
+    RAISE EXCEPTION
+      'client_mutation_receipts holds operation_kind values this migration would reject: %. Add them to the list before running.',
+      array_to_string(v_orphans, ', ');
+  END IF;
+
+  ALTER TABLE private.client_mutation_receipts
+    DROP CONSTRAINT IF EXISTS client_mutation_receipts_operation_kind_check;
+  ALTER TABLE private.client_mutation_receipts
+    ADD CONSTRAINT client_mutation_receipts_operation_kind_check
+      CHECK (operation_kind IN (
+        'post',
+        'comment',
+        'whisper_comment',
+        'dm',
+        'tribe_message',
+        'whisper',
+        'tribe'
+      ));
+END $$;
 
 -- Wraps create_managed_tribe rather than editing it.
 --
