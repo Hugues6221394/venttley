@@ -37,4 +37,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20260829200000': 'enforce_blocks_on_replies_and_existing_dms',
   '20260830090000': 'tribe_category_taxonomy',
   '20260830120000': 'media_quarantine_and_security_checkup',
+  '20260831090000': 'tribe_rules_versioning',
 };

@@ -277,7 +277,7 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                       const SizedBox(height: 10),
                       Text(
                         verified
-                            ? 'Sign-ins require your password plus a 6-digit code from your authenticator app.'
+                            ? 'Sign-ins require your password plus a 6-digit code from your authenticator app. If you lose the authenticator, sign in with your 12-word recovery phrase — that phrase is the backup for this account. We do not issue one-time backup codes.'
                             : 'Add a 6-digit code from any authenticator app (Google Authenticator, 1Password, Authy) on top of your password.',
                         style: TextStyle(
                           color: context.ink.withOpacity(0.7),

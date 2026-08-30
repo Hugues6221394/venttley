@@ -22,6 +22,7 @@ import '../widgets/keep_alive.dart';
 import '../screens/onboarding/email_signup_screen.dart';
 import '../screens/onboarding/age_completion_screen.dart';
 import '../screens/onboarding/identity_screen.dart';
+import '../screens/onboarding/mfa_challenge_screen.dart';
 import '../screens/onboarding/recover_screen.dart';
 import '../screens/onboarding/recovery_key_screen.dart';
 import '../screens/onboarding/phone_signin_screen.dart';
@@ -72,12 +73,16 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/onboarding',
     redirect: (context, state) {
       final session = ref.read(sessionProvider);
+      final pendingMfa = ref.read(pendingMfaFactorIdProvider);
       final path = state.matchedLocation;
       final onboardingRoute = path.startsWith('/onboarding');
+      final onMfa = path == '/onboarding/mfa';
+      if (pendingMfa != null && !onMfa) return '/onboarding/mfa';
       if (session == null && !onboardingRoute) return '/onboarding';
       if (session != null &&
           session.birthYear == null &&
-          path != '/onboarding/age') {
+          path != '/onboarding/age' &&
+          !onMfa) {
         return '/onboarding/age';
       }
       if (session != null &&
@@ -155,6 +160,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding/phone',
         builder: (_, __) => const PhoneSignInScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding/mfa',
+        builder: (_, __) => const MfaChallengeScreen(),
       ),
 
       // Bottom-nav shell. Five stateful branches plus the Friends shortcut:
@@ -537,6 +546,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(this.ref) {
     ref.listen(sessionProvider, (_, __) => notifyListeners());
+    ref.listen(pendingMfaFactorIdProvider, (_, __) => notifyListeners());
   }
   final Ref ref;
 }

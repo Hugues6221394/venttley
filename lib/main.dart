@@ -222,6 +222,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   /// app is foregrounded so peers see Online / Active recently (0114).
   Timer? _presenceTimer;
   StreamSubscription<Uri>? _appLinkSubscription;
+  StreamSubscription<AuthState>? _authSubscription;
   String? _pendingDeepLinkPath;
 
   /// Throttles the unanswered-alert poll. Resume fires on every task-switch,
@@ -467,6 +468,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   void dispose() {
     _stopPresenceHeartbeat();
     _appLinkSubscription?.cancel();
+    _authSubscription?.cancel();
     PushRegistrationService.instance.setNotificationOpenedHandler(null);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -484,6 +486,15 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       onError: (Object error, StackTrace stack) =>
           Logger.instance.warn('app_link.invalid', error: error, stack: stack),
     );
+    if (!VentlyConfig.useMockBackend) {
+      _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen(
+        (data) {
+          if (data.event == AuthChangeEvent.signedIn) {
+            unawaited(_restoreSessionSafely());
+          }
+        },
+      );
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _restoreSessionSafely();
       AnalyticsService.instance.track(Events.appOpened);

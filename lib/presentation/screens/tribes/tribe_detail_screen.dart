@@ -10,6 +10,7 @@ import '../../widgets/media_preview_viewer.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tribe_avatar.dart';
+import '../../widgets/tribe_rules_notice.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/vently_premium_background.dart';
 
@@ -218,6 +219,7 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                                 ),
                               ),
                             ],
+                            TribeRulesUpdatedBanner(tribeId: tribe.tribeId),
                             if (tribe.keeperPseudonym != null) ...[
                               const SizedBox(height: 12),
                               UserProfileTap(

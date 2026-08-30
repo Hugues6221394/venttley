@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/repositories/vently_repository.dart';
+import '../data/services/supabase_backend.dart'
+    show MfaChallengeRequiredException;
 import '../data/services/analytics_service.dart';
 import '../data/services/device_identity_service.dart';
 import '../data/services/feature_flags_service.dart';
@@ -25,6 +27,10 @@ import 'analytics_events.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'logger.dart';
+
+/// Factor id waiting on a TOTP code. Null means the current session is
+/// allowed to enter the app, or there is no session.
+final pendingMfaFactorIdProvider = StateProvider<String?>((ref) => null);
 
 final repositoryProvider = Provider<VentlyRepository>((ref) {
   return VentlyRepository();
@@ -92,17 +98,35 @@ final sessionProvider = StateNotifierProvider<SessionController, AppUser?>((
   ref,
 ) {
   final repo = ref.watch(repositoryProvider);
-  return SessionController(repo);
+  return SessionController(repo, ref);
 });
 
 class SessionController extends StateNotifier<AppUser?> {
-  SessionController(this._repo) : super(_repo.currentUser) {
+  SessionController(this._repo, [this._ref]) : super(_repo.currentUser) {
     // If the repo already has a cached user (warm app start), tell
     // analytics + flags immediately so the first event is attributed.
     final cached = _repo.currentUser;
     if (cached != null) _identifyDownstream(cached);
   }
   final VentlyRepository _repo;
+  final Ref? _ref;
+
+  void _setPendingMfa(String? factorId) {
+    final ref = _ref;
+    if (ref == null) return;
+    ref.read(pendingMfaFactorIdProvider.notifier).state = factorId;
+  }
+
+  Future<T> _withMfaGate<T>(Future<T> Function() action) async {
+    try {
+      final result = await action();
+      _setPendingMfa(null);
+      return result;
+    } on MfaChallengeRequiredException catch (e) {
+      _setPendingMfa(e.factorId);
+      rethrow;
+    }
+  }
 
   /// Identify the user on every downstream service that needs it.
   /// Idempotent — safe to call on every restore() / register / signIn.
@@ -120,6 +144,14 @@ class SessionController extends StateNotifier<AppUser?> {
 
   Future<void> restore() async {
     state = await _repo.restoreSession();
+    final factor = await _repo.pendingMfaFactorId();
+    _setPendingMfa(factor);
+    if (factor != null) {
+      // Keep the GoTrue JWT so verifyMfa works, but do not expose an
+      // AAL1 session to the rest of the app.
+      state = null;
+      return;
+    }
     final user = state;
     if (user != null) _identifyDownstream(user);
   }
@@ -181,7 +213,9 @@ class SessionController extends StateNotifier<AppUser?> {
     required String email,
     required String password,
   }) async {
-    final user = await _repo.signInWithEmail(email: email, password: password);
+    final user = await _withMfaGate(
+      () => _repo.signInWithEmail(email: email, password: password),
+    );
     await _repo
         .reactivateMyAccount(); // restore if deactivated / cancel deletion
     state = user;
@@ -248,6 +282,7 @@ class SessionController extends StateNotifier<AppUser?> {
     try {
       await _repo.signOutEverywhere();
     } finally {
+      _setPendingMfa(null);
       state = null;
       await AnalyticsService.instance.reset();
     }
@@ -290,7 +325,9 @@ class SessionController extends StateNotifier<AppUser?> {
     required String phone,
     required String token,
   }) async {
-    final user = await _repo.verifyPhoneOtp(phone: phone, token: token);
+    final user = await _withMfaGate(
+      () => _repo.verifyPhoneOtp(phone: phone, token: token),
+    );
     await _repo
         .reactivateMyAccount(); // restore if deactivated / cancel deletion
     state = user;
@@ -310,7 +347,9 @@ class SessionController extends StateNotifier<AppUser?> {
     required String username,
     required String password,
   }) async {
-    final user = await _repo.signIn(username: username, password: password);
+    final user = await _withMfaGate(
+      () => _repo.signIn(username: username, password: password),
+    );
     await _repo
         .reactivateMyAccount(); // restore if deactivated / cancel deletion
     state = user;
@@ -339,9 +378,8 @@ class SessionController extends StateNotifier<AppUser?> {
     required String username,
     required String phrase,
   }) async {
-    final user = await _repo.recoverWithPhrase(
-      username: username,
-      phrase: phrase,
+    final user = await _withMfaGate(
+      () => _repo.recoverWithPhrase(username: username, phrase: phrase),
     );
     if (user != null) {
       state = user;
@@ -361,6 +399,7 @@ class SessionController extends StateNotifier<AppUser?> {
     try {
       await _repo.logout();
     } finally {
+      _setPendingMfa(null);
       state = null;
       await AnalyticsService.instance.reset();
     }

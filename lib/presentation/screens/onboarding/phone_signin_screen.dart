@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
+import '../../../data/services/supabase_backend.dart'
+    show MfaChallengeRequiredException;
 import '../../theme/colors.dart';
 
 /// Optional phone sign-in: enter a number, receive an SMS OTP, verify.
@@ -72,6 +74,8 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
           .read(sessionProvider.notifier)
           .verifyPhoneOtp(phone: _e164, token: _otp.text.trim());
       if (mounted) context.go('/feed');
+    } on MfaChallengeRequiredException {
+      if (mounted) context.go('/onboarding/mfa');
     } catch (e) {
       if (mounted) setState(() => _error = _clean(e));
     } finally {

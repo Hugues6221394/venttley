@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../../../core/constants.dart';
 import '../../../core/connection.dart';
 import '../../../core/providers.dart';
+import '../../../core/user_friendly_errors.dart';
 import '../../../data/services/draft_store.dart';
 import '../../../data/services/moderation_service.dart';
 import '../../../data/services/outbox.dart';
@@ -167,7 +168,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             );
         await outbox.discardStagedMedia(stagedMedia.path);
         unawaited(ref.read(repositoryProvider).refreshMessages(widget.roomId));
-      } catch (_) {
+      } catch (error) {
+        if (UserFriendlyErrors.isPermanent(error)) {
+          await outbox.discardStagedMedia(stagedMedia?.path);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(UserFriendlyErrors.message(error))),
+          );
+          return;
+        }
         if (stagedMedia != null) {
           await outbox.enqueue(OutboxKind.dm, {
             'roomId': widget.roomId,
@@ -770,7 +779,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         idempotencyKey: operationId,
                       );
                   await outbox.discardStagedMedia(stagedMedia?.path);
-                } catch (_) {
+                } catch (error) {
+                  if (UserFriendlyErrors.isPermanent(error)) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(UserFriendlyErrors.message(error)),
+                        ),
+                      );
+                    }
+                    return;
+                  }
                   if (pending != null && stagedMedia == null) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(

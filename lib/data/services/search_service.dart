@@ -29,11 +29,13 @@ abstract class SearchService {
         ? _MeilisearchBackend(
             host: VentlyConfig.meilisearchHost,
             apiKey: VentlyConfig.meilisearchKey,
-            fallback: supabase == null ? null : _PostgresSearchBackend(supabase),
+            fallback: supabase == null
+                ? null
+                : _PostgresSearchBackend(supabase),
           )
         : (supabase == null
-            ? _NoopSearchBackend()
-            : _PostgresSearchBackend(supabase));
+              ? _NoopSearchBackend()
+              : _PostgresSearchBackend(supabase));
     _instance = next;
     return next;
   }
@@ -44,7 +46,8 @@ abstract class SearchService {
 
 class _NoopSearchBackend implements SearchService {
   @override
-  Future<List<SearchHit>> search(String query, {int limit = 24}) async => const [];
+  Future<List<SearchHit>> search(String query, {int limit = 24}) async =>
+      const [];
 }
 
 class _PostgresSearchBackend implements SearchService {
@@ -70,10 +73,10 @@ class _MeilisearchBackend implements SearchService {
   /// Tunable list of indexes scanned in parallel. Add to this when a
   /// new index ships (whispers_v1, plug_profiles, etc.).
   static const _indexes = <String, String>{
-    'posts_v1':   'post',
-    'tribes_v1':  'tribe',
+    'posts_v1': 'post',
+    'tribes_v1': 'tribe',
     'whispers_v1': 'whisper',
-    'users_v1':   'user',
+    'users_v1': 'user',
   };
 
   @override
@@ -92,7 +95,8 @@ class _MeilisearchBackend implements SearchService {
         if (res.statusCode != 200) return <SearchHit>[];
         final body = jsonDecode(res.body) as Map<String, Object?>;
         final hits = (body['hits'] as List?) ?? const [];
-        return hits.map((h) => _meiliToHit(entry.value, h as Map<String, Object?>))
+        return hits
+            .map((h) => _meiliToHit(entry.value, h as Map<String, Object?>))
             .whereType<SearchHit>()
             .toList();
       });

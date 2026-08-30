@@ -4382,18 +4382,38 @@ class SupabaseBackend {
 
   Future<TribeManagementOverview> replaceTribeRules(
     String tribeId,
-    List<TribeRuleItem> rules,
-  ) async {
+    List<TribeRuleItem> rules, {
+    String? changeNote,
+  }) async {
     final raw = await _client.rpc(
-      'replace_tribe_rules',
+      'publish_tribe_rules',
       params: {
         'p_tribe_id': tribeId,
         'p_rules': [for (final rule in rules) rule.toJson()],
+        'p_change_note': changeNote?.trim().isEmpty == true
+            ? null
+            : changeNote?.trim(),
       },
     );
     return TribeManagementOverview.fromJson(
       Map<String, dynamic>.from(raw as Map),
     );
+  }
+
+  Future<TribeRulesStatus> myTribeRulesStatus(String tribeId) async {
+    final raw = await _client.rpc(
+      'my_tribe_rules_status',
+      params: {'p_tribe_id': tribeId},
+    );
+    return TribeRulesStatus.fromJson(Map<String, dynamic>.from(raw as Map));
+  }
+
+  Future<int> acknowledgeTribeRules(String tribeId, int version) async {
+    final raw = await _client.rpc(
+      'acknowledge_tribe_rules',
+      params: {'p_tribe_id': tribeId, 'p_version': version},
+    );
+    return _coerceInt(raw) ?? version;
   }
 
   Future<List<TribeJoinRequest>> tribeJoinRequests(String tribeId) async {

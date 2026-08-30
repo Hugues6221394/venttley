@@ -4,8 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/security_checkup.dart';
+import '../../../data/services/supabase_backend.dart'
+    show MfaChallengeRequiredException;
 import '../../theme/colors.dart';
 import '../../widgets/modal_text_controller_scope.dart';
+import '../onboarding/mfa_challenge_screen.dart';
 
 /// Instagram-style "Password and security" hub: a security checkup summary,
 /// password rotation, a real recovery email, two-factor, and session control.
@@ -21,6 +25,7 @@ class _PasswordSecurityScreenState
     extends ConsumerState<PasswordSecurityScreen> {
   bool _twoFactorOn = false;
   bool _loadingFactors = true;
+  DateTime? _passwordChangedAt;
   int? _deviceCount;
 
   @override
@@ -28,6 +33,17 @@ class _PasswordSecurityScreenState
     super.initState();
     _loadFactors();
     _loadDeviceCount();
+    _loadPasswordChangedAt();
+  }
+
+  Future<void> _loadPasswordChangedAt() async {
+    try {
+      final at = await ref.read(repositoryProvider).myPasswordChangedAt();
+      if (mounted) setState(() => _passwordChangedAt = at);
+    } catch (_) {
+      // Leave null — the checkup then says the password was never rotated,
+      // which is the honest default when we cannot read the stamp.
+    }
   }
 
   /// Just the count for the tile subtitle. The screen behind it does the real
@@ -72,10 +88,12 @@ class _PasswordSecurityScreenState
     final emailVerified = session.isEmailVerified;
     final email = session.currentEmail;
 
-    // Checkup: password is always set; 2FA + verified recovery email are the
-    // two things a user can improve.
-    final recoveryOk = hasRealEmail && emailVerified;
-    final coveredCount = 1 + (_twoFactorOn ? 1 : 0) + (recoveryOk ? 1 : 0);
+    final checkup = SecurityCheckup(
+      passwordChangedAt: _passwordChangedAt,
+      twoFactorOn: _twoFactorOn,
+      hasRealEmail: hasRealEmail,
+      emailVerified: emailVerified,
+    );
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -84,27 +102,21 @@ class _PasswordSecurityScreenState
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
           _CheckupCard(
-            covered: coveredCount,
-            total: 3,
+            covered: checkup.coveredCount,
+            total: SecurityCheckup.totalSteps,
             loading: _loadingFactors,
             items: [
-              const _CheckItem(
-                label: 'Password protects your account',
-                ok: true,
+              _CheckItem(
+                label: checkup.passwordLabel,
+                ok: checkup.passwordRotated,
               ),
               _CheckItem(
-                label: _twoFactorOn
-                    ? 'Two-factor authentication is on'
-                    : 'Turn on two-factor authentication',
-                ok: _twoFactorOn,
+                label: checkup.twoFactorLabel,
+                ok: checkup.twoFactorOn,
               ),
               _CheckItem(
-                label: recoveryOk
-                    ? 'Recovery email verified'
-                    : hasRealEmail
-                    ? 'Confirm your recovery email'
-                    : 'Add a recovery email',
-                ok: recoveryOk,
+                label: checkup.recoveryLabel,
+                ok: checkup.recoveryOk,
               ),
             ],
           ),
@@ -121,7 +133,7 @@ class _PasswordSecurityScreenState
             title: 'Recovery email',
             subtitle: email == null || !hasRealEmail
                 ? 'Not set — add one to recover your account'
-                : recoveryOk
+                : checkup.recoveryOk
                 ? _mask(email)
                 : '${_mask(email)} • unconfirmed',
             trailingBadge: hasRealEmail && !emailVerified ? 'Confirm' : null,
@@ -348,6 +360,47 @@ class _PasswordSecurityScreenState
                                       content: Text('Password updated.'),
                                     ),
                                   );
+                                  _loadPasswordChangedAt();
+                                }
+                              } on MfaChallengeRequiredException catch (e) {
+                                final verified = await showMfaChallengeDialog(
+                                  context: ctx,
+                                  ref: ref,
+                                  factorId: e.factorId,
+                                );
+                                if (!verified) {
+                                  setSheet(() {
+                                    busy = false;
+                                    error =
+                                        'Two-factor verification is required to change your password.';
+                                  });
+                                  return;
+                                }
+                                try {
+                                  await ref
+                                      .read(sessionProvider.notifier)
+                                      .changePassword(
+                                        currentPassword: current.text,
+                                        newPassword: next.text,
+                                        recoveryPhrase: needsRecoveryPhrase
+                                            ? recoveryPhrase.text
+                                            : null,
+                                      );
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Password updated.'),
+                                      ),
+                                    );
+                                    _loadPasswordChangedAt();
+                                  }
+                                } catch (_) {
+                                  setSheet(() {
+                                    busy = false;
+                                    error =
+                                        'Couldn\'t update password. Try again.';
+                                  });
                                 }
                               } on AuthException catch (_) {
                                 setSheet(() {

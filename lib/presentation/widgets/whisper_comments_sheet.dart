@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/connection.dart';
 import '../../core/providers.dart';
+import '../../core/user_friendly_errors.dart';
 import '../../data/services/draft_store.dart';
 import '../../data/services/outbox.dart';
 import '../../domain/entities/entities.dart';
@@ -125,6 +126,14 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
       _controller.clear();
       setState(() => _replyingTo = null);
     } catch (e) {
+      if (UserFriendlyErrors.isPermanent(e)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(UserFriendlyErrors.message(e))),
+          );
+        }
+        return;
+      }
       // Offline: queue the comment for automatic retry.
       final outbox = ref.read(outboxProvider).valueOrNull;
       if (outbox != null) {

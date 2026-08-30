@@ -49,6 +49,47 @@ class TribeRuleItem {
       );
 }
 
+/// Where a member stands relative to a Tribe's current rules.
+///
+/// [needsAcknowledgement] is decided on the server, because it depends on when
+/// the member joined and what they have already confirmed — facts the client
+/// does not hold and should not be trusted to weigh.
+class TribeRulesStatus {
+  final int version;
+  final DateTime? publishedAt;
+  final String? changeNote;
+  final int? acknowledgedVersion;
+  final bool isMember;
+  final bool needsAcknowledgement;
+  final List<TribeRuleItem> rules;
+
+  const TribeRulesStatus({
+    this.version = 0,
+    this.publishedAt,
+    this.changeNote,
+    this.acknowledgedVersion,
+    this.isMember = false,
+    this.needsAcknowledgement = false,
+    this.rules = const [],
+  });
+
+  factory TribeRulesStatus.fromJson(Map<String, dynamic> json) =>
+      TribeRulesStatus(
+        version: (json['version'] as num?)?.toInt() ?? 0,
+        publishedAt: json['published_at'] == null
+            ? null
+            : DateTime.tryParse(json['published_at'] as String)?.toLocal(),
+        changeNote: json['change_note'] as String?,
+        acknowledgedVersion: (json['acknowledged_version'] as num?)?.toInt(),
+        isMember: json['is_member'] == true,
+        needsAcknowledgement: json['needs_acknowledgement'] == true,
+        rules: [
+          for (final row in (json['rules'] as List? ?? const []))
+            TribeRuleItem.fromJson(Map<String, dynamic>.from(row as Map)),
+        ],
+      );
+}
+
 class TribeGovernanceSettings {
   final bool joinApprovalRequired;
   final int minimumAccountAgeDays;

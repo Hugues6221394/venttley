@@ -2439,11 +2439,31 @@ class VentlyRepository implements MusicProvider {
 
   Future<TribeManagementOverview> replaceTribeRules(
     String tribeId,
-    List<TribeRuleItem> rules,
-  ) {
+    List<TribeRuleItem> rules, {
+    String? changeNote,
+  }) {
     final live = _live;
-    if (live != null) return live.replaceTribeRules(tribeId, rules);
+    if (live != null) {
+      return live.replaceTribeRules(tribeId, rules, changeNote: changeNote);
+    }
     return Future.value(_mock.replaceTribeRules(tribeId, rules));
+  }
+
+  /// Whether the signed-in member is being asked to read a newer rule set.
+  ///
+  /// Offline this always answers "nothing to read": inventing a rules change
+  /// against mock data would put a notice in front of someone that no Keeper
+  /// ever published.
+  Future<TribeRulesStatus> myTribeRulesStatus(String tribeId) {
+    final live = _live;
+    if (live != null) return live.myTribeRulesStatus(tribeId);
+    return Future.value(const TribeRulesStatus());
+  }
+
+  Future<int> acknowledgeTribeRules(String tribeId, int version) {
+    final live = _live;
+    if (live != null) return live.acknowledgeTribeRules(tribeId, version);
+    return Future.value(version);
   }
 
   Future<List<TribeJoinRequest>> tribeJoinRequests(String tribeId) {

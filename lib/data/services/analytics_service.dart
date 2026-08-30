@@ -34,7 +34,10 @@ abstract class AnalyticsService {
   Future<void> track(String event, {Map<String, Object?> props = const {}});
 
   /// Associate the current session with a stable user id. Idempotent.
-  Future<void> identify(String userId, {Map<String, Object?> traits = const {}});
+  Future<void> identify(
+    String userId, {
+    Map<String, Object?> traits = const {},
+  });
 
   /// Record a screen view. Maps to `$screen` in PostHog.
   Future<void> screen(String name, {Map<String, Object?> props = const {}});
@@ -51,8 +54,10 @@ class _DefaultAnalytics implements AnalyticsService {
   }
 
   @override
-  Future<void> identify(String userId,
-      {Map<String, Object?> traits = const {}}) async {
+  Future<void> identify(
+    String userId, {
+    Map<String, Object?> traits = const {},
+  }) async {
     log.info('analytics.identify', props: {'user_id': userId, ...traits});
     // TelemetryService stores user_id implicitly via the session.
   }
@@ -82,8 +87,10 @@ class _PostHogAnalytics implements AnalyticsService {
   Uri get _capture => Uri.parse('$host/capture/');
 
   @override
-  Future<void> track(String event,
-      {Map<String, Object?> props = const {}}) async {
+  Future<void> track(
+    String event, {
+    Map<String, Object?> props = const {},
+  }) async {
     log.info('analytics.$event', props: props);
     unawaited(TelemetryService.instance.event(event, props: props));
     final scrubbed = PiiScrubber.scrub(props);
@@ -100,14 +107,15 @@ class _PostHogAnalytics implements AnalyticsService {
         }),
       );
     } catch (e) {
-      log.warn('analytics.posthog_failed',
-          props: {'event': event}, error: e);
+      log.warn('analytics.posthog_failed', props: {'event': event}, error: e);
     }
   }
 
   @override
-  Future<void> identify(String userId,
-      {Map<String, Object?> traits = const {}}) async {
+  Future<void> identify(
+    String userId, {
+    Map<String, Object?> traits = const {},
+  }) async {
     _distinctId = userId;
     log.info('analytics.identify', props: {'user_id': userId});
     final scrubbed = PiiScrubber.scrub(traits);
@@ -129,10 +137,8 @@ class _PostHogAnalytics implements AnalyticsService {
   }
 
   @override
-  Future<void> screen(String name,
-      {Map<String, Object?> props = const {}}) {
-    return track(r'$screen',
-        props: {r'$screen_name': name, ...props});
+  Future<void> screen(String name, {Map<String, Object?> props = const {}}) {
+    return track(r'$screen', props: {r'$screen_name': name, ...props});
   }
 
   @override

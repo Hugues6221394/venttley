@@ -107,7 +107,9 @@ class WhisperRecorder {
     final duration = elapsed;
     try {
       await _recorder.stop();
-    } catch (_) {/* ignore — file may already be sealed */}
+    } catch (_) {
+      /* ignore — file may already be sealed */
+    }
     final path = _activePath!;
     _resetState();
     try {
@@ -124,13 +126,17 @@ class WhisperRecorder {
     if (_activePath == null) return;
     try {
       await _recorder.stop();
-    } catch (_) {/* ignore */}
+    } catch (_) {
+      /* ignore */
+    }
     final path = _activePath;
     _resetState();
     if (path != null) {
       try {
         await File(path).delete();
-      } catch (_) {/* swallow */}
+      } catch (_) {
+        /* swallow */
+      }
     }
   }
 

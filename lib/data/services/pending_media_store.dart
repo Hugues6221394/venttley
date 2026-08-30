@@ -36,8 +36,7 @@ class PendingMediaStore {
   static PendingMediaStore forDirectory(
     Directory root, {
     required SensitiveStore keyStore,
-  }) =>
-      PendingMediaStore._(root, keyStore);
+  }) => PendingMediaStore._(root, keyStore);
 
   Future<String> stage({
     required String userId,

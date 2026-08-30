@@ -47,9 +47,9 @@ class DeviceIdentityService {
     SensitiveStore? store,
     DeviceInfoPlugin? deviceInfo,
     Random? random,
-  })  : _store = store ?? DeviceSensitiveStore(),
-        _deviceInfo = deviceInfo ?? DeviceInfoPlugin(),
-        _random = random ?? Random.secure();
+  }) : _store = store ?? DeviceSensitiveStore(),
+       _deviceInfo = deviceInfo ?? DeviceInfoPlugin(),
+       _random = random ?? Random.secure();
 
   static const String _storageKey = 'venttly.device_id.v1';
 
@@ -130,12 +130,10 @@ class DeviceIdentityService {
         return info.browserName.name;
       }
       return switch (defaultTargetPlatform) {
-        TargetPlatform.android =>
-          (await _deviceInfo.androidInfo).model,
+        TargetPlatform.android => (await _deviceInfo.androidInfo).model,
         TargetPlatform.iOS => (await _deviceInfo.iosInfo).utsname.machine,
         TargetPlatform.macOS => (await _deviceInfo.macOsInfo).model,
-        TargetPlatform.windows =>
-          (await _deviceInfo.windowsInfo).computerName,
+        TargetPlatform.windows => (await _deviceInfo.windowsInfo).computerName,
         TargetPlatform.linux => (await _deviceInfo.linuxInfo).prettyName,
         _ => null,
       };
@@ -151,8 +149,7 @@ class DeviceIdentityService {
         TargetPlatform.android =>
           (await _deviceInfo.androidInfo).version.release,
         TargetPlatform.iOS => (await _deviceInfo.iosInfo).systemVersion,
-        TargetPlatform.macOS =>
-          (await _deviceInfo.macOsInfo).osRelease,
+        TargetPlatform.macOS => (await _deviceInfo.macOsInfo).osRelease,
         TargetPlatform.windows =>
           (await _deviceInfo.windowsInfo).displayVersion,
         TargetPlatform.linux => (await _deviceInfo.linuxInfo).version,
