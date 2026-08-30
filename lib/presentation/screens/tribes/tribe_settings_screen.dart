@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
+import 'tribe_helpers_screen.dart' show myTribePermissionsProvider;
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
@@ -33,7 +34,19 @@ class TribeSettingsScreen extends ConsumerWidget {
             : const Center(child: Text('Tribe not found')),
       );
     }
-    if (me == null || tribe.keeperId != me.userId) {
+    final isKeeper = me != null && tribe.keeperId == me.userId;
+    // Helpers reach this screen too. It is the hub the Manage button opens, so
+    // gating the whole page on ownership meant a Keeper could grant someone a
+    // job and leave them staring at a locked door. Each tile below is gated on
+    // the capability it actually needs instead.
+    final permissions = isKeeper
+        ? const <String>[]
+        : (ref.watch(myTribePermissionsProvider(tribe.tribeId)).valueOrNull ??
+              const <String>[]);
+    bool can(String permission) => isKeeper || permissions.contains(permission);
+    final canOpen = isKeeper || permissions.isNotEmpty;
+
+    if (me == null || !canOpen) {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(title: const Text('Manage Tribe')),
@@ -41,7 +54,8 @@ class TribeSettingsScreen extends ConsumerWidget {
           child: Padding(
             padding: EdgeInsets.all(28),
             child: Text(
-              'Only the current Plug can change ownership and Tribe settings.',
+              'Only the Keeper, and the helpers they choose, can manage this '
+              'Tribe.',
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
@@ -83,59 +97,66 @@ class TribeSettingsScreen extends ConsumerWidget {
                     child: _Section(
                       title: 'Community administration',
                       children: [
-                        _ManagementTile(
-                          icon: Icons.palette_outlined,
-                          title: 'Edit identity',
-                          subtitle:
-                              'Name, images, description, tags and welcome',
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/identity',
+                        if (can('manage_settings'))
+                          _ManagementTile(
+                            icon: Icons.palette_outlined,
+                            title: 'Edit identity',
+                            subtitle:
+                                'Name, images, description, tags and welcome',
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/identity',
+                            ),
                           ),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.tune_rounded,
-                          title: 'Access and permissions',
-                          subtitle: 'Visibility, approvals, posting and safety',
-                          onTap: () =>
-                              _showAdvancedSettings(context, ref, overview),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.rule_rounded,
-                          title: 'Tribe rules',
-                          subtitle:
-                              '${overview.rules.length} structured rule${overview.rules.length == 1 ? '' : 's'}',
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/rules',
+                        if (can('manage_settings'))
+                          _ManagementTile(
+                            icon: Icons.tune_rounded,
+                            title: 'Access and permissions',
+                            subtitle:
+                                'Visibility, approvals, posting and safety',
+                            onTap: () =>
+                                _showAdvancedSettings(context, ref, overview),
                           ),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.groups_2_outlined,
-                          title: 'Members and requests',
-                          subtitle:
-                              '${overview.memberCount} members · ${overview.pendingJoinRequests} waiting',
-                          badge: overview.pendingJoinRequests,
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/members',
+                        if (can('manage_rules'))
+                          _ManagementTile(
+                            icon: Icons.rule_rounded,
+                            title: 'Tribe rules',
+                            subtitle:
+                                '${overview.rules.length} structured rule${overview.rules.length == 1 ? '' : 's'}',
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/rules',
+                            ),
                           ),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.handshake_outlined,
-                          title: 'Helpers',
-                          subtitle:
-                              'Give someone one job without giving them everything',
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/helpers',
+                        if (can('manage_members'))
+                          _ManagementTile(
+                            icon: Icons.groups_2_outlined,
+                            title: 'Members and requests',
+                            subtitle:
+                                '${overview.memberCount} members · ${overview.pendingJoinRequests} waiting',
+                            badge: overview.pendingJoinRequests,
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/members',
+                            ),
                           ),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.view_quilt_outlined,
-                          title: 'Spaces',
-                          subtitle:
-                              '${overview.spaceCount} active space${overview.spaceCount == 1 ? '' : 's'}',
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/spaces',
+                        if (isKeeper)
+                          _ManagementTile(
+                            icon: Icons.handshake_outlined,
+                            title: 'Helpers',
+                            subtitle:
+                                'Give someone one job without giving them everything',
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/helpers',
+                            ),
                           ),
-                        ),
+                        if (can('manage_spaces'))
+                          _ManagementTile(
+                            icon: Icons.view_quilt_outlined,
+                            title: 'Spaces',
+                            subtitle:
+                                '${overview.spaceCount} active space${overview.spaceCount == 1 ? '' : 's'}',
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/spaces',
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -143,56 +164,66 @@ class TribeSettingsScreen extends ConsumerWidget {
                     child: _Section(
                       title: 'Safety and growth',
                       children: [
-                        _ManagementTile(
-                          icon: Icons.dynamic_feed_outlined,
-                          title: 'Content and approvals',
-                          subtitle:
-                              'Review, pin, feature, move, lock and archive vents',
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/content',
+                        if (can('manage_content'))
+                          _ManagementTile(
+                            icon: Icons.dynamic_feed_outlined,
+                            title: 'Content and approvals',
+                            subtitle:
+                                'Review, pin, feature, move, lock and archive vents',
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/content',
+                            ),
                           ),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.shield_outlined,
-                          title: 'Moderation center',
-                          subtitle:
-                              '${overview.openReports} open report${overview.openReports == 1 ? '' : 's'}',
-                          badge: overview.openReports,
-                          onTap: () =>
-                              context.push('/tribe/$slug/manage/moderation'),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.insights_outlined,
-                          title: 'Analytics and export',
-                          subtitle: 'Growth, engagement, content and reports',
-                          onTap: () => context.push('/keeper/insights'),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.history_rounded,
-                          title: 'Audit history',
-                          subtitle:
-                              'Every sensitive owner and moderator action',
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/audit',
+                        if (can('handle_reports'))
+                          _ManagementTile(
+                            icon: Icons.shield_outlined,
+                            title: 'Moderation center',
+                            subtitle:
+                                '${overview.openReports} open report${overview.openReports == 1 ? '' : 's'}',
+                            badge: overview.openReports,
+                            onTap: () =>
+                                context.push('/tribe/$slug/manage/moderation'),
                           ),
-                        ),
+                        if (isKeeper)
+                          _ManagementTile(
+                            icon: Icons.insights_outlined,
+                            title: 'Analytics and export',
+                            subtitle: 'Growth, engagement, content and reports',
+                            onTap: () => context.push('/keeper/insights'),
+                          ),
+                        if (can('view_audit'))
+                          _ManagementTile(
+                            icon: Icons.history_rounded,
+                            title: 'Audit history',
+                            subtitle:
+                                'Every sensitive owner and moderator action',
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/audit',
+                            ),
+                          ),
                       ],
                     ),
                   ),
-                  SliverToBoxAdapter(
-                    child: _LifecycleSection(
-                      overview: overview,
-                      onAction: (action) => _performLifecycleAction(
-                        context,
-                        ref,
-                        overview,
-                        action,
+                  // Owner only, and deliberately not delegable: pausing,
+                  // archiving, transferring and deleting are the actions that
+                  // end a community. A helper should not see them, let alone
+                  // reach them.
+                  if (isKeeper)
+                    SliverToBoxAdapter(
+                      child: _LifecycleSection(
+                        overview: overview,
+                        onAction: (action) => _performLifecycleAction(
+                          context,
+                          ref,
+                          overview,
+                          action,
+                        ),
+                        onTransfer: () =>
+                            _showTransferSheet(context, ref, overview),
+                        onDelete: () =>
+                            _showDeleteDialog(context, ref, overview),
                       ),
-                      onTransfer: () =>
-                          _showTransferSheet(context, ref, overview),
-                      onDelete: () => _showDeleteDialog(context, ref, overview),
                     ),
-                  ),
                   // Clear the floating nav, not an arbitrary 40. HomeShell
                   // paints its pill over the branch, so at 40 the last row —
                   // Delete Tribe — sat at y~792 against a pill occupying

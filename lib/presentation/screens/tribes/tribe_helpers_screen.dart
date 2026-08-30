@@ -169,11 +169,24 @@ class _HelperCard extends ConsumerStatefulWidget {
 }
 
 class _HelperCardState extends ConsumerState<_HelperCard> {
-  late Set<String> _selected = widget.helper.permissions.toSet();
+  late Set<String> _selected = _grantableOnly(widget.helper.permissions);
   bool _saving = false;
 
+  /// What this member holds that a Keeper can actually hand out.
+  ///
+  /// The effective set the server returns includes derived permissions —
+  /// view_management is held automatically by anyone with any other
+  /// capability, and is not in the catalog. Carrying it into the editable set
+  /// broke two things at once: the header counted a permission with no
+  /// checkbox beside it ("3 of 8" over two ticks), and Save posted a key the
+  /// server refuses as non-grantable, so nothing could ever be changed.
+  Set<String> _grantableOnly(List<String> permissions) {
+    final offered = {for (final option in widget.catalog) option.key};
+    return permissions.where(offered.contains).toSet();
+  }
+
   bool get _dirty =>
-      !_setsMatch(_selected, widget.helper.permissions.toSet());
+      !_setsMatch(_selected, _grantableOnly(widget.helper.permissions));
 
   static bool _setsMatch(Set<String> a, Set<String> b) =>
       a.length == b.length && a.every(b.contains);

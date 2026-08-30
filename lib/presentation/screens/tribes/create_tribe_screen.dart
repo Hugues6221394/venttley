@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/tribe_category_labels.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
@@ -14,16 +15,6 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../../core/user_friendly_errors.dart';
 import '../home/home_shell.dart';
-
-/// The Tribe category taxonomy, read from public.tribe_categories.
-///
-/// Screen-scoped: this is the only surface offering a category picker, so the
-/// live list and the fallback below sit together rather than a file apart.
-final tribeCategoriesProvider = FutureProvider.autoDispose<List<TribeCategory>>(
-  (ref) async {
-    return ref.watch(repositoryProvider).tribeCategories();
-  },
-);
 
 class CreateTribeScreen extends ConsumerStatefulWidget {
   const CreateTribeScreen({super.key});

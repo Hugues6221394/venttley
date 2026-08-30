@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/tribe_category_labels.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
@@ -11,6 +12,7 @@ import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/tribe_rules_notice.dart';
+import 'tribe_helpers_screen.dart' show myTribePermissionsProvider;
 import '../../widgets/user_link.dart';
 import '../../widgets/vently_premium_background.dart';
 
@@ -44,8 +46,8 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
     final preferredUrl = openCover && bannerUrl.isNotEmpty
         ? bannerUrl
         : !openCover && avatarUrl.isNotEmpty
-            ? avatarUrl
-            : items.first.url;
+        ? avatarUrl
+        : items.first.url;
     final initialIndex = items.indexWhere((item) => item.url == preferredUrl);
     await showMediaPreview(
       context,
@@ -75,32 +77,33 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
     final spacesAsync = ref.watch(spacesByTribeProvider(tribe.tribeId));
     final allSpaces = spacesAsync.valueOrNull ?? const <Space>[];
     final spaces = allSpaces.where((s) => !s.isArchived).toList();
-    final categoryLabel = switch (tribe.category) {
-      'campus' => 'Campus',
-      'city' => 'City',
-      'interest_group' => 'Interest',
-      'hobby' => 'Hobby',
-      'support' => 'Support',
-      'venting' => 'Venting',
-      _ => tribe.category,
-    };
+    final categoryLabel = tribeCategoryLabel(ref, tribe.category);
 
     final me = ref.watch(sessionProvider);
     final isKeeper =
         me != null && tribe.keeperId != null && tribe.keeperId == me.userId;
+    // A helper the Keeper has given a job to needs a way to get to it. The
+    // Studio itself already admits them on the strength of their capabilities;
+    // without this they could be granted work they had no route to reach.
+    final canManage =
+        isKeeper ||
+        (ref
+                .watch(myTribePermissionsProvider(tribe.tribeId))
+                .valueOrNull
+                ?.isNotEmpty ??
+            false);
     return Scaffold(
       appBar: AppBar(
         title: Text(tribe.name, overflow: TextOverflow.ellipsis),
         actions: [
-          if (isKeeper)
+          if (canManage)
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: TextButton.icon(
                 icon: const Icon(Icons.tune_rounded, size: 16),
                 label: const Text('Manage'),
-                onPressed: () => context.push(
-                  '/tribe/${tribe.slug}/manage/settings',
-                ),
+                onPressed: () =>
+                    context.push('/tribe/${tribe.slug}/manage/settings'),
               ),
             ),
         ],
@@ -127,11 +130,8 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                         height: 112,
                         semanticLabel: 'Preview ${tribe.name} cover photo',
                         onTap: _hasMedia(tribe)
-                            ? () => _previewMedia(
-                                  context,
-                                  tribe,
-                                  openCover: true,
-                                )
+                            ? () =>
+                                  _previewMedia(context, tribe, openCover: true)
                             : null,
                       ),
                       Padding(
@@ -149,10 +149,10 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                                       'Preview ${tribe.name} profile photo',
                                   onTap: _hasMedia(tribe)
                                       ? () => _previewMedia(
-                                            context,
-                                            tribe,
-                                            openCover: false,
-                                          )
+                                          context,
+                                          tribe,
+                                          openCover: false,
+                                        )
                                       : null,
                                 ),
                                 const SizedBox(width: 12),
@@ -164,8 +164,9 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                                       Text(
                                         tribe.name,
                                         style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w800),
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w800,
+                                        ),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
@@ -174,8 +175,9 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                                         '${tribe.lifecycleStatus == 'active' ? '' : ' • ${tribe.lifecycleStatus == 'paused' ? 'Paused' : 'Archived'}'}',
                                         style: TextStyle(
                                           fontSize: 12,
-                                          color: scheme.onSurface
-                                              .withOpacity(0.65),
+                                          color: scheme.onSurface.withOpacity(
+                                            0.65,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -225,12 +227,14 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                               UserProfileTap(
                                 userId: tribe.keeperId,
                                 child: Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
                                   child: Row(
                                     children: [
                                       ProfileAvatar(
-                                        avatarSeed: tribe.keeperAvatarSeed ??
+                                        avatarSeed:
+                                            tribe.keeperAvatarSeed ??
                                             'default-orb',
                                         label: tribe.keeperPseudonym!,
                                         profilePhotoUrl:
@@ -258,18 +262,24 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                                 Expanded(child: _JoinAction(tribe: tribe)),
                                 const SizedBox(width: 8),
                                 OutlinedButton.icon(
-                                  onPressed: tribe.joinedByMe &&
+                                  onPressed:
+                                      tribe.joinedByMe &&
                                           tribe.acceptsNewActivity
                                       ? () {
                                           ref
-                                              .read(composeTargetTribeProvider
-                                                  .notifier)
-                                              .state = tribe;
+                                                  .read(
+                                                    composeTargetTribeProvider
+                                                        .notifier,
+                                                  )
+                                                  .state =
+                                              tribe;
                                           context.go('/compose');
                                         }
                                       : null,
-                                  icon:
-                                      const Icon(Icons.edit_outlined, size: 16),
+                                  icon: const Icon(
+                                    Icons.edit_outlined,
+                                    size: 16,
+                                  ),
                                   label: const Text('Post'),
                                 ),
                               ],
@@ -283,7 +293,9 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
               ),
               if (tribe.welcomeMessage != null)
                 _TribeWelcomeBanner(
-                    message: tribe.welcomeMessage!, accent: tribe.themeColor),
+                  message: tribe.welcomeMessage!,
+                  accent: tribe.themeColor,
+                ),
               if (tribe.spotlightUserId != null &&
                   tribe.spotlightPseudonym != null)
                 _SpotlightBanner(tribe: tribe),
@@ -295,9 +307,9 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                     Text(
                       'Spaces',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            color: context.ink,
-                          ),
+                        fontWeight: FontWeight.w900,
+                        color: context.ink,
+                      ),
                     ),
                     const Spacer(),
                     if (me != null &&
@@ -324,17 +336,23 @@ class _TribeDetailScreenState extends ConsumerState<TribeDetailScreen> {
                   child: Center(
                     child: Column(
                       children: [
-                        Icon(Icons.forum_outlined,
-                            size: 40, color: scheme.onSurface.withOpacity(0.4)),
+                        Icon(
+                          Icons.forum_outlined,
+                          size: 40,
+                          color: scheme.onSurface.withOpacity(0.4),
+                        ),
                         const SizedBox(height: 8),
-                        const Text('No Spaces here yet.',
-                            style: TextStyle(fontWeight: FontWeight.w700)),
+                        const Text(
+                          'No Spaces here yet.',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
                         const SizedBox(height: 2),
                         Text(
                           'The keeper hasn\'t opened any Spaces yet.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                              color: scheme.onSurface.withOpacity(0.6)),
+                            color: scheme.onSurface.withOpacity(0.6),
+                          ),
                         ),
                       ],
                     ),
@@ -373,8 +391,9 @@ class _SpaceTile extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
-              border:
-                  Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
+              border: Border.all(
+                color: VentlyColors.softMauve.withOpacity(0.4),
+              ),
             ),
             child: Row(
               children: [
@@ -415,7 +434,9 @@ class _SpaceTile extends StatelessWidget {
                             const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: accent.withOpacity(0.14),
                                 borderRadius: BorderRadius.circular(10),
@@ -460,8 +481,11 @@ class _SpaceTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right,
-                    size: 18, color: context.ink.withOpacity(0.45)),
+                Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: context.ink.withOpacity(0.45),
+                ),
               ],
             ),
           ),
@@ -595,10 +619,7 @@ class _PinnedStrip extends ConsumerWidget {
             ),
           ),
           for (final p in list)
-            PostCard(
-              post: p,
-              onTap: () => context.push('/post/${p.postId}'),
-            ),
+            PostCard(post: p, onTap: () => context.push('/post/${p.postId}')),
         ],
       ),
     );
@@ -626,10 +647,7 @@ class _SpotlightBanner extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                accent.withOpacity(0.16),
-                accent.withOpacity(0.04),
-              ],
+              colors: [accent.withOpacity(0.16), accent.withOpacity(0.04)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -658,8 +676,11 @@ class _SpotlightBanner extends StatelessWidget {
                         shape: BoxShape.circle,
                         border: Border.all(color: scheme.surface, width: 2),
                       ),
-                      child:
-                          const Icon(Icons.star, size: 11, color: Colors.white),
+                      child: const Icon(
+                        Icons.star,
+                        size: 11,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ],
@@ -695,8 +716,11 @@ class _SpotlightBanner extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right,
-                  size: 18, color: scheme.onSurface.withOpacity(0.5)),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: scheme.onSurface.withOpacity(0.5),
+              ),
             ],
           ),
         ),
