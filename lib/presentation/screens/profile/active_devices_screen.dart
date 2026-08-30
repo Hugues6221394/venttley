@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
+import '../../widgets/wall_controls.dart';
 
 /// Every place this account is currently signed in, with a way to end each one.
 ///
@@ -227,14 +228,10 @@ class _DeviceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const accent = VentlyColors.berryMagenta;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-          child: Column(
+    return WallPanel(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -294,27 +291,28 @@ class _DeviceCard extends StatelessWidget {
                 // card on a 390pt phone, and the second action is the one
                 // someone reaching for it most needs to be able to hit.
                 Wrap(
-                  spacing: 4,
-                  runSpacing: 2,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    TextButton(
+                    WallButton(
+                      label: 'Sign out',
+                      compact: true,
+                      expanded: false,
+                      tone: WallButtonTone.quiet,
                       onPressed: busy ? null : onSignOut,
-                      child: const Text('Sign out'),
                     ),
-                    TextButton(
+                    WallButton(
+                      label: 'This wasn\'t me',
+                      compact: true,
+                      expanded: false,
+                      tone: WallButtonTone.danger,
                       onPressed: busy ? null : onNotYou,
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFFE05C5C),
-                      ),
-                      child: const Text('This wasn\'t me'),
                     ),
                   ],
                 ),
               ],
             ],
           ),
-        ),
-      ),
     );
   }
 
@@ -377,21 +375,11 @@ class _DangerButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        icon: const Icon(Icons.logout_rounded, size: 18),
-        label: Text(label),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFFE05C5C),
-          side: const BorderSide(color: Color(0x33E05C5C)),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-      ),
+    return WallButton(
+      label: label,
+      icon: Icons.logout_rounded,
+      tone: WallButtonTone.danger,
+      onPressed: onPressed,
     );
   }
 }

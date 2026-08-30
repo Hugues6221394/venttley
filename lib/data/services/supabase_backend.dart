@@ -74,13 +74,30 @@ class SupabaseBackend {
   }
 
   bool _geoPinged = false;
+  Future<void>? _geoInFlight;
 
-  Future<void> _pingGeoCapture() async {
-    try {
-      await _client.functions.invoke('geo-capture');
-    } catch (_) {
-      // Best-effort analytics signal — never surface or block on failure.
-    }
+  Future<void> _pingGeoCapture() => ensureCountryCaptured();
+
+  /// Resolve and store this session's coarse country, at most once.
+  ///
+  /// Awaitable, and safe to await from several places: the first caller starts
+  /// the request and everyone else joins it. Device registration needs this to
+  /// have finished, because register_device_session reads users.last_country —
+  /// so when this was fire-and-forget the very first sign-in on a new device,
+  /// the one the risk engine cares about most, always recorded a null country
+  /// and could never raise the new-country signal.
+  Future<void> ensureCountryCaptured() {
+    final inFlight = _geoInFlight;
+    if (inFlight != null) return inFlight;
+    final future = () async {
+      try {
+        await _client.functions.invoke('geo-capture');
+      } catch (_) {
+        // Best-effort signal — never surface or block on failure.
+      }
+    }();
+    _geoInFlight = future;
+    return future;
   }
 
   factory SupabaseBackend.of(SupabaseClient client) =>

@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers.dart';
 import '../../../core/tribe_category_labels.dart';
 import '../../../domain/entities/entities.dart';
-import '../../theme/colors.dart';
 import '../../widgets/premium_motion.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
@@ -14,6 +13,7 @@ import '../../widgets/tribe_avatar.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/vently_logo.dart';
 import '../../widgets/tribe_age_gate.dart';
+import '../../widgets/wall_controls.dart';
 
 /// Hybrid Tribes browse + search + create entry point.
 class TribesDirectoryScreen extends ConsumerStatefulWidget {
@@ -83,24 +83,24 @@ class _TribesDirectoryScreenState extends ConsumerState<TribesDirectoryScreen> {
             ),
           ),
           SizedBox(
-            height: 44,
+            height: 56,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
               itemCount: _categories.length,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (_, i) {
                 final (key, label, icon) = _categories[i];
                 final selected = _category == key;
-                return ChoiceChip(
-                  selected: selected,
-                  onSelected: (_) => setState(() => _category = key),
-                  avatar: Icon(
-                    icon,
-                    size: 14,
-                    color: selected ? Colors.white : scheme.primary,
-                  ),
-                  label: Text(label),
+                return WallButton(
+                  label: label,
+                  icon: icon,
+                  compact: true,
+                  expanded: false,
+                  tone: selected
+                      ? WallButtonTone.brand
+                      : WallButtonTone.quiet,
+                  onPressed: () => setState(() => _category = key),
                 );
               },
             ),
@@ -136,11 +136,12 @@ class _TribesDirectoryScreenState extends ConsumerState<TribesDirectoryScreen> {
                               color: scheme.onSurface.withOpacity(0.6),
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          ElevatedButton.icon(
+                          const SizedBox(height: 16),
+                          WallButton(
+                            label: 'Create a Tribe',
+                            icon: Icons.add_rounded,
+                            expanded: false,
                             onPressed: () => _startCreateTribe(context, ref),
-                            icon: const Icon(Icons.add, size: 16),
-                            label: const Text('Create a Tribe'),
                           ),
                         ],
                       ),
@@ -174,14 +175,11 @@ class _TribeCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final categoryLabel = tribeCategoryLabel(ref, tribe.category);
-    return Card(
+    return WallPanel(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => context.push('/tribe/${tribe.slug}'),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
+      padding: const EdgeInsets.all(14),
+      onTap: () => context.push('/tribe/${tribe.slug}'),
+      child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TribeCoverPreview(
@@ -285,11 +283,12 @@ class _TribeCard extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _JoinPill(tribe: tribe),
+              GestureDetector(
+                onTap: () {},
+                child: _JoinPill(tribe: tribe),
+              ),
             ],
           ),
-        ),
-      ),
     );
   }
 }
@@ -301,29 +300,21 @@ class _JoinPill extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.watch(repositoryProvider);
-    if (tribe.joinedByMe) {
-      return OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          foregroundColor: context.ink,
-        ),
-        onPressed: () async {
+    return WallButton(
+      label: tribe.joinedByMe ? 'Joined' : 'Join',
+      compact: true,
+      expanded: false,
+      tone: tribe.joinedByMe ? WallButtonTone.quiet : WallButtonTone.brand,
+      onPressed: () async {
+        if (tribe.joinedByMe) {
           await repo.leaveTribe(tribe.tribeId);
           ref.invalidate(tribesProvider);
           ref.invalidate(tribeBySlugProvider);
-        },
-        child: const Text('Joined'),
-      );
-    }
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      ),
-      onPressed: () async {
-        await repo.joinTribe(tribe.tribeId);
-        ref.invalidate(tribesProvider);
+        } else {
+          await repo.joinTribe(tribe.tribeId);
+          ref.invalidate(tribesProvider);
+        }
       },
-      child: const Text('Join'),
     );
   }
 }

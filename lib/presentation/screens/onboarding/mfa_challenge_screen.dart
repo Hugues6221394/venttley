@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
 import '../../widgets/modal_text_controller_scope.dart';
+import '../../widgets/wall_controls.dart';
 
 /// Completes AAL2 after any sign-in path that landed at AAL1 with TOTP
 /// enrolled: password, recovery phrase, phone OTP, Google, or a restored
@@ -162,15 +163,11 @@ class _MfaCodeFormState extends State<_MfaCodeForm> {
           onSubmitted: (_) => _submit(),
         ),
         const SizedBox(height: 18),
-        ElevatedButton(
+        WallButton(
+          label: 'Verify',
+          icon: Icons.verified_user_outlined,
           onPressed: widget.busy ? null : _submit,
-          child: widget.busy
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Verify'),
+          busy: widget.busy,
         ),
         if (widget.footer != null) ...[
           const SizedBox(height: 20),

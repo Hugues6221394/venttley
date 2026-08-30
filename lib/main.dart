@@ -343,6 +343,21 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       final identity = await ref.read(deviceIdentityServiceProvider).read();
       if (!mounted || ref.read(sessionProvider)?.userId != userId) return;
 
+      // Resolve the country first: register_device_session reads it off the
+      // user row, so registering before it lands means the new-device event —
+      // the one most worth getting right — carries no location at all. Bounded,
+      // because a slow edge call must not hold up sign-in; if it times out we
+      // register without a country exactly as before.
+      try {
+        await ref
+            .read(repositoryProvider)
+            .ensureCountryCaptured()
+            .timeout(const Duration(seconds: 3));
+      } catch (_) {
+        // Country is a risk signal, not a gate. Carry on without it.
+      }
+      if (!mounted || ref.read(sessionProvider)?.userId != userId) return;
+
       final registration = await ref
           .read(repositoryProvider)
           .registerDeviceSession(

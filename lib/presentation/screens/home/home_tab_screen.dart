@@ -51,9 +51,10 @@ class _KeeperLoadingShell extends StatelessWidget {
               Text(
                 'Plug Studio',
                 style: TextStyle(
-                  color: VentlyColors.berryMagenta.withOpacity(0.9),
-                  fontWeight: FontWeight.w900,
+                  color: context.ink,
+                  fontWeight: FontWeight.w800,
                   fontSize: 18,
+                  letterSpacing: -0.4,
                 ),
               ),
               const Spacer(),

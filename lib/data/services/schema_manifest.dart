@@ -40,4 +40,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20260831090000': 'tribe_rules_versioning',
   '20260901090000': 'granular_tribe_permissions',
   '20260902090000': 'fix_permission_grants_read_only',
+  '20260903090000': 'auth_login_guard_hook',
 };

@@ -5,20 +5,19 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/keeper/keeper_overview.dart';
+import '../../navigation/compose_navigation.dart';
 import '../../theme/colors.dart';
-import '../../theme/vently_tokens.dart';
-import 'home_shell.dart';
-import '../../widgets/glass_card.dart';
+import '../../widgets/keeper_prompt_composer_sheet.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/vently_premium_background.dart';
-import '../../widgets/keeper_prompt_composer_sheet.dart';
-import '../../navigation/compose_navigation.dart';
+import '../../widgets/wall_controls.dart';
+import 'home_shell.dart';
 
-/// Keeper / Plug homepage — Tribe Control Center (Creator Studio).
+/// Keeper / Plug homepage — operations desk for every tribe this account keeps.
 ///
 /// Replaces the member feed for users who keep at least one tribe.
 /// Stats come from `tribe_studio_stats`; actions deep-link into manage flows.
@@ -52,8 +51,17 @@ class KeeperHomeScreen extends ConsumerWidget {
             ),
             data: (overview) {
               if (overview.tribes.isEmpty) {
-                return _EmptyKeeperState(
-                    me: me, onRefresh: () => _refresh(ref));
+                return Column(
+                  children: [
+                    _TopBar(me: me, overview: overview),
+                    Expanded(
+                      child: _EmptyKeeperState(
+                        me: me,
+                        onRefresh: () => _refresh(ref),
+                      ),
+                    ),
+                  ],
+                );
               }
               return RefreshIndicator(
                 color: VentlyColors.berryMagenta,
@@ -62,57 +70,50 @@ class KeeperHomeScreen extends ConsumerWidget {
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
                     SliverToBoxAdapter(
-                      child: _TopBar(me: me),
+                      child: _TopBar(me: me, overview: overview),
                     ),
                     SliverToBoxAdapter(
-                      child: _KeeperWelcome(me: me, overview: overview),
+                      child: _StudioDesk(overview: overview),
                     ),
                     SliverToBoxAdapter(
-                      child: _CommandStrip(me: me, overview: overview),
+                      child: _PulseBoard(overview: overview),
                     ),
                     SliverToBoxAdapter(
-                      child: _PriorityQueue(overview: overview),
+                      child: _ToolRail(overview: overview),
                     ),
                     SliverToBoxAdapter(
-                      child: _QuickActionsRow(overview: overview),
+                      child: _OpsList(overview: overview),
                     ),
-                    SliverToBoxAdapter(
-                      child: _StudioV2Grid(overview: overview),
-                    ),
-                    // _TodaySnapshot ("Today's activity": vents, new members,
-                    // reports) and _OverviewGrid (members, vents·24h, new·7d)
-                    // used to sit here. Between them and the Tribe overview
-                    // above, `totalPosts24h` was rendered three times on one
-                    // screen and members, reports and new-members twice each —
-                    // in three different card styles, all reading zero. The
-                    // Tribe overview grid now carries those four numbers once.
                     if (overview.totalOpenReports > 0 ||
-                        overview.totalScheduledPrompts > 0)
+                        overview.totalScheduledPrompts > 0 ||
+                        overview.totalUnansweredPosts > 0)
                       SliverToBoxAdapter(
                         child: _ContentHub(overview: overview),
                       ),
                     SliverToBoxAdapter(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                        padding: const EdgeInsets.fromLTRB(18, 22, 18, 8),
                         child: Row(
                           children: [
                             Expanded(
                               child: Text(
-                                'Your tribes',
+                                overview.tribes.length == 1
+                                    ? 'Tribe'
+                                    : 'Tribes',
                                 style: TextStyle(
                                   color: context.ink,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                  letterSpacing: 0.4,
                                 ),
                               ),
                             ),
-                            TextButton.icon(
+                            WallButton(
+                              label: 'New',
+                              icon: Icons.add_rounded,
+                              compact: true,
+                              expanded: false,
                               onPressed: () => context.push('/tribes/new'),
-                              icon: const Icon(Icons.add_rounded, size: 18),
-                              label: const Text(
-                                'New tribe',
-                                style: TextStyle(fontWeight: FontWeight.w900),
-                              ),
                             ),
                           ],
                         ),
@@ -122,18 +123,14 @@ class KeeperHomeScreen extends ConsumerWidget {
                       itemCount: overview.tribes.length,
                       itemBuilder: (context, i) {
                         final tribe = overview.tribes[i];
-                        final stats = overview.statsFor(tribe.tribeId);
                         return RepaintBoundary(
                           child: _TribeControlCard(
                             tribe: tribe,
-                            stats: stats,
-                            engagement: overview.engagementScoreFor(stats),
+                            stats: overview.statsFor(tribe.tribeId),
                           ),
                         );
                       },
                     ),
-                    // Was 28, which left the bottom row of stat cards covered
-                    // by the floating nav pill.
                     const SliverToBoxAdapter(
                       child: SizedBox(height: HomeShell.navClearance),
                     ),
@@ -148,379 +145,75 @@ class KeeperHomeScreen extends ConsumerWidget {
   }
 }
 
-/// Warm, guided welcome so a keeper instantly understands where they are and
-/// what to do next. Adapts its hint to the tribe's state (needs attention vs.
-/// calm-and-quiet vs. thriving).
-class _KeeperWelcome extends StatelessWidget {
-  const _KeeperWelcome({required this.me, required this.overview});
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.me, required this.overview});
   final AppUser? me;
   final KeeperOverview overview;
 
   @override
   Widget build(BuildContext context) {
-    // Privacy: the studio home is a public-facing surface — never print the
-    // keeper's pseudonym here. Identity lives on the profile tab only.
-    final reports = overview.totalOpenReports;
-    final quiet = overview.totalPosts24h == 0;
     final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
+    final subtitle = primary == null
+        ? 'No tribes yet'
+        : overview.tribes.length == 1
+            ? primary.name
+            : '${primary.name} + ${overview.tribes.length - 1}';
 
-    final (IconData icon, String hint, VoidCallback? onTap) = reports > 0
-        ? (
-            Icons.shield_rounded,
-            'You have $reports report${reports == 1 ? '' : 's'} to review.',
-            () => context.push('/keeper/moderation'),
-          )
-        : quiet
-            ? (
-                Icons.auto_awesome_rounded,
-                "It's quiet right now.\nSend a Prompt to spark a conversation.",
-                primary == null
-                    ? null
-                    : () => showKeeperPromptComposer(
-                          context,
-                          tribeId: primary.tribeId,
-                        ),
-              )
-            : (
-                Icons.favorite_rounded,
-                'Your community is active and safe.\nKeep nurturing it.',
-                null,
-              );
-
-    final isDark = context.isDark;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(18, 6, 18, 2),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? const [Color(0xFF351D26), Color(0xFF241419)]
-              : const [Color(0xFFFDD9E7), Color(0xFFFBEAF1)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border:
-            isDark ? Border.all(color: Colors.white.withOpacity(0.06)) : null,
-        boxShadow: [
-          BoxShadow(
-            color: VentlyColors.berryMagenta.withOpacity(isDark ? 0.18 : 0.12),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          children: [
-            // Decorative orb (Venttly mark inside a soft glowing disc).
-            // A soft glow, not a logo. The disc used to carry the two-bar
-            // Venttly mark at its centre; with the panel shortened to a status
-            // line the callout card now crosses exactly there, slicing the bars
-            // in half. The wordmark is already in the top bar a few points
-            // above, so the disc keeps the warmth and drops the mark.
-            Positioned(
-              right: -12,
-              top: -14,
-              child: Container(
-                width: 132,
-                height: 132,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: isDark
-                        ? [
-                            const Color(0xFFF7A8C6).withOpacity(0.30),
-                            const Color(0xFFE05C93).withOpacity(0.18),
-                            const Color(0xFFE05C93).withOpacity(0.06),
-                          ]
-                        : [
-                            Colors.white.withOpacity(0.9),
-                            const Color(0xFFF7A8C6).withOpacity(0.55),
-                            const Color(0xFFE05C93).withOpacity(0.25),
-                          ],
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // The state of the tribe, not a title for the screen.
-                  //
-                  // This was a "CONTROL CENTER" eyebrow, a 23pt "Your tribe, at
-                  // a glance" and "Everything you need to keep it safe and
-                  // thriving." — three lines telling a keeper what screen they
-                  // are on, above the top bar that already says "Plug Studio /
-                  // Manage your tribe. Protect your safe space." and above a
-                  // "Creator Studio" section whose own tagline said almost the
-                  // same sentence again. The last line also ran underneath the
-                  // decorative orb, so it was chrome that was hard to read.
-                  //
-                  // A keeper opens this to learn one thing: is anything on
-                  // fire. Now it says so.
-                  Row(
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          color: reports > 0
-                              ? VentlyColors.dangerRed
-                              : VentlyColors.successGreen,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 7),
-                      Text(
-                        reports > 0
-                            ? 'NEEDS REVIEW'
-                            : quiet
-                            ? 'ALL CLEAR · QUIET'
-                            : 'ALL CLEAR · ACTIVE',
-                        style: TextStyle(
-                          color: reports > 0
-                              ? VentlyColors.dangerRed
-                              : context.ink.withOpacity(0.55),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 11,
-                          letterSpacing: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _HeroCallout(icon: icon, hint: hint, onTap: onTap),
-                  if (primary != null) ...[
-                    const SizedBox(height: 10),
-                    _ManageTribeAction(tribe: primary),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-}
-
-/// Persistent Plugz ownership action, kept above metrics and activity cards.
-class _ManageTribeAction extends StatelessWidget {
-  const _ManageTribeAction({required this.tribe});
-
-  final Tribe tribe;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Manage Tribe ${tribe.name}',
-      child: SizedBox(
-        width: double.infinity,
-        height: 50,
-        child: FilledButton(
-          key: const ValueKey('plug-studio-primary-manage-tribe'),
-          onPressed: () => context.push('/tribe/${tribe.slug}/manage/settings'),
-          style: FilledButton.styleFrom(
-            backgroundColor: VentlyColors.berryMagenta,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.admin_panel_settings_outlined, size: 21),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Manage Tribe',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      tribe.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(.78),
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.arrow_forward_rounded, size: 20),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The action callout inside the keeper welcome hero.
-class _HeroCallout extends StatelessWidget {
-  const _HeroCallout({required this.icon, required this.hint, this.onTap});
-  final IconData icon;
-  final String hint;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      // Opaque in light mode. At 0.72 the decorative orb behind the panel bled
-      // through the card and sat under the action button, which read as a
-      // rendering fault rather than as depth.
-      color: context.isDark
-          ? Colors.white.withOpacity(0.07)
-          : Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-          child: Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: VentlyColors.berryMagenta.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 16, color: VentlyColors.berryMagenta),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  hint,
-                  style: TextStyle(
-                    color: context.ink,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12.5,
-                    height: 1.3,
-                  ),
-                ),
-              ),
-              if (onTap != null) ...[
-                const SizedBox(width: 8),
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: const BoxDecoration(
-                    gradient: VentlyGradients.brand,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.arrow_forward_rounded,
-                      size: 16, color: Colors.white),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Top bar
-// ---------------------------------------------------------------------------
-
-class _TopBar extends StatelessWidget {
-  const _TopBar({required this.me});
-  final AppUser? me;
-
-  @override
-  Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 10, 12, 2),
+      padding: const EdgeInsets.fromLTRB(8, 6, 12, 4),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Builder(
-            builder: (ctx) => GestureDetector(
-              onTap: () => Scaffold.of(ctx).openDrawer(),
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                width: 40,
-                height: 40,
-                margin: const EdgeInsets.only(right: 6),
-                decoration: BoxDecoration(
-                  color: context.glass(0.7),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.menu_rounded,
-                    color: VentlyColors.berryMagenta, size: 22),
-              ),
+            builder: (ctx) => IconButton(
+              tooltip: 'Menu',
+              onPressed: () => Scaffold.of(ctx).openDrawer(),
+              icon: Icon(Icons.menu_rounded, color: context.ink),
             ),
           ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
               children: [
-                const Row(
-                  children: [
-                    Text(
-                      'Plug Studio',
-                      style: TextStyle(
-                        color: VentlyColors.berryMagenta,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 22,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 1),
                 Text(
-                  'Manage your tribe. Protect your safe space.',
+                  'Plug Studio',
                   style: TextStyle(
                     color: context.ink,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 20,
+                    letterSpacing: -0.5,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.ink.withValues(alpha: 0.52),
                     fontWeight: FontWeight.w600,
-                    fontSize: 12,
+                    fontSize: 12.5,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
           _BellButton(),
-          const SizedBox(width: 4),
+          const SizedBox(width: 2),
           GestureDetector(
-            // /profile resolves to the Studio analytics for a keeper, so this
-            // avatar used to send them to Analytics — the one place it could
-            // not plausibly mean. Push the real profile instead.
             onTap: () => context.push('/profile/me'),
             child: me == null
-                ? const CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Color(0xFFFFDCE8),
-                    child: Icon(Icons.person,
-                        color: VentlyColors.berryMagenta, size: 18),
+                ? CircleAvatar(
+                    radius: 16,
+                    backgroundColor: context.glass(0.7),
+                    child: Icon(Icons.person_outline,
+                        color: context.ink, size: 16),
                   )
                 : ProfileAvatar(
                     avatarSeed: me!.avatarSeed,
                     label: me!.anonymousPseudonym,
                     profilePhotoUrl: me!.profilePhotoUrl,
-                    size: 38,
+                    size: 32,
                   ),
           ),
         ],
@@ -529,7 +222,6 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-/// Bell with an unread dot (from the notifications provider).
 class _BellButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -546,12 +238,15 @@ class _BellButton extends ConsumerWidget {
             right: 8,
             top: 8,
             child: Container(
-              width: 9,
-              height: 9,
+              width: 8,
+              height: 8,
               decoration: BoxDecoration(
                 color: VentlyColors.berryMagenta,
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1.5),
+                border: Border.all(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  width: 1.5,
+                ),
               ),
             ),
           ),
@@ -560,303 +255,125 @@ class _BellButton extends ConsumerWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Command strip (replaces large marketing hero)
-// ---------------------------------------------------------------------------
-
-class _CommandStrip extends ConsumerWidget {
-  const _CommandStrip({required this.me, required this.overview});
-  final AppUser? me;
+/// One command plate: which tribe, whether anything is on fire, what to do.
+class _StudioDesk extends StatelessWidget {
+  const _StudioDesk({required this.overview});
   final KeeperOverview overview;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
-    final members = primary?.memberCount ?? overview.totalMembers;
+  Widget build(BuildContext context) {
+    final tribe = overview.tribes.first;
     final reports = overview.totalOpenReports;
+    final quiet = overview.totalPosts24h == 0;
     final vents = overview.totalPosts24h;
-    final joined = overview.totalNewMembers7d;
+
+    final status = reports > 0
+        ? 'Needs review'
+        : quiet
+            ? 'Quiet'
+            : 'Live';
+    final statusColor = reports > 0
+        ? VentlyColors.dangerRed
+        : quiet
+            ? context.ink.withValues(alpha: 0.55)
+            : VentlyColors.successGreen;
+
+    final next = reports > 0
+        ? '$reports report${reports == 1 ? '' : 's'} waiting.'
+        : quiet
+            ? 'No vents in the last 24 hours.'
+            : '$vents vent${vents == 1 ? '' : 's'} in the last 24 hours.';
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 10, 18, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.insights_rounded,
-                  size: 17, color: VentlyColors.berryMagenta),
-              const SizedBox(width: 6),
-              Text(
-                'Tribe overview',
-                style: TextStyle(
-                  color: context.ink,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 15,
-                ),
-              ),
-              const Spacer(),
-              TextButton(
-                style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  minimumSize: Size.zero,
-                ),
-                onPressed: () {
-                  ref.read(keeperMemberViewProvider.notifier).state = true;
-                  context.go('/feed');
-                },
-                child: const Text('Member feed',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _OverviewCard(
-                  icon: Icons.groups_rounded,
-                  color: VentlyColors.berryMagenta,
-                  value: PostCard.compactNumber(members),
-                  label: 'Members',
-                  status: members > 1 ? 'Growing' : 'Just you',
-                  statusColor: VentlyColors.successGreen,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _OverviewCard(
-                  icon: Icons.verified_user_rounded,
-                  color: VentlyColors.successGreen,
-                  value: '$reports',
-                  label: 'Reports',
-                  status: reports == 0 ? 'All clear' : 'Needs review',
-                  statusColor: reports == 0
-                      ? VentlyColors.successGreen
-                      : VentlyColors.dangerRed,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _OverviewCard(
-                  icon: Icons.notes_rounded,
-                  color: VentlyTokens.messageBlue,
-                  value: '$vents',
-                  label: '24h vents',
-                  status: vents > 0 ? 'Active' : 'No activity',
-                  statusColor: context.ink.withOpacity(0.5),
-                ),
-              ),
-              const SizedBox(width: 10),
-              // Was "Tribe health", a percentage. `_healthScore` computed
-              // `engagement + 55 - reportsPenalty`, clamped to 40..100, with a
-              // comment saying the floor existed "so it never looks broken" —
-              // so a tribe with no posts and no members beyond its keeper
-              // rendered "55% · Growing ↗". That is not a measurement, it is a
-              // constant wearing a metric's clothes, and it is the same problem
-              // that got the profile's mood ring removed: a number nobody can
-              // explain and nobody maintains. New members in the last week is
-              // something a keeper can act on and verify.
-              Expanded(
-                child: _OverviewCard(
-                  icon: Icons.person_add_alt_1_rounded,
-                  color: VentlyTokens.growthTeal,
-                  value: '$joined',
-                  label: 'New · 7d',
-                  status: joined > 0 ? 'Growing' : 'None yet',
-                  statusColor: joined > 0
-                      ? VentlyColors.successGreen
-                      : context.ink.withOpacity(0.5),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A premium "Tribe overview" stat card: coloured icon in a soft circle, big
-/// value, label, and a friendly status line.
-class _OverviewCard extends StatelessWidget {
-  const _OverviewCard({
-    required this.icon,
-    required this.color,
-    required this.value,
-    required this.label,
-    required this.status,
-    required this.statusColor,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String value;
-  final String label;
-  final String status;
-  final Color statusColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: context.isDark
-            ? Colors.white.withOpacity(0.05)
-            : Colors.white.withOpacity(0.72),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-            color: Colors.white.withOpacity(context.isDark ? 0.08 : 0.7)),
-        boxShadow: [
-          BoxShadow(
-            color: context.isDark
-                ? Colors.black.withOpacity(0.30)
-                : VentlyColors.berryMagenta.withOpacity(0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 20, color: color),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: TextStyle(
-              color: context.ink,
-              fontWeight: FontWeight.w900,
-              fontSize: 26,
-              height: 1,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              color: context.ink.withOpacity(0.7),
-              fontWeight: FontWeight.w700,
-              fontSize: 12.5,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            status,
-            style: TextStyle(
-              color: statusColor,
-              fontWeight: FontWeight.w800,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PriorityQueue extends StatelessWidget {
-  const _PriorityQueue({required this.overview});
-  final KeeperOverview overview;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = <({String label, String value, IconData icon, Color color})>[
-      (
-        label: 'Open reports',
-        value: '${overview.totalOpenReports}',
-        icon: Icons.gavel_rounded,
-        color: VentlyColors.dangerRed,
-      ),
-      (
-        label: 'Unanswered',
-        value: '${overview.totalUnansweredPosts}',
-        icon: Icons.mark_chat_unread_outlined,
-        color: VentlyTokens.trendingAmber,
-      ),
-      (
-        label: 'Scheduled',
-        value: '${overview.totalScheduledPrompts}',
-        icon: Icons.event_note_rounded,
-        color: VentlyTokens.messageBlue,
-      ),
-      (
-        label: 'Active 7d',
-        value: PostCard.compactNumber(overview.totalActivePosters7d),
-        icon: Icons.bolt_rounded,
-        color: VentlyTokens.growthTeal,
-      ),
-    ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      child: GlassCard(
-        padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
+      child: WallPanel(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              "Today's priorities",
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 13,
-                color: context.ink,
-              ),
-            ),
-            const SizedBox(height: 10),
             Row(
               children: [
-                for (var i = 0; i < items.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 8),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: items[i].color.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(12),
+                TribeCoverPreview(
+                  bannerUrl: tribe.bannerUrl,
+                  avatarUrl: tribe.avatarUrl,
+                  width: 56,
+                  height: 48,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tribe.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.ink,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 17,
+                          letterSpacing: -0.3,
+                        ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(items[i].icon, size: 14, color: items[i].color),
-                          const SizedBox(height: 4),
-                          Text(
-                            items[i].value,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
-                              color: context.ink,
-                            ),
-                          ),
-                          Text(
-                            items[i].label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: context.ink.withOpacity(0.55),
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 2),
+                      Text(
+                        '${PostCard.compactNumber(tribe.memberCount)} members',
+                        style: TextStyle(
+                          color: context.ink.withValues(alpha: 0.52),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12.5,
+                        ),
                       ),
+                    ],
+                  ),
+                ),
+                _StatusPill(label: status, color: statusColor),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              next,
+              style: TextStyle(
+                color: context.ink.withValues(alpha: 0.72),
+                fontWeight: FontWeight.w600,
+                fontSize: 13.5,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    label: 'Manage Tribe ${tribe.name}',
+                    child: WallButton(
+                      key: const ValueKey('plug-studio-primary-manage-tribe'),
+                      label: 'Manage Tribe',
+                      icon: Icons.tune_rounded,
+                      onPressed: () => context.push('/tribe/${tribe.slug}/manage/settings'),
                     ),
                   ),
-                ],
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: reports > 0
+                      ? WallButton(
+                          label: 'Review',
+                          icon: Icons.gavel_rounded,
+                          tone: WallButtonTone.danger,
+                          onPressed: () => context.push('/keeper/moderation'),
+                        )
+                      : WallButton(
+                          label: 'Prompt',
+                          icon: Icons.edit_outlined,
+                          tone: WallButtonTone.quiet,
+                          onPressed: () => showKeeperPromptComposer(
+                            context,
+                            tribeId: tribe.tribeId,
+                          ),
+                        ),
+                ),
               ],
             ),
           ],
@@ -866,14 +383,170 @@ class _PriorityQueue extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Legacy hero (unused — kept for reference during migration)
-// ---------------------------------------------------------------------------
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.label, required this.color});
+  final String label;
+  final Color color;
 
-// ignore: unused_element
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w800,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
+}
 
-class _QuickActionsRow extends ConsumerWidget {
-  const _QuickActionsRow({required this.overview});
+class _PulseBoard extends ConsumerWidget {
+  const _PulseBoard({required this.overview});
+  final KeeperOverview overview;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
+    final members = primary?.memberCount ?? overview.totalMembers;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Text(
+                'Pulse',
+                style: TextStyle(
+                  color: context.ink,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  letterSpacing: 0.4,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  ref.read(keeperMemberViewProvider.notifier).state = true;
+                  context.go('/feed');
+                },
+                child: const Text(
+                  'Member feed',
+                  style: TextStyle(
+                    color: VentlyColors.berryMagenta,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          WallPanel(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 14),
+            child: Row(
+              children: [
+                _PulseCell(
+                  value: PostCard.compactNumber(members),
+                  label: 'Members',
+                ),
+                _PulseCell(
+                  value: '${overview.totalOpenReports}',
+                  label: 'Reports',
+                  alert: overview.totalOpenReports > 0,
+                  onTap: overview.totalOpenReports > 0
+                      ? () => context.push('/keeper/moderation')
+                      : null,
+                ),
+                _PulseCell(
+                  value: '${overview.totalPosts24h}',
+                  label: '24h',
+                ),
+                _PulseCell(
+                  value: '${overview.totalNewMembers7d}',
+                  label: 'New 7d',
+                  last: true,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PulseCell extends StatelessWidget {
+  const _PulseCell({
+    required this.value,
+    required this.label,
+    this.alert = false,
+    this.onTap,
+    this.last = false,
+  });
+
+  final String value;
+  final String label;
+  final bool alert;
+  final VoidCallback? onTap;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    final ink = alert ? VentlyColors.dangerRed : context.ink;
+    final cell = Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            color: ink,
+            fontWeight: FontWeight.w800,
+            fontSize: 22,
+            height: 1,
+            letterSpacing: -0.4,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: TextStyle(
+            color: context.ink.withValues(alpha: 0.48),
+            fontWeight: FontWeight.w700,
+            fontSize: 11,
+          ),
+        ),
+      ],
+    );
+
+    return Expanded(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: last
+              ? null
+              : Border(
+                  right: BorderSide(
+                    color: context.ink.withValues(alpha: 0.08),
+                  ),
+                ),
+        ),
+        child: onTap == null
+            ? cell
+            : GestureDetector(onTap: onTap, behavior: HitTestBehavior.opaque, child: cell),
+      ),
+    );
+  }
+}
+
+class _ToolRail extends ConsumerWidget {
+  const _ToolRail({required this.overview});
   final KeeperOverview overview;
 
   @override
@@ -881,25 +554,17 @@ class _QuickActionsRow extends ConsumerWidget {
     final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
     final slug = primary?.slug;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _QuickAction(
-              icon: Icons.lightbulb_outline,
-              label: 'Prompt',
-              onTap: primary == null
-                  ? null
-                  : () => showKeeperPromptComposer(
-                        context,
-                        tribeId: primary.tribeId,
-                      ),
-            ),
-            _QuickAction(
-              icon: Icons.campaign_outlined,
+            WallButton(
               label: 'Announce',
-              onTap: primary == null
+              icon: Icons.campaign_outlined,
+              compact: true,
+              expanded: false,
+              onPressed: primary == null
                   ? null
                   : () {
                       ref.read(composeTargetTribeProvider.notifier).state =
@@ -914,10 +579,14 @@ class _QuickActionsRow extends ConsumerWidget {
                       );
                     },
             ),
-            _QuickAction(
-              icon: Icons.poll_outlined,
+            const SizedBox(width: 8),
+            WallButton(
               label: 'Poll',
-              onTap: primary == null
+              icon: Icons.poll_outlined,
+              compact: true,
+              expanded: false,
+              tone: WallButtonTone.quiet,
+              onPressed: primary == null
                   ? null
                   : () {
                       ref.read(composeTargetTribeProvider.notifier).state =
@@ -927,19 +596,27 @@ class _QuickActionsRow extends ConsumerWidget {
                       openCompose(context, ref, format: 'poll');
                     },
             ),
-            _QuickAction(
-              icon: Icons.person_add_alt_1,
+            const SizedBox(width: 8),
+            WallButton(
               label: 'Invite',
-              onTap: slug == null
+              icon: Icons.person_add_alt_1,
+              compact: true,
+              expanded: false,
+              tone: WallButtonTone.quiet,
+              onPressed: slug == null
                   ? null
                   : () => context.push(
                         '/tribe/$slug/manage/settings/members',
                       ),
             ),
-            _QuickAction(
-              icon: Icons.rule_rounded,
+            const SizedBox(width: 8),
+            WallButton(
               label: 'Rules',
-              onTap: slug == null
+              icon: Icons.rule_rounded,
+              compact: true,
+              expanded: false,
+              tone: WallButtonTone.quiet,
+              onPressed: slug == null
                   ? null
                   : () => context.push(
                         '/tribe/$slug/manage/settings/rules',
@@ -952,83 +629,56 @@ class _QuickActionsRow extends ConsumerWidget {
   }
 }
 
-class _StudioV2Grid extends StatelessWidget {
-  const _StudioV2Grid({required this.overview});
+class _OpsList extends StatelessWidget {
+  const _OpsList({required this.overview});
   final KeeperOverview overview;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // "Everything you need to grow and protect your tribe." used to sit
-          // under this heading, one screen below the hero's "Everything you
-          // need to keep it safe and thriving." and the top bar's "Manage your
-          // tribe. Protect your safe space." Three taglines making the same
-          // promise is not reassurance, it is noise between the keeper and the
-          // four things they came to open.
           Text(
-            'Creator Studio',
+            'Operations',
             style: TextStyle(
               color: context.ink,
-              fontWeight: FontWeight.w900,
-              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              letterSpacing: 0.4,
             ),
           ),
           const SizedBox(height: 10),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            // A nested ScrollView with a null padding inherits the ambient
-            // MediaQuery padding along its scroll axis — here the home
-            // indicator's bottom inset, which this grid has no business
-            // reserving. It was adding dead space under the last row.
-            padding: EdgeInsets.zero,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            // Raised from 1.18 now that tile content is top-aligned rather than
-            // bottom-anchored: the cells no longer need the extra height that
-            // the Spacer used to absorb.
-            childAspectRatio: 1.3,
-            children: [
-              _V2Tile(
-                icon: Icons.gavel_rounded,
-                accent: VentlyColors.dangerRed,
-                label: 'Moderation',
-                subtitle: 'Review reports & keep it safe',
-                badge: overview.totalOpenReports > 0
-                    ? '${overview.totalOpenReports}'
-                    : null,
-                onTap: () => context.push('/keeper/moderation'),
-              ),
-              _V2Tile(
-                icon: Icons.calendar_month_rounded,
-                accent: VentlyTokens.messageBlue,
-                label: 'Calendar',
-                subtitle: 'Schedule prompts & rituals',
-                badge: overview.totalScheduledPrompts > 0
-                    ? '${overview.totalScheduledPrompts}'
-                    : null,
-                onTap: () => context.push('/keeper/calendar'),
-              ),
-              _V2Tile(
-                icon: Icons.auto_awesome_rounded,
-                accent: VentlyColors.berryMagenta,
-                label: 'AI Insights',
-                subtitle: 'Understand your community',
-                onTap: () => context.push('/keeper/insights'),
-              ),
-              _V2Tile(
-                icon: Icons.admin_panel_settings_rounded,
-                accent: VentlyTokens.growthTeal,
-                label: 'Co-moderators',
-                subtitle: 'Add & manage your mod team',
-                onTap: () => context.push('/keeper/comod'),
-              ),
-            ],
+          _OpsRow(
+            icon: Icons.gavel_rounded,
+            label: 'Moderation',
+            detail: 'Reports and removals',
+            badge: overview.totalOpenReports > 0
+                ? '${overview.totalOpenReports}'
+                : null,
+            onTap: () => context.push('/keeper/moderation'),
+          ),
+          _OpsRow(
+            icon: Icons.calendar_month_rounded,
+            label: 'Calendar',
+            detail: 'Prompts and rituals',
+            badge: overview.totalScheduledPrompts > 0
+                ? '${overview.totalScheduledPrompts}'
+                : null,
+            onTap: () => context.push('/keeper/calendar'),
+          ),
+          _OpsRow(
+            icon: Icons.insights_rounded,
+            label: 'Insights',
+            detail: 'Activity across your tribes',
+            onTap: () => context.push('/keeper/insights'),
+          ),
+          _OpsRow(
+            icon: Icons.badge_outlined,
+            label: 'Co-moderators',
+            detail: 'People who can help you keep it',
+            onTap: () => context.push('/keeper/comod'),
           ),
         ],
       ),
@@ -1036,203 +686,81 @@ class _StudioV2Grid extends StatelessWidget {
   }
 }
 
-class _V2Tile extends StatelessWidget {
-  const _V2Tile({
+class _OpsRow extends StatelessWidget {
+  const _OpsRow({
     required this.icon,
     required this.label,
+    required this.detail,
     required this.onTap,
-    this.subtitle,
     this.badge,
-    this.accent = VentlyColors.berryMagenta,
   });
+
   final IconData icon;
   final String label;
+  final String detail;
   final VoidCallback onTap;
-  final String? subtitle;
   final String? badge;
-  final Color accent;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color:
-          context.isDark ? Theme.of(context).colorScheme.surface : Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: context.isDark
-                ? Theme.of(context).colorScheme.surface
-                : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: accent.withOpacity(0.10),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Stack(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: accent.withOpacity(0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(icon, color: accent, size: 21),
+    return WallPanel(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: context.ink.withValues(alpha: 0.72)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14.5,
+                    color: context.ink,
                   ),
-                  // Top-aligned, not bottom-aligned. A Spacer here pushed the
-                  // text to the bottom of each cell, so a tile whose subtitle
-                  // wrapped to two lines sat its label a line higher than its
-                  // neighbour's — "Moderation" and "Calendar" never lined up.
-                  const SizedBox(height: 14),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13.5,
-                      color: context.ink,
-                    ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: TextStyle(
+                    color: context.ink.withValues(alpha: 0.48),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
                   ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 10.5,
-                        height: 1.2,
-                        color: context.ink.withOpacity(0.55),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              // Badge (count) if present, else a soft chevron affordance.
-              Positioned(
-                right: 0,
-                top: 0,
-                child: badge != null
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: accent,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: Text(
-                          badge!,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 10,
-                          ),
-                        ),
-                      )
-                    : Container(
-                        width: 26,
-                        height: 26,
-                        decoration: BoxDecoration(
-                          color: accent.withOpacity(0.10),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(Icons.arrow_outward_rounded,
-                            color: accent, size: 15),
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _QuickAction extends StatelessWidget {
-  const _QuickAction({
-    required this.icon,
-    required this.label,
-    this.onTap,
-  });
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 10),
-      child: Material(
-        color: context.isDark
-            ? Theme.of(context).colorScheme.surface
-            : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Opacity(
-            opacity: onTap == null ? 0.45 : 1,
-            child: Container(
-              width: 96,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                color: context.isDark
-                    ? Theme.of(context).colorScheme.surface
-                    : Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: VentlyColors.berryMagenta.withOpacity(0.10),
-                    blurRadius: 14,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: VentlyColors.berryMagenta.withOpacity(0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child:
-                        Icon(icon, color: VentlyColors.berryMagenta, size: 21),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 11,
-                      color: context.ink,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        ),
+          if (badge != null)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: VentlyColors.dangerRed,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                badge!,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: context.ink.withValues(alpha: 0.28),
+          ),
+        ],
       ),
     );
   }
 }
-
-
-
-
 
 class _ContentHub extends StatelessWidget {
   const _ContentHub({required this.overview});
@@ -1241,46 +769,60 @@ class _ContentHub extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-      child: GlassCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Needs attention',
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10, top: 8),
+            child: Text(
+              'Needs you',
               style: TextStyle(
                 color: context.ink,
-                fontWeight: FontWeight.w900,
-                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+                letterSpacing: 0.4,
               ),
             ),
-            const SizedBox(height: 12),
-            if (overview.totalOpenReports > 0)
-              _HubRow(
-                icon: Icons.flag_rounded,
-                color: VentlyColors.dangerRed,
-                label: 'Open reports',
-                count: overview.totalOpenReports,
-                onTap: () {
-                  final slug = overview.tribes.first.slug;
-                  context.push('/tribe/$slug/manage/reports');
-                },
-              ),
-            if (overview.totalScheduledPrompts > 0) ...[
-              if (overview.totalOpenReports > 0) const SizedBox(height: 8),
-              _HubRow(
-                icon: Icons.campaign_rounded,
-                color: VentlyColors.berryMagenta,
-                label: 'Scheduled prompts',
-                count: overview.totalScheduledPrompts,
-                onTap: () {
-                  final slug = overview.tribes.first.slug;
-                  context.push('/tribe/$slug/manage');
-                },
-              ),
-            ],
-          ],
-        ),
+          ),
+          WallPanel(
+            padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
+            child: Column(
+              children: [
+                if (overview.totalOpenReports > 0)
+                  _HubRow(
+                    icon: Icons.flag_outlined,
+                    label: 'Open reports',
+                    count: overview.totalOpenReports,
+                    onTap: () {
+                      final slug = overview.tribes.first.slug;
+                      context.push('/tribe/$slug/manage/reports');
+                    },
+                  ),
+                if (overview.totalUnansweredPosts > 0)
+                  _HubRow(
+                    icon: Icons.mark_chat_unread_outlined,
+                    label: 'Unanswered vents',
+                    count: overview.totalUnansweredPosts,
+                    onTap: () {
+                      final slug = overview.tribes.first.slug;
+                      context.push('/tribe/$slug');
+                    },
+                  ),
+                if (overview.totalScheduledPrompts > 0)
+                  _HubRow(
+                    icon: Icons.event_note_outlined,
+                    label: 'Scheduled prompts',
+                    count: overview.totalScheduledPrompts,
+                    onTap: () {
+                      final slug = overview.tribes.first.slug;
+                      context.push('/tribe/$slug/manage');
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1289,84 +831,58 @@ class _ContentHub extends StatelessWidget {
 class _HubRow extends StatelessWidget {
   const _HubRow({
     required this.icon,
-    required this.color,
     required this.label,
     required this.count,
     required this.onTap,
   });
   final IconData icon;
-  final Color color;
   final String label;
   final int count;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: color, size: 18),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                  ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        child: Row(
+          children: [
+            Icon(icon, color: context.ink.withValues(alpha: 0.7), size: 18),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  color: context.ink,
                 ),
               ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '$count',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12,
-                  ),
-                ),
+            ),
+            Text(
+              '$count',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+                color: context.ink,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Per-tribe card
-// ---------------------------------------------------------------------------
-
 class _TribeControlCard extends StatelessWidget {
   const _TribeControlCard({
     required this.tribe,
     required this.stats,
-    required this.engagement,
   });
   final Tribe tribe;
   final TribeStudioStats? stats;
-  final int engagement;
 
   @override
   Widget build(BuildContext context) {
@@ -1375,15 +891,15 @@ class _TribeControlCard extends StatelessWidget {
     final newMembers = stats?.members7d ?? 0;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-      child: GlassCard(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+      child: WallPanel(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                TribeAvatar(avatarUrl: tribe.avatarUrl, size: 44),
+                TribeAvatar(avatarUrl: tribe.avatarUrl, size: 40),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -1395,28 +911,19 @@ class _TribeControlCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: context.ink,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15.5,
                         ),
                       ),
                       Text(
-                        '${PostCard.compactNumber(tribe.memberCount)} members · '
-                        'Engagement $engagement',
+                        '${PostCard.compactNumber(tribe.memberCount)} members',
                         style: TextStyle(
-                          color: context.ink.withOpacity(0.58),
-                          fontWeight: FontWeight.w700,
+                          color: context.ink.withValues(alpha: 0.5),
+                          fontWeight: FontWeight.w600,
                           fontSize: 12,
                         ),
                       ),
                     ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.open_in_new_rounded, size: 20),
-                  color: VentlyColors.berryMagenta,
-                  tooltip: 'Manage Tribe',
-                  onPressed: () => context.push(
-                    '/tribe/${tribe.slug}/manage/settings',
                   ),
                 ),
               ],
@@ -1424,9 +931,9 @@ class _TribeControlCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                _MiniStat(label: 'Vents 24h', value: '$posts24h'),
+                _MiniStat(label: '24h', value: '$posts24h'),
                 _MiniStat(label: 'Reports', value: '$openReports'),
-                _MiniStat(label: 'New 7d', value: '$newMembers'),
+                _MiniStat(label: 'New 7d', value: '$newMembers', last: true),
               ],
             ),
             const SizedBox(height: 12),
@@ -1434,28 +941,34 @@ class _TribeControlCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _ActionChip(
-                  icon: Icons.dashboard_customize_outlined,
+                WallButton(
                   label: 'Manage Tribe',
-                  onTap: () => context.push(
-                    '/tribe/${tribe.slug}/manage/settings',
-                  ),
+                  compact: true,
+                  expanded: false,
+                  onPressed: () =>
+                      context.push('/tribe/${tribe.slug}/manage/settings'),
                 ),
-                _ActionChip(
-                  icon: Icons.gavel_rounded,
+                WallButton(
                   label: 'Moderation',
-                  onTap: () =>
+                  compact: true,
+                  expanded: false,
+                  tone: WallButtonTone.quiet,
+                  onPressed: () =>
                       context.push('/tribe/${tribe.slug}/manage/moderation'),
                 ),
-                _ActionChip(
-                  icon: Icons.chat_rounded,
-                  label: 'Group chat',
-                  onTap: () => context.push('/tribe/${tribe.slug}/chat'),
+                WallButton(
+                  label: 'Chat',
+                  compact: true,
+                  expanded: false,
+                  tone: WallButtonTone.quiet,
+                  onPressed: () => context.push('/tribe/${tribe.slug}/chat'),
                 ),
-                _ActionChip(
-                  icon: Icons.public_rounded,
-                  label: 'Public page',
-                  onTap: () => context.push('/tribe/${tribe.slug}'),
+                WallButton(
+                  label: 'Page',
+                  compact: true,
+                  expanded: false,
+                  tone: WallButtonTone.quiet,
+                  onPressed: () => context.push('/tribe/${tribe.slug}'),
                 ),
               ],
             ),
@@ -1467,90 +980,55 @@ class _TribeControlCard extends StatelessWidget {
 }
 
 class _MiniStat extends StatelessWidget {
-  const _MiniStat({required this.label, required this.value});
+  const _MiniStat({
+    required this.label,
+    required this.value,
+    this.last = false,
+  });
   final String label;
   final String value;
+  final bool last;
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        margin: const EdgeInsets.only(right: 6),
+      child: DecoratedBox(
         decoration: BoxDecoration(
-          color: VentlyColors.berryMagenta.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(14),
+          border: last
+              ? null
+              : Border(
+                  right: BorderSide(
+                    color: context.ink.withValues(alpha: 0.08),
+                  ),
+                ),
         ),
-        alignment: Alignment.center,
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                color: context.ink,
-                fontWeight: FontWeight.w900,
-                fontSize: 15,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  color: context.ink,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
               ),
-            ),
-            Text(
-              label,
-              style: TextStyle(
-                color: context.ink.withOpacity(0.55),
-                fontWeight: FontWeight.w700,
-                fontSize: 10,
+              Text(
+                label,
+                style: TextStyle(
+                  color: context.ink.withValues(alpha: 0.48),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 10.5,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
-
-class _ActionChip extends StatelessWidget {
-  const _ActionChip({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: VentlyColors.berryMagenta.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: VentlyColors.berryMagenta),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: context.ink,
-                fontWeight: FontWeight.w800,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Drawer
-// ---------------------------------------------------------------------------
 
 class _KeeperDrawer extends ConsumerWidget {
   const _KeeperDrawer({required this.me});
@@ -1563,15 +1041,12 @@ class _KeeperDrawer extends ConsumerWidget {
           ? Theme.of(context).colorScheme.surface
           : VentlyColors.cardBlush,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(right: Radius.circular(28)),
+        borderRadius: BorderRadius.horizontal(right: Radius.circular(20)),
       ),
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Tappable, because a drawer header showing your own face reads as
-            // the way to your own profile whether or not it is wired up. It
-            // used to be inert, which is worse than not being there.
             InkWell(
               onTap: () {
                 Navigator.pop(context);
@@ -1586,7 +1061,7 @@ class _KeeperDrawer extends ConsumerWidget {
                         avatarSeed: me!.avatarSeed,
                         label: me!.anonymousPseudonym,
                         profilePhotoUrl: me!.profilePhotoUrl,
-                        size: 44,
+                        size: 40,
                       ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -1597,16 +1072,16 @@ class _KeeperDrawer extends ConsumerWidget {
                             'Plug Studio',
                             style: TextStyle(
                               color: context.ink,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w800,
                               fontSize: 16,
                             ),
                           ),
-                          const Text(
-                            'Tribe Control Center',
+                          Text(
+                            'Operations',
                             style: TextStyle(
-                              color: VentlyColors.berryMagenta,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 11.5,
+                              color: context.ink.withValues(alpha: 0.5),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
                             ),
                           ),
                         ],
@@ -1614,20 +1089,20 @@ class _KeeperDrawer extends ConsumerWidget {
                     ),
                     Icon(
                       Icons.chevron_right_rounded,
-                      color: context.ink.withOpacity(0.35),
+                      color: context.ink.withValues(alpha: 0.32),
                     ),
                   ],
                 ),
               ),
             ),
-            const Divider(height: 1, color: Color(0xFFEEDCE3)),
+            Divider(height: 1, color: context.glassBorder),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 children: [
                   _DrawerTile(
-                    icon: Icons.home_rounded,
-                    label: 'Control Center',
+                    icon: Icons.space_dashboard_outlined,
+                    label: 'Studio',
                     onTap: () {
                       Navigator.pop(context);
                       ref.read(keeperMemberViewProvider.notifier).state = false;
@@ -1635,7 +1110,7 @@ class _KeeperDrawer extends ConsumerWidget {
                     },
                   ),
                   _DrawerTile(
-                    icon: Icons.explore_rounded,
+                    icon: Icons.explore_outlined,
                     label: 'Member feed',
                     onTap: () {
                       Navigator.pop(context);
@@ -1643,7 +1118,7 @@ class _KeeperDrawer extends ConsumerWidget {
                       context.go('/feed');
                     },
                   ),
-                  const _DrawerSection('Studio'),
+                  const _DrawerSection('Operations'),
                   _DrawerTile(
                     icon: Icons.gavel_rounded,
                     label: 'Moderation',
@@ -1661,15 +1136,15 @@ class _KeeperDrawer extends ConsumerWidget {
                     },
                   ),
                   _DrawerTile(
-                    icon: Icons.auto_awesome_rounded,
-                    label: 'AI insights',
+                    icon: Icons.insights_rounded,
+                    label: 'Insights',
                     onTap: () {
                       Navigator.pop(context);
                       context.push('/keeper/insights');
                     },
                   ),
                   _DrawerTile(
-                    icon: Icons.admin_panel_settings_rounded,
+                    icon: Icons.badge_outlined,
                     label: 'Co-mods',
                     onTap: () {
                       Navigator.pop(context);
@@ -1686,7 +1161,7 @@ class _KeeperDrawer extends ConsumerWidget {
                     },
                   ),
                   _DrawerTile(
-                    icon: Icons.chat_bubble_rounded,
+                    icon: Icons.chat_bubble_outline_rounded,
                     label: 'Chats',
                     onTap: () {
                       Navigator.pop(context);
@@ -1694,7 +1169,7 @@ class _KeeperDrawer extends ConsumerWidget {
                     },
                   ),
                   _DrawerTile(
-                    icon: Icons.groups_rounded,
+                    icon: Icons.groups_outlined,
                     label: 'All tribes',
                     onTap: () {
                       Navigator.pop(context);
@@ -1702,7 +1177,7 @@ class _KeeperDrawer extends ConsumerWidget {
                     },
                   ),
                   _DrawerTile(
-                    icon: Icons.add_circle_outline,
+                    icon: Icons.add_rounded,
                     label: 'Create tribe',
                     onTap: () {
                       Navigator.pop(context);
@@ -1710,11 +1185,8 @@ class _KeeperDrawer extends ConsumerWidget {
                     },
                   ),
                   const _DrawerSection('Account'),
-                  // A keeper is a member too, and the bottom-nav slot where
-                  // everyone else finds their profile holds the Studio
-                  // analytics here. Without this row there is no route to it.
                   _DrawerTile(
-                    icon: Icons.person_rounded,
+                    icon: Icons.person_outline_rounded,
                     label: 'My profile',
                     onTap: () {
                       Navigator.pop(context);
@@ -1722,7 +1194,7 @@ class _KeeperDrawer extends ConsumerWidget {
                     },
                   ),
                   _DrawerTile(
-                    icon: Icons.settings_rounded,
+                    icon: Icons.settings_outlined,
                     label: 'Settings',
                     onTap: () {
                       Navigator.pop(context);
@@ -1746,14 +1218,14 @@ class _DrawerSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
       child: Text(
         label.toUpperCase(),
         style: TextStyle(
-          color: context.ink.withOpacity(0.45),
-          fontWeight: FontWeight.w800,
+          color: context.ink.withValues(alpha: 0.4),
+          fontWeight: FontWeight.w700,
           fontSize: 10,
-          letterSpacing: 0.8,
+          letterSpacing: 1.1,
         ),
       ),
     );
@@ -1776,44 +1248,19 @@ class _DrawerTile extends StatelessWidget {
     return ListTile(
       dense: true,
       visualDensity: VisualDensity.compact,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-      leading: _DrawerIcon(icon),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      leading: Icon(icon, color: context.ink.withValues(alpha: 0.72), size: 20),
       title: Text(
         label,
         style: const TextStyle(
-          fontWeight: FontWeight.w800,
-          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          fontSize: 14.5,
         ),
       ),
       onTap: onTap,
     );
   }
 }
-
-class _DrawerIcon extends StatelessWidget {
-  const _DrawerIcon(this.icon);
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: context.isDark
-            ? VentlyColors.berryMagenta.withOpacity(0.16)
-            : const Color(0xFFFFE3EC),
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: Icon(icon, color: VentlyColors.berryMagenta, size: 18),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Empty / error
-// ---------------------------------------------------------------------------
 
 class _EmptyKeeperState extends StatelessWidget {
   const _EmptyKeeperState({required this.me, required this.onRefresh});
@@ -1826,75 +1273,53 @@ class _EmptyKeeperState extends StatelessWidget {
       onRefresh: () async => onRefresh(),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.fromLTRB(32, 48, 32, 32),
         children: [
-          const SizedBox(height: 48),
-          const Icon(Icons.diversity_3,
-              size: 56, color: VentlyColors.berryMagenta),
+          Icon(
+            Icons.hub_outlined,
+            size: 40,
+            color: context.ink.withValues(alpha: 0.28),
+          ),
           const SizedBox(height: 16),
           Text(
-            'No tribes to manage yet',
+            'No tribes yet',
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.4,
               color: context.ink,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             me?.isPlug == true
-                ? 'As a Plug, create your first tribe to unlock the Control Center.'
-                : 'When you create or inherit a tribe, your studio dashboard appears here.',
+                ? 'Create a tribe and this desk becomes the place you run it from.'
+                : 'When you keep a tribe, its operations land here.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: context.ink.withOpacity(0.65),
+              color: context.ink.withValues(alpha: 0.58),
               fontWeight: FontWeight.w600,
+              height: 1.4,
             ),
           ),
           const SizedBox(height: 24),
           Center(
-            child: FilledButton.icon(
+            child: WallButton(
+              label: 'Create a tribe',
+              icon: Icons.add_rounded,
+              expanded: false,
               onPressed: () => context.push('/tribes/new'),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Create a tribe'),
             ),
           ),
           const SizedBox(height: 12),
           Center(
             child: TextButton(
               onPressed: () => context.go('/feed'),
-              child: const Text('Browse member feed'),
+              child: const Text('Member feed'),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ignore: unused_element
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline,
-                size: 40, color: VentlyColors.berryMagenta),
-            const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ),
       ),
     );
   }

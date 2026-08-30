@@ -2454,6 +2454,14 @@ class VentlyRepository implements MusicProvider {
   /// Offline the answer is empty rather than permissive. A mock that granted
   /// everything would show a management surface that the server would refuse,
   /// which is a worse lie than showing nothing.
+  /// Make sure this session's coarse country is on record before anything
+  /// reads it. Offline this is a no-op rather than a wait.
+  Future<void> ensureCountryCaptured() async {
+    final live = _live;
+    if (live == null) return;
+    await live.ensureCountryCaptured();
+  }
+
   Future<List<String>> myTribePermissions(String tribeId) {
     final live = _live;
     if (live != null) return live.myTribePermissions(tribeId);

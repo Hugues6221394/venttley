@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/colors.dart';
 import '../../widgets/modal_text_controller_scope.dart';
+import '../../widgets/wall_controls.dart';
 
 /// Security & 2FA settings. Wires Supabase Auth MFA (TOTP) so a
 /// returning user can require a 6-digit code in addition to their
@@ -120,60 +121,41 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                       errorText: error,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: VentlyColors.berryMagenta,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onPressed: verifying
-                          ? null
-                          : () async {
-                              final code = codeCtl.text.trim();
-                              if (code.length != 6) {
-                                setSheet(
-                                    () => error = 'Enter the 6-digit code.');
-                                return;
-                              }
+                  const SizedBox(height: 8),
+                  WallButton(
+                    label: 'Verify & enable 2FA',
+                    busy: verifying,
+                    onPressed: verifying
+                        ? null
+                        : () async {
+                            final code = codeCtl.text.trim();
+                            if (code.length != 6) {
+                              setSheet(
+                                  () => error = 'Enter the 6-digit code.');
+                              return;
+                            }
+                            setSheet(() {
+                              verifying = true;
+                              error = null;
+                            });
+                            try {
+                              final challenge = await Supabase
+                                  .instance.client.auth.mfa
+                                  .challenge(factorId: factorId);
+                              await Supabase.instance.client.auth.mfa.verify(
+                                factorId: factorId,
+                                challengeId: challenge.id,
+                                code: code,
+                              );
+                              if (ctx.mounted) Navigator.pop(ctx, true);
+                            } catch (_) {
+                              if (!ctx.mounted) return;
                               setSheet(() {
-                                verifying = true;
-                                error = null;
+                                verifying = false;
+                                error = 'Code didn\'t match. Try again.';
                               });
-                              try {
-                                final challenge = await Supabase
-                                    .instance.client.auth.mfa
-                                    .challenge(factorId: factorId);
-                                await Supabase.instance.client.auth.mfa.verify(
-                                  factorId: factorId,
-                                  challengeId: challenge.id,
-                                  code: code,
-                                );
-                                if (ctx.mounted) Navigator.pop(ctx, true);
-                              } catch (_) {
-                                if (!ctx.mounted) return;
-                                setSheet(() {
-                                  verifying = false;
-                                  error = 'Code didn\'t match. Try again.';
-                                });
-                              }
-                            },
-                      child: verifying
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Verify & enable 2FA',
-                              style: TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                    ),
+                            }
+                          },
                   ),
                 ],
               ),
@@ -239,14 +221,8 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: VentlyColors.softMauve.withOpacity(0.4)),
-                  ),
+                WallPanel(
+                  padding: const EdgeInsets.all(18),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -262,14 +238,16 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                             size: 22,
                           ),
                           const SizedBox(width: 10),
-                          Text(
-                            verified
-                                ? 'Two-factor authentication is ON'
-                                : 'Two-factor authentication is OFF',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 15,
-                              color: context.ink,
+                          Expanded(
+                            child: Text(
+                              verified
+                                  ? 'Two-factor authentication is ON'
+                                  : 'Two-factor authentication is OFF',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 15,
+                                color: context.ink,
+                              ),
                             ),
                           ),
                         ],
@@ -285,7 +263,7 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                           height: 1.35,
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 16),
                       if (verified) ...[
                         for (final f in _factors)
                           if (f.status == FactorStatus.verified)
@@ -306,19 +284,11 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                               ),
                             ),
                       ] else
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: VentlyColors.berryMagenta,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            onPressed: _busy ? null : _enroll,
-                            icon: const Icon(Icons.lock_outline, size: 18),
-                            label: const Text('Turn on 2FA',
-                                style: TextStyle(fontWeight: FontWeight.w900)),
-                          ),
+                        WallButton(
+                          label: 'Turn on 2FA',
+                          icon: Icons.lock_outline,
+                          onPressed: _busy ? null : _enroll,
+                          busy: _busy,
                         ),
                     ],
                   ),
