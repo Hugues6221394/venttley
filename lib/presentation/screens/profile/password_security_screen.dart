@@ -9,7 +9,6 @@ import '../../../data/services/supabase_backend.dart'
     show MfaChallengeRequiredException;
 import '../../theme/colors.dart';
 import '../../widgets/modal_text_controller_scope.dart';
-import '../../widgets/wall_controls.dart';
 import '../onboarding/mfa_challenge_screen.dart';
 
 /// Instagram-style "Password and security" hub: a security checkup summary,
@@ -115,7 +114,10 @@ class _PasswordSecurityScreenState
                 label: checkup.twoFactorLabel,
                 ok: checkup.twoFactorOn,
               ),
-              _CheckItem(label: checkup.recoveryLabel, ok: checkup.recoveryOk),
+              _CheckItem(
+                label: checkup.recoveryLabel,
+                ok: checkup.recoveryOk,
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -856,12 +858,18 @@ class _CheckupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final allGood = covered >= total;
-    final dark = context.isDark;
-    return WallPanel(
+    return Container(
       padding: const EdgeInsets.all(18),
-      tint: allGood
-          ? (dark ? const Color(0xFF14301C) : const Color(0xFFE7F8EE))
-          : (dark ? const Color(0xFF2A1520) : const Color(0xFFFCE4EE)),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: allGood
+              ? const [Color(0xFFE7F8EE), Color(0xFFF4FBF6)]
+              : const [Color(0xFFFDD9E7), Color(0xFFFBEAF1)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -998,69 +1006,81 @@ class _Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = danger ? const Color(0xFFE05C5C) : VentlyColors.berryMagenta;
-    return WallPanel(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
-      onTap: onTap,
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 19, color: color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+            child: Row(
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14.5,
-                    color: danger ? color : context.ink,
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, size: 19, color: color),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14.5,
+                          color: danger ? color : context.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: context.ink.withOpacity(0.55),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: context.ink.withOpacity(0.55),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
+                if (trailingBadge != null) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: VentlyColors.berryMagenta,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      trailingBadge!,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11.5,
+                      ),
+                    ),
                   ),
-                ),
+                ] else if (onTap != null)
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: context.ink.withOpacity(0.3),
+                  ),
               ],
             ),
           ),
-          if (trailingBadge != null)
-            Container(
-              margin: const EdgeInsets.only(left: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                trailingBadge!,
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 11,
-                ),
-              ),
-            )
-          else if (onTap != null)
-            Icon(
-              Icons.chevron_right_rounded,
-              color: context.ink.withOpacity(0.28),
-            ),
-        ],
+        ),
       ),
     );
   }

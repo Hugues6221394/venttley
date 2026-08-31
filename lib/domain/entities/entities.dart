@@ -680,7 +680,7 @@ class Post {
     this.myReaction,
     this.savedByMe = false,
     this.crisisLevel,
-    this.mediaStatus = 'clean',
+    this.mediaStatus = 'pending',
   }) : _authorDisplayName = authorDisplayName;
 
   String get authorDisplayName {
@@ -1831,7 +1831,7 @@ class Whisper {
     this.savedByMe = false,
     this.reactionCounts = const {},
     this.myReaction,
-    this.mediaStatus = 'clean',
+    this.mediaStatus = 'pending',
     this.musicTrackId,
     this.musicPreviewUrl,
     this.musicTitle,

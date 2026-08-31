@@ -2246,7 +2246,11 @@ class SupabaseBackend {
       likesCount: (r['likes_count'] as int?) ?? 0,
       commentsCount: (r['comments_count'] as int?) ?? 0,
       crisisLevel: r['crisis_level'] as String?,
-      mediaStatus: (r['media_status'] as String?) ?? 'clean',
+      // 'pending' when absent, never 'clean'. A row that does not carry
+      // media_status must veil, because the alternative is publishing
+      // unscanned media — and PostgREST omits a column it was not asked
+      // for, so "absent" and "safe" are indistinguishable here.
+      mediaStatus: (r['media_status'] as String?) ?? 'pending',
       // Music bed. Read defensively: these columns and the joined track are
       // absent until 20260816130000 is applied, and a whisper must render
       // without them.
@@ -7306,6 +7310,8 @@ class SupabaseBackend {
 
   Post _postFromRow(Map<String, dynamic> r) {
     expectColumns('posts', r, const {
+      // A read path that forgets this one renders unscanned media as clean.
+      'media_status': '0087_media_safety',
       'card_background_color': '20260727133836_post_card_colors',
       'card_text_color': '20260727133836_post_card_colors',
       'is_story': '20260727190030_distinct_stories_and_audience',
@@ -7368,7 +7374,11 @@ class SupabaseBackend {
       myReaction: _myReactions[r['post_id']],
       savedByMe: _savedPosts.contains(r['post_id']),
       crisisLevel: r['crisis_level'] as String?,
-      mediaStatus: (r['media_status'] as String?) ?? 'clean',
+      // 'pending' when absent, never 'clean'. A row that does not carry
+      // media_status must veil, because the alternative is publishing
+      // unscanned media — and PostgREST omits a column it was not asked
+      // for, so "absent" and "safe" are indistinguishable here.
+      mediaStatus: (r['media_status'] as String?) ?? 'pending',
     );
   }
 

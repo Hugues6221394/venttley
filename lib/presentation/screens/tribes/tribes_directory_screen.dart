@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers.dart';
 import '../../../core/tribe_category_labels.dart';
 import '../../../domain/entities/entities.dart';
+import '../../theme/colors.dart';
 import '../../widgets/premium_motion.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
@@ -13,7 +14,6 @@ import '../../widgets/tribe_avatar.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/vently_logo.dart';
 import '../../widgets/tribe_age_gate.dart';
-import '../../widgets/wall_controls.dart';
 
 /// Hybrid Tribes browse + search + create entry point.
 class TribesDirectoryScreen extends ConsumerStatefulWidget {
@@ -83,22 +83,24 @@ class _TribesDirectoryScreenState extends ConsumerState<TribesDirectoryScreen> {
             ),
           ),
           SizedBox(
-            height: 56,
+            height: 44,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               itemCount: _categories.length,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (_, i) {
                 final (key, label, icon) = _categories[i];
                 final selected = _category == key;
-                return WallButton(
-                  label: label,
-                  icon: icon,
-                  compact: true,
-                  expanded: false,
-                  tone: selected ? WallButtonTone.brand : WallButtonTone.quiet,
-                  onPressed: () => setState(() => _category = key),
+                return ChoiceChip(
+                  selected: selected,
+                  onSelected: (_) => setState(() => _category = key),
+                  avatar: Icon(
+                    icon,
+                    size: 14,
+                    color: selected ? Colors.white : scheme.primary,
+                  ),
+                  label: Text(label),
                 );
               },
             ),
@@ -134,12 +136,11 @@ class _TribesDirectoryScreenState extends ConsumerState<TribesDirectoryScreen> {
                               color: scheme.onSurface.withOpacity(0.6),
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          WallButton(
-                            label: 'Create a Tribe',
-                            icon: Icons.add_rounded,
-                            expanded: false,
+                          const SizedBox(height: 12),
+                          ElevatedButton.icon(
                             onPressed: () => _startCreateTribe(context, ref),
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Create a Tribe'),
                           ),
                         ],
                       ),
@@ -173,118 +174,121 @@ class _TribeCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final categoryLabel = tribeCategoryLabel(ref, tribe.category);
-    return WallPanel(
+    return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.all(14),
-      onTap: () => context.push('/tribe/${tribe.slug}'),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TribeCoverPreview(
-            bannerUrl: tribe.bannerUrl,
-            avatarUrl: tribe.avatarUrl,
-            width: 72,
-            height: 62,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => context.push('/tribe/${tribe.slug}'),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TribeCoverPreview(
+                bannerUrl: tribe.bannerUrl,
+                avatarUrl: tribe.avatarUrl,
+                width: 72,
+                height: 62,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
-                      child: Text(
-                        tribe.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            tribe.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        if (tribe.isPrivate) ...[
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.lock,
+                            size: 13,
+                            color: scheme.onSurface.withOpacity(0.5),
+                          ),
+                        ],
+                      ],
                     ),
-                    if (tribe.isPrivate) ...[
-                      const SizedBox(width: 6),
-                      Icon(
-                        Icons.lock,
-                        size: 13,
-                        color: scheme.onSurface.withOpacity(0.5),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.people_alt_outlined,
+                          size: 12,
+                          color: scheme.onSurface.withOpacity(0.55),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${PostCard.compactNumber(tribe.memberCount)} • $categoryLabel',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: scheme.onSurface.withOpacity(0.65),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (tribe.description != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        tribe.description!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurface.withOpacity(0.75),
+                        ),
+                      ),
+                    ],
+                    if (tribe.keeperPseudonym != null) ...[
+                      const SizedBox(height: 8),
+                      UserProfileTap(
+                        userId: tribe.keeperId,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              ProfileAvatar(
+                                avatarSeed:
+                                    tribe.keeperAvatarSeed ?? 'default-orb',
+                                label: tribe.keeperPseudonym!,
+                                profilePhotoUrl: tribe.keeperProfilePhotoUrl,
+                                size: 20,
+                                showVerifiedBadge: tribe.keeperIsVerified,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'Kept by @${tribe.keeperPseudonym}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: scheme.onSurface.withOpacity(0.7),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ],
                 ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.people_alt_outlined,
-                      size: 12,
-                      color: scheme.onSurface.withOpacity(0.55),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${PostCard.compactNumber(tribe.memberCount)} • $categoryLabel',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: scheme.onSurface.withOpacity(0.65),
-                      ),
-                    ),
-                  ],
-                ),
-                if (tribe.description != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    tribe.description!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: scheme.onSurface.withOpacity(0.75),
-                    ),
-                  ),
-                ],
-                if (tribe.keeperPseudonym != null) ...[
-                  const SizedBox(height: 8),
-                  UserProfileTap(
-                    userId: tribe.keeperId,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(
-                        children: [
-                          ProfileAvatar(
-                            avatarSeed: tribe.keeperAvatarSeed ?? 'default-orb',
-                            label: tribe.keeperPseudonym!,
-                            profilePhotoUrl: tribe.keeperProfilePhotoUrl,
-                            size: 20,
-                            showVerifiedBadge: tribe.keeperIsVerified,
-                          ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'Kept by @${tribe.keeperPseudonym}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: scheme.onSurface.withOpacity(0.7),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              _JoinPill(tribe: tribe),
+            ],
           ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () {},
-            child: _JoinPill(tribe: tribe),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -297,21 +301,29 @@ class _JoinPill extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.watch(repositoryProvider);
-    return WallButton(
-      label: tribe.joinedByMe ? 'Joined' : 'Join',
-      compact: true,
-      expanded: false,
-      tone: tribe.joinedByMe ? WallButtonTone.quiet : WallButtonTone.brand,
-      onPressed: () async {
-        if (tribe.joinedByMe) {
+    if (tribe.joinedByMe) {
+      return OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          foregroundColor: context.ink,
+        ),
+        onPressed: () async {
           await repo.leaveTribe(tribe.tribeId);
           ref.invalidate(tribesProvider);
           ref.invalidate(tribeBySlugProvider);
-        } else {
-          await repo.joinTribe(tribe.tribeId);
-          ref.invalidate(tribesProvider);
-        }
+        },
+        child: const Text('Joined'),
+      );
+    }
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      ),
+      onPressed: () async {
+        await repo.joinTribe(tribe.tribeId);
+        ref.invalidate(tribesProvider);
       },
+      child: const Text('Join'),
     );
   }
 }

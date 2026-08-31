@@ -5,7 +5,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/colors.dart';
 import '../../widgets/modal_text_controller_scope.dart';
-import '../../widgets/wall_controls.dart';
 
 /// Security & 2FA settings. Wires Supabase Auth MFA (TOTP) so a
 /// returning user can require a 6-digit code in addition to their
@@ -64,8 +63,7 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Couldn\'t start enrollment: $e')),
-        );
+            SnackBar(content: Text('Couldn\'t start enrollment: $e')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -90,56 +88,54 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
         initialValues: const [''],
         builder: (ctx, controllers) {
           final codeCtl = controllers.single;
-          return StatefulBuilder(
-            builder: (ctx, setSheet) {
-              return SingleChildScrollView(
-                padding: EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  top: 20,
-                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Set up authenticator',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
+          return StatefulBuilder(builder: (ctx, setSheet) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Set up authenticator',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 8),
+                  const Text(
                       'Open Google Authenticator / 1Password / Authy. Add a new account with this secret, then enter the 6-digit code below.',
-                      style: TextStyle(height: 1.4),
+                      style: TextStyle(height: 1.4)),
+                  const SizedBox(height: 14),
+                  _SecretBlock(secret: secret, uri: uri),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: codeCtl,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: '6-digit code',
+                      errorText: error,
                     ),
-                    const SizedBox(height: 14),
-                    _SecretBlock(secret: secret, uri: uri),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: codeCtl,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
-                        labelText: '6-digit code',
-                        errorText: error,
+                  ),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: VentlyColors.berryMagenta,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    WallButton(
-                      label: 'Verify & enable 2FA',
-                      busy: verifying,
                       onPressed: verifying
                           ? null
                           : () async {
                               final code = codeCtl.text.trim();
                               if (code.length != 6) {
                                 setSheet(
-                                  () => error = 'Enter the 6-digit code.',
-                                );
+                                    () => error = 'Enter the 6-digit code.');
                                 return;
                               }
                               setSheet(() {
@@ -148,10 +144,7 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                               });
                               try {
                                 final challenge = await Supabase
-                                    .instance
-                                    .client
-                                    .auth
-                                    .mfa
+                                    .instance.client.auth.mfa
                                     .challenge(factorId: factorId);
                                 await Supabase.instance.client.auth.mfa.verify(
                                   factorId: factorId,
@@ -167,19 +160,31 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                                 });
                               }
                             },
+                      child: verifying
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Verify & enable 2FA',
+                              style: TextStyle(fontWeight: FontWeight.w900),
+                            ),
                     ),
-                  ],
-                ),
-              );
-            },
-          );
+                  ),
+                ],
+              ),
+            );
+          });
         },
       ),
     );
     if (verified == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Two-factor authentication is on.')),
-      );
+          const SnackBar(content: Text('Two-factor authentication is on.')));
     } else {
       // User cancelled — clean up the half-enrolled factor.
       try {
@@ -194,17 +199,14 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Turn off 2FA?'),
         content: const Text(
-          'Your account will only need your password to sign in. You can re-enable it any time.',
-        ),
+            'Your account will only need your password to sign in. You can re-enable it any time.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: VentlyColors.berryMagenta,
-            ),
+                backgroundColor: VentlyColors.berryMagenta),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Turn off'),
           ),
@@ -218,9 +220,8 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
       await _refresh();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Couldn\'t disable: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Couldn\'t disable: $e')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -238,8 +239,14 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               children: [
-                WallPanel(
-                  padding: const EdgeInsets.all(18),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: VentlyColors.softMauve.withOpacity(0.4)),
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -255,16 +262,14 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                             size: 22,
                           ),
                           const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              verified
-                                  ? 'Two-factor authentication is ON'
-                                  : 'Two-factor authentication is OFF',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 15,
-                                color: context.ink,
-                              ),
+                          Text(
+                            verified
+                                ? 'Two-factor authentication is ON'
+                                : 'Two-factor authentication is OFF',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 15,
+                              color: context.ink,
                             ),
                           ),
                         ],
@@ -280,7 +285,7 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                           height: 1.35,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       if (verified) ...[
                         for (final f in _factors)
                           if (f.status == FactorStatus.verified)
@@ -296,17 +301,24 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                                 child: const Text(
                                   'Disable',
                                   style: TextStyle(
-                                    color: VentlyColors.berryMagenta,
-                                  ),
+                                      color: VentlyColors.berryMagenta),
                                 ),
                               ),
                             ),
                       ] else
-                        WallButton(
-                          label: 'Turn on 2FA',
-                          icon: Icons.lock_outline,
-                          onPressed: _busy ? null : _enroll,
-                          busy: _busy,
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: VentlyColors.berryMagenta,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            onPressed: _busy ? null : _enroll,
+                            icon: const Icon(Icons.lock_outline, size: 18),
+                            label: const Text('Turn on 2FA',
+                                style: TextStyle(fontWeight: FontWeight.w900)),
+                          ),
                         ),
                     ],
                   ),
@@ -349,10 +361,7 @@ class _SecretBlock extends StatelessWidget {
           Text(
             'Secret (paste into authenticator)',
             style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: context.ink,
-            ),
+                fontSize: 11, fontWeight: FontWeight.w800, color: context.ink),
           ),
           const SizedBox(height: 4),
           Row(
@@ -373,8 +382,7 @@ class _SecretBlock extends StatelessWidget {
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: secret));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Secret copied')),
-                  );
+                      const SnackBar(content: Text('Secret copied')));
                 },
               ),
             ],
@@ -383,10 +391,9 @@ class _SecretBlock extends StatelessWidget {
           Text(
             'Or copy the full setup URI:',
             style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: context.ink.withOpacity(0.7),
-            ),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: context.ink.withOpacity(0.7)),
           ),
           Row(
             children: [
@@ -402,9 +409,8 @@ class _SecretBlock extends StatelessWidget {
                 icon: const Icon(Icons.copy, size: 18),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: uri));
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('URI copied')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('URI copied')));
                 },
               ),
             ],
