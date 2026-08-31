@@ -39,14 +39,52 @@ curl -F file=@some.jpg http://localhost:8090/classify
 
 ## Host it for nothing
 
-Any free tier that runs a container works — Hugging Face Spaces (Docker SDK),
-Fly.io scaled to zero, or Render's free web service. Then:
+**Hugging Face Spaces no longer works for this.** Docker and Gradio Spaces now
+require a paid plan; only Static Spaces are free, and a Static Space cannot run
+Python. Checked on the signup page, not assumed.
 
-```bash
-supabase secrets set NSFW_CLASSIFIER_URL=https://<your-host>
-supabase secrets set MEDIA_SCAN_ENABLED=true
-supabase functions deploy media-scan
-```
+### Koyeb — the recommended path
+
+Free tier, one Docker web service, 512MB RAM, **no sleep**, and normally no
+credit card. It builds straight from this repository, so no image registry and
+no tokens are involved.
+
+1. Sign in at [koyeb.com](https://www.koyeb.com) with GitHub.
+2. **Create Web Service → GitHub →** this repository.
+3. Set:
+
+   | Field | Value |
+   |---|---|
+   | Work directory | `services/nsfw-classifier` |
+   | Builder | Dockerfile |
+   | Dockerfile path | `Dockerfile` (relative to the work directory) |
+   | Port | `8090` |
+   | Instance | Free |
+   | Health check path | `/health` |
+
+4. Deploy, then confirm it is alive:
+
+   ```bash
+   curl https://<your-app>.koyeb.app/health
+   # {"ok":true,"model_loaded":false}
+   ```
+
+The model loads on the first request. `POST /warm` loads it without sending an
+image, which is worth doing once after each deploy.
+
+### Others that work
+
+- **Render** — free web service, no Dockerfile changes needed, but it sleeps
+  after 15 minutes of inactivity.
+- **Google Cloud Run** — a genuinely generous always-free tier, but it wants a
+  billing account on file.
+- **Fly.io** — works well, also wants a card now.
+
+### Memory
+
+The free tiers above give 512MB. This fits: the ONNX weights are 127kB and
+onnxruntime is the bulk of the image, not the runtime. If a host reports an
+out-of-memory kill, `OMP_NUM_THREADS=1` cuts onnxruntime's arena.
 
 ## About sleeping
 
