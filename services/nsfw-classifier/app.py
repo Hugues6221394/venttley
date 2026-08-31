@@ -47,6 +47,33 @@ def detector():
     return _detector
 
 
+def decide(detections) -> tuple[str, dict[str, float]]:
+    """Turn raw detections into one verdict.
+
+    Separate from the endpoint on purpose. This is the part that decides
+    whether a person's photo gets published, and it needs to be testable
+    without a folder of pornography on a laptop — feed it detection dicts and
+    assert the verdict.
+
+    "blocked" always wins over "sensitive" regardless of order, because the
+    detections arrive in whatever order the model emits them and a strong
+    genitals hit must not be downgraded by a later, milder one.
+    """
+    labels: dict[str, float] = {}
+    verdict = "clean"
+    for item in detections or []:
+        name = str(item.get("class") or item.get("label") or "")
+        score = float(item.get("score") or 0)
+        if not name:
+            continue
+        labels[name] = max(labels.get(name, 0.0), score)
+        if name in BLOCKED and score >= BLOCK_AT:
+            verdict = "blocked"
+        elif name in SENSITIVE and score >= SENSITIVE_AT and verdict != "blocked":
+            verdict = "sensitive"
+    return verdict, labels
+
+
 @app.get("/health")
 def health() -> dict[str, bool]:
     return {"ok": True, "model_loaded": _detector is not None}
@@ -78,16 +105,5 @@ async def classify(file: UploadFile = File(...)) -> dict:
         tmp.flush()
         detections = detector().detect(tmp.name)
 
-    labels: dict[str, float] = {}
-    verdict = "clean"
-    for item in detections or []:
-        name = str(item.get("class") or item.get("label") or "")
-        score = float(item.get("score") or 0)
-        if not name:
-            continue
-        labels[name] = max(labels.get(name, 0.0), score)
-        if name in BLOCKED and score >= BLOCK_AT:
-            verdict = "blocked"
-        elif name in SENSITIVE and score >= SENSITIVE_AT and verdict != "blocked":
-            verdict = "sensitive"
+    verdict, labels = decide(detections)
     return {"verdict": verdict, "labels": labels, "csam": False}
