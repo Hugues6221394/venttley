@@ -81,13 +81,25 @@ function worse(a: Verdict, b: Verdict): Verdict {
 async function scanLocal(bytes: Uint8Array): Promise<ScanResult | null> {
   const base = Deno.env.get("NSFW_CLASSIFIER_URL")?.replace(/\/$/, "");
   if (!base) return null;
+
+  // Free hosting tiers sleep. Render warns that a cold start "can delay
+  // requests by 50 seconds or more", and the original 8s budget guaranteed
+  // that every first upload after a quiet spell timed out and got quarantined
+  // — safe, but it would look like the scanner does not work.
+  //
+  // Generous because nothing is waiting on this: the client fires media-scan
+  // and polls media_status, so a slow scan costs a few more seconds of "being
+  // checked", not a blocked screen. Configurable so a paid always-on host can
+  // tighten it back down.
+  const timeoutMs = Number(Deno.env.get("NSFW_TIMEOUT_MS") ?? "60000");
+
   try {
     const form = new FormData();
     form.append("file", new Blob([bytes]), "image.bin");
     const res = await fetch(`${base}/classify`, {
       method: "POST",
       body: form,
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) return null;
     const body = await res.json();

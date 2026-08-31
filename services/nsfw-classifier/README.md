@@ -74,8 +74,17 @@ image, which is worth doing once after each deploy.
 
 ### Others that work
 
-- **Render** — free web service, no Dockerfile changes needed, but it sleeps
-  after 15 minutes of inactivity.
+- **Render** — free web service. Sleeps after 15 minutes and warns that waking
+  "can delay requests by 50 seconds or more", so `media-scan` allows 60s
+  (`NSFW_TIMEOUT_MS`). Nothing is waiting on the scan — the client polls
+  media_status — so a slow first scan costs a few more seconds of "being
+  checked", not a blocked screen.
+
+  **Render's path fields are relative to the Root Directory, not the repo
+  root**, despite what the hint text next to them says. With Root Directory set
+  to `services/nsfw-classifier`, the Dockerfile Path is `./Dockerfile` and the
+  build context must be left empty. Repeating the subdirectory produces
+  `.../services/nsfw-classifier/services: no such file or directory`.
 - **Google Cloud Run** — a genuinely generous always-free tier, but it wants a
   billing account on file.
 - **Fly.io** — works well, also wants a card now.
