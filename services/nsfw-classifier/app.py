@@ -103,7 +103,17 @@ async def classify(file: UploadFile = File(...)) -> dict:
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
         tmp.write(data)
         tmp.flush()
-        detections = detector().detect(tmp.name)
+        try:
+            detections = detector().detect(tmp.name)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            # Undecodable bytes with an image extension land here. media-scan
+            # already treats any non-ok answer as unsafe and quarantines, so
+            # this is not a safety hole either way — but an unhandled traceback
+            # in a safety service buries the failures that do matter, and
+            # "Internal Server Error" tells the caller nothing it can act on.
+            raise HTTPException(status_code=400, detail="undecodable_image") from exc
 
     verdict, labels = decide(detections)
     return {"verdict": verdict, "labels": labels, "csam": False}
