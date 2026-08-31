@@ -27,4 +27,11 @@ RUN useradd -m app && chown -R app:app /app
 USER app
 
 EXPOSE 8090
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8090"]
+
+# Bind to $PORT when the host sets one, 8090 otherwise.
+#
+# Render, Fly and Cloud Run all inject PORT and health-check that port; a
+# container that hardcodes its own fails the health check and the deploy rolls
+# back with nothing obviously wrong in the logs. Shell form so the variable is
+# actually expanded — the exec form would pass the literal string "${PORT}".
+CMD ["sh", "-c", "exec uvicorn app:app --host 0.0.0.0 --port ${PORT:-8090}"]
