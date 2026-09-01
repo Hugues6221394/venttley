@@ -143,8 +143,11 @@ class SupabaseBackend {
 
   static const _feedRealtimeDebounce = Duration(seconds: 4);
   static const _maxTribeFeedRealtimeFilters = 20;
+  static const _maxInboxRealtimeRoomFilters = 30;
   Timer? _feedInvalidationTimer;
   bool _feedInvalidationScheduled = false;
+
+  final Set<String> _inboxRoomIds = {};
 
   RealtimeChannel? _feedChannel;
   RealtimeChannel? _roomsChannel;
@@ -723,9 +726,21 @@ class SupabaseBackend {
     await _refreshLikedAndSaved();
     _subscribeFeedRealtime();
     _subscribeRoomsRealtime();
-    _subscribeMessagesNotifyRealtime();
+    await _syncInboxRealtimeSubscriptions();
     _scheduleFeedInvalidation(immediate: true);
     _emitRooms();
+  }
+
+  Future<void> _syncInboxRealtimeSubscriptions() async {
+    try {
+      final rooms = await inbox(tab: 'all');
+      _inboxRoomIds
+        ..clear()
+        ..addAll(rooms.map((r) => r.roomId));
+    } catch (_) {
+      // Inbox may be empty on a fresh account — still subscribe once rooms land.
+    }
+    _subscribeMessagesNotifyRealtime();
   }
 
   Future<void> _refreshLikedAndSaved() async {
@@ -833,29 +848,37 @@ class SupabaseBackend {
         .subscribe();
   }
 
-  /// New messages don't always touch chat_rooms — refresh inbox on INSERT
-  /// so unread counts + foreground notifications stay current.
+  /// Scoped inbox realtime — one INSERT listener per room the caller belongs to.
+  /// Avoids the global `chat_messages` WAL fan-out that crushed Free-tier latency.
   void _subscribeMessagesNotifyRealtime() {
     _messagesNotifyChannel?.unsubscribe();
-    _messagesNotifyChannel = _client
-        .channel('public:chat_messages:inbox-notify')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'chat_messages',
-          callback: (payload) {
-            _emitRooms();
-            // The client has now received this message — stamp the
-            // "delivered" tick for the sender (migration 0114). RLS
-            // already scopes events to rooms we belong to.
-            final roomId = payload.newRecord['room_id'] as String?;
-            final senderId = payload.newRecord['sender_id'] as String?;
-            if (roomId != null && senderId != null && senderId != _uid) {
-              unawaited(markRoomDelivered(roomId));
-            }
-          },
-        )
-        .subscribe();
+    final uid = _uid;
+    if (uid == null || _inboxRoomIds.isEmpty) return;
+
+    var channel = _client.channel('inbox:scoped:$uid');
+    for (final roomId in _inboxRoomIds.take(_maxInboxRealtimeRoomFilters)) {
+      channel = channel.onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'chat_messages',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'room_id',
+          value: roomId,
+        ),
+        callback: (payload) {
+          _emitRooms();
+          final senderId = payload.newRecord['sender_id'] as String?;
+          if (senderId != null && senderId != uid) {
+            unawaited(markRoomDelivered(roomId));
+          }
+          // If the open DM thread is watching, postgres_changes on that room
+          // already appends — this path is for inbox badges + background rooms.
+        },
+      );
+    }
+
+    _messagesNotifyChannel = channel..subscribe();
   }
 
   // ===================================================================
@@ -1992,33 +2015,58 @@ class SupabaseBackend {
   /// thread on every event so reads include the joined sender row.
   Stream<List<TribeMessage>> watchTribeMessages(String tribeId) {
     final controller = StreamController<List<TribeMessage>>();
-    Future<void> emit() async {
-      try {
-        controller.add(await tribeMessages(tribeId));
-      } catch (_) {}
-    }
 
-    _tribeMessageRefreshers[tribeId] = emit;
+    Future<void> reload() => _reloadTribe(tribeId, controller);
 
-    final channel = _client.channel('tribe_chat_$tribeId')
-      ..onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'tribe_messages',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'tribe_id',
-          value: tribeId,
-        ),
-        callback: (_) => emit(),
-      )
-      ..subscribe((_, __) {});
-    emit();
+    _tribeMessageRefreshers[tribeId] = reload;
+    _tribePublishers[tribeId] = (list) {
+      if (!controller.isClosed) controller.add(list);
+    };
 
-    controller.onCancel = () async {
+    final channel = _client
+        .channel('tribe_chat_$tribeId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'tribe_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'tribe_id',
+            value: tribeId,
+          ),
+          callback: (payload) =>
+              _appendTribeFromRealtime(tribeId, controller, payload.newRecord),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'tribe_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'tribe_id',
+            value: tribeId,
+          ),
+          callback: (_) => reload(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'tribe_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'tribe_id',
+            value: tribeId,
+          ),
+          callback: (_) => reload(),
+        )
+        .subscribe();
+
+    controller.onListen = reload;
+    controller.onCancel = () {
       _tribeMessageRefreshers.remove(tribeId);
-      await channel.unsubscribe();
-      await controller.close();
+      _tribePublishers.remove(tribeId);
+      _tribeSnapshots.remove(tribeId);
+      channel.unsubscribe();
     };
     return controller.stream;
   }
@@ -2052,7 +2100,18 @@ class SupabaseBackend {
         'p_metadata': metadata,
       },
     );
-    return res as String;
+    final messageId = res as String;
+    try {
+      final row = await _client
+          .from('tribe_messages_feed')
+          .select()
+          .eq('message_id', messageId)
+          .single();
+      _injectTribeMessage(tribeId, _tribeMessageFromRow(row));
+    } catch (_) {
+      unawaited(refreshTribeMessages(tribeId));
+    }
+    return messageId;
   }
 
   Future<void> voteTribeChatPoll({
@@ -6653,6 +6712,10 @@ class SupabaseBackend {
   /// swaps it in place.
   final Map<String, Future<void> Function()> _messageRefreshers = {};
   final Map<String, Future<void> Function()> _tribeMessageRefreshers = {};
+  final Map<String, List<ChatMessage>> _dmSnapshots = {};
+  final Map<String, List<TribeMessage>> _tribeSnapshots = {};
+  final Map<String, void Function(List<ChatMessage>)> _dmPublishers = {};
+  final Map<String, void Function(List<TribeMessage>)> _tribePublishers = {};
 
   /// Re-read a conversation without collapsing its stream. A no-op when nothing
   /// is watching, because then there is nothing on screen to keep.
@@ -6662,22 +6725,140 @@ class SupabaseBackend {
   Future<void> refreshTribeMessages(String tribeId) async =>
       _tribeMessageRefreshers[tribeId]?.call();
 
+  void _publishDm(String roomId, List<ChatMessage> list) {
+    _dmSnapshots[roomId] = list;
+    _dmPublishers[roomId]?.call(list);
+  }
+
+  void _publishTribe(String tribeId, List<TribeMessage> list) {
+    _tribeSnapshots[tribeId] = list;
+    _tribePublishers[tribeId]?.call(list);
+  }
+
+  void _injectDmMessage(String roomId, ChatMessage message) {
+    final current = _dmSnapshots[roomId];
+    if (current != null && _dmPublishers.containsKey(roomId)) {
+      if (!current.any((m) => m.messageId == message.messageId)) {
+        _publishDm(roomId, [...current, message]);
+      }
+      unawaited(_messageRefreshers[roomId]?.call());
+      return;
+    }
+    unawaited(_messageRefreshers[roomId]?.call());
+  }
+
+  void _injectTribeMessage(String tribeId, TribeMessage message) {
+    final current = _tribeSnapshots[tribeId];
+    if (current != null && _tribePublishers.containsKey(tribeId)) {
+      if (!current.any((m) => m.messageId == message.messageId)) {
+        _publishTribe(tribeId, [...current, message]);
+      }
+      unawaited(_tribeMessageRefreshers[tribeId]?.call());
+      return;
+    }
+    unawaited(_tribeMessageRefreshers[tribeId]?.call());
+  }
+
+  Future<void> _appendDmFromRealtime(
+    String roomId,
+    StreamController<List<ChatMessage>> controller,
+    Map<String, dynamic> record,
+  ) async {
+    try {
+      final incoming = _messageFromRow(record);
+      final current = _dmSnapshots[roomId];
+      if (current == null) {
+        await _reloadDm(roomId, controller);
+        return;
+      }
+      if (current.any((m) => m.messageId == incoming.messageId)) {
+        await _reloadDm(roomId, controller);
+        return;
+      }
+      final next = [...current, incoming];
+      _publishDm(roomId, next);
+      if (!controller.isClosed) controller.add(next);
+      unawaited(_reloadDm(roomId, controller));
+    } catch (_) {
+      await _reloadDm(roomId, controller);
+    }
+  }
+
+  Future<void> _reloadDm(
+    String roomId,
+    StreamController<List<ChatMessage>> controller,
+  ) async {
+    try {
+      final list = await messages(roomId);
+      _dmSnapshots[roomId] = list;
+      if (!controller.isClosed) controller.add(list);
+    } catch (_) {
+      /* listener retries on next event */
+    }
+  }
+
+  Future<void> _appendTribeFromRealtime(
+    String tribeId,
+    StreamController<List<TribeMessage>> controller,
+    Map<String, dynamic> record,
+  ) async {
+    try {
+      final rows = await _client
+          .from('tribe_messages_feed')
+          .select()
+          .eq('message_id', record['message_id'] as String)
+          .limit(1);
+      if ((rows as List).isEmpty) {
+        await _reloadTribe(tribeId, controller);
+        return;
+      }
+      final incoming = _tribeMessageFromRow(
+        (rows.first as Map).cast<String, dynamic>(),
+      );
+      final current = _tribeSnapshots[tribeId];
+      if (current == null) {
+        await _reloadTribe(tribeId, controller);
+        return;
+      }
+      if (current.any((m) => m.messageId == incoming.messageId)) {
+        await _reloadTribe(tribeId, controller);
+        return;
+      }
+      final next = [...current, incoming];
+      _publishTribe(tribeId, next);
+      if (!controller.isClosed) controller.add(next);
+    } catch (_) {
+      await _reloadTribe(tribeId, controller);
+    }
+  }
+
+  Future<void> _reloadTribe(
+    String tribeId,
+    StreamController<List<TribeMessage>> controller,
+  ) async {
+    try {
+      final list = await tribeMessages(tribeId);
+      _tribeSnapshots[tribeId] = list;
+      if (!controller.isClosed) controller.add(list);
+    } catch (_) {
+      /* listener retries on next event */
+    }
+  }
+
   Stream<List<ChatMessage>> watchMessages(String roomId) {
     final controller = StreamController<List<ChatMessage>>();
-    Future<void> emit() async {
-      try {
-        controller.add(await messages(roomId));
-      } catch (_) {
-        /* listener retries on next event */
-      }
-    }
 
-    _messageRefreshers[roomId] = emit;
+    Future<void> reload() => _reloadDm(roomId, controller);
 
-    final channel = _client
-        .channel('public:chat_messages:room=$roomId')
+    _messageRefreshers[roomId] = reload;
+    _dmPublishers[roomId] = (list) {
+      if (!controller.isClosed) controller.add(list);
+    };
+
+    final msgChannel = _client
+        .channel('dm:msgs:$roomId')
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'chat_messages',
           filter: PostgresChangeFilter(
@@ -6685,20 +6866,57 @@ class SupabaseBackend {
             column: 'room_id',
             value: roomId,
           ),
-          callback: (_) => emit(),
+          callback: (payload) =>
+              _appendDmFromRealtime(roomId, controller, payload.newRecord),
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'chat_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id',
+            value: roomId,
+          ),
+          callback: (_) => reload(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'chat_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id',
+            value: roomId,
+          ),
+          callback: (_) => reload(),
+        )
+        .subscribe();
+
+    // Reactions are on a separate channel so a missing `room_id` column
+    // (pre-migration) cannot break message delivery.
+    final reactionChannel = _client
+        .channel('dm:rxn:$roomId')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'chat_message_reactions',
-          callback: (_) => emit(),
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id',
+            value: roomId,
+          ),
+          callback: (_) => reload(),
         )
         .subscribe();
 
-    controller.onListen = emit;
+    controller.onListen = reload;
     controller.onCancel = () {
       _messageRefreshers.remove(roomId);
-      channel.unsubscribe();
+      _dmPublishers.remove(roomId);
+      _dmSnapshots.remove(roomId);
+      msgChannel.unsubscribe();
+      reactionChannel.unsubscribe();
     };
     return controller.stream;
   }
@@ -6924,8 +7142,7 @@ class SupabaseBackend {
               },
             )
             as String;
-    unawaited(_emitRooms());
-    return ChatMessage(
+    final message = ChatMessage(
       messageId: messageId,
       roomId: roomId,
       senderId: uid,
@@ -6937,6 +7154,9 @@ class SupabaseBackend {
       attachedMediaType: attachedMediaType,
       parentMessageId: parentMessageId,
     );
+    _injectDmMessage(roomId, message);
+    unawaited(_emitRooms());
+    return message;
   }
 
   // ===================================================================
@@ -7529,6 +7749,14 @@ class SupabaseBackend {
     try {
       final list = await inbox(tab: 'all');
       _roomsController.add(list);
+      final nextIds = list.map((r) => r.roomId).toSet();
+      if (nextIds.length != _inboxRoomIds.length ||
+          !nextIds.containsAll(_inboxRoomIds)) {
+        _inboxRoomIds
+          ..clear()
+          ..addAll(nextIds);
+        _subscribeMessagesNotifyRealtime();
+      }
     } catch (_) {}
   }
 

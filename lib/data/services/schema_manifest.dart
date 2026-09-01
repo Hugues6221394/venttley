@@ -48,4 +48,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20260908090000': 'requeue_media_scan',
   '20260909090000': 'outbox_explicit_recipient',
   '20260910090000': 'recovery_methods',
+  '20260911090000': 'requeue_skipped_addressed_mail',
 };

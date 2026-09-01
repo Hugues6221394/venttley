@@ -167,7 +167,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               idempotencyKey: operationId,
             );
         await outbox.discardStagedMedia(stagedMedia.path);
-        unawaited(ref.read(repositoryProvider).refreshMessages(widget.roomId));
+        _scrollToLatest();
       } catch (error) {
         if (UserFriendlyErrors.isPermanent(error)) {
           await outbox.discardStagedMedia(stagedMedia?.path);
@@ -843,9 +843,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     _replyingTo = null;
                   });
                 }
-                unawaited(
-                  ref.read(repositoryProvider).refreshMessages(widget.roomId),
-                );
                 _scrollToLatest();
                 // Reuse the advisory pre-submit verdict to surface help quickly.
                 // PostgreSQL separately scans the server-readable body at
