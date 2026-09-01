@@ -40,6 +40,8 @@ interface EmailDelivery {
   template: string;
   variables: Record<string, unknown> | null;
   attempts: number;
+  /** Explicit recipient; null means resolve from the account. */
+  to_address: string | null;
 }
 
 function plainValue(
@@ -262,15 +264,28 @@ async function deliverOne(
     await complete(supabase, delivery, "failed", "unknown_template");
     return "failed";
   }
-  const recipient = await supabase.auth.admin.getUserById(delivery.user_id);
-  if (recipient.error) {
-    await complete(supabase, delivery, "retry", "recipient_lookup_failed");
-    return "retried";
-  }
-  const to = recipient.data.user?.email;
-  if (!to || to.endsWith("@id.venttly.app")) {
-    await complete(supabase, delivery, "skipped", "no_real_email");
-    return "skipped";
+  // An explicit recipient wins and skips the auth lookup entirely. This is how
+  // a recovery address gets verified: the whole point is to mail somewhere the
+  // account does not yet own, so resolving from auth.users.email would defeat
+  // it. Only SECURITY DEFINER callers can set the column — clients have no
+  // INSERT privilege on email_outbox — and a CHECK constraint refuses the
+  // synthetic domain there.
+  let to = delivery.to_address ?? null;
+
+  if (!to) {
+    const recipient = await supabase.auth.admin.getUserById(delivery.user_id);
+    if (recipient.error) {
+      await complete(supabase, delivery, "retry", "recipient_lookup_failed");
+      return "retried";
+    }
+    to = recipient.data.user?.email ?? null;
+    if (!to || to.endsWith("@id.venttly.app")) {
+      // Every anonymous account has a synthetic address, so this is the normal
+      // outcome for them rather than an error — and it is why nothing queued
+      // without an explicit recipient has ever reached one.
+      await complete(supabase, delivery, "skipped", "no_real_email");
+      return "skipped";
+    }
   }
 
   const variables = delivery.variables ?? {};
