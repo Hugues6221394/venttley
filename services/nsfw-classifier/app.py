@@ -19,24 +19,47 @@ _detector = None
 # 200MB body should not be able to take down moderation for everybody.
 MAX_BYTES = int(os.environ.get("NSFW_MAX_BYTES", str(12 * 1024 * 1024)))
 
-# Detection thresholds as configuration rather than literals, so the line can
-# be moved without a redeploy.
-BLOCK_AT = float(os.environ.get("NSFW_BLOCK_AT", "0.5"))
-SENSITIVE_AT = float(os.environ.get("NSFW_SENSITIVE_AT", "0.5"))
+# Thresholds as configuration rather than literals, so a line can be moved
+# without a redeploy.
+#
+# BLOCK_AT is deliberately high. Blocking deletes somebody's post, and this
+# model returns confidences, not certainties — a wrongly blocked holiday photo
+# is a reason to leave an app, while a wrongly veiled one is a blur with an
+# appeal behind it. So a block needs the model to be quite sure.
+BLOCK_AT = float(os.environ.get("NSFW_BLOCK_AT", "0.75"))
 
-BLOCKED = {
+# Below BLOCK_AT but above this, exposed nudity is veiled rather than refused —
+# the band where the model thinks it saw something and might be wrong.
+NUDITY_VEIL_AT = float(os.environ.get("NSFW_NUDITY_VEIL_AT", "0.40"))
+
+# Clothed-but-suggestive detections only ever reach "sensitive".
+SUGGESTIVE_AT = float(os.environ.get("NSFW_SUGGESTIVE_AT", "0.50"))
+
+# Actual nudity — a body part that is exposed, not clothed. A high-confidence
+# detection here refuses the upload outright.
+NUDITY_EXPOSED = {
     "FEMALE_GENITALIA_EXPOSED",
     "MALE_GENITALIA_EXPOSED",
     "ANUS_EXPOSED",
-}
-SENSITIVE = {
     "FEMALE_BREAST_EXPOSED",
     "BUTTOCKS_EXPOSED",
+}
+
+# Suggestive but clothed. Veils for review and NEVER blocks: the difference
+# between "covered" and "exposed" is the difference between a swimsuit photo and
+# pornography, and deleting the former would be the worse mistake by far.
+SUGGESTIVE = {
     "FEMALE_GENITALIA_COVERED",
     "MALE_GENITALIA_COVERED",
     "ANUS_COVERED",
 }
 
+# Everything else NudeNet reports — FACE_*, BELLY_EXPOSED, ARMPITS_EXPOSED,
+# FEET_EXPOSED, FEMALE_BREAST_COVERED and the rest — is ordinary human anatomy
+# in ordinary photographs and is deliberately absent from both sets. A person in
+# a vest top is not a moderation event. FEMALE_BREAST_COVERED in particular
+# fires at ~0.46 on a woman in a business suit, which is exactly why it is not
+# here.
 
 def detector():
     global _detector
@@ -50,27 +73,52 @@ def detector():
 def decide(detections) -> tuple[str, dict[str, float]]:
     """Turn raw detections into one verdict.
 
-    Separate from the endpoint on purpose. This is the part that decides
-    whether a person's photo gets published, and it needs to be testable
-    without a folder of pornography on a laptop — feed it detection dicts and
-    assert the verdict.
+    Three outcomes, and the asymmetry between them is the whole design:
 
-    "blocked" always wins over "sensitive" regardless of order, because the
-    detections arrive in whatever order the model emits them and a strong
-    genitals hit must not be downgraded by a later, milder one.
+      blocked   — exposed nudity the model is confident about. The post is
+                  refused and removed.
+      sensitive — exposed nudity the model is unsure about, or something
+                  clothed-but-suggestive. Veiled, still there, appealable.
+      clean     — everything else.
+
+    Blocking is the only destructive outcome, so it is the hardest to reach: it
+    needs a label that means *exposed*, at BLOCK_AT or above. Anything less
+    certain falls to sensitive rather than being deleted. A wrongly blocked
+    holiday photo is a reason to leave an app; a wrongly veiled one is a blur
+    with a way back.
+
+    Kept as a pure function so this can be tested exhaustively without needing
+    explicit imagery to hand — see test_decide.py.
     """
     labels: dict[str, float] = {}
     verdict = "clean"
+
+    def escalate(to: str) -> None:
+        nonlocal verdict
+        rank = {"clean": 0, "sensitive": 1, "blocked": 2}
+        if rank[to] > rank[verdict]:
+            verdict = to
+
     for item in detections or []:
         name = str(item.get("class") or item.get("label") or "")
-        score = float(item.get("score") or 0)
         if not name:
             continue
+        try:
+            score = float(item.get("score") or 0)
+        except (TypeError, ValueError):
+            continue
         labels[name] = max(labels.get(name, 0.0), score)
-        if name in BLOCKED and score >= BLOCK_AT:
-            verdict = "blocked"
-        elif name in SENSITIVE and score >= SENSITIVE_AT and verdict != "blocked":
-            verdict = "sensitive"
+
+        if name in NUDITY_EXPOSED:
+            if score >= BLOCK_AT:
+                escalate("blocked")
+            elif score >= NUDITY_VEIL_AT:
+                escalate("sensitive")
+        elif name in SUGGESTIVE and score >= SUGGESTIVE_AT:
+            # Never escalates past sensitive, whatever the confidence. Clothed
+            # is not nudity, and no amount of model certainty makes it so.
+            escalate("sensitive")
+
     return verdict, labels
 
 

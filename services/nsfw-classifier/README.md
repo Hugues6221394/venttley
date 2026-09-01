@@ -110,9 +110,42 @@ instead of published. Two cheap mitigations, both already in place:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `NSFW_BLOCK_AT` | `0.5` | Confidence at which an exposed-genitals detection blocks the upload |
-| `NSFW_SENSITIVE_AT` | `0.5` | Confidence at which a lesser detection quarantines it |
+| `NSFW_BLOCK_AT` | `0.75` | Exposed nudity at or above this **refuses** the upload |
+| `NSFW_NUDITY_VEIL_AT` | `0.40` | Exposed nudity between this and the block line is **veiled** instead |
+| `NSFW_SUGGESTIVE_AT` | `0.50` | Clothed-but-suggestive detections **veil**, and can never block |
 | `NSFW_MAX_BYTES` | `12582912` | Reject larger bodies outright |
+
+## The policy, and why it is asymmetric
+
+Three outcomes:
+
+- **blocked** — exposed nudity the model is confident about. The post is
+  refused and removed.
+- **sensitive** — exposed nudity the model is unsure about, or something
+  clothed-but-suggestive. Veiled, still there, appealable.
+- **clean** — everything else.
+
+Blocking is the only destructive outcome, so it is the hardest to reach. It
+requires a label meaning *exposed* at 0.75 or above. Anything less certain is
+veiled rather than deleted, because a wrongly blocked holiday photo is a reason
+to leave an app while a wrongly veiled one is a blur with a way back.
+
+**Covered is never blocked, at any confidence.** The difference between
+`FEMALE_BREAST_COVERED` and `FEMALE_BREAST_EXPOSED` is the difference between a
+swimsuit photo and pornography, and no amount of model certainty about a
+clothed person turns it into nudity.
+
+Everything else NudeNet reports — faces, bellies, armpits, feet, covered
+anything — is ordinary human anatomy in ordinary photographs and is absent from
+both sets. Measured: a woman in a business suit returns
+`FEMALE_BREAST_COVERED 0.46` and `FACE_FEMALE 0.86`. That must be, and is,
+clean.
+
+`test_decide.py` asserts all of this, including a class dedicated to the
+expensive mistake — every ordinary label, at full confidence, individually and
+all at once, must come back clean. Run it with `./run_tests.py`; no pytest
+needed, because being able to check this should not depend on what happens to
+be installed.
 
 ## What it will not do
 
