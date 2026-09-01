@@ -47,4 +47,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20260907090000': 'uploads_start_pending',
   '20260908090000': 'requeue_media_scan',
   '20260909090000': 'outbox_explicit_recipient',
+  '20260910090000': 'recovery_methods',
 };
