@@ -45,4 +45,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20260905090000': 'weak_password_bases',
   '20260906090000': 'reporter_identity_privacy',
   '20260907090000': 'uploads_start_pending',
+  '20260908090000': 'requeue_media_scan',
 };
