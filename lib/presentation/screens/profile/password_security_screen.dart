@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers.dart';
 import '../../../core/security_checkup.dart';
+import '../../../domain/entities/entities.dart';
 import '../../../data/services/supabase_backend.dart'
     show MfaChallengeRequiredException;
 import '../../theme/colors.dart';
@@ -28,12 +29,18 @@ class _PasswordSecurityScreenState
   DateTime? _passwordChangedAt;
   int? _deviceCount;
 
+  /// Null until the first load answers. Distinct from "nothing configured", so
+  /// the screen can show a neutral row rather than claiming a person has no way
+  /// back into their account before we have asked.
+  RecoveryMethods? _recovery;
+
   @override
   void initState() {
     super.initState();
     _loadFactors();
     _loadDeviceCount();
     _loadPasswordChangedAt();
+    _loadRecovery();
   }
 
   Future<void> _loadPasswordChangedAt() async {
@@ -86,7 +93,6 @@ class _PasswordSecurityScreenState
     final me = ref.watch(sessionProvider);
     final hasRealEmail = session.hasRealEmail;
     final emailVerified = session.isEmailVerified;
-    final email = session.currentEmail;
 
     final checkup = SecurityCheckup(
       passwordChangedAt: _passwordChangedAt,
@@ -128,16 +134,22 @@ class _PasswordSecurityScreenState
             subtitle: 'Update the password you use to sign in',
             onTap: _openChangePassword,
           ),
+          // Reads the recovery method, not the login email. The two were the
+          // same thing before, which is what made adding a recovery address
+          // change how you sign in.
           _Tile(
             icon: Icons.alternate_email_rounded,
             title: 'Recovery email',
-            subtitle: email == null || !hasRealEmail
-                ? 'Not set — add one to recover your account'
-                : checkup.recoveryOk
-                ? _mask(email)
-                : '${_mask(email)} • unconfirmed',
-            trailingBadge: hasRealEmail && !emailVerified ? 'Confirm' : null,
+            subtitle: _recoverySubtitle(_recovery?.email, 'email address'),
+            trailingBadge:
+                _recovery?.email.pending == true ? 'Enter code' : null,
             onTap: _openRecoveryEmail,
+          ),
+          _Tile(
+            icon: Icons.sms_outlined,
+            title: 'Recovery phone',
+            subtitle: _recoverySubtitle(_recovery?.phone, 'phone number'),
+            onTap: _openRecoveryPhone,
           ),
           _Tile(
             icon: Icons.verified_user_outlined,
@@ -451,21 +463,269 @@ class _PasswordSecurityScreenState
 
   // ---- Recovery email ----------------------------------------------------
 
-  Future<void> _openRecoveryEmail() async {
-    final session = ref.read(sessionProvider.notifier);
-    final hasRealEmail = session.hasRealEmail;
-    final emailVerified = session.isEmailVerified;
+  // ── Recovery methods ──────────────────────────────────────────────────
+  //
+  // Was: one sheet that called auth.updateUser(email:), replacing the
+  // account's login address. That silently changed what the person signs in
+  // with, and failed anyway because Supabase confirms an email change to the
+  // old address too — which on an anonymous account is the synthetic
+  // @id.venttly.app that GoTrue rejects. Hence the "Couldn't save that email"
+  // that arrived together with the email.
+  //
+  // Now two steps against a recovery method that is separate from the login:
+  // nominate an address, then prove you read it with a 6-digit code. A code
+  // rather than a link because mail providers prefetch links and can spend a
+  // one-time token before the person ever clicks it.
 
-    // Already have a real email that just needs confirming → 6-digit verify.
-    if (hasRealEmail && !emailVerified) {
-      await _verifyExistingEmail();
+  /// One line describing where a recovery method stands.
+  ///
+  /// Three states worth distinguishing, because they ask different things of
+  /// the reader: nothing set (do something), set but unproven (finish it), and
+  /// verified (nothing to do).
+  String _recoverySubtitle(RecoveryMethod? method, String noun) {
+    if (_recovery == null) return 'Checking…';
+    if (method == null || method.isEmpty) {
+      return 'Not set — add a $noun to recover your account';
+    }
+    if (method.verified) return '${method.masked} • verified';
+    return '${method.masked} • verification required';
+  }
+
+  Future<void> _loadRecovery() async {
+    try {
+      final methods = await ref.read(repositoryProvider).myRecoveryMethods();
+      if (!mounted) return;
+      setState(() => _recovery = methods);
+    } catch (_) {
+      // Leave the last known state alone. Blanking the section on a failed
+      // refresh would read as "you have no recovery method", which is a
+      // frightening thing to tell somebody incorrectly.
+    }
+  }
+
+  Future<void> _openRecoveryEmail() async {
+    final current = _recovery?.email;
+
+    // Already nominated and waiting on a code — go straight to entering it
+    // rather than making them retype an address they already gave us.
+    if (current != null && current.pending) {
+      await _enterEmailCode(current.masked ?? '');
       return;
     }
 
-    String? error;
-    bool busy = false;
+    // Verified already: the likely intent is neither "add" nor "change", so
+    // ask. Removing a route back into an account should be a deliberate,
+    // visible act rather than a hidden gesture.
+    if (current != null && current.verified) {
+      final choice = await _chooseManageAction(current.masked ?? '');
+      if (choice == _ManageChoice.remove) {
+        await _removeRecovery(email: true);
+        return;
+      }
+      if (choice != _ManageChoice.change) return;
+    }
 
-    await showModalBottomSheet<void>(
+    final entered = await _promptForValue(
+      title: current?.verified == true
+          ? 'Change recovery email'
+          : 'Add a recovery email',
+      blurb: 'If you ever lose your password, this is how we get you back in. '
+          'We only use it for account recovery.',
+      hint: 'you@example.com',
+      keyboard: TextInputType.emailAddress,
+      initial: '',
+      action: 'Send code',
+    );
+    if (entered == null || entered.trim().isEmpty) return;
+
+    final masked = await _guard(
+      () => ref.read(repositoryProvider).setRecoveryEmail(entered),
+      onError: _recoveryErrorText,
+    );
+    if (masked == null || !mounted) return;
+    await _loadRecovery();
+    if (!mounted) return;
+    await _enterEmailCode(masked);
+  }
+
+  Future<void> _enterEmailCode(String masked) async {
+    final code = await _promptForValue(
+      title: 'Enter the code',
+      blurb: 'We sent a 6-digit code to $masked. It expires in 15 minutes.',
+      hint: '000000',
+      keyboard: TextInputType.number,
+      initial: '',
+      action: 'Verify',
+    );
+    if (code == null || code.trim().isEmpty) return;
+
+    // A throw here is the network or the server, NOT a wrong code. Saying
+    // "that code was wrong" when we never managed to ask would send somebody
+    // hunting for a fresh code they do not need.
+    final ok = await _guard(
+      () => ref.read(repositoryProvider).confirmRecoveryEmail(code),
+      onError: (_) =>
+          'Couldn\'t verify that code. Check your connection and try again.',
+    );
+    if (ok == null) return;
+    await _loadRecovery();
+    if (!mounted) return;
+
+    // A false return is a wrong or expired code, not a failure of the app —
+    // so it gets a specific message rather than "something went wrong".
+    _snack(
+      ok == true
+          ? 'Recovery email verified.'
+          : 'That code was wrong or has expired. Ask for a new one.',
+    );
+  }
+
+  Future<void> _openRecoveryPhone() async {
+    final current = _recovery?.phone;
+    if (current != null && !current.isEmpty) {
+      final choice = await _chooseManageAction(current.masked ?? '');
+      if (choice == _ManageChoice.remove) {
+        await _removeRecovery(email: false);
+        return;
+      }
+      if (choice != _ManageChoice.change) return;
+    }
+
+    final entered = await _promptForValue(
+      title: _recovery?.phone.isEmpty == false
+          ? 'Change recovery phone'
+          : 'Add a recovery phone',
+      blurb: 'Include your country code, like +250. Text-message recovery is '
+          'not switched on yet — your number is saved and will be confirmed '
+          'once it is.',
+      hint: '+250 7xx xxx xxx',
+      keyboard: TextInputType.phone,
+      initial: '',
+      action: 'Save',
+    );
+    if (entered == null || entered.trim().isEmpty) return;
+
+    final masked = await _guard(
+      () => ref.read(repositoryProvider).setRecoveryPhone(entered),
+      onError: _recoveryErrorText,
+    );
+    if (masked == null || !mounted) return;
+    await _loadRecovery();
+    if (!mounted) return;
+
+    // Told plainly rather than left looking broken. The number is stored; the
+    // confirmation step genuinely does not exist yet.
+    _snack('Saved $masked. We will confirm it when SMS is available.');
+  }
+
+  Future<void> _removeRecovery({required bool email}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(email ? 'Remove recovery email?' : 'Remove recovery phone?'),
+        content: const Text(
+          'You will have one less way back into your account if you lose your '
+          'password. Your recovery phrase still works.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep it'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await _guard(
+      () async {
+        final repo = ref.read(repositoryProvider);
+        if (email) {
+          await repo.clearRecoveryEmail();
+        } else {
+          await repo.clearRecoveryPhone();
+        }
+        return true;
+      },
+      onError: _recoveryErrorText,
+    );
+    await _loadRecovery();
+    if (mounted) _snack(email ? 'Recovery email removed.' : 'Recovery phone removed.');
+  }
+
+  /// Server error codes turned into something a person can act on. Anything
+  /// unrecognised falls through to a generic line rather than showing a raw
+  /// PostgREST payload.
+  String _recoveryErrorText(Object error) {
+    final text = error.toString();
+    if (text.contains('resend_too_soon')) {
+      return 'Wait a minute before asking for another code.';
+    }
+    if (text.contains('invalid_email')) {
+      // The server returns this both for a malformed address and for one
+      // already verified by somebody else, on purpose — telling them apart
+      // would let anyone test which emails have Venttly accounts.
+      return 'We cannot use that address. Try a different one.';
+    }
+    if (text.contains('invalid_phone')) {
+      return 'Enter the number with its country code, like +250788123456.';
+    }
+    return 'That did not work. Please try again.';
+  }
+
+  /// Change or remove, for a method that is already set.
+  Future<_ManageChoice?> _chooseManageAction(String masked) {
+    return showModalBottomSheet<_ManageChoice>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 14),
+            Text(
+              masked,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Change it'),
+              onTap: () => Navigator.pop(ctx, _ManageChoice.change),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline,
+                  color: VentlyColors.berryMagenta),
+              title: const Text('Remove it'),
+              subtitle: const Text('One less way back into your account'),
+              onTap: () => Navigator.pop(ctx, _ManageChoice.remove),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// One sheet for every short text answer this screen needs.
+  Future<String?> _promptForValue({
+    required String title,
+    required String blurb,
+    required String hint,
+    required TextInputType keyboard,
+    required String initial,
+    required String action,
+  }) async {
+    return showModalBottomSheet<String>(
       context: context,
       useRootNavigator: true,
       useSafeArea: true,
@@ -475,318 +735,86 @@ class _PasswordSecurityScreenState
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => ModalTextControllerScope(
-        initialValues: [hasRealEmail ? (session.currentEmail ?? '') : ''],
+        initialValues: [initial],
         builder: (ctx, controllers) {
           final controller = controllers.single;
-          return StatefulBuilder(
-            builder: (ctx, setSheet) {
-              return SingleChildScrollView(
-                padding: EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  top: 18,
-                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          return SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                      fontSize: 19, fontWeight: FontWeight.w900),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      hasRealEmail
-                          ? 'Change recovery email'
-                          : 'Add recovery email',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: context.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'We\'ll email a confirmation link to this address. Tap it to '
-                      'finish — your username login keeps working either way.',
-                      style: TextStyle(
-                        color: context.ink.withOpacity(0.6),
-                        fontSize: 13,
-                        height: 1.35,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: controller,
-                      keyboardType: TextInputType.emailAddress,
-                      autocorrect: false,
-                      decoration: InputDecoration(
-                        labelText: 'Email address',
-                        filled: true,
-                        fillColor: const Color(0xFFFFF1F6),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                    if (error != null) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        error!,
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: VentlyColors.berryMagenta,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onPressed: busy
-                          ? null
-                          : () async {
-                              final value = controller.text.trim();
-                              if (!_looksLikeEmail(value)) {
-                                setSheet(
-                                  () => error = 'Enter a valid email address.',
-                                );
-                                return;
-                              }
-                              setSheet(() {
-                                busy = true;
-                                error = null;
-                              });
-                              try {
-                                await session.setRecoveryEmail(value);
-                                if (ctx.mounted) Navigator.pop(ctx);
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Confirmation sent to $value. Tap the link '
-                                        'to finish.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              } catch (e) {
-                                setSheet(() {
-                                  busy = false;
-                                  error =
-                                      'Couldn\'t save that email. Try again.';
-                                });
-                              }
-                            },
-                      child: busy
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Send confirmation',
-                              style: TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                    ),
-                  ],
+                const SizedBox(height: 6),
+                Text(
+                  blurb,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(.7),
+                  ),
                 ),
-              );
-            },
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: keyboard,
+                  decoration: InputDecoration(
+                    hintText: hint,
+                    border: const OutlineInputBorder(),
+                  ),
+                  onSubmitted: (v) => Navigator.pop(ctx, v),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx, controller.text),
+                    child: Text(
+                      action,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),
     );
   }
 
-  /// Real email already on file but unverified → reuse the app's working
-  /// 6-digit code pipeline (sendEmailVerification / confirmEmailVerification).
-  Future<void> _verifyExistingEmail() async {
-    final session = ref.read(sessionProvider.notifier);
-    String? error;
-    bool busy = false;
-    bool sent = false;
+  /// Runs [task], turning a throw into a message instead of an unhandled
+  /// exception. Returns null when it failed, so callers can stop.
+  Future<T?> _guard<T>(
+    Future<T> Function() task, {
+    required String Function(Object error) onError,
+  }) async {
+    try {
+      return await task();
+    } catch (error) {
+      if (mounted) _snack(onError(error));
+      return null;
+    }
+  }
 
-    await showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => ModalTextControllerScope(
-        initialValues: const [''],
-        builder: (ctx, controllers) {
-          final codeCtl = controllers.single;
-          return StatefulBuilder(
-            builder: (ctx, setSheet) {
-              Future<void> send() async {
-                setSheet(() {
-                  busy = true;
-                  error = null;
-                });
-                try {
-                  await session.sendEmailVerification();
-                  if (!ctx.mounted) return;
-                  setSheet(() {
-                    busy = false;
-                    sent = true;
-                  });
-                } catch (_) {
-                  if (!ctx.mounted) return;
-                  setSheet(() {
-                    busy = false;
-                    error =
-                        'Couldn\'t send a code right now. Try again shortly.';
-                  });
-                }
-              }
-
-              return SingleChildScrollView(
-                padding: EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  top: 18,
-                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Confirm recovery email',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: context.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      sent
-                          ? 'Enter the 6-digit code we emailed to ${session.currentEmail ?? 'your inbox'}.'
-                          : 'We\'ll email a 6-digit code to ${session.currentEmail ?? 'your inbox'}.',
-                      style: TextStyle(
-                        color: context.ink.withOpacity(0.6),
-                        fontSize: 13,
-                        height: 1.35,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (sent)
-                      TextField(
-                        controller: codeCtl,
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
-                        decoration: InputDecoration(
-                          labelText: '6-digit code',
-                          counterText: '',
-                          filled: true,
-                          fillColor: const Color(0xFFFFF1F6),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                        ),
-                      ),
-                    if (error != null) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        error!,
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: VentlyColors.berryMagenta,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onPressed: busy
-                          ? null
-                          : () async {
-                              if (!sent) {
-                                await send();
-                                return;
-                              }
-                              if (codeCtl.text.trim().length != 6) {
-                                setSheet(
-                                  () => error = 'Enter the 6-digit code.',
-                                );
-                                return;
-                              }
-                              setSheet(() {
-                                busy = true;
-                                error = null;
-                              });
-                              try {
-                                final ok = await session
-                                    .confirmEmailVerification(
-                                      codeCtl.text.trim(),
-                                    );
-                                if (ok) {
-                                  if (ctx.mounted) Navigator.pop(ctx);
-                                  if (mounted) {
-                                    setState(() {});
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Recovery email confirmed.',
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                } else {
-                                  setSheet(() {
-                                    busy = false;
-                                    error =
-                                        'That code didn\'t match. Try again.';
-                                  });
-                                }
-                              } catch (_) {
-                                setSheet(() {
-                                  busy = false;
-                                  error =
-                                      'Couldn\'t verify that code. Check your connection and try again.';
-                                });
-                              }
-                            },
-                      child: busy
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              sent ? 'Confirm' : 'Send code',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      ),
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
 
-  // ---- Sessions ----------------------------------------------------------
 
   Future<void> _signOutEverywhere() async {
     final ok =
@@ -826,19 +854,6 @@ class _PasswordSecurityScreenState
 
   // ---- Helpers -----------------------------------------------------------
 
-  bool _looksLikeEmail(String v) =>
-      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v);
-
-  String _mask(String email) {
-    final at = email.indexOf('@');
-    if (at <= 1) return email;
-    final name = email.substring(0, at);
-    final domain = email.substring(at);
-    final shown = name.length <= 2
-        ? name.substring(0, 1)
-        : name.substring(0, 2);
-    return '$shown${'•' * (name.length - shown.length)}$domain';
-  }
 }
 
 // ============================= Widgets =====================================
@@ -1085,3 +1100,6 @@ class _Tile extends StatelessWidget {
     );
   }
 }
+
+/// What to do with a recovery method that is already set.
+enum _ManageChoice { change, remove }

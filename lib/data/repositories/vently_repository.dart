@@ -10,6 +10,7 @@ import '../../domain/keeper/keeper_mode.dart';
 import '../../domain/keeper/keeper_studio_v2.dart';
 import '../../domain/tribe/tribe_chat_hub.dart';
 import '../../domain/tribe/tribe_management.dart';
+import '../models/feed_page.dart';
 import '../services/analytics_service.dart';
 import '../services/cache_service.dart';
 import '../services/identity_service.dart';
@@ -404,10 +405,50 @@ class VentlyRepository implements MusicProvider {
   }
 
   /// Attach / change a real recovery email (Supabase emails a confirm link).
-  Future<void> setRecoveryEmail(String email) async {
+  /// Nominate a recovery email. Returns the masked form the server echoes back.
+  Future<String?> setRecoveryEmail(String email) async {
+    final live = _live;
+    if (live == null) return null;
+    return live.setRecoveryEmail(email);
+  }
+
+  Future<bool> confirmRecoveryEmail(String code) async {
+    final live = _live;
+    if (live == null) return false;
+    return live.confirmRecoveryEmail(code);
+  }
+
+  Future<void> clearRecoveryEmail() async {
     final live = _live;
     if (live == null) return;
-    await live.setRecoveryEmail(email);
+    await live.clearRecoveryEmail();
+  }
+
+  Future<String?> setRecoveryPhone(String phone) async {
+    final live = _live;
+    if (live == null) return null;
+    return live.setRecoveryPhone(phone);
+  }
+
+  Future<bool> confirmRecoveryPhone() async {
+    final live = _live;
+    if (live == null) return false;
+    return live.confirmRecoveryPhone();
+  }
+
+  Future<void> clearRecoveryPhone() async {
+    final live = _live;
+    if (live == null) return;
+    await live.clearRecoveryPhone();
+  }
+
+  /// Offline this reports nothing configured rather than inventing a verified
+  /// method — a security screen that overstates protection is worse than one
+  /// that admits it cannot tell.
+  Future<RecoveryMethods> myRecoveryMethods() async {
+    final live = _live;
+    if (live == null) return const RecoveryMethods();
+    return live.myRecoveryMethods();
   }
 
   /// Sign out of every device (revokes all refresh tokens).
@@ -549,6 +590,12 @@ class VentlyRepository implements MusicProvider {
     }
   }
 
+  Stream<void> get feedInvalidationStream {
+    final live = _live;
+    if (live != null) return live.feedInvalidationStream;
+    return _mock.postsStream.map((_) {});
+  }
+
   // ===================== Posts / Feed =====================
   Stream<List<Post>> watchFeed({
     String? category,
@@ -560,20 +607,24 @@ class VentlyRepository implements MusicProvider {
     final live = _live;
     if (live != null) {
       final controller = StreamController<List<Post>>();
-      late StreamSubscription<List<Post>> sub;
+      late StreamSubscription<void> sub;
       Future<void> emit() async {
-        controller.add(
-          await live.feed(
-            category: category,
-            mood: mood,
-            tribeSlug: tribeSlug,
-            locationBucket: locationBucket,
-            sort: sort,
-          ),
-        );
+        try {
+          controller.add(
+            await live.feed(
+              category: category,
+              mood: mood,
+              tribeSlug: tribeSlug,
+              locationBucket: locationBucket,
+              sort: sort,
+            ),
+          );
+        } catch (error, stackTrace) {
+          controller.addError(error, stackTrace);
+        }
       }
 
-      sub = live.postsStream.listen((_) => emit());
+      sub = live.feedInvalidationStream.listen((_) => emit());
       controller.onListen = emit;
       controller.onCancel = () => sub.cancel();
       return controller.stream;
@@ -614,6 +665,7 @@ class VentlyRepository implements MusicProvider {
     String sort = 'fresh',
     int limit = 30,
     int offset = 0,
+    FeedCursor? cursor,
   }) {
     final live = _live;
     if (live != null) {
@@ -625,6 +677,7 @@ class VentlyRepository implements MusicProvider {
         sort: sort,
         limit: limit,
         offset: offset,
+        cursor: cursor,
       );
     }
     return Future.value(
@@ -638,6 +691,41 @@ class VentlyRepository implements MusicProvider {
         offset: offset,
       ),
     );
+  }
+
+  Future<FeedPage> feedPage({
+    String? category,
+    String? mood,
+    String? tribeSlug,
+    String? locationBucket,
+    String sort = 'fresh',
+    int limit = 30,
+    int offset = 0,
+    FeedCursor? cursor,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.feedPage(
+        category: category,
+        mood: mood,
+        tribeSlug: tribeSlug,
+        locationBucket: locationBucket,
+        sort: sort,
+        limit: limit,
+        offset: offset,
+        cursor: cursor,
+      );
+    }
+    final posts = _mock.feed(
+      category: category,
+      mood: mood,
+      tribeSlug: tribeSlug,
+      locationBucket: locationBucket,
+      sort: sort,
+      limit: limit,
+      offset: offset,
+    );
+    return FeedPage(posts: posts);
   }
 
   Future<List<Post>> friendStories({int limit = 24}) async {

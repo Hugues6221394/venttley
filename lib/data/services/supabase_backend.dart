@@ -18,6 +18,7 @@ import '../../domain/keeper/keeper_mode.dart';
 import '../../domain/keeper/keeper_studio_v2.dart';
 import '../../domain/tribe/tribe_chat_hub.dart';
 import '../../domain/tribe/tribe_management.dart';
+import '../models/feed_page.dart';
 import 'identity_service.dart';
 
 /// Coerces JSONB `{text: "…"}` or plain strings into a nullable String.
@@ -132,12 +133,20 @@ class SupabaseBackend {
       '$_userBaseSelect, profile_photo_url, profile_banner_url, bio, pronouns';
 
   // ----- realtime fan-out used by the repository to stream the UI -----
-  final _postsController = StreamController<List<Post>>.broadcast();
+  final _feedInvalidationController = StreamController<void>.broadcast();
   final _roomsController = StreamController<List<ChatRoom>>.broadcast();
-  Stream<List<Post>> get postsStream => _postsController.stream;
+
+  /// Debounced signal that the caller's active feed may have new rows.
+  /// Listeners refetch with their own filters — never a global feed snapshot.
+  Stream<void> get feedInvalidationStream => _feedInvalidationController.stream;
   Stream<List<ChatRoom>> get roomsStream => _roomsController.stream;
 
-  RealtimeChannel? _postsChannel;
+  static const _feedRealtimeDebounce = Duration(seconds: 4);
+  static const _maxTribeFeedRealtimeFilters = 20;
+  Timer? _feedInvalidationTimer;
+  bool _feedInvalidationScheduled = false;
+
+  RealtimeChannel? _feedChannel;
   RealtimeChannel? _roomsChannel;
   RealtimeChannel? _messagesNotifyChannel;
 
@@ -584,10 +593,11 @@ class SupabaseBackend {
   }
 
   Future<void> logout() async {
-    await _postsChannel?.unsubscribe();
+    _feedInvalidationTimer?.cancel();
+    await _feedChannel?.unsubscribe();
     await _roomsChannel?.unsubscribe();
     await _messagesNotifyChannel?.unsubscribe();
-    _postsChannel = null;
+    _feedChannel = null;
     _roomsChannel = null;
     _messagesNotifyChannel = null;
     await _client.auth.signOut();
@@ -637,17 +647,69 @@ class SupabaseBackend {
   /// Attach (or change) a real recovery email on an account. Supabase emails
   /// a confirmation to the new address; the change finalises when the link is
   /// confirmed. Login-by-username keeps working either way.
-  Future<void> setRecoveryEmail(String email) async {
-    await _client.auth.updateUser(UserAttributes(email: email.trim()));
+  /// Nominate a recovery email. Returns it masked, as the server sees fit to
+  /// show it back.
+  ///
+  /// Deliberately NOT auth.updateUser(email:), which is what this used to be.
+  /// That replaces the account's login address — so adding a recovery email
+  /// silently changed what the person signs in with — and it failed anyway,
+  /// because Supabase confirms an email change to the OLD address too and the
+  /// old address is the synthetic @id.venttly.app that GoTrue rejects.
+  Future<String?> setRecoveryEmail(String email) async {
+    final masked = await _client.rpc(
+      'set_recovery_email',
+      params: {'p_email': email.trim()},
+    );
+    return masked as String?;
+  }
+
+  /// Confirm the 6-digit code. False means wrong or expired, not an error —
+  /// the server burns an attempt and the caller says so plainly.
+  Future<bool> confirmRecoveryEmail(String code) async {
+    final ok = await _client.rpc(
+      'confirm_recovery_email',
+      params: {'p_code': code.trim()},
+    );
+    return ok == true;
+  }
+
+  Future<void> clearRecoveryEmail() async {
+    await _client.rpc('clear_recovery_email');
+  }
+
+  Future<String?> setRecoveryPhone(String phone) async {
+    final masked = await _client.rpc(
+      'set_recovery_phone',
+      params: {'p_phone': phone.trim()},
+    );
+    return masked as String?;
+  }
+
+  /// Marks the recovery phone verified, but only if Supabase Auth has already
+  /// confirmed that exact number on this account. Returns false until then —
+  /// which is the normal answer while no SMS provider is configured.
+  Future<bool> confirmRecoveryPhone() async {
+    final ok = await _client.rpc('confirm_recovery_phone');
+    return ok == true;
+  }
+
+  Future<void> clearRecoveryPhone() async {
+    await _client.rpc('clear_recovery_phone');
+  }
+
+  Future<RecoveryMethods> myRecoveryMethods() async {
+    final raw = await _client.rpc('my_recovery_methods');
+    return RecoveryMethods.fromJson(Map<String, dynamic>.from(raw as Map));
   }
 
   /// Global sign-out — revokes the refresh token on EVERY device, not just
   /// this one. Same local teardown as [logout].
   Future<void> signOutEverywhere() async {
-    await _postsChannel?.unsubscribe();
+    _feedInvalidationTimer?.cancel();
+    await _feedChannel?.unsubscribe();
     await _roomsChannel?.unsubscribe();
     await _messagesNotifyChannel?.unsubscribe();
-    _postsChannel = null;
+    _feedChannel = null;
     _roomsChannel = null;
     _messagesNotifyChannel = null;
     await _client.auth.signOut(scope: SignOutScope.global);
@@ -659,10 +721,10 @@ class SupabaseBackend {
 
   Future<void> _hydrateRealtime() async {
     await _refreshLikedAndSaved();
-    _subscribePostsRealtime();
+    _subscribeFeedRealtime();
     _subscribeRoomsRealtime();
     _subscribeMessagesNotifyRealtime();
-    _emitPosts();
+    _scheduleFeedInvalidation(immediate: true);
     _emitRooms();
   }
 
@@ -694,19 +756,68 @@ class SupabaseBackend {
     _joinedTribes
       ..clear()
       ..addAll(memberships.map((r) => r['tribe_id'] as String));
+    _subscribeFeedRealtime();
   }
 
-  void _subscribePostsRealtime() {
-    _postsChannel?.unsubscribe();
-    _postsChannel = _client
-        .channel('public:posts')
+  /// Scoped feed realtime — never subscribe to the global posts WAL.
+  ///
+  /// At scale a single `public:posts` channel fans every insert/update to
+  /// every connected client and each event used to trigger a full feed refetch.
+  /// We only listen for (a) the caller's own posts and (b) inserts in tribes
+  /// they joined. Global discovery updates arrive on pull-to-refresh instead.
+  void _subscribeFeedRealtime() {
+    _feedChannel?.unsubscribe();
+    final uid = _uid;
+    if (uid == null) return;
+
+    var channel = _client.channel('feed:scoped:$uid');
+    channel = channel
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'posts',
-          callback: (_) => _emitPosts(),
-        )
-        .subscribe();
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'author_id',
+            value: uid,
+          ),
+          callback: (_) => _scheduleFeedInvalidation(),
+        );
+
+    for (final tribeId in _joinedTribes.take(_maxTribeFeedRealtimeFilters)) {
+      channel = channel.onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'posts',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'tribe_id',
+          value: tribeId,
+        ),
+        callback: (_) => _scheduleFeedInvalidation(),
+      );
+    }
+
+    _feedChannel = channel..subscribe();
+  }
+
+  void _scheduleFeedInvalidation({bool immediate = false}) {
+    if (_feedInvalidationController.isClosed) return;
+    if (immediate) {
+      _feedInvalidationTimer?.cancel();
+      _feedInvalidationScheduled = false;
+      _feedInvalidationController.add(null);
+      return;
+    }
+    if (_feedInvalidationScheduled) return;
+    _feedInvalidationScheduled = true;
+    _feedInvalidationTimer?.cancel();
+    _feedInvalidationTimer = Timer(_feedRealtimeDebounce, () {
+      _feedInvalidationScheduled = false;
+      if (!_feedInvalidationController.isClosed) {
+        _feedInvalidationController.add(null);
+      }
+    });
   }
 
   void _subscribeRoomsRealtime() {
@@ -758,6 +869,30 @@ class SupabaseBackend {
     String sort = 'fresh', // fresh | hot | foryou
     int limit = 30,
     int offset = 0,
+    FeedCursor? cursor,
+  }) async {
+    final page = await feedPage(
+      category: category,
+      mood: mood,
+      tribeSlug: tribeSlug,
+      locationBucket: locationBucket,
+      sort: sort,
+      limit: limit,
+      offset: offset,
+      cursor: cursor,
+    );
+    return page.posts;
+  }
+
+  Future<FeedPage> feedPage({
+    String? category,
+    String? mood,
+    String? tribeSlug,
+    String? locationBucket,
+    String sort = 'fresh',
+    int limit = 30,
+    int offset = 0,
+    FeedCursor? cursor,
   }) async {
     // "For You" is a server-side blended ranking (migration 0015).
     // The personal_score already factors in local + tribe affinity, so
@@ -765,20 +900,23 @@ class SupabaseBackend {
     // (those would just over-constrain the candidate pool).
     if (sort == 'foryou' && tribeSlug == null) {
       try {
+        final params = <String, dynamic>{
+          'p_limit': limit,
+          'p_category': category,
+          'p_mood': mood,
+        };
+        if (cursor != null) {
+          params['p_before_score'] = cursor.personalScore;
+          params['p_before_created_at'] = cursor.createdAt.toUtc().toIso8601String();
+          params['p_before_post_id'] = cursor.postId;
+        } else {
+          params['p_offset'] = offset;
+        }
         final rows =
-            await _client.rpc(
-                  'personal_feed',
-                  params: {
-                    'p_limit': limit,
-                    'p_offset': offset,
-                    'p_category': category,
-                    'p_mood': mood,
-                  },
-                )
-                as List<dynamic>;
+            await _client.rpc('personal_feed', params: params) as List<dynamic>;
         final cutoff = DateTime.now().subtract(const Duration(hours: 24));
-        final personalized = rows
-            .cast<Map<String, dynamic>>()
+        final raw = rows.cast<Map<String, dynamic>>();
+        final personalized = raw
             .map<Post>(_postFromRow)
             .where(
               (p) =>
@@ -786,10 +924,15 @@ class SupabaseBackend {
             )
             .toList();
         if (personalized.isNotEmpty ||
+            cursor != null ||
             offset > 0 ||
             category != null ||
             mood != null) {
-          return _hydratePosts(personalized);
+          final hydrated = await _hydratePosts(personalized);
+          return FeedPage(
+            posts: hydrated,
+            nextCursor: _personalFeedCursor(raw, hydrated),
+          );
         }
       } on PostgrestException catch (error) {
         if (!_isMissingRpc(error, 'personal_feed')) rethrow;
@@ -797,7 +940,7 @@ class SupabaseBackend {
 
       // Cold-start resilience: use the same RLS-protected database feed,
       // ranked globally, when a new account has no affinity signals yet.
-      return feed(
+      return feedPage(
         category: category,
         mood: mood,
         tribeSlug: tribeSlug,
@@ -805,6 +948,7 @@ class SupabaseBackend {
         sort: 'hot',
         limit: limit,
         offset: offset,
+        cursor: cursor,
       );
     }
 
@@ -816,21 +960,110 @@ class SupabaseBackend {
     if (locationBucket != null) {
       query = query.eq('location_bucket', locationBucket);
     }
+
+    if (cursor != null) {
+      final iso = cursor.createdAt.toUtc().toIso8601String();
+      if (sort == 'hot') {
+        final hotScore = cursor.hotScore ?? await _hotScoreForPost(cursor.postId);
+        if (hotScore != null) {
+          query = query.or(
+            'hot_score.lt.$hotScore,'
+            'and(hot_score.eq.$hotScore,created_at.lt.$iso),'
+            'and(hot_score.eq.$hotScore,and(created_at.eq.$iso,post_id.lt.${cursor.postId}))',
+          );
+        } else {
+          query = query.or(
+            'created_at.lt.$iso,'
+            'and(created_at.eq.$iso,post_id.lt.${cursor.postId})',
+          );
+        }
+      } else {
+        query = query.or(
+          'created_at.lt.$iso,'
+          'and(created_at.eq.$iso,post_id.lt.${cursor.postId})',
+        );
+      }
+    }
+
     final ordered = sort == 'hot'
-        ? query.order('hot_score', ascending: false)
-        : query.order('created_at', ascending: false);
-    final rows = await ordered.range(offset, offset + limit - 1);
+        ? query
+            .order('hot_score', ascending: false)
+            .order('created_at', ascending: false)
+            .order('post_id', ascending: false)
+        : query
+            .order('created_at', ascending: false)
+            .order('post_id', ascending: false);
+    final rows = cursor == null
+        ? await ordered.range(offset, offset + limit - 1)
+        : await ordered.limit(limit);
     // Whispers vanish from the feed after 24h. We filter client-side
     // because PostgREST's `or` filter doesn't cleanly express
     // "is_whisper = false OR created_at > now() - 24h" against a view.
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
-    final posts = rows
+    final raw = (rows as List).cast<Map<String, dynamic>>();
+    final posts = raw
         .map<Post>(_postFromRow)
         .where(
           (p) => (!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff),
         )
         .toList();
-    return _hydratePosts(posts);
+    final hydrated = await _hydratePosts(posts);
+    return FeedPage(
+      posts: hydrated,
+      nextCursor: _viewFeedCursor(raw, hydrated, sort: sort),
+    );
+  }
+
+  Map<String, dynamic>? _rowForPost(
+    List<Map<String, dynamic>> raw,
+    String postId,
+  ) {
+    for (final row in raw) {
+      if (row['post_id'] == postId) return row;
+    }
+    return null;
+  }
+
+  FeedCursor? _personalFeedCursor(
+    List<Map<String, dynamic>> raw,
+    List<Post> hydrated,
+  ) {
+    if (hydrated.isEmpty) return null;
+    final lastPost = hydrated.last;
+    final rawRow = _rowForPost(raw, lastPost.postId);
+    final score = (rawRow?['personal_score'] as num?)?.toDouble();
+    if (score == null) return null;
+    return FeedCursor(
+      createdAt: lastPost.createdAt,
+      postId: lastPost.postId,
+      personalScore: score,
+    );
+  }
+
+  FeedCursor? _viewFeedCursor(
+    List<Map<String, dynamic>> raw,
+    List<Post> hydrated, {
+    required String sort,
+  }) {
+    if (hydrated.isEmpty) return null;
+    final lastPost = hydrated.last;
+    final rawRow = _rowForPost(raw, lastPost.postId);
+    return FeedCursor(
+      createdAt: lastPost.createdAt,
+      postId: lastPost.postId,
+      hotScore: sort == 'hot'
+          ? (rawRow?['hot_score'] as num?)?.toDouble()
+          : null,
+    );
+  }
+
+  Future<double?> _hotScoreForPost(String postId) async {
+    final row = await _client
+        .from('feed_hot')
+        .select('hot_score')
+        .eq('post_id', postId)
+        .maybeSingle();
+    return (row?['hot_score'] as num?)?.toDouble();
   }
 
   Future<List<Post>> friendStories({int limit = 24}) async {
@@ -1030,7 +1263,7 @@ class SupabaseBackend {
         mediaStatus: hasImage ? 'pending' : 'clean',
       );
     }
-    unawaited(_emitPosts());
+    _scheduleFeedInvalidation(immediate: true);
     return post;
   }
 
@@ -3476,7 +3709,7 @@ class SupabaseBackend {
     } else {
       _myReactions[postId] = result as String;
     }
-    _emitPosts();
+    _scheduleFeedInvalidation();
     return result as String?;
   }
 
@@ -3497,7 +3730,7 @@ class SupabaseBackend {
       });
       _savedPosts.add(postId);
     }
-    _emitPosts();
+    _scheduleFeedInvalidation();
   }
 
   Future<void> reportPost({
@@ -4959,7 +5192,7 @@ class SupabaseBackend {
     final me = _me;
     final tree = await comments(postId);
     final created = _findInTree(tree, id);
-    _emitPosts();
+    _scheduleFeedInvalidation();
     return created ??
         ThreadedComment(
           commentId: id,
@@ -7289,15 +7522,6 @@ class SupabaseBackend {
         props: {'reason': error.runtimeType.toString()},
       );
       return const {};
-    }
-  }
-
-  Future<void> _emitPosts() async {
-    try {
-      final list = await feed();
-      _postsController.add(list);
-    } catch (_) {
-      // ignore — stream listeners will retry on the next emit
     }
   }
 

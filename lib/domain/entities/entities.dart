@@ -2976,3 +2976,66 @@ class TribeCategory {
   final String key;
   final String label;
 }
+
+/// One recovery method as the server chooses to describe it.
+///
+/// [masked] is all the client ever gets — never the full address. It is already
+/// known to whoever typed it, and returning it would turn a stolen session into
+/// a way of harvesting the owner's real email or phone number.
+class RecoveryMethod {
+  final String? masked;
+  final bool verified;
+  final bool pending;
+  final DateTime? codeExpiresAt;
+  final DateTime? addedAt;
+
+  const RecoveryMethod({
+    this.masked,
+    this.verified = false,
+    this.pending = false,
+    this.codeExpiresAt,
+    this.addedAt,
+  });
+
+  /// Nothing nominated yet.
+  bool get isEmpty => masked == null;
+
+  factory RecoveryMethod.fromJson(Map<String, dynamic> json) => RecoveryMethod(
+        masked: json['masked'] as String?,
+        // Absent means not verified. The safe reading of a missing key for
+        // anything security-shaped is the one that grants nothing.
+        verified: json['verified'] == true,
+        pending: json['pending'] == true,
+        codeExpiresAt: json['code_expires_at'] == null
+            ? null
+            : DateTime.tryParse(json['code_expires_at'] as String)?.toLocal(),
+        addedAt: json['added_at'] == null
+            ? null
+            : DateTime.tryParse(json['added_at'] as String)?.toLocal(),
+      );
+}
+
+/// The recovery section of the Security Centre.
+class RecoveryMethods {
+  final RecoveryMethod email;
+  final RecoveryMethod phone;
+
+  const RecoveryMethods({
+    this.email = const RecoveryMethod(),
+    this.phone = const RecoveryMethod(),
+  });
+
+  factory RecoveryMethods.fromJson(Map<String, dynamic> json) =>
+      RecoveryMethods(
+        email: RecoveryMethod.fromJson(
+          Map<String, dynamic>.from((json['email'] as Map?) ?? const {}),
+        ),
+        phone: RecoveryMethod.fromJson(
+          Map<String, dynamic>.from((json['phone'] as Map?) ?? const {}),
+        ),
+      );
+
+  /// How many recovery routes actually work. Drives the security score, so it
+  /// counts verified only — a pending address recovers nothing.
+  int get verifiedCount => (email.verified ? 1 : 0) + (phone.verified ? 1 : 0);
+}

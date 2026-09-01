@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/models/feed_page.dart';
 import '../data/repositories/vently_repository.dart';
 import '../data/services/supabase_backend.dart'
     show MfaChallengeRequiredException;
@@ -264,7 +265,8 @@ class SessionController extends StateNotifier<AppUser?> {
 
   /// Attach / change a real recovery email; Supabase emails a confirm link.
   /// The auth-email change only finalises once the user confirms.
-  Future<void> setRecoveryEmail(String email) => _repo.setRecoveryEmail(email);
+  Future<String?> setRecoveryEmail(String email) =>
+      _repo.setRecoveryEmail(email);
 
   /// Sign out of every device (revokes all refresh tokens), then clear state.
   Future<void> signOutEverywhere() async {
@@ -546,19 +548,96 @@ final feedFilterProvider = StateProvider<FeedFilter>(
   (ref) => const FeedFilter(),
 );
 
-final feedPostsProvider = StreamProvider<List<Post>>((ref) {
-  final repo = ref.watch(repositoryProvider);
-  final filter = ref.watch(feedFilterProvider);
-  final me = ref.watch(sessionProvider);
-  final bucket = filter.scope == 'local' ? me?.localBucket : null;
-  return repo.watchFeed(
-    category: filter.category,
-    mood: filter.mood,
-    tribeSlug: filter.tribeSlug,
-    locationBucket: bucket,
-    sort: filter.sort,
-  );
+/// Debounced backend signal that the caller's feed may have new rows.
+final feedInvalidationProvider = StreamProvider.autoDispose<void>((ref) {
+  return ref.watch(repositoryProvider).feedInvalidationStream;
 });
+
+/// Paginated home feed with keyset cursors and scoped realtime refresh.
+class FeedPostsNotifier extends AutoDisposeAsyncNotifier<List<Post>> {
+  static const pageSize = 20;
+
+  bool _hasMore = true;
+  bool _loadingMore = false;
+  FeedCursor? _nextCursor;
+
+  bool get hasMore => _hasMore;
+  bool get isLoadingMore => _loadingMore;
+
+  @override
+  Future<List<Post>> build() async {
+    ref.listen(feedInvalidationProvider, (_, __) {
+      unawaited(refresh());
+    });
+
+    final filter = ref.watch(feedFilterProvider);
+    final me = ref.watch(sessionProvider);
+    final bucket = filter.scope == 'local' ? me?.localBucket : null;
+    _hasMore = true;
+    _loadingMore = false;
+    _nextCursor = null;
+
+    final page = await ref.read(repositoryProvider).feedPage(
+      category: filter.category,
+      mood: filter.mood,
+      tribeSlug: filter.tribeSlug,
+      locationBucket: bucket,
+      sort: filter.sort,
+      limit: pageSize,
+    );
+    _nextCursor = page.nextCursor;
+    _hasMore =
+        page.posts.length >= pageSize && page.nextCursor != null;
+    return page.posts;
+  }
+
+  Future<void> loadMore() async {
+    if (!_hasMore || _loadingMore) return;
+    final current = state.valueOrNull;
+    if (current == null || current.isEmpty || _nextCursor == null) return;
+
+    _loadingMore = true;
+    try {
+      final filter = ref.read(feedFilterProvider);
+      final me = ref.read(sessionProvider);
+      final bucket = filter.scope == 'local' ? me?.localBucket : null;
+      final page = await ref.read(repositoryProvider).feedPage(
+        category: filter.category,
+        mood: filter.mood,
+        tribeSlug: filter.tribeSlug,
+        locationBucket: bucket,
+        sort: filter.sort,
+        limit: pageSize,
+        cursor: _nextCursor,
+      );
+      if (page.posts.isEmpty) {
+        _hasMore = false;
+        return;
+      }
+      _nextCursor = page.nextCursor;
+      _hasMore =
+          page.posts.length >= pageSize && page.nextCursor != null;
+      final seen = current.map((p) => p.postId).toSet();
+      state = AsyncData([
+        ...current,
+        for (final post in page.posts)
+          if (!seen.contains(post.postId)) post,
+      ]);
+    } finally {
+      _loadingMore = false;
+    }
+  }
+
+  Future<void> refresh() async {
+    ref.invalidateSelf();
+    await future;
+  }
+}
+
+final feedPostsProvider =
+    AsyncNotifierProvider.autoDispose<FeedPostsNotifier, List<Post>>(
+      FeedPostsNotifier.new,
+    );
 
 /// Broad hot sample for Home discovery modules. It intentionally ignores the
 /// active category/mood filters so Trending Topics and Tribes keep showing the

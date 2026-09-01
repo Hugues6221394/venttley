@@ -41,17 +41,36 @@ void main() {
       passwordSecurity,
       contains("Couldn\\'t verify that code. Check your connection"),
     );
+    // These were counts — "3 sheets, 3 scopes" — which described a structure
+    // rather than a requirement, and broke the moment three near-identical
+    // sheets were consolidated into one. What actually matters is asserted
+    // directly instead, and it holds however the screen is arranged.
+
+    // Every sheet clears the floating nav. HomeShell paints its pill over the
+    // branch, so a sheet on the branch navigator has its lower rows swallowed.
     expect(
       'useRootNavigator: true'.allMatches(passwordSecurity).length,
-      3,
+      'showModalBottomSheet'.allMatches(passwordSecurity).length,
+      reason: 'every bottom sheet must use the root navigator',
     );
+
+    // No controller is created by hand, so every one of them comes from
+    // ModalTextControllerScope and is therefore disposed. Stronger than
+    // counting scopes: it forbids the bypass rather than counting the fix.
+    expect(
+      'TextEditingController('.allMatches(passwordSecurity).length,
+      0,
+      reason: 'text controllers must come from ModalTextControllerScope',
+    );
+
+    // Every sheet that takes text is scrollable, or the keyboard overflows it
+    // on a small screen.
     expect(
       'SingleChildScrollView('.allMatches(passwordSecurity).length,
-      greaterThanOrEqualTo(3),
-    );
-    expect(
-      'ModalTextControllerScope('.allMatches(passwordSecurity).length,
-      3,
+      greaterThanOrEqualTo(
+        'ModalTextControllerScope('.allMatches(passwordSecurity).length,
+      ),
+      reason: 'each text-entry sheet must scroll with the keyboard up',
     );
     expect(controllerScope, contains('controller.dispose()'));
     expect(settings, contains('useRootNavigator: true'));

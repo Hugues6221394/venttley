@@ -115,7 +115,15 @@ class FeedScreen extends ConsumerWidget {
                 final stories = showingCommunityStories
                     ? communityStories
                     : friendStories;
-                return CustomScrollView(
+                return NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    final metrics = notification.metrics;
+                    if (metrics.pixels >= metrics.maxScrollExtent - 700) {
+                      ref.read(feedPostsProvider.notifier).loadMore();
+                    }
+                    return false;
+                  },
+                  child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   // Pre-build offscreen items so fast flings never show a
                   // blank gap on mid-tier devices. Data Saver prefetches
@@ -272,6 +280,7 @@ class FeedScreen extends ConsumerWidget {
                       child: SizedBox(height: HomeShell.navClearance),
                     ),
                   ],
+                  ),
                 );
               },
             ),
