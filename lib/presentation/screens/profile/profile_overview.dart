@@ -7,6 +7,7 @@ import '../../../core/providers.dart';
 import '../../../core/user_friendly_errors.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
+import '../../widgets/media_preview_viewer.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/post_card.dart';
@@ -286,7 +287,7 @@ class _OwnProfileBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return SizedBox(
+    final strip = SizedBox(
       height: 104,
       width: double.infinity,
       child: Stack(
@@ -331,6 +332,35 @@ class _OwnProfileBanner extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+
+    // Tap your own background to see it full size.
+    //
+    // This card crops the banner to a 104pt strip — less than two thirds of
+    // the height the public profile uses — so the owner never actually sees
+    // the photo they chose at full size anywhere in the app. Same viewer the
+    // public profile and the avatar already use.
+    //
+    // Only when a banner exists: the rose-tint fallback is not a photograph.
+    if (url.trim().isEmpty) return strip;
+
+    return Semantics(
+      button: true,
+      label: 'View your profile background',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => showMediaPreview(
+          context,
+          items: [
+            MediaPreviewItem(
+              url: url.trim(),
+              label: 'Your profile background',
+            ),
+          ],
+          title: 'Profile background',
+        ),
+        child: strip,
       ),
     );
   }

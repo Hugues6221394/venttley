@@ -575,11 +575,46 @@ class _Hero extends StatelessWidget {
               clipBehavior: Clip.none,
               alignment: Alignment.bottomCenter,
               children: [
-                _HeroBanner(
-                  photoUrl: (profile.profilePhotoUrl ?? '').trim(),
-                  bannerUrl: (profile.profileBannerUrl ?? '').trim(),
-                  bannerOffset: profile.profileBannerOffset,
-                ),
+                // The banner opens full screen too.
+                //
+                // The avatar has been tappable since it was built, and the
+                // banner — often the more personal of the two, and the only
+                // place a landscape photo is visible at all — was not. Same
+                // viewer, same gesture, so it behaves the way the avatar
+                // already taught people to expect.
+                //
+                // Only when there is a real banner: the brand gradient
+                // fallback is not a photograph, and opening a full-screen
+                // gradient would be a dead end.
+                if ((profile.profileBannerUrl ?? '').trim().isEmpty)
+                  _HeroBanner(
+                    photoUrl: (profile.profilePhotoUrl ?? '').trim(),
+                    bannerUrl: '',
+                    bannerOffset: profile.profileBannerOffset,
+                  )
+                else
+                  Semantics(
+                    button: true,
+                    label: 'View @${profile.pseudonym} profile background',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => showMediaPreview(
+                        context,
+                        items: [
+                          MediaPreviewItem(
+                            url: profile.profileBannerUrl!.trim(),
+                            label: 'Profile background',
+                          ),
+                        ],
+                        title: '@${profile.pseudonym}',
+                      ),
+                      child: _HeroBanner(
+                        photoUrl: (profile.profilePhotoUrl ?? '').trim(),
+                        bannerUrl: profile.profileBannerUrl!.trim(),
+                        bannerOffset: profile.profileBannerOffset,
+                      ),
+                    ),
+                  ),
                 Positioned(bottom: -52, child: _HeroAvatar(profile: profile)),
               ],
             ),
@@ -810,12 +845,12 @@ class _BrandBanner extends StatelessWidget {
 /// The large hero avatar. When the user has uploaded a photo it becomes a
 /// button that opens the full-screen, zoomable preview, and carries a small
 /// "expand" glyph so the affordance is obvious.
-class _HeroAvatar extends StatelessWidget {
+class _HeroAvatar extends ConsumerWidget {
   const _HeroAvatar({required this.profile});
   final UserProfileView profile;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final photoUrl = (profile.profilePhotoUrl ?? '').trim();
     final hasPhoto = photoUrl.isNotEmpty;
@@ -873,18 +908,104 @@ class _HeroAvatar extends StatelessWidget {
       ],
     );
 
-    if (!hasPhoto) return withGlyph;
+    // A live story changes what tapping the avatar should do.
+    //
+    // Everywhere else in the app an avatar with a story takes you to the
+    // story. Here it only ever opened the profile photo, so the one screen
+    // somebody visits deliberately to look at a person was the one screen
+    // that hid their story. Rather than pick for them — the photo and the
+    // story are both things they might have meant — ask, and only when there
+    // is actually something to choose between.
+    final storyId = ref.watch(activeStoryForUserProvider(profile.userId))
+        .valueOrNull;
+
+    if (!hasPhoto && storyId == null) return withGlyph;
+
     return Semantics(
       button: true,
-      label: 'View @${profile.pseudonym} profile photo',
+      label: storyId != null
+          ? 'View @${profile.pseudonym} story or profile photo'
+          : 'View @${profile.pseudonym} profile photo',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => showMediaPreview(
-          context,
-          items: [MediaPreviewItem(url: photoUrl, label: 'Profile photo')],
-          title: '@${profile.pseudonym}',
+        onTap: () => _onTap(context, storyId, photoUrl, hasPhoto),
+        child: storyId == null
+            ? withGlyph
+            // The same ring the story rail uses, so the affordance is one
+            // people have already learned rather than a new one.
+            : Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      VentlyColors.berryMagenta,
+                      VentlyColors.softMauve,
+                    ],
+                  ),
+                ),
+                child: withGlyph,
+              ),
+      ),
+    );
+  }
+
+  void _onTap(
+    BuildContext context,
+    String? storyId,
+    String photoUrl,
+    bool hasPhoto,
+  ) {
+    // Nothing to choose between: go straight there. A chooser with one real
+    // option is a tax on every tap.
+    if (storyId == null) {
+      showMediaPreview(
+        context,
+        items: [MediaPreviewItem(url: photoUrl, label: 'Profile photo')],
+        title: '@${profile.pseudonym}',
+      );
+      return;
+    }
+    if (!hasPhoto) {
+      context.push('/story/$storyId');
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      showDragHandle: true,
+      builder: (sheetCtx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.auto_stories_outlined),
+              title: const Text('View story'),
+              subtitle: const Text('Disappears 24 hours after posting'),
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                context.push('/story/$storyId');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.account_circle_outlined),
+              title: const Text('View profile photo'),
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                showMediaPreview(
+                  context,
+                  items: [
+                    MediaPreviewItem(url: photoUrl, label: 'Profile photo'),
+                  ],
+                  title: '@${profile.pseudonym}',
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
         ),
-        child: withGlyph,
       ),
     );
   }

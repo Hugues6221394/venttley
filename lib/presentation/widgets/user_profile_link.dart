@@ -19,6 +19,7 @@ class UserProfileLink extends StatelessWidget {
     this.showVerifiedBadge = false,
     this.heroTag,
     this.dense = false,
+    this.onTapOverride,
   });
 
   final String userId;
@@ -34,7 +35,24 @@ class UserProfileLink extends StatelessWidget {
   final Object? heroTag;
   final bool dense;
 
-  void _open(BuildContext context) => context.push('/user/$userId');
+  /// Replaces the default go_router push.
+  ///
+  /// For callers on a page ABOVE the shell. `/user/:userId` is a shell-branch
+  /// route, and go_router derives page keys from the location, so pushing it
+  /// from a top-level page collides keys inside the branch navigator and
+  /// asserts. Setting parentNavigatorKey on that route is not a way out
+  /// either — a sub-route of a branch may not claim the root navigator, which
+  /// go_router asserts at build time and which took the whole app down.
+  final VoidCallback? onTapOverride;
+
+  void _open(BuildContext context) {
+    final override = onTapOverride;
+    if (override != null) {
+      override();
+      return;
+    }
+    context.push('/user/$userId');
+  }
 
   @override
   Widget build(BuildContext context) {

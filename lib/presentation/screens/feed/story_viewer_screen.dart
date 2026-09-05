@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/logger.dart';
 import '../../../core/providers.dart';
 import '../../../core/user_friendly_errors.dart';
 import '../../../data/services/music_playback_service.dart';
@@ -12,7 +13,9 @@ import '../../../domain/entities/entities.dart';
 import '../../../domain/home/home_discovery.dart';
 import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
+import '../friends/friend_profile_screen.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/sensitive_media_veil.dart';
 import '../../widgets/tagged_text.dart';
 import '../../widgets/music_track_card.dart';
 import '../../widgets/user_profile_link.dart';
@@ -52,7 +55,21 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
 
   @override
   void dispose() {
-    unawaited(_musicPlayback.stop());
+    // Stopped after this frame, not inside dispose().
+    //
+    // MusicPlaybackController is a ChangeNotifier behind a provider, so stop()
+    // ends in notifyListeners(). dispose() runs while Flutter is unmounting
+    // elements, which is still inside the build phase, and Riverpod refuses a
+    // provider write there: "Tried to modify a provider while the widget tree
+    // was building." Two exceptions were thrown every time the story viewer
+    // closed.
+    //
+    // The controller is captured in a local because `this` is being torn down;
+    // the callback must not reach back into the State.
+    final playback = _musicPlayback;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(playback.stop());
+    });
     _progress.dispose();
     _reply.dispose();
     super.dispose();
@@ -117,7 +134,21 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
     _viewedThisSession.add(story.postId);
     try {
       await ref.read(repositoryProvider).markStoryViewed(story.postId);
-    } catch (_) {}
+    } catch (error) {
+      // Was `catch (_) {}`.
+      //
+      // A view that fails to record is invisible twice over: the author's
+      // viewer list is short and nobody knows why, and the person who watched
+      // has no idea anything failed. Silence here is exactly what made "I
+      // can't see who viewed my story" impossible to diagnose from the
+      // outside. Still swallowed for the viewer — a failed view must never
+      // interrupt watching — but no longer unrecorded.
+      log.warn(
+        'story.mark_viewed_failed',
+        props: {'post_id': story.postId, 'error': '$error'},
+      );
+      _viewedThisSession.remove(story.postId);
+    }
   }
 
   void _advance() {
@@ -200,16 +231,32 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
       ref.invalidate(allInboxRoomsStreamProvider);
       if (!mounted) return;
       _reply.clear();
+
+      // Stay in the story.
+      //
+      // This used to end with context.push('/chat/<room>'), which threw the
+      // viewer away and dropped the person into a DM thread the instant they
+      // hit send. Replying to one story out of five meant losing the other
+      // four and navigating back to find your place. Nobody replies twice
+      // under that design.
+      //
+      // The reply is delivered either way — the snackbar says so, and the
+      // action below opens the thread for anyone who actually wants it.
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             room.roomStatus == 'pending_request'
                 ? 'Reply sent — they\'ll see it in requests.'
-                : 'Reply delivered to Inbox.',
+                : 'Reply sent.',
+          ),
+          action: SnackBarAction(
+            label: 'Open chat',
+            onPressed: () {
+              if (mounted) context.push('/chat/${room.roomId}');
+            },
           ),
         ),
       );
-      context.push('/chat/${room.roomId}');
     } on DmGatingException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -228,6 +275,30 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
       if (mounted) setState(() => _busy = false);
       _resume();
     }
+  }
+
+  /// Open the author's profile without losing the story behind it.
+  ///
+  /// Pushed on the ROOT navigator: `/user/:userId` is a shell-branch route and
+  /// going through go_router from this top-level page collides page keys and
+  /// crashes. Popping the story first instead made the pop and the push race
+  /// and froze the screen, and marking the route parentNavigatorKey:
+  /// rootNavigatorKey is rejected because a branch sub-route may not claim the
+  /// root navigator. An imperative root push has none of those problems.
+  ///
+  /// Paused around the push because the story does not stop just because
+  /// something is on top of it: the progress timer kept running and the
+  /// attached music kept playing, so a look at somebody's profile meant coming
+  /// back to a story that had silently ended — dismissing the profile dropped
+  /// you on the feed instead of back where you were.
+  Future<void> _openAuthorProfile(String userId) async {
+    _pause();
+    await Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FriendProfileScreen(userId: userId),
+      ),
+    );
+    if (mounted) _resume();
   }
 
   Future<void> _showOwnerActions() async {
@@ -314,9 +385,24 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
   Future<void> _showStoryActivity() async {
     final story = _stories[_index];
     try {
-      final reactions = await ref.read(
-        storyReactionsProvider(story.postId).future,
-      );
+      // Both, in parallel. The viewer list is the answer to "who saw this";
+      // reactions are a small subset of it and are shown as a badge against
+      // the people in that list rather than as a separate list of their own.
+      // Invalidated first, so opening the sheet always asks the server.
+      //
+      // Both providers are autoDispose but kept alive by watching
+      // feedPostsProvider, so a second open could hand back the list from the
+      // first — an author checking again after somebody watched would see the
+      // same stale count. Story activity is precisely the screen people open
+      // repeatedly to see what changed.
+      ref.invalidate(storyViewersProvider(story.postId));
+      ref.invalidate(storyReactionsProvider(story.postId));
+      final results = await Future.wait([
+        ref.read(storyViewersProvider(story.postId).future),
+        ref.read(storyReactionsProvider(story.postId).future),
+      ]);
+      final viewers = results[0] as List<StoryViewerUser>;
+      final reactions = results[1] as List<StoryReactionUser>;
       if (!mounted) return;
       await showModalBottomSheet<void>(
         context: context,
@@ -363,7 +449,10 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
                       ),
                       const SizedBox(width: 7),
                       Text(
-                        '${story.viewCount} unique ${story.viewCount == 1 ? 'view' : 'views'}',
+                        // viewers.length rather than posts.view_count: it is
+                        // the length of the list directly below, so the number
+                        // and the list can never disagree.
+                        '${viewers.length} ${viewers.length == 1 ? 'viewer' : 'viewers'}',
                         style: TextStyle(
                           color: Theme.of(
                             context,
@@ -377,20 +466,20 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
                 const SizedBox(height: 12),
                 const Divider(height: 1),
                 Expanded(
-                  child: reactions.isEmpty
+                  child: viewers.isEmpty
                       ? const Center(
                           child: Text(
-                            'No reactions yet.',
+                            'No one has seen this yet.',
                             style: TextStyle(fontWeight: FontWeight.w800),
                           ),
                         )
                       : ListView.separated(
                           padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                          itemCount: reactions.length,
+                          itemCount: viewers.length,
                           separatorBuilder: (_, __) =>
                               const Divider(height: 18),
                           itemBuilder: (_, index) {
-                            final person = reactions[index];
+                            final person = viewers[index];
                             return Row(
                               children: [
                                 Expanded(
@@ -405,12 +494,32 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
                                   ),
                                 ),
                                 const SizedBox(width: 10),
-                                Text(
-                                  PostReactions.label(person.reactionType),
-                                  style: const TextStyle(
-                                    color: VentlyColors.berryMagenta,
-                                    fontWeight: FontWeight.w900,
-                                  ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (person.reactionType != null)
+                                      Text(
+                                        PostReactions.label(
+                                          person.reactionType!,
+                                        ),
+                                        style: const TextStyle(
+                                          color: VentlyColors.berryMagenta,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    Text(
+                                      _StoryViewerTime.ago(person.viewedAt),
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withOpacity(0.5),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             );
@@ -587,6 +696,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
             onLongPressEnd: (_) => _resume(),
             onReact: _react,
             onSendReply: _sendReply,
+            onOpenAuthor: _openAuthorProfile,
           );
         },
       ),
@@ -615,6 +725,7 @@ class _ViewerBody extends StatelessWidget {
     required this.onLongPressEnd,
     required this.onReact,
     required this.onSendReply,
+    required this.onOpenAuthor,
   });
 
   final List<VentStory> stories;
@@ -636,6 +747,7 @@ class _ViewerBody extends StatelessWidget {
   final GestureLongPressEndCallback onLongPressEnd;
   final ValueChanged<String> onReact;
   final VoidCallback onSendReply;
+  final ValueChanged<String> onOpenAuthor;
 
   @override
   Widget build(BuildContext context) {
@@ -699,6 +811,7 @@ class _ViewerBody extends StatelessWidget {
                         isOwner: isOwner,
                         onOwnerActions: onOwnerActions,
                         onClose: onClose,
+                        onOpenAuthor: onOpenAuthor,
                       ),
                     ],
                   ),
@@ -729,6 +842,13 @@ class _ViewerBody extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Above the music card, tray and composer, so it can
+                      // never be drawn underneath any of them.
+                      if (story.hasImage &&
+                          story.content.trim().isNotEmpty) ...[
+                        _StoryCaption(text: story.content.trim()),
+                        const SizedBox(height: 12),
+                      ],
                       if (story.musicTrack != null) ...[
                         MusicTrackCard(
                           track: story.musicTrack!,
@@ -894,11 +1014,13 @@ class _AuthorHeader extends StatelessWidget {
     required this.isOwner,
     required this.onOwnerActions,
     required this.onClose,
+    required this.onOpenAuthor,
   });
   final VentStory story;
   final bool isOwner;
   final VoidCallback onOwnerActions;
   final VoidCallback onClose;
+  final ValueChanged<String> onOpenAuthor;
 
   @override
   Widget build(BuildContext context) {
@@ -906,6 +1028,27 @@ class _AuthorHeader extends StatelessWidget {
       children: [
         if (story.authorId != null)
           UserProfileLink(
+            // Pushed imperatively onto the ROOT navigator, not via go_router.
+            //
+            // Three approaches got here. Going through go_router collides page
+            // keys inside the shell branch and crashes with
+            // !keyReservation.contains(key). Popping the story first and then
+            // pushing left the pop and the push racing, and the story froze on
+            // screen with nothing opening — worse than the crash it replaced.
+            // Marking the route parentNavigatorKey: rootNavigatorKey is
+            // rejected outright, because a sub-route of a shell branch may not
+            // claim the root navigator; that one broke the app at startup.
+            //
+            // An imperative root push has none of those problems: no location,
+            // so no page key to collide, and no pop, so nothing to race. The
+            // profile stacks above the story and dismissing it comes back
+            // here. What is given up is that this particular profile view is
+            // not a deep-linkable URL — the right trade for a panel opened
+            // from a full-screen overlay.
+            // Handled by the screen's state, which can pause the story
+            // timer and the music around the navigation and resume them when
+            // the profile is dismissed.
+            onTapOverride: () => onOpenAuthor(story.authorId!),
             userId: story.authorId!,
             pseudonym: story.authorPseudonym.replaceFirst('@', ''),
             displayName: story.authorDisplayName,
@@ -973,29 +1116,88 @@ class _StoryCanvas extends StatelessWidget {
   const _StoryCanvas({required this.story});
   final VentStory story;
 
+  static const _canvasBackground = Color(0xFF1A1014);
+
   @override
   Widget build(BuildContext context) {
-    if (story.imageUrl != null && story.imageUrl!.isNotEmpty) {
-      return CachedNetworkImage(
-        imageUrl: story.imageUrl!,
-        fit: BoxFit.cover,
-        placeholder: (_, __) => Container(color: const Color(0xFF1A1014)),
-        errorWidget: (_, __, ___) => Container(color: const Color(0xFF1A1014)),
+    if (!story.hasImage) {
+      final text = story.content.trim();
+      return Container(
+        color: _canvasBackground,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: text.isEmpty
+            ? const SizedBox.shrink()
+            : TaggedText(
+                '"$text"',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  height: 1.35,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
       );
     }
 
-    return Container(
-      color: const Color(0xFF1A1014),
-      alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 28),
+    // The image only. The caption for a photo story is rendered by
+    // _ViewerBody, inside the same column as the reaction tray and the reply
+    // composer.
+    //
+    // It was briefly overlaid here at bottom: 0 instead, which put it exactly
+    // where the bottom chrome lives — on an owner's story the words ran
+    // straight through the "0 views · 0 reactions" pill and neither was
+    // readable. Sharing the chrome's column makes overlap impossible rather
+    // than something to keep re-tuning as that chrome changes.
+    return SensitiveMediaVeil(
+      veiled: story.mediaNeedsVeil,
+      pending: story.mediaStatus == 'pending',
+      child: CachedNetworkImage(
+        imageUrl: story.imageUrl!,
+        fit: BoxFit.cover,
+        placeholder: (_, __) => Container(color: _canvasBackground),
+        errorWidget: (_, __, ___) => Container(color: _canvasBackground),
+      ),
+    );
+  }
+}
+
+/// Relative time for the viewer list.
+class _StoryViewerTime {
+  static String ago(DateTime at) {
+    final diff = DateTime.now().difference(at);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+}
+
+/// The caption under a photo story.
+///
+/// Only rendered when a story has both an image and words. A text-only story's
+/// words are the story itself and are drawn large and centred on the canvas.
+class _StoryCaption extends StatelessWidget {
+  const _StoryCaption({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
       child: TaggedText(
-        '"${story.content}"',
-        textAlign: TextAlign.center,
+        text,
+        textAlign: TextAlign.start,
         style: const TextStyle(
           color: Colors.white,
-          fontSize: 22,
+          fontSize: 16.5,
           height: 1.35,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
+          // The chrome's scrim already darkens this area, but a caption can sit
+          // over a bright patch of photo above it; the shadow is what keeps it
+          // legible there.
+          shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
         ),
       ),
     );
@@ -1024,19 +1226,44 @@ class _ReactionTray extends StatelessWidget {
         borderRadius: BorderRadius.circular(VentlyTokens.radiusChip),
         border: Border.all(color: Colors.white.withOpacity(0.14)),
       ),
+      // Icon above label, and each item takes an equal share.
+      //
+      // Four TextButton.icon widgets in a Row put the icon BESIDE the label,
+      // and "Been there" plus a 18px icon plus each button's own 16px of
+      // horizontal padding does not fit four times across a 393pt phone —
+      // hence "A RenderFlex overflowed by 15 pixels". Stacking halves the
+      // width each item needs, and Expanded means the tray divides whatever
+      // space it has instead of demanding a fixed amount.
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           for (final item in _items)
-            TextButton.icon(
-              onPressed: () => onReact(item.$3),
-              icon: Icon(item.$1, size: 18, color: Colors.white),
-              label: Text(
-                item.$2,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 11,
+            Expanded(
+              child: InkWell(
+                onTap: () => onReact(item.$3),
+                borderRadius: BorderRadius.circular(14),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(item.$1, size: 20, color: Colors.white),
+                      const SizedBox(height: 3),
+                      Text(
+                        item.$2,
+                        maxLines: 1,
+                        // The last line of defence: a longer reaction label,
+                        // or a large system font, shortens the text instead
+                        // of overflowing the tray again.
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
