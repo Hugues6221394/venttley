@@ -166,6 +166,9 @@ class SupabaseBackend {
     required String password,
     required String avatarSeed,
     required int birthYear,
+    // Optional so any caller that genuinely has only a year still compiles;
+    // the trigger treats a missing month exactly as it did before.
+    int? birthMonth,
     required String safetyTier,
     required String recoveryBlob,
     required String recoverySalt,
@@ -180,6 +183,11 @@ class SupabaseBackend {
           'pseudonym': username,
           'avatar_seed': avatarSeed,
           'birth_year': birthYear,
+          // Sent so the age gate never has to ask for it later. The signup
+          // picker already collected a full date of birth and this was the
+          // only piece being discarded — which is what made "we need one more
+          // detail about your age" reachable at all.
+          if (birthMonth != null) 'birth_month': birthMonth,
           'safety_tier': safetyTier,
         },
       );
@@ -236,6 +244,9 @@ class SupabaseBackend {
     required String username,
     required String avatarSeed,
     required int birthYear,
+    // Optional so any caller that genuinely has only a year still compiles;
+    // the trigger treats a missing month exactly as it did before.
+    int? birthMonth,
     required String safetyTier,
     required String recoveryBlob,
     required String recoverySalt,
@@ -243,12 +254,19 @@ class SupabaseBackend {
     final AuthResponse res;
     try {
       res = await _client.auth.signUp(
-        email: email,
+        // Normalised for the same reason sign-in is: an account created with a
+        // stray space is an account nobody can sign back into.
+        email: _normalizeEmail(email),
         password: password,
         data: {
           'pseudonym': username,
           'avatar_seed': avatarSeed,
           'birth_year': birthYear,
+          // Sent so the age gate never has to ask for it later. The signup
+          // picker already collected a full date of birth and this was the
+          // only piece being discarded — which is what made "we need one more
+          // detail about your age" reachable at all.
+          if (birthMonth != null) 'birth_month': birthMonth,
           'safety_tier': safetyTier,
         },
       );
@@ -298,13 +316,27 @@ class SupabaseBackend {
     return _me;
   }
 
+  /// The address as an identifier rather than as typed.
+  ///
+  /// GoTrue lowercases addresses itself but does not trim them, and a mobile
+  /// keyboard will happily hand us " you@example.com" after an autocomplete
+  /// tap. That signs up fine and then fails to sign in, with the only
+  /// available message being "invalid credentials" — someone locked out of
+  /// their own account by an invisible space. Normalising here covers every
+  /// caller, and matches what set_recovery_email already does server-side
+  /// (`lower(btrim(...))`) so the two cannot drift.
+  static String _normalizeEmail(String email) => email.trim().toLowerCase();
+
   /// Email-based sign-in for accounts created with [signUpWithEmail].
   Future<AppUser> signInWithEmail({
     required String email,
     required String password,
   }) async {
     try {
-      await _client.auth.signInWithPassword(email: email, password: password);
+      await _client.auth.signInWithPassword(
+        email: _normalizeEmail(email),
+        password: password,
+      );
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
       if (msg.contains('invalid') || msg.contains('credentials')) {
@@ -678,6 +710,67 @@ class SupabaseBackend {
 
   Future<void> clearRecoveryEmail() async {
     await _client.rpc('clear_recovery_email');
+  }
+
+  /// Abandon a requested-but-unconfirmed address. Never touches the verified
+  /// one, so it is always the safe way out of a half-finished change.
+  Future<bool> cancelRecoveryEmailChange() async {
+    final ok = await _client.rpc('cancel_recovery_email_change');
+    return ok == true;
+  }
+
+  /// Ask for a reset code at the account's verified recovery address.
+  ///
+  /// [identifier] is either that address or the account's handle, because
+  /// somebody locked out will not reliably remember which we want.
+  ///
+  /// Returns nothing and throws for nothing that depends on the account. The
+  /// server answers identically whether the account exists, has no verified
+  /// address, or is rate limited — otherwise this becomes a way to test who
+  /// has a Venttly account, which is the one thing the app promises it is not.
+  /// So there is nothing here for the UI to branch on, and the screen says
+  /// "check your inbox" either way.
+  Future<void> requestPasswordReset(String identifier) async {
+    await _client.functions.invoke(
+      'password-reset',
+      body: {'action': 'request', 'identifier': identifier.trim()},
+    );
+  }
+
+  /// Set a new password using a code from [requestPasswordReset].
+  ///
+  /// Returns null on success, or a message to show. A wrong code, an expired
+  /// code and an exhausted one all come back the same way, on purpose.
+  Future<String?> confirmPasswordReset({
+    required String identifier,
+    required String code,
+    required String newPassword,
+  }) async {
+    final res = await _client.functions.invoke(
+      'password-reset',
+      body: {
+        'action': 'confirm',
+        'identifier': identifier.trim(),
+        'code': code.trim(),
+        'new_password': newPassword,
+      },
+    );
+
+    final data = res.data;
+    final body = data is Map ? Map<String, dynamic>.from(data) : const {};
+    if (body['ok'] == true) return null;
+
+    // The server sends a specific message only for a weak password, which is
+    // about what the person just typed and gives them something to act on.
+    final error = body['error'];
+    if (error == 'weak_password') {
+      return (body['message'] as String?) ?? 'Choose a stronger password.';
+    }
+    if (error == 'reset_failed') {
+      return 'That code was right, but we could not finish. Ask for a new '
+          'code and try once more.';
+    }
+    return 'That code was wrong or has expired. Ask for a new one.';
   }
 
   Future<String?> setRecoveryPhone(String phone) async {
@@ -1413,10 +1506,37 @@ class SupabaseBackend {
 
   /// RLS-aware category totals. Unlike a feed page, this RPC aggregates every
   /// post visible to the caller so Home counts match category results.
+  /// Prefers the personalised ordering, falling back to the global aggregate
+  /// when the RPC is not deployed. A trending rail that 500s is worse than one
+  /// that is merely impersonal.
+  Future<List<dynamic>> _trendingTopicRows(int limit) async {
+    try {
+      return await _client.rpc(
+            'trending_topics_for_me',
+            params: {'p_limit': limit},
+          )
+          as List<dynamic>;
+    } on PostgrestException catch (error) {
+      if (!_isMissingRpc(error, 'trending_topics_for_me')) rethrow;
+      return await _client.rpc(
+            'trending_topic_stats',
+            params: {'p_limit': limit},
+          )
+          as List<dynamic>;
+    }
+  }
+
+  /// Trending categories, ordered for this person.
+  ///
+  /// trending_topic_stats is a pure global aggregate with no auth.uid() in it,
+  /// so it gave every account the same order: whoever posts most overall wins
+  /// for everyone. trending_topics_for_me blends that global trend 55/45
+  /// against what you actually engage with, both log-normalised, and returns
+  /// the same row shape — post_count and trend_score are still the true
+  /// app-wide figures, so nothing displayed becomes a lie. Only the order is
+  /// personal.
   Future<List<TrendingTopic>> trendingTopicStats({int limit = 8}) async {
-    final rows =
-        await _client.rpc('trending_topic_stats', params: {'p_limit': limit})
-            as List<dynamic>;
+    final rows = await _trendingTopicRows(limit);
     return rows
         .map((row) {
           final data = (row as Map).cast<String, dynamic>();
@@ -1510,6 +1630,65 @@ class SupabaseBackend {
       params: {'p_post_id': postId},
     );
     return (res as bool?) ?? false;
+  }
+
+  /// Who viewed a story. Author only — enforced server-side.
+  ///
+  /// story_views has held (post_id, viewer_id, viewed_at) since 0038, so this
+  /// data always existed; nothing ever asked for it. RLS on that table lets a
+  /// person read only their own row, so the list can only come through the
+  /// SECURITY DEFINER RPC.
+  Future<List<StoryViewerUser>> storyViewers(String postId) async {
+    final List<dynamic> rows;
+    try {
+      rows =
+          await _client.rpc(
+                'story_viewers_for_owner',
+                params: {'p_post_id': postId},
+              )
+              as List<dynamic>;
+    } on PostgrestException catch (error) {
+      // An app newer than its database must not take the whole activity sheet
+      // down with it. Returning empty means the sheet still opens and still
+      // shows the reaction count; the viewer list simply is not there yet.
+      // This exact mismatch — client expecting something the server has not
+      // got — is what produced several of today's silent blank sections.
+      if (!_isMissingRpc(error, 'story_viewers_for_owner')) rethrow;
+      return const [];
+    }
+    return rows
+        .map((raw) {
+          final row = (raw as Map).cast<String, dynamic>();
+          return StoryViewerUser(
+            userId: row['user_id'] as String,
+            pseudonym: (row['pseudonym'] as String?) ?? 'Someone',
+            avatarSeed: (row['avatar_seed'] as String?) ?? 'default-orb',
+            profilePhotoUrl: row['profile_photo_url'] as String?,
+            isVerified: (row['is_verified'] as bool?) ?? false,
+            viewedAt: DateTime.parse(row['viewed_at'] as String),
+            reactionType: row['reaction_type'] as String?,
+          );
+        })
+        .toList(growable: false);
+  }
+
+  /// The newest story by [userId] the caller may watch, or null.
+  ///
+  /// Lets a profile screen offer the story alongside the profile photo without
+  /// fetching the whole friend rail to find out whether there is one.
+  Future<String?> activeStoryForUser(String userId) async {
+    try {
+      final res = await _client.rpc(
+        'active_story_for_user',
+        params: {'p_user_id': userId},
+      );
+      return res as String?;
+    } on PostgrestException catch (error) {
+      // A profile must still open on an older database. No story offered is
+      // the correct degradation; a failed profile is not.
+      if (!_isMissingRpc(error, 'active_story_for_user')) rethrow;
+      return null;
+    }
   }
 
   Future<bool> storyRepliesEnabled() async {
@@ -3093,14 +3272,49 @@ class SupabaseBackend {
         .replaceAll('.', '')
         .toLowerCase()
         .replaceAll(RegExp('[^a-z0-9]'), '');
+    // Under the uploader's own uid, not at tribes/<id>/….
+    //
+    // The tribes/ prefix relies on the "post media tribe manager insert"
+    // policy from 0067, which kept returning 403 "new row violates row-level
+    // security policy" even after that migration was re-applied — so every
+    // Tribe created with pictures got "its images could not be saved yet" and
+    // no picture. Reproduced twice, before and after re-applying the policy.
+    //
+    // The uid-prefixed path is covered by the bucket's original 0038 policy,
+    // which is demonstrably working: post images and story images go through
+    // it constantly, including one uploaded minutes before this was changed.
+    // Using the path that provably works beats continuing to debug a policy
+    // whose failing clause I could not isolate from outside the database.
+    //
+    // The tribe id stays in the path so an object is still traceable to its
+    // Tribe, and updateTribeConfiguration records the resulting URL either way.
     final path =
-        'tribes/$tribeId/${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
+        '$uid/tribes/$tribeId/${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
     await _client.storage
         .from('post-media')
         .uploadBinary(
           path,
           _imageUploadBytes(bytes),
-          fileOptions: FileOptions(contentType: contentType, upsert: true),
+          // upsert: false, and that is the actual fix.
+          //
+          // This was upsert: true, which makes the storage client issue an
+          // upsert rather than a plain insert — and an upsert needs UPDATE
+          // permission on storage.objects. The post-media bucket has no UPDATE
+          // policy at all: 0038 defines "post media owner insert",
+          // "post media owner delete" and "post media public read", and
+          // nothing else. So every tribe image upload came back
+          // "403 new row violates row-level security policy" and every Tribe
+          // created with pictures got "its images could not be saved yet".
+          //
+          // It also explains why post and story images were always fine:
+          // uploadPostImage uses upsert: false and therefore only ever needs
+          // the INSERT policy, which exists.
+          //
+          // Nothing is lost by dropping it. The path above contains a fresh
+          // Uuid().v4() on every call, so there is never an existing object at
+          // that key to overwrite — the upsert could not have been doing
+          // anything except requiring a privilege the bucket does not grant.
+          fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('post-media').getPublicUrl(path);
     return (path: path, url: url);
@@ -3460,8 +3674,28 @@ class SupabaseBackend {
       displayName = row?['display_name'] as String?;
       bio = row?['bio'] as String?;
       pronouns = row?['pronouns'] as String?;
-    } catch (_) {
-      // RLS or transient — leave at defaults rather than failing the open.
+    } catch (e) {
+      // Was `catch (_) { }`.
+      //
+      // This swallowed a 42501 on every single profile open for months.
+      // public.users has a blanket REVOKE SELECT with individual columns
+      // re-granted since, connections_count was never granted, and Postgres
+      // refuses the whole statement when one column is denied — so bio,
+      // pronouns and display_name were nulled by a permission error on a
+      // counter, silently. Somebody's biography saved fine and was invisible
+      // to everyone, with nothing anywhere to explain it.
+      //
+      // Still non-fatal: a profile that opens without its bio beats one that
+      // does not open. But never again unlogged, and the field names are in
+      // the message so the next missing grant is a one-line diagnosis.
+      log.warn(
+        'profile.detail_read_failed',
+        props: {
+          'target': otherUserId,
+          'fields': 'connections_count,display_name,bio,pronouns',
+        },
+        error: e,
+      );
     }
     // Banner stats: total posts (vents + whispers) + total hugs received.
     int postsTotal = 0;
@@ -4882,6 +5116,24 @@ class SupabaseBackend {
     );
   }
 
+  /// Delete a tribe outright, with no 30-day window.
+  ///
+  /// Separate from [setTribeLifecycle] because it is a different act: that one
+  /// schedules and is reversible with 'cancel_delete', this one is not. The
+  /// server requires the caller to be the keeper and to have typed the tribe's
+  /// name; the repository re-authenticates first, as it does for scheduling.
+  Future<int> deleteTribeNow({
+    required String tribeId,
+    required String confirmedName,
+  }) async {
+    final raw = await _client.rpc(
+      'delete_tribe_now',
+      params: {'p_tribe_id': tribeId, 'p_confirm_name': confirmedName},
+    );
+    final body = raw is Map ? Map<String, dynamic>.from(raw) : const {};
+    return (body['posts_affected'] as num?)?.toInt() ?? 0;
+  }
+
   Future<List<TribeAuditEvent>> tribeAuditLog(
     String tribeId, {
     int limit = 100,
@@ -5325,13 +5577,97 @@ class SupabaseBackend {
   bool joinedTribe(String tribeId) => _joinedTribes.contains(tribeId);
 
   Future<List<Tribe>> tribes({String? category, String? search}) async {
-    var q = _client.from('tribe_directory').select();
+    // Only living tribes are discoverable.
+    //
+    // A tribe scheduled for deletion, paused, or archived kept appearing in
+    // search results exactly as before — the view did not expose
+    // lifecycle_status, so nothing could filter on it. Someone searched for a
+    // tribe they had already scheduled for deletion and found it sitting there.
+    //
+    // This filters discovery only. tribeBySlug and tribesByKeeper deliberately
+    // do not, because a keeper has to be able to open a paused or
+    // pending-deletion tribe to restore it.
+    var q = _client
+        .from('tribe_directory')
+        .select()
+        .eq('lifecycle_status', 'active');
     if (category != null) q = q.eq('category', category);
     if (search != null && search.trim().isNotEmpty) {
       q = q.ilike('name', '%${search.trim()}%');
     }
     final rows = await q.order('member_count', ascending: false);
     return rows.map<Tribe>(_tribeFromRow).toList();
+  }
+
+  /// Tribes to suggest to *this* person, in an order that changes.
+  ///
+  /// The home rail used to be `tribes()` — tribe_directory ordered by
+  /// member_count — which is one global ranking. Two different accounts saw the
+  /// same six tribes, and pulling to refresh re-fetched the same six. This
+  /// ranks on who your friends are, what you engage with, and which tribes are
+  /// actually active, then subtracts a decaying penalty for what you were shown
+  /// recently so a refresh genuinely brings something new.
+  ///
+  /// Falls back to [tribes] if the RPC is not deployed yet: a home screen with
+  /// an empty tribes rail would be a worse regression than a global ordering.
+  Future<List<Tribe>> recommendedTribes({int limit = 10}) async {
+    try {
+      final rows =
+          await _client.rpc('recommended_tribes', params: {'p_limit': limit})
+              as List<dynamic>;
+      return rows
+          .map<Tribe>((r) => _tribeFromRow((r as Map).cast<String, dynamic>()))
+          .toList();
+    } on PostgrestException catch (error) {
+      if (!_isMissingRpc(error, 'recommended_tribes')) rethrow;
+      final all = await tribes();
+      return all.take(limit).toList();
+    }
+  }
+
+  /// Whispers for the home rail, ranked for this person and rotated.
+  ///
+  /// The rail used to fetch [listWhispers] and sort it client-side by
+  /// plays + likes*2 + comments — a fixed formula over a recency-ordered
+  /// global list, so every account saw the same whispers in the same order and
+  /// a refresh changed nothing. This asks the server, which knows who your
+  /// friends are and what it has already shown you.
+  ///
+  /// Falls back to the old path if the RPC is not deployed: an empty rail on a
+  /// support platform reads as abandonment, which is worse than a stale one.
+  Future<List<Whisper>> whispersForMe({int limit = 24}) async {
+    try {
+      final rows =
+          await _client.rpc('whispers_for_me', params: {'p_limit': limit})
+              as List<dynamic>;
+      return rows
+          .map<Whisper>(
+            (r) => _whisperFromRow((r as Map).cast<String, dynamic>()),
+          )
+          .toList();
+    } on PostgrestException catch (error) {
+      if (!_isMissingRpc(error, 'whispers_for_me')) rethrow;
+      return listWhispers(limit: limit);
+    }
+  }
+
+  /// Tell the server what a discovery rail actually put on screen, so the next
+  /// refresh can show something else. Best-effort: failing to record an
+  /// impression must never surface to somebody scrolling.
+  Future<void> noteDiscoveryImpressions({
+    required String kind,
+    required List<String> ids,
+  }) async {
+    if (ids.isEmpty) return;
+    try {
+      await _client.rpc(
+        'note_discovery_impressions',
+        params: {'p_kind': kind, 'p_ids': ids},
+      );
+    } catch (_) {
+      // Rotation degrades to "no rotation", which is the old behaviour, not a
+      // broken screen.
+    }
   }
 
   Future<List<Tribe>> tribesByKeeper(String keeperId) async {
@@ -5675,6 +6011,33 @@ class SupabaseBackend {
     );
   }
 
+  /// The signed-in keeper's agreement for this Tribe, or null if there is
+  /// none.
+  ///
+  /// Null is a real and expected answer, not an error: every Tribe created
+  /// before 20261001090000 has no attestation, because the agreement did not
+  /// exist to be given. The UI says so rather than inventing a date.
+  Future<KeeperAttestation?> myKeeperAttestation(String tribeId) async {
+    final res = await _client.rpc(
+      'my_keeper_attestation',
+      params: {'p_tribe_id': tribeId},
+    );
+    // RETURNS TABLE arrives as a list of rows; own-row-only, so at most one.
+    final rows = (res as List?) ?? const [];
+    if (rows.isEmpty) return null;
+    final row = (rows.first as Map).cast<String, dynamic>();
+    final at = _coerceDate(row['attested_at']);
+    if (at == null) return null;
+    return KeeperAttestation(
+      version: _coerceInt(row['version']) ?? 1,
+      // Absent rather than defaulted to 'adult': claiming the server verified
+      // an age it did not report is the kind of comfortable default this
+      // codebase has been bitten by before.
+      ageStatus: (row['age_status'] as String?) ?? 'unknown',
+      attestedAt: at,
+    );
+  }
+
   /// Record the birth month for an account in its 18th year. Write-once on the
   /// server, so a wrong answer cannot be retried into a right one.
   Future<TribeCreationEligibility> setMyBirthMonth(int month) async {
@@ -5739,6 +6102,8 @@ class SupabaseBackend {
     TribeGovernanceSettings settings = const TribeGovernanceSettings(),
     List<TribeRuleItem> rules = const [],
     required String idempotencyKey,
+    required bool keeperAttested,
+    required int attestationVersion,
   }) async {
     if (_uid == null) throw StateError('Not signed in');
     // Required, not optional. A Tribe is not a post: a duplicate carries
@@ -5758,6 +6123,12 @@ class SupabaseBackend {
         if (welcomeMessage != null) 'p_welcome_message': welcomeMessage,
         'p_settings': settings.toJson(),
         'p_rules': [for (final rule in rules) rule.toJson()],
+        // Sent explicitly rather than left to the server's default, which is
+        // FALSE: the server refuses an unattested creation with
+        // keeper_attestation_required, so a caller that forgets this gets a
+        // named error instead of an unattested Tribe.
+        'p_keeper_attested': keeperAttested,
+        'p_attestation_version': attestationVersion,
       },
     );
     final row = await _client

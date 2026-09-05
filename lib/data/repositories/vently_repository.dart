@@ -121,6 +121,9 @@ class VentlyRepository implements MusicProvider {
         password: password,
         avatarSeed: avatarSeed,
         birthYear: birthDate.year,
+        // The picker already asked for the whole date; sending only the year
+        // is what left the age gate with a question the app couldn't answer.
+        birthMonth: birthDate.month,
         safetyTier: tier,
         recoveryBlob: sealed.blob,
         recoverySalt: sealed.salt,
@@ -193,6 +196,7 @@ class VentlyRepository implements MusicProvider {
       username: username,
       avatarSeed: avatarSeed,
       birthYear: birthDate.year,
+      birthMonth: birthDate.month,
       safetyTier: tier,
       recoveryBlob: sealed.blob,
       recoverySalt: sealed.salt,
@@ -422,6 +426,32 @@ class VentlyRepository implements MusicProvider {
     final live = _live;
     if (live == null) return;
     await live.clearRecoveryEmail();
+  }
+
+  Future<bool> cancelRecoveryEmailChange() async {
+    final live = _live;
+    if (live == null) return false;
+    return live.cancelRecoveryEmailChange();
+  }
+
+  Future<void> requestPasswordReset(String identifier) async {
+    final live = _live;
+    if (live == null) return;
+    await live.requestPasswordReset(identifier);
+  }
+
+  Future<String?> confirmPasswordReset({
+    required String identifier,
+    required String code,
+    required String newPassword,
+  }) async {
+    final live = _live;
+    if (live == null) return 'You appear to be offline.';
+    return live.confirmPasswordReset(
+      identifier: identifier,
+      code: code,
+      newPassword: newPassword,
+    );
   }
 
   Future<String?> setRecoveryPhone(String phone) async {
@@ -1118,6 +1148,18 @@ class VentlyRepository implements MusicProvider {
     return Future.value(true);
   }
 
+  Future<String?> activeStoryForUser(String userId) {
+    final live = _live;
+    if (live == null) return Future.value(null);
+    return live.activeStoryForUser(userId);
+  }
+
+  Future<List<StoryViewerUser>> storyViewers(String postId) {
+    final live = _live;
+    if (live != null) return live.storyViewers(postId);
+    return Future.value(const []);
+  }
+
   Future<List<StoryReactionUser>> storyReactions(String postId) {
     final live = _live;
     if (live != null) return live.storyReactions(postId);
@@ -1362,6 +1404,16 @@ class VentlyRepository implements MusicProvider {
       );
     }
     return live.tribeCreationEligibility();
+  }
+
+  /// The signed-in keeper's agreement for this Tribe, or null if none exists.
+  ///
+  /// Null in mock mode too: there is no agreement to show for a Tribe that was
+  /// never really created.
+  Future<KeeperAttestation?> myKeeperAttestation(String tribeId) {
+    final live = _live;
+    if (live == null) return Future.value(null);
+    return live.myKeeperAttestation(tribeId);
   }
 
   Future<TribeCreationEligibility> setMyBirthMonth(int month) {
@@ -2695,6 +2747,27 @@ class VentlyRepository implements MusicProvider {
     _cache.invalidate(prefix: 'tribes:');
   }
 
+  /// Immediate, irreversible deletion.
+  ///
+  /// Re-authenticates first, exactly like scheduling does. If anything this
+  /// path deserves it more: scheduling leaves 30 days to change your mind and
+  /// a 'cancel_delete' action to do it with, and this leaves nothing.
+  Future<int> deleteTribeNow({
+    required String tribeId,
+    required String confirmedName,
+    String? password,
+  }) async {
+    await reauthenticate(password ?? '');
+    final live = _live;
+    if (live == null) return 0;
+    final affected = await live.deleteTribeNow(
+      tribeId: tribeId,
+      confirmedName: confirmedName,
+    );
+    _cache.invalidate(prefix: 'tribes:');
+    return affected;
+  }
+
   Future<TribeManagementOverview> setTribeLifecycle({
     required String tribeId,
     required String action,
@@ -2965,6 +3038,38 @@ class VentlyRepository implements MusicProvider {
   // ===================== Tribes =====================
   /// Tribe lists are stable enough to cache for a minute per query —
   /// the directory screen swipes through several categories quickly.
+  /// Deliberately NOT cached, unlike [tribes].
+  ///
+  /// The whole point is that consecutive calls return different things — the
+  /// server subtracts a penalty for what it has already shown this person. A
+  /// cache would hand back the previous list and reintroduce exactly the frozen
+  /// rail this replaces.
+  Future<List<Tribe>> recommendedTribes({int limit = 10}) async {
+    final live = _live;
+    if (live == null) {
+      final all = await tribes();
+      return all.take(limit).toList();
+    }
+    return live.recommendedTribes(limit: limit);
+  }
+
+  /// Uncached, like [recommendedTribes], and for the same reason: consecutive
+  /// calls are supposed to differ.
+  Future<List<Whisper>> whispersForMe({int limit = 24}) async {
+    final live = _live;
+    if (live == null) return listWhispers(limit: limit);
+    return live.whispersForMe(limit: limit);
+  }
+
+  Future<void> noteDiscoveryImpressions({
+    required String kind,
+    required List<String> ids,
+  }) async {
+    final live = _live;
+    if (live == null) return;
+    await live.noteDiscoveryImpressions(kind: kind, ids: ids);
+  }
+
   Future<List<Tribe>> tribes({String? category, String? search}) {
     final key = 'tribes:${category ?? ''}:${search ?? ''}';
     return _cache.getOrLoad(key, () async {
@@ -3156,21 +3261,41 @@ class VentlyRepository implements MusicProvider {
     TribeGovernanceSettings settings = const TribeGovernanceSettings(),
     List<TribeRuleItem> rules = const [],
     required String idempotencyKey,
+    required bool keeperAttested,
+    required int attestationVersion,
   }) {
     final live = _live;
     if (live != null) {
-      return live.createTribe(
-        name: name,
-        category: category,
-        description: description,
-        isPrivate: isPrivate,
-        tags: tags,
-        visibility: visibility,
-        welcomeMessage: welcomeMessage,
-        settings: settings,
-        rules: rules,
-        idempotencyKey: idempotencyKey,
-      );
+      return live
+          .createTribe(
+            name: name,
+            category: category,
+            description: description,
+            isPrivate: isPrivate,
+            tags: tags,
+            visibility: visibility,
+            welcomeMessage: welcomeMessage,
+            settings: settings,
+            rules: rules,
+            idempotencyKey: idempotencyKey,
+            keeperAttested: keeperAttested,
+            attestationVersion: attestationVersion,
+          )
+          .then((tribe) {
+            // Drop the cached directory.
+            //
+            // tribes() caches under a 'tribes:<category>:<search>' key with a
+            // one-minute TTL, and creation never cleared it. Pull-to-refresh
+            // invalidates the Riverpod provider, which re-calls tribes(), which
+            // returns the same cached list — so a brand new Tribe was absent
+            // from search and the directory no matter how many times anyone
+            // refreshed, and only a full app restart showed it.
+            //
+            // setTribeLifecycle already does exactly this, which is why
+            // DELETING a Tribe updated immediately while creating one did not.
+            _cache.invalidate(prefix: 'tribes:');
+            return tribe;
+          });
     }
     return Future.value(
       _mock.createTribe(

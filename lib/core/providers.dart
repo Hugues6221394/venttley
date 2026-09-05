@@ -639,6 +639,46 @@ final feedPostsProvider =
       FeedPostsNotifier.new,
     );
 
+/// Per-user tribe suggestions for the Home rail, ranked server-side and
+/// rotated so a refresh brings different tribes.
+///
+/// autoDispose and uncached on purpose: this provider must re-ask the server
+/// every time the rail is rebuilt after an invalidate, because the server's
+/// answer depends on what it has already shown. The rail records impressions
+/// after it renders, which is what makes the next answer differ.
+final homeTribeRailProvider = FutureProvider.autoDispose<List<Tribe>>((
+  ref,
+) async {
+  final repo = ref.watch(repositoryProvider);
+  List<Tribe> tribes;
+  try {
+    tribes = await repo.recommendedTribes(limit: 10);
+  } catch (error) {
+    // Never degrade to a blank section.
+    //
+    // When recommended_tribes first shipped it excluded tribes you had
+    // joined, and for a Keeper who belonged to nearly all of them the rail
+    // came back empty: no header, no cards, no error, nothing in the log,
+    // because .valueOrNull turns a failed provider into a silent null. A
+    // section that vanishes with no trace is the same failure shape as
+    // `?? 'clean'` — the app quietly deciding that "we do not know" means
+    // "there is nothing".
+    //
+    // So a broken ranking function now costs personalisation, not the rail,
+    // and it says so.
+    log.warn('discovery.tribe_rail_failed', props: {'error': '$error'});
+    return repo.tribes().then((all) => all.take(10).toList());
+  }
+  // Recorded here rather than in the widget so it happens once per fetch, not
+  // once per rebuild — a scroll or a keyboard opening must not count as having
+  // shown somebody a new set of tribes.
+  await ref.read(repositoryProvider).noteDiscoveryImpressions(
+    kind: 'tribe',
+    ids: tribes.take(6).map((t) => t.tribeId).toList(),
+  );
+  return tribes;
+});
+
 /// Broad hot sample for Home discovery modules. It intentionally ignores the
 /// active category/mood filters so Trending Topics and Tribes keep showing the
 /// whole app pulse while the main feed list can be narrowed.
@@ -741,6 +781,22 @@ final storyReactionsProvider = FutureProvider.autoDispose
       return ref.watch(repositoryProvider).storyReactions(postId);
     });
 
+/// The story this person has running, if any and if I may see it.
+///
+/// Drives the ring on a profile avatar and the choice between opening the
+/// story and opening the profile photo.
+final activeStoryForUserProvider = FutureProvider.autoDispose
+    .family<String?, String>(
+      (ref, userId) => ref.watch(repositoryProvider).activeStoryForUser(userId),
+    );
+
+/// Who viewed one of my stories. Author-only server-side.
+final storyViewersProvider = FutureProvider.autoDispose
+    .family<List<StoryViewerUser>, String>((ref, postId) {
+      ref.watch(feedPostsProvider);
+      return ref.watch(repositoryProvider).storyViewers(postId);
+    });
+
 final inboxTabProvider = StateProvider<String>((ref) => 'requests');
 final inboxStreamProvider = StreamProvider<List<ChatRoom>>((ref) {
   final repo = ref.watch(repositoryProvider);
@@ -821,6 +877,17 @@ final recommendedTribesProvider = FutureProvider.autoDispose
 final tribeBySlugProvider = FutureProvider.autoDispose.family<Tribe?, String>(
   (ref, slug) async => ref.watch(repositoryProvider).tribeBySlug(slug),
 );
+
+/// The signed-in keeper's agreement for one Tribe, or null if there is none.
+///
+/// autoDispose because it is read on one card of one screen, and family'd by
+/// tribe id because a keeper with several Tribes has a separate agreement for
+/// each one.
+final myKeeperAttestationProvider = FutureProvider.autoDispose
+    .family<KeeperAttestation?, String>(
+      (ref, tribeId) async =>
+          ref.watch(repositoryProvider).myKeeperAttestation(tribeId),
+    );
 
 /// Tribes the current user keeps (manages). Plug Dashboard data source.
 final tribesIKeepProvider = FutureProvider.autoDispose<List<Tribe>>(
@@ -1228,19 +1295,40 @@ final myWhispersProvider = FutureProvider.autoDispose<List<Whisper>>((
   return ref.watch(repositoryProvider).whispersForAuthor(me.userId, limit: 48);
 });
 
-/// Trending whispers for the home discovery rail — ranked by engagement.
+/// Whispers for the home discovery rail, ranked per user and rotated.
+///
+/// This used to fetch the global recency list and sort it client-side by
+/// plays + likes*2 + comments. That formula is the same for everybody, over a
+/// list that is the same for everybody, so the rail — and the "Popular right
+/// now" faces on it — were identical across accounts and never changed on
+/// refresh. The ranking now happens server-side in whispers_for_me, which
+/// knows about friendships, blocks, and what it has already shown you.
+///
+/// Note the missing `ref.watch(whispersFeedProvider)`: watching it made this
+/// rail rebuild whenever the Whispers screen's feed changed, which would
+/// re-fetch and re-record impressions for a rail nobody was looking at.
 final popularWhispersProvider = FutureProvider.autoDispose<List<Whisper>>((
   ref,
 ) async {
-  ref.watch(whispersFeedProvider);
-  final list = await ref.read(repositoryProvider).listWhispers(limit: 24);
-  final ranked = list.toList()
-    ..sort((a, b) {
-      final scoreA = a.playsCount + a.likesCount * 2 + a.commentsCount;
-      final scoreB = b.playsCount + b.likesCount * 2 + b.commentsCount;
-      return scoreB.compareTo(scoreA);
-    });
-  return ranked.take(10).toList();
+  final repo = ref.watch(repositoryProvider);
+  List<Whisper> whispers;
+  try {
+    whispers = await repo.whispersForMe(limit: 24);
+  } catch (error) {
+    // Same guard, and this rail is why it exists: whispers_for_me is
+    // SECURITY INVOKER and read discovery_impressions, which authenticated
+    // had no grant on, so every signed-in call raised "permission denied"
+    // and the rail rendered as nothing at all. Signed-out worked, which made
+    // it look like a data problem rather than a privilege one.
+    log.warn('discovery.whisper_rail_failed', props: {'error': '$error'});
+    whispers = await repo.listWhispers(limit: 24);
+  }
+  final shown = whispers.take(10).toList();
+  await ref.read(repositoryProvider).noteDiscoveryImpressions(
+    kind: 'whisper',
+    ids: shown.map((w) => w.whisperId).toList(),
+  );
+  return shown;
 });
 
 /// A post the user has already been allowed to see in the active feed.

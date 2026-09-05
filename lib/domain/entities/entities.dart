@@ -230,6 +230,34 @@ class StoryReactionUser {
   });
 }
 
+/// Somebody who watched a story, and what they left behind if anything.
+///
+/// Distinct from [StoryReactionUser]: reacting is a far higher bar than
+/// watching, so the reaction list was always a small subset. The activity
+/// sheet showed that subset plus a bare "N unique views" count, which told an
+/// author how many people watched but never which ones.
+class StoryViewerUser {
+  final String userId;
+  final String pseudonym;
+  final String avatarSeed;
+  final String? profilePhotoUrl;
+  final bool isVerified;
+  final DateTime viewedAt;
+
+  /// Null when they watched without reacting, which is most people.
+  final String? reactionType;
+
+  const StoryViewerUser({
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.isVerified,
+    required this.viewedAt,
+    this.profilePhotoUrl,
+    this.reactionType,
+  });
+}
+
 class PlugProfile {
   final String plugId;
   final String displayName;
@@ -2691,6 +2719,30 @@ class OnlineFriend {
   }
 }
 
+/// A keeper's record of accepting responsibility for a Tribe.
+///
+/// Written once, at creation, by create_managed_tribe_idempotent, and read
+/// back through my_keeper_attestation. The table itself is deny-all, so this
+/// only ever describes the signed-in account's own agreement.
+class KeeperAttestation {
+  const KeeperAttestation({
+    required this.version,
+    required this.ageStatus,
+    required this.attestedAt,
+  });
+
+  /// Which wording of the agreement was on screen when they ticked it, so the
+  /// question "what did they actually agree to" survives the text changing.
+  final int version;
+
+  /// What the server independently believed about their age at that moment —
+  /// not what the person claimed. Recorded alongside because a birth year can
+  /// be corrected later and this has to keep saying what was true then.
+  final String ageStatus;
+
+  final DateTime attestedAt;
+}
+
 /// Whether an account may create a Tribe, as decided by the server.
 class TribeCreationEligibility {
   const TribeCreationEligibility({
@@ -2983,25 +3035,52 @@ class TribeCategory {
 /// known to whoever typed it, and returning it would turn a stolen session into
 /// a way of harvesting the owner's real email or phone number.
 class RecoveryMethod {
+  /// The real address or number, as the owner typed it.
+  ///
+  /// Only ever populated for the account making the request —
+  /// my_recovery_methods is SECURITY DEFINER over a single row keyed on
+  /// auth.uid(). It exists because "do***@gmail.com" cannot answer the one
+  /// question the recovery screen is for: which inbox should I go and open?
+  final String? address;
   final String? masked;
   final bool verified;
   final bool pending;
+
+  /// A different address the owner asked to switch to, not yet proven.
+  ///
+  /// Non-null means a change is half-finished. [address] is still the one that
+  /// can actually recover the account — the two are separate on purpose, so a
+  /// change that is never confirmed cannot cost somebody their way back in.
+  final String? pendingAddress;
   final DateTime? codeExpiresAt;
   final DateTime? addedAt;
 
   const RecoveryMethod({
+    this.address,
     this.masked,
     this.verified = false,
     this.pending = false,
+    this.pendingAddress,
     this.codeExpiresAt,
     this.addedAt,
   });
 
   /// Nothing nominated yet.
-  bool get isEmpty => masked == null;
+  ///
+  /// Keyed on [masked] rather than [address] so an older server that does not
+  /// return the full value yet still reports "something is configured" instead
+  /// of silently telling somebody they have no recovery method.
+  bool get isEmpty => masked == null && address == null;
+
+  /// What to show the owner: the real value when the server sends it, falling
+  /// back to the masked form so a stale server degrades to the old display
+  /// rather than to a blank.
+  String? get display => address ?? masked;
 
   factory RecoveryMethod.fromJson(Map<String, dynamic> json) => RecoveryMethod(
+        address: json['address'] as String?,
         masked: json['masked'] as String?,
+        pendingAddress: json['pending_address'] as String?,
         // Absent means not verified. The safe reading of a missing key for
         // anything security-shaped is the one that grants nothing.
         verified: json['verified'] == true,
