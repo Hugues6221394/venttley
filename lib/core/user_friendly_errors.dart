@@ -40,6 +40,20 @@ class UserFriendlyErrors {
       return 'That already exists. Try a different option.';
     }
 
+    // PostgREST found no function matching the shape the app asked for, which
+    // in practice means one thing: the app is newer than the database, because
+    // a migration has not been applied yet. It is not a fault the person can
+    // do anything about, and the generic fallback — "Please try again" —
+    // invites them to keep pressing a button that cannot work until somebody
+    // deploys. Observed exactly this way: the Keeper agreement added two
+    // parameters to create_managed_tribe_idempotent, and until the migration
+    // ran every attempt failed with "Couldn't create this Tribe."
+    if (raw.contains('pgrst202') ||
+        raw.contains('could not find the function')) {
+      return 'Venttly is being updated right now. Please try again in a few '
+          'minutes.';
+    }
+
     // Named errors raised by the Tribe RPCs. These reach the client as the bare
     // identifier, which is meaningless to a person — and the create screen used
     // to interpolate the whole exception into a snackbar.
@@ -48,6 +62,15 @@ class UserFriendlyErrors {
     }
     if (raw.contains('age_verification_required')) {
       return 'We need one more detail about your age first.';
+    }
+    // Reaching this means the tick on step 3 was somehow not sent — the button
+    // is disabled without it, so in practice this is a stale build talking to
+    // a current server. Say what to do rather than naming the field.
+    if (raw.contains('keeper_attestation_version_invalid')) {
+      return 'Please update Venttly and try creating your Tribe again.';
+    }
+    if (raw.contains('keeper_attestation_required')) {
+      return 'Please confirm the Keeper agreement before creating your Tribe.';
     }
     if (raw.contains('blocked_by_user')) {
       return 'You can\'t contact this person. One of you has blocked the other.';

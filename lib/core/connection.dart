@@ -73,6 +73,10 @@ class ConnectionController extends StateNotifier<ConnectionStatus> {
     }
   }
 
+  /// Whether a reachability probe is already running, so a burst of
+  /// connectivity events cannot start several at once.
+  bool _probing = false;
+
   final Ref _ref;
   StreamSubscription<List<ConnectivityResult>>? _sub;
   Timer? _reconnectSettle;
@@ -81,8 +85,22 @@ class ConnectionController extends StateNotifier<ConnectionStatus> {
     final offline =
         results.isEmpty || results.every((r) => r == ConnectivityResult.none);
     if (offline) {
+      // Verify before telling anybody.
+      //
+      // connectivity_plus reports which network INTERFACES exist, not whether
+      // the internet is reachable, and on the iOS simulator it reports none or
+      // an empty list while the app is demonstrably loading feeds, stories and
+      // profiles from Supabase. The banner then sat on screen for entire
+      // sessions saying "You're offline — drafts are saved" while everything
+      // worked, which is worse than useless: it trains people to ignore the
+      // one message that should mean something, and on a support platform it
+      // says "your words may not have sent" when they did.
+      //
+      // So a no-interfaces report is now a hint that triggers a real check,
+      // not a verdict. Nothing else changes: the reconnect path, the resync
+      // and the outbox flush are untouched.
       _reconnectSettle?.cancel();
-      if (mounted) state = ConnectionStatus.offline;
+      _confirmOffline();
       return;
     }
     if (state == ConnectionStatus.offline) {
@@ -98,6 +116,32 @@ class ConnectionController extends StateNotifier<ConnectionStatus> {
       });
     } else if (mounted) {
       state = ConnectionStatus.online;
+    }
+  }
+
+  /// Ask the network directly before declaring the app offline.
+  Future<void> _confirmOffline() async {
+    if (_probing) return;
+    _probing = true;
+    try {
+      // checkConnectivity is the same plugin, but it answers now rather than
+      // replaying a stale event — enough to catch the case where the stream
+      // fired once during startup and never corrected itself.
+      final now = await Connectivity().checkConnectivity();
+      final reallyOffline =
+          now.isEmpty || now.every((r) => r == ConnectivityResult.none);
+      if (!mounted) return;
+      if (!reallyOffline) {
+        state = ConnectionStatus.online;
+        return;
+      }
+      state = ConnectionStatus.offline;
+    } catch (_) {
+      // A failed probe is not evidence of anything. Leaving the status alone
+      // is the honest answer, and it keeps a plugin error from producing a
+      // banner that contradicts what the person can plainly see working.
+    } finally {
+      _probing = false;
     }
   }
 

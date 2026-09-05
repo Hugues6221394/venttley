@@ -22,11 +22,23 @@ import 'data/services/notifications_service.dart';
 import 'data/services/telemetry_service.dart';
 import 'presentation/router/app_router.dart';
 import 'presentation/theme/app_theme.dart';
+import 'presentation/widgets/friendly_error_screen.dart';
 import 'presentation/widgets/notification_foreground_listener.dart';
 import 'presentation/widgets/vently_premium_background.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Before anything else that could fail.
+  //
+  // Without this, any widget that throws during build shows Flutter's red
+  // screen with a stack trace — which is what a person actually saw when
+  // opening a profile from a story. On an app used by people in distress,
+  // including thirteen-year-olds, that is not a developer inconvenience: it
+  // looks like they broke something, on the one platform promising them they
+  // are safe. Every widget failure now renders FriendlyErrorScreen instead,
+  // and the error still reaches the logger and Sentry.
+  installErrorHandling();
   VentlyConfig.validateBackendConfiguration();
 
   // Firebase background handlers must be registered before runApp. Preparing
