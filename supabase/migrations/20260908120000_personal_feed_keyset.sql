@@ -186,4 +186,8 @@ GRANT EXECUTE ON FUNCTION public.personal_feed(
   INTEGER, INTEGER, TEXT, TEXT, DOUBLE PRECISION, TIMESTAMPTZ, UUID
 ) TO authenticated;
 
+SELECT public.record_migration(
+  '20260908120000', 'personal_feed_keyset'
+);
+
 NOTIFY pgrst, 'reload schema';

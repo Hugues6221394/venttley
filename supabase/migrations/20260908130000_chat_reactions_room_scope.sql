@@ -37,4 +37,8 @@ CREATE TRIGGER chat_reaction_room_trg
 CREATE INDEX IF NOT EXISTS chat_message_reactions_room_idx
   ON public.chat_message_reactions (room_id);
 
+SELECT public.record_migration(
+  '20260908130000', 'chat_reactions_room_scope'
+);
+
 NOTIFY pgrst, 'reload schema';
