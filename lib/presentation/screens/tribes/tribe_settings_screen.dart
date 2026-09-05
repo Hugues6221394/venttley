@@ -204,6 +204,14 @@ class TribeSettingsScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
+                  // Above the lifecycle section rather than below it: the last
+                  // thing on this screen should stay Delete Tribe, and a
+                  // receipt tucked under the destructive actions is a receipt
+                  // nobody scrolls to.
+                  if (isKeeper)
+                    SliverToBoxAdapter(
+                      child: KeeperAgreementRecord(tribeId: tribe.tribeId),
+                    ),
                   // Owner only, and deliberately not delegable: pausing,
                   // archiving, transferring and deleting are the actions that
                   // end a community. A helper should not see them, let alone
@@ -729,6 +737,91 @@ class _Section extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The Keeper agreement, read back.
+///
+/// Passive on purpose — there is nothing to tap and nothing to change. A
+/// consent you can edit from the screen that displays it is not a record, and
+/// the server makes that structural anyway: tribe_keeper_attestations is
+/// deny-all and has no update path at all.
+///
+/// Keeper-only, because it is the keeper's own agreement and
+/// my_keeper_attestation returns rows for the calling account only. A helper
+/// or moderator viewing this screen sees nothing here rather than an empty
+/// card about somebody else's consent.
+class KeeperAgreementRecord extends ConsumerWidget {
+  const KeeperAgreementRecord({super.key, required this.tribeId});
+
+  final String tribeId;
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(myKeeperAttestationProvider(tribeId));
+
+    // While loading, and on error, this shows nothing at all.
+    //
+    // Deliberate: a record of consent that renders a skeleton or an error box
+    // is worse than absent, because both read as "something is wrong with your
+    // agreement". Nothing here is load-bearing — the agreement is enforced and
+    // stored server-side whatever this card does — so the honest failure mode
+    // for a passive receipt is silence.
+    final attestation = async.valueOrNull;
+    if (attestation == null) return const SizedBox.shrink();
+
+    final at = attestation.attestedAt.toLocal();
+    final date = '${at.day} ${_months[at.month - 1]} ${at.year}';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+      child: GlassCard(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.verified_user_outlined,
+              size: 18,
+              color: VentlyColors.berryMagenta,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Keeper agreement',
+                    style: TextStyle(
+                      color: context.ink,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'You confirmed you are 18 or over and accepted '
+                    'responsibility for this Tribe on $date.',
+                    style: TextStyle(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.75),
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/logger.dart';
 import '../../../core/providers.dart';
 import '../../../core/tribe_category_labels.dart';
 import '../../../domain/entities/entities.dart';
@@ -15,6 +16,7 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../../core/user_friendly_errors.dart';
 import '../home/home_shell.dart';
+import '../../widgets/tribe_age_gate.dart';
 
 class CreateTribeScreen extends ConsumerStatefulWidget {
   const CreateTribeScreen({super.key});
@@ -45,6 +47,13 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   bool _joinApproval = false;
   bool _useSafetyTemplate = true;
   bool _submitting = false;
+  // One retry only, so a server that keeps saying age_verification_required
+  // surfaces as an error instead of an invisible loop.
+  bool _retriedAfterAgeGate = false;
+
+  /// The Keeper agreement, ticked on step 3. Starts false and is never
+  /// pre-ticked: a pre-ticked consent is not a consent.
+  bool _attested = false;
   Uint8List? _avatarBytes;
   Uint8List? _bannerBytes;
   String _avatarExtension = 'jpg';
@@ -174,6 +183,8 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
             tags: tags,
             visibility: _visibility,
             welcomeMessage: _welcome.text.trim(),
+            keeperAttested: _attested,
+            attestationVersion: _attestationVersion,
             settings: TribeGovernanceSettings(
               joinApprovalRequired: _joinApproval,
             ),
@@ -235,11 +246,36 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
                 bannerUrl: bannerUrl,
               );
         }
-      } catch (error) {
+      } catch (error, stack) {
         mediaError = error;
+        // The snackbar truncates and nothing else recorded this, so "images
+        // could not be saved yet" was unreproducible from the outside: no
+        // bucket, no path, no status code. Uploads go to
+        // post-media/tribes/<tribeId>/… and are allowed by the
+        // "post media tribe manager insert" policy via can_manage_tribe, so a
+        // failure here is either that policy, the bucket, or the bytes — and
+        // the message says which.
+        log.error(
+          'tribe.media_upload_failed',
+          props: {'tribe_id': tribe.tribeId, 'bucket': 'post-media'},
+          error: error,
+          stack: stack,
+        );
       }
       ref.invalidate(tribesProvider);
       ref.invalidate(tribesIKeepProvider);
+      // Becoming a Keeper has to be visible immediately.
+      //
+      // Deleting a Tribe already dropped the Keeper Studio entry from the menu
+      // at once, because that path invalidates these. Creating one did not, so
+      // a brand new Keeper had to restart the app before the Studio appeared —
+      // the two halves of the same state change behaved differently.
+      //
+      // isKeeperProvider is what the menu and the shell both ask, and it falls
+      // back to keeperMode() then to tribesIKeep(), so all three have to go.
+      ref.invalidate(keeperModeProvider);
+      ref.invalidate(isKeeperProvider);
+      ref.invalidate(homeTribeRailProvider);
       if (!mounted) return;
       // Show the moment instead of jumping to the console. Landing straight in
       // Manage Tribe never said the Tribe existed, never said the account had
@@ -256,6 +292,27 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
         );
       }
     } catch (e) {
+      // age_verification_required means the server needs a birth month before
+      // it will allow this. TribeCreationGate asks for it up front, so getting
+      // here means the answer arrived late — the row was written between
+      // opening the form and submitting it, or the gate's check failed and let
+      // the form open anyway.
+      //
+      // The message on its own — "We need one more detail about your age
+      // first" — was a dead end: it named a missing detail and gave no way to
+      // supply it. So ask, here, and resubmit if the answer clears it. Once
+      // only; if it comes back a second time something else is wrong and
+      // looping would just hide it.
+      if (!_retriedAfterAgeGate &&
+          e.toString().toLowerCase().contains('age_verification_required')) {
+        _retriedAfterAgeGate = true;
+        if (mounted) setState(() => _submitting = false);
+        if (!mounted) return;
+        if (await ensureCanCreateTribe(context, ref) && mounted) {
+          return _submit();
+        }
+        return;
+      }
       // Was interpolating the raw exception, so a person saw
       // "PostgrestException(message: adults_only...)". Named server errors are
       // translated centrally now.
@@ -323,13 +380,26 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   int _step = 0;
   static const _stepCount = 3;
 
+  /// Which wording of the Keeper agreement was on screen. Stored with the
+  /// record server-side, so "which text did they agree to" stays answerable
+  /// after the text changes. Bump this whenever the wording below changes
+  /// materially — old rows keep pointing at what they were actually shown.
+  static const _attestationVersion = 1;
+
   /// Set once creation succeeds, which swaps the whole screen for the
   /// "you're a Keeper" moment rather than dropping the user into an
   /// administration console with no acknowledgement that anything happened.
   Tribe? _created;
 
+  /// Whether the CURRENT step is complete — including the last one, where
+  /// completing it means having accepted the Keeper agreement.
+  ///
+  /// The footer used to ignore this on the final step (`!last && !canAdvance`),
+  /// which was fine while the last step was a passive summary and is not now
+  /// that it carries a required tick.
   bool get _canAdvance {
     if (_step == 0) return _name.text.trim().length >= 3;
+    if (_step == _stepCount - 1) return _attested;
     return true;
   }
 
@@ -627,6 +697,23 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
             ],
           ),
         ),
+        const SizedBox(height: 14),
+        // The age requirement had no visible presence anywhere in this flow.
+        // It is enforced server-side and asked about before the form opens,
+        // but for the overwhelming majority — adults — that check passes in
+        // silence, so nobody was ever shown the 18+ rule, told what keeping a
+        // Tribe commits them to, or asked to agree to any of it.
+        //
+        // This is where that happens now: the last thing before Create, on the
+        // step where the person is already reviewing what they are about to
+        // make. Create Tribe stays disabled until it is ticked, and the server
+        // records the agreement with its version.
+        _KeeperAgreement(
+          value: _attested,
+          onChanged: _submitting
+              ? null
+              : (next) => setState(() => _attested = next ?? false),
+        ),
       ],
     );
   }
@@ -844,7 +931,10 @@ class _StepFooter extends StatelessWidget {
                   // Disabled rather than failing on submit: a Tribe needs a
                   // name, and finding that out after three screens is worse
                   // than a button that waits.
-                  onPressed: busy || (!last && !canAdvance)
+                  // Was `busy || (!last && !canAdvance)`, which let the
+                  // final step submit regardless. The last step now has a
+                  // required agreement, so canAdvance applies there as well.
+                  onPressed: busy || !canAdvance
                       ? null
                       : (last ? onSubmit : onNext),
                   style: FilledButton.styleFrom(
@@ -871,6 +961,139 @@ class _StepFooter extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The 18+ confirmation and Keeper responsibility agreement.
+///
+/// Deliberately one tick, not two. The age and the responsibility are the same
+/// commitment here — the floor exists *because* keeping a Tribe means looking
+/// after members who may be 13 to 17 — and splitting them into two boxes makes
+/// a person agree twice to one thing, which reads as paperwork and gets
+/// clicked through without being read.
+///
+/// What it says is chosen carefully:
+///   - it states the age rule and the reason for it, so the person is agreeing
+///     to something they understand rather than to a policy reference
+///   - it says what the responsibility actually involves, in the two concrete
+///     terms that matter (uphold the guidelines, act on reports)
+///   - it does not imply suspicion. Most people reading this are adults
+///     starting a community, and the tone should not treat them as suspects.
+class _KeeperAgreement extends StatelessWidget {
+  const _KeeperAgreement({required this.value, required this.onChanged});
+
+  /// The agreement itself. A single source for the visible text and the
+  /// screen-reader label, and the thing `_attestationVersion` versions — if
+  /// this sentence changes materially, bump that.
+  static const String agreementText =
+      "I'm 18 or over, and I accept responsibility for this Tribe — "
+      "I'll uphold Venttly's Community Guidelines and act on reports about it.";
+
+  final bool value;
+  final ValueChanged<bool?>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final enabled = onChanged != null;
+    return GlassCard(
+      // Stated in the border as well as the text: while unticked this is the
+      // one thing standing between here and Create, so it should be findable
+      // without reading the whole screen.
+      borderColor: value
+          ? VentlyColors.berryMagenta.withOpacity(0.55)
+          : VentlyColors.berryMagenta.withOpacity(0.22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.shield_outlined,
+                size: 18,
+                color: VentlyColors.berryMagenta,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Keeper confirmation',
+                style: TextStyle(
+                  color: context.ink,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Keeping a Tribe is for people aged 18 and over, because it means '
+            'looking after other members — some of them 13 to 17. We check '
+            'this on your account, and we ask you to confirm it here too.',
+            style: TextStyle(
+              color: scheme.onSurface.withOpacity(0.75),
+              fontSize: 13.5,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 6),
+          // One combined accessibility node, announced as a checkbox with its
+          // sentence. Without excludeSemantics a screen reader reads the box
+          // and the sentence as two unrelated things, and the checked state
+          // ends up attached to something with no text.
+          Semantics(
+            checked: value,
+            label: agreementText,
+            excludeSemantics: true,
+            // container: true is load-bearing. Without it this node has no
+            // boundary of its own, so it merged upward into the step's
+            // semantics — VoiceOver reported one checkbox spanning the whole
+            // review step (y=162, h=426) announcing "Review your Tribe, this
+            // is what people will see", and the agreement text never got read
+            // out at all. Verified on device with `idb ui describe-all`.
+            container: true,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              // The whole row is the target, not just the 24pt box. A checkbox
+              // is the smallest thing on this screen and it is the one thing
+              // that has to be tapped.
+              onTap: enabled ? () => onChanged!(!value) : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Checkbox(
+                      value: value,
+                      onChanged: onChanged,
+                      activeColor: VentlyColors.berryMagenta,
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          // Same constant the Semantics label uses, so what is
+                          // read aloud cannot drift from what is on screen.
+                          agreementText,
+                          style: TextStyle(
+                            color: context.ink,
+                            fontSize: 13.5,
+                            height: 1.4,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1002,13 +1225,24 @@ class _TribeCreatedView extends StatelessWidget {
                 icon: Icons.person_add_alt_1_outlined,
                 title: 'Invite people',
                 subtitle: 'Share a link, a QR code, or pick from your friends',
-                onTap: () => context.push('/tribe/${tribe.slug}/members'),
+                // The members screen is nested under manage/settings.
+                //
+                // This pushed '/tribe/<slug>/members', which is not a route —
+                // go_router matched nothing and showed "Page unavailable", so
+                // the Invite people card on the tribe-created screen was a
+                // dead end from the moment it shipped.
+                onTap: () => context.push(
+                  '/tribe/${tribe.slug}/manage/settings/members',
+                ),
               ),
               _NextStep(
                 icon: Icons.rule_rounded,
                 title: 'Set the ground rules',
                 subtitle: 'What this space is, and what it is not',
-                onTap: () => context.push('/tribe/${tribe.slug}/rules'),
+                // Same missing segment as members above.
+                onTap: () => context.push(
+                  '/tribe/${tribe.slug}/manage/settings/rules',
+                ),
               ),
               const SizedBox(height: 20),
               SizedBox(

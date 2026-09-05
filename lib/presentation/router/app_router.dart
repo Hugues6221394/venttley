@@ -19,10 +19,12 @@ import '../screens/inbox/group_chat_settings_screen.dart';
 import '../screens/inbox/group_invite_screen.dart';
 import '../screens/whispers/create_whisper_screen.dart';
 import '../widgets/keep_alive.dart';
+import '../widgets/tribe_age_gate.dart';
 import '../screens/onboarding/email_signup_screen.dart';
 import '../screens/onboarding/age_completion_screen.dart';
 import '../screens/onboarding/identity_screen.dart';
 import '../screens/onboarding/mfa_challenge_screen.dart';
+import '../screens/onboarding/password_reset_screen.dart';
 import '../screens/onboarding/recover_screen.dart';
 import '../screens/onboarding/recovery_key_screen.dart';
 import '../screens/onboarding/phone_signin_screen.dart';
@@ -153,6 +155,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding/recover',
         builder: (_, __) => const RecoverScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding/reset-password',
+        builder: (_, __) => const PasswordResetScreen(),
       ),
       GoRoute(
         path: '/onboarding/email',
@@ -364,7 +370,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
               GoRoute(
                 path: '/tribes/new',
-                builder: (_, __) => const CreateTribeScreen(),
+                // Gated here rather than at each button: eight screens push
+                // this path and only one of them was checking.
+                builder: (_, __) =>
+                    const TribeCreationGate(child: CreateTribeScreen()),
               ),
               GoRoute(
                 path: '/questions',

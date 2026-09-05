@@ -26,27 +26,44 @@ import '../theme/colors.dart';
 ///
 /// The answer is the server's; nothing here decides anything. A modified client
 /// that skips this sheet still gets `adults_only` from create_managed_tribe.
-Future<bool> ensureCanCreateTribe(BuildContext context, WidgetRef ref) async {
+/// What the check actually established.
+///
+/// `refused` and `inconclusive` used to be the same `false`, which was
+/// harmless while this only guarded a button — the button simply did not
+/// navigate. It stops being harmless once the check guards the route, because
+/// then a dropped request would bounce an adult straight back out of the form
+/// they just opened. "The server said no" and "we could not reach the server"
+/// have to be different answers.
+enum TribeCreationCheck { allowed, refused, inconclusive }
+
+/// The check itself. Shows the explanatory sheet when the answer is a real no.
+Future<TribeCreationCheck> checkCanCreateTribe(
+  BuildContext context,
+  WidgetRef ref, {
+  bool reportErrors = true,
+}) async {
   TribeCreationEligibility eligibility;
   try {
     eligibility = await ref.read(repositoryProvider).tribeCreationEligibility();
   } catch (e) {
-    if (!context.mounted) return false;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          UserFriendlyErrors.message(
-            e,
-            fallback: "Couldn't check this right now. Please try again.",
+    if (!context.mounted) return TribeCreationCheck.inconclusive;
+    if (reportErrors) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              e,
+              fallback: "Couldn't check this right now. Please try again.",
+            ),
           ),
         ),
-      ),
-    );
-    return false;
+      );
+    }
+    return TribeCreationCheck.inconclusive;
   }
 
-  if (eligibility.canCreate) return true;
-  if (!context.mounted) return false;
+  if (eligibility.canCreate) return TribeCreationCheck.allowed;
+  if (!context.mounted) return TribeCreationCheck.inconclusive;
 
   if (eligibility.needsBirthMonth) {
     final result = await showModalBottomSheet<bool>(
@@ -61,7 +78,11 @@ Future<bool> ensureCanCreateTribe(BuildContext context, WidgetRef ref) async {
       ),
       builder: (_) => const _BirthMonthSheet(),
     );
-    return result ?? false;
+    // Answered and cleared → allowed. Dismissed, or answered and still not 18
+    // → a real refusal, and the sheet has already said which.
+    return (result ?? false)
+        ? TribeCreationCheck.allowed
+        : TribeCreationCheck.refused;
   }
 
   await showModalBottomSheet<void>(
@@ -73,7 +94,91 @@ Future<bool> ensureCanCreateTribe(BuildContext context, WidgetRef ref) async {
     ),
     builder: (_) => const _AdultsOnlySheet(),
   );
-  return false;
+  return TribeCreationCheck.refused;
+}
+
+/// Ask before opening the flow, and only open it on a definite yes.
+///
+/// This is the pre-check on the Tribes directory button, where refusing to
+/// navigate on an inconclusive answer is right: nothing has been invested yet,
+/// the snackbar says to try again, and the button is still there.
+Future<bool> ensureCanCreateTribe(BuildContext context, WidgetRef ref) async =>
+    await checkCanCreateTribe(context, ref) == TribeCreationCheck.allowed;
+
+/// [ensureCanCreateTribe], applied to the route instead of to a button.
+///
+/// The sheet above was only ever reached from the Tribes directory. There are
+/// eight places that push `/tribes/new` — the directory, four in the Keeper
+/// home cluster, Keeper members, Keeper spaces, the Friends screen and the
+/// content-studio sheet — and seven of them opened the form with no check at
+/// all. Those seven walked to step 3, pressed Create, and got a snackbar
+/// reading "We need one more detail about your age first" with nothing behind
+/// it: the answer existed, in the sheet above, and no route led there.
+///
+/// Guarding each button is the fix that decays. The ninth entry point gets
+/// added, nobody remembers the check, and the dead end comes back. Guarding
+/// the route cannot be forgotten, because there is only one of it.
+///
+/// Adults see nothing: [ensureCanCreateTribe] returns true without UI when the
+/// server says `can_create`, so the only cost on the common path is one RPC
+/// while the form is already building.
+class TribeCreationGate extends ConsumerStatefulWidget {
+  const TribeCreationGate({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  ConsumerState<TribeCreationGate> createState() => _TribeCreationGateState();
+}
+
+class _TribeCreationGateState extends ConsumerState<TribeCreationGate> {
+  bool _allowed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // After the first frame: showModalBottomSheet needs a mounted route, and
+    // ensureCanCreateTribe may show one.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
+  }
+
+  Future<void> _check() async {
+    // Errors are not reported here: an inconclusive check lets the form open,
+    // so a snackbar saying "couldn't check this right now" would appear over a
+    // form that is working fine.
+    final result = await checkCanCreateTribe(context, ref, reportErrors: false);
+    if (!mounted) return;
+
+    // Inconclusive opens the form. Failing closed on a dropped request would
+    // mean an adult on a bad connection cannot create a Tribe at all, and
+    // nothing is actually protected by refusing: create_managed_tribe checks
+    // the age itself and raises adults_only regardless of what this client
+    // decided, and _submit now recovers from a late age_verification_required
+    // by asking for the month there. So the cost of being wrong here is one
+    // extra question at the end, not an unguarded write.
+    if (result != TribeCreationCheck.refused) {
+      setState(() => _allowed = true);
+      return;
+    }
+
+    // A real refusal. Go back where they came from rather than leaving them on
+    // a form that can only fail at the end. The sheet has already said why, so
+    // this is not a silent dismissal.
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_allowed) return widget.child;
+    // Deliberately a plain waiting state with a working back button, not a
+    // skeleton of the form: the form may never open.
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
 }
 
 class _AdultsOnlySheet extends StatelessWidget {

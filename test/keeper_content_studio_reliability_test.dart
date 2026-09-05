@@ -196,6 +196,10 @@ void main() {
           name: 'Workflow ${DateTime.now().microsecondsSinceEpoch}',
           category: 'support',
           idempotencyKey: 'test-${DateTime.now().microsecondsSinceEpoch}',
+          // The Keeper agreement is ticked on step 3 of the real flow; this
+          // test is about spaces, so it stands in for a keeper who accepted it.
+          keeperAttested: true,
+          attestationVersion: 1,
         );
 
         final initial = await repository.spacesByTribe(tribe.tribeId);
