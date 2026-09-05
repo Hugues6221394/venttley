@@ -869,9 +869,42 @@ class _ManagementTile extends StatelessWidget {
           fontSize: 11,
         ),
       ),
+      // This badge blanked the entire screen whenever it showed.
+      //
+      // A Container given an `alignment` wraps its child in an Align, and an
+      // Align with no widthFactor expands to the biggest size its constraints
+      // allow. ListTile lays `trailing` out with LOOSE constraints — 0 to the
+      // full tile width — so the badge grew to the whole tile, and ListTile
+      // threw during performLayout:
+      //
+      //   Trailing widget consumes the entire tile width (including
+      //   ListTile.contentPadding).
+      //
+      // A throw inside performLayout leaves the subtree unlaid-out, which
+      // cascaded into "RenderBox was not laid out" seventeen levels up, then a
+      // null check on a null value, then '!semantics.parentDataDirty' firing
+      // in a loop for as long as the screen was open. What the keeper saw was
+      // a blank white page.
+      //
+      // The cruelty of it is the trigger: `badge` is pendingJoinRequests and
+      // openReports, so Manage Tribe worked fine until there was something to
+      // manage, and broke the moment a report or a join request arrived. Every
+      // Tribe with a quiet inbox looked healthy. Reproduced exactly that way —
+      // one Tribe with 1 open report blank, another with 0 fine.
+      //
+      // Both axes are bounded, because Align expands on both. Bounding only
+      // the width stopped the crash and left a badge stretched to the full
+      // height of the tile — a tall rectangle instead of a pill. Caught by
+      // looking at the pixels; the layout assertion only complains about
+      // width, so nothing would have reported the shape.
       trailing: badge > 0
           ? Container(
-              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+              constraints: const BoxConstraints(
+                minWidth: 24,
+                maxWidth: 46,
+                minHeight: 24,
+                maxHeight: 24,
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 6),
               alignment: Alignment.center,
               decoration: BoxDecoration(
@@ -879,7 +912,12 @@ class _ManagementTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                '$badge',
+                // Capped so the label cannot outgrow the box either. A keeper
+                // with 300 waiting requests needs to know it is a lot, not the
+                // exact figure, and the exact figure is on the screen this
+                // tile opens.
+                badge > 99 ? '99+' : '$badge',
+                maxLines: 1,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 10,
