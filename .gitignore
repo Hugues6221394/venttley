@@ -60,3 +60,7 @@ app.*.map.json
 # overwrites them. These are real user photos WITH their original EXIF —
 # they must never be committed.
 exif-backfill-backup/
+
+# Node dependencies for the load-test harness. Reinstall with `npm ci` in
+# loadtest/ — package-lock.json is committed, the 8.9MB tree is not.
+node_modules/
