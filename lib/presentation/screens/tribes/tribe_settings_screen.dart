@@ -400,7 +400,71 @@ class TribeSettingsScreen extends ConsumerWidget {
           builder: (_) => _DeleteTribeDialog(overview: overview),
         );
     if (result == null || !context.mounted) return;
+
+    // Two ways to delete, asked after the name and password are already in
+    // hand so the choice is the last thing standing between intent and effect.
+    //
+    // Scheduling is offered first and worded as the safe one, because it is:
+    // 30 days and a cancel action. Immediate deletion exists because 30 days
+    // is the wrong answer for a tribe created by mistake, or one being used to
+    // harass somebody — waiting a month is not a neutral default there.
+    final immediate = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('When should it go?'),
+        content: const Text(
+          'Scheduling keeps the Tribe hidden for 30 days so you can still '
+          'restore it. Deleting now cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Schedule (30 days)'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: VentlyColors.dangerRed,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete now'),
+          ),
+        ],
+      ),
+    );
+    if (immediate == null || !context.mounted) return;
+
     try {
+      if (immediate) {
+        final affected = await ref
+            .read(repositoryProvider)
+            .deleteTribeNow(
+              tribeId: overview.tribeId,
+              confirmedName: result.name,
+              password: result.password,
+            );
+        ref.invalidate(tribeManagementProvider(overview.tribeId));
+        ref.invalidate(tribesIKeepProvider);
+        ref.invalidate(homeTribeRailProvider);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              affected == 0
+                  ? 'Tribe deleted.'
+                  : 'Tribe deleted. $affected post(s) were removed with it.',
+            ),
+          ),
+        );
+        // The settings screen belongs to a tribe that no longer exists, so
+        // staying on it would show a dead shell and any refresh would 404.
+        if (context.mounted) GoRouter.of(context).go('/tribes');
+        return;
+      }
+
       await ref
           .read(repositoryProvider)
           .setTribeLifecycle(
@@ -412,6 +476,7 @@ class TribeSettingsScreen extends ConsumerWidget {
           );
       ref.invalidate(tribeManagementProvider(overview.tribeId));
       ref.invalidate(tribesIKeepProvider);
+      ref.invalidate(homeTribeRailProvider);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -421,7 +486,7 @@ class TribeSettingsScreen extends ConsumerWidget {
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deletion was not scheduled: $error')),
+        SnackBar(content: Text('Deletion did not go through: $error')),
       );
     }
   }
@@ -1237,14 +1302,22 @@ class _DeleteTribeDialogState extends State<_DeleteTribeDialog> {
         color: VentlyColors.dangerRed,
         size: 34,
       ),
-      title: const Text('Schedule Tribe deletion'),
+      // Neutral, because the timing is not decided yet.
+      //
+      // This said "Schedule Tribe deletion" and its button said "Schedule
+      // deletion", and then the very next dialog asks whether to schedule or
+      // delete now. Committing to one answer and then asking is how somebody
+      // taps through believing they have 30 days and finds the Tribe gone.
+      title: const Text('Delete Tribe'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               '${widget.overview.memberCount} members and ${widget.overview.postCount} posts are affected. '
-              'The Tribe becomes unavailable now and is permanently removed after 30 days unless restored.',
+              'The Tribe becomes unavailable straight away. You will choose '
+              'next whether it is removed after 30 days — restorable until '
+              'then — or immediately.',
             ),
             const SizedBox(height: 14),
             TextField(
@@ -1302,7 +1375,7 @@ class _DeleteTribeDialogState extends State<_DeleteTribeDialog> {
                   reason: reason.text.trim(),
                 ))
               : null,
-          child: const Text('Schedule deletion'),
+          child: const Text('Continue'),
         ),
       ],
     );
