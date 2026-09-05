@@ -122,6 +122,12 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
+                // iOS capitalises the first letter unless told not to, and
+                // this address is a credential — it is what a password reset
+                // is sent to. Seeing it come back with a capital letter is
+                // enough to make somebody retype it or doubt the signup.
+                textCapitalization: TextCapitalization.none,
+                enableSuggestions: false,
                 decoration: const InputDecoration(
                   labelText: 'Email',
                   prefixIcon: Icon(Icons.mail_outline_rounded),

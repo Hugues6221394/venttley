@@ -224,6 +224,21 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
                     : VentlyButtonState.idle,
                 onPressed: _mode == _Mode.signIn ? _signIn : _recover,
               ),
+              // Only on the sign-in tab. Offering it beside the phrase form
+              // would be offering two answers to the same question at once.
+              // Placed directly under the button because that is where
+              // somebody looks after being told their password is wrong.
+              if (_mode == _Mode.signIn)
+                Center(
+                  child: TextButton(
+                    onPressed: () =>
+                        context.push('/onboarding/reset-password'),
+                    child: const Text(
+                      'Forgot your password?',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 24),
               Center(
                 child: TextButton(

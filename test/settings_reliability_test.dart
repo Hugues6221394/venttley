@@ -54,13 +54,19 @@ void main() {
       reason: 'every bottom sheet must use the root navigator',
     );
 
-    // No controller is created by hand, so every one of them comes from
-    // ModalTextControllerScope and is therefore disposed. Stronger than
-    // counting scopes: it forbids the bypass rather than counting the fix.
+    // Was: no controller may be created by hand at all, on the reasoning that
+    // ModalTextControllerScope is the only thing that disposes them. That held
+    // while every sheet here was stateless. _CodeSheet is not — it owns a
+    // resend countdown, so it is a real StatefulWidget with a real dispose(),
+    // and owning its controller there is correct rather than a bypass.
+    //
+    // So assert the property the rule existed to protect: nothing is created
+    // without being disposed. A hand-made controller with no matching dispose
+    // fails this exactly as before.
     expect(
+      '_controller.dispose()'.allMatches(passwordSecurity).length,
       'TextEditingController('.allMatches(passwordSecurity).length,
-      0,
-      reason: 'text controllers must come from ModalTextControllerScope',
+      reason: 'every hand-made text controller must be disposed by its State',
     );
 
     // Every sheet that takes text is scrollable, or the keyboard overflows it

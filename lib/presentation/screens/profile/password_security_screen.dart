@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -89,16 +90,16 @@ class _PasswordSecurityScreenState
 
   @override
   Widget build(BuildContext context) {
-    final session = ref.watch(sessionProvider.notifier);
     final me = ref.watch(sessionProvider);
-    final hasRealEmail = session.hasRealEmail;
-    final emailVerified = session.isEmailVerified;
+
+    // fallback: false on purpose. A missing flag row must read as "no SMS",
+    // because guessing the other way puts the dead-end phone flow back.
+    final smsReady = flagEnabled(ref, 'recovery_sms', fallback: false);
 
     final checkup = SecurityCheckup(
       passwordChangedAt: _passwordChangedAt,
       twoFactorOn: _twoFactorOn,
-      hasRealEmail: hasRealEmail,
-      emailVerified: emailVerified,
+      recovery: _recovery,
     );
 
     return Scaffold(
@@ -145,11 +146,24 @@ class _PasswordSecurityScreenState
                 _recovery?.email.pending == true ? 'Enter code' : null,
             onTap: _openRecoveryEmail,
           ),
+          // Gated on the live flag, not a constant: confirm_recovery_phone()
+          // can only succeed once GoTrue has an SMS provider, so until one is
+          // configured this row must not ask for something it cannot finish.
+          // Flipping recovery_sms in the console turns it on with no deploy.
           _Tile(
             icon: Icons.sms_outlined,
             title: 'Recovery phone',
-            subtitle: _recoverySubtitle(_recovery?.phone, 'phone number'),
-            onTap: _openRecoveryPhone,
+            subtitle: _phoneSubtitle(smsReady),
+            muted: !smsReady && (_recovery?.phone.isEmpty ?? true),
+            onTap: smsReady
+                ? _openRecoveryPhone
+                : (_recovery?.phone.isEmpty ?? true)
+                      // Nothing stored and nothing storable — an inert row is
+                      // kinder than one that opens a form leading nowhere.
+                      ? null
+                      // A number saved before SMS was switched off is stranded.
+                      // Removing it is the only real action, so offer that.
+                      : () => _removeRecovery(email: false),
           ),
           _Tile(
             icon: Icons.verified_user_outlined,
@@ -487,8 +501,34 @@ class _PasswordSecurityScreenState
     if (method == null || method.isEmpty) {
       return 'Not set — add a $noun to recover your account';
     }
-    if (method.verified) return '${method.masked} • verified';
-    return '${method.masked} • verification required';
+    // A half-finished change. Naming both addresses is the point: the reader
+    // needs to know their existing route still works, which is the opposite of
+    // what the old single-column version could tell them.
+    final moving = method.pendingAddress;
+    if (moving != null && method.verified) {
+      return '${method.display} • verified — confirming $moving';
+    }
+    if (method.verified) return '${method.display} • verified';
+    return '${method.display} • verification required';
+  }
+
+  /// The phone row cannot borrow [_recoverySubtitle], because the unverified
+  /// case there says "verification required" — a request. With no SMS provider
+  /// there is nothing the reader can do to satisfy it, and an app that asks for
+  /// something impossible and then stays silent is worse than one that admits
+  /// the feature is not ready.
+  String _phoneSubtitle(bool smsReady) {
+    if (_recovery == null) return 'Checking…';
+    final phone = _recovery!.phone;
+
+    if (smsReady) return _recoverySubtitle(phone, 'phone number');
+
+    if (phone.isEmpty) {
+      return 'Not available yet — a recovery email covers this for now';
+    }
+    // Stored while the option was open, and now unconfirmable. Say whose
+    // problem it is, and point at the one thing that still works.
+    return '${phone.display} • we cannot confirm it yet — tap to remove';
   }
 
   Future<void> _loadRecovery() async {
@@ -506,10 +546,25 @@ class _PasswordSecurityScreenState
   Future<void> _openRecoveryEmail() async {
     final current = _recovery?.email;
 
+    // A change is in flight. Two real options — finish it, or drop it and keep
+    // what already works — and the sheet must offer the second, because
+    // otherwise the only way out of a change whose code never arrived is to
+    // remove the verified address entirely.
+    final moving = current?.pendingAddress;
+    if (moving != null) {
+      final choice = await _choosePendingAction(moving);
+      if (choice == _PendingChoice.enterCode) {
+        await _enterEmailCode(moving);
+      } else if (choice == _PendingChoice.discard) {
+        await _cancelEmailChange();
+      }
+      return;
+    }
+
     // Already nominated and waiting on a code — go straight to entering it
     // rather than making them retype an address they already gave us.
     if (current != null && current.pending) {
-      await _enterEmailCode(current.masked ?? '');
+      await _enterEmailCode(current.display ?? '');
       return;
     }
 
@@ -517,7 +572,7 @@ class _PasswordSecurityScreenState
     // ask. Removing a route back into an account should be a deliberate,
     // visible act rather than a hidden gesture.
     if (current != null && current.verified) {
-      final choice = await _chooseManageAction(current.masked ?? '');
+      final choice = await _chooseManageAction(current.display ?? '');
       if (choice == _ManageChoice.remove) {
         await _removeRecovery(email: true);
         return;
@@ -548,14 +603,25 @@ class _PasswordSecurityScreenState
     await _enterEmailCode(masked);
   }
 
-  Future<void> _enterEmailCode(String masked) async {
-    final code = await _promptForValue(
-      title: 'Enter the code',
-      blurb: 'We sent a 6-digit code to $masked. It expires in 15 minutes.',
-      hint: '000000',
-      keyboard: TextInputType.number,
-      initial: '',
-      action: 'Verify',
+  Future<void> _enterEmailCode(String target) async {
+    final code = await _promptForCode(
+      sentTo: target,
+      blurb: (to) => 'We sent a 6-digit code to $to. It expires in 15 minutes.',
+      onResend: () async {
+        // A resend is the same request again: set_recovery_email issues a fresh
+        // code for the same address and queues fresh mail. It is only safe to
+        // call because the address is now carried in full — a masked string
+        // would fail the server's format check.
+        if (!target.contains('@') || target.contains('*')) {
+          return 'Reopen this screen to send a new code.';
+        }
+        try {
+          await ref.read(repositoryProvider).setRecoveryEmail(target);
+          return null;
+        } catch (error) {
+          return _recoveryErrorText(error);
+        }
+      },
     );
     if (code == null || code.trim().isEmpty) return;
 
@@ -583,7 +649,7 @@ class _PasswordSecurityScreenState
   Future<void> _openRecoveryPhone() async {
     final current = _recovery?.phone;
     if (current != null && !current.isEmpty) {
-      final choice = await _chooseManageAction(current.masked ?? '');
+      final choice = await _chooseManageAction(current.display ?? '');
       if (choice == _ManageChoice.remove) {
         await _removeRecovery(email: false);
         return;
@@ -595,13 +661,12 @@ class _PasswordSecurityScreenState
       title: _recovery?.phone.isEmpty == false
           ? 'Change recovery phone'
           : 'Add a recovery phone',
-      blurb: 'Include your country code, like +250. Text-message recovery is '
-          'not switched on yet — your number is saved and will be confirmed '
-          'once it is.',
+      blurb: 'Include your country code, like +250. We will text you a 6-digit '
+          'code to confirm the number is yours.',
       hint: '+250 7xx xxx xxx',
       keyboard: TextInputType.phone,
       initial: '',
-      action: 'Save',
+      action: 'Send code',
     );
     if (entered == null || entered.trim().isEmpty) return;
 
@@ -613,9 +678,70 @@ class _PasswordSecurityScreenState
     await _loadRecovery();
     if (!mounted) return;
 
-    // Told plainly rather than left looking broken. The number is stored; the
-    // confirmation step genuinely does not exist yet.
-    _snack('Saved $masked. We will confirm it when SMS is available.');
+    await _enterPhoneCode(entered.trim(), masked);
+  }
+
+  /// Ownership of a number is proved through GoTrue's own phone OTP, the same
+  /// one phone sign-in uses, and then confirm_recovery_phone() checks that
+  /// auth.users.phone_confirmed_at now covers this exact number. We deliberately
+  /// do not mint a second proof of our own: two independent ideas of "confirmed"
+  /// is how one of them ends up wrong.
+  Future<void> _enterPhoneCode(String phone, String shown) async {
+    // updateUser(phone:) is what actually sends the SMS, and it is also what a
+    // resend calls — GoTrue issues a fresh OTP for the same number.
+    Future<void> send() => Supabase.instance.client.auth.updateUser(
+      UserAttributes(phone: phone),
+    );
+
+    // If no provider is configured this throws, which is why the row is
+    // flag-gated: reaching here with SMS off would show a code prompt for a
+    // code nobody sent.
+    final sent = await _guard(
+      () async {
+        await send();
+        return true;
+      },
+      onError: (e) => 'We could not text $shown. Check the number and '
+          'your connection, then try again.',
+    );
+    if (sent != true || !mounted) return;
+
+    final code = await _promptForCode(
+      sentTo: shown,
+      blurb: (to) => 'We texted a 6-digit code to $to.',
+      onResend: () async {
+        try {
+          await send();
+          return null;
+        } catch (_) {
+          // GoTrue enforces its own SMS rate limit, and the message it returns
+          // is not something to show a person.
+          return 'We could not send another code just yet. Try again shortly.';
+        }
+      },
+    );
+    if (code == null || code.trim().isEmpty) return;
+
+    final ok = await _guard(() async {
+      // phoneChange is the right type here: the number is being attached to an
+      // existing session, not used to sign in.
+      await Supabase.instance.client.auth.verifyOTP(
+        type: OtpType.phoneChange,
+        phone: phone,
+        token: code.trim(),
+      );
+      // Only now can the server see phone_confirmed_at and agree.
+      return ref.read(repositoryProvider).confirmRecoveryPhone();
+    }, onError: (e) => 'That code was wrong or has expired. Ask for a new one.');
+
+    if (ok == null || !mounted) return;
+    await _loadRecovery();
+    if (!mounted) return;
+    _snack(
+      ok == true
+          ? 'Recovery phone verified.'
+          : 'That code was wrong or has expired. Ask for a new one.',
+    );
   }
 
   Future<void> _removeRecovery({required bool email}) async {
@@ -716,6 +842,63 @@ class _PasswordSecurityScreenState
     );
   }
 
+  /// What to do about a change that was started but never confirmed.
+  Future<_PendingChoice?> _choosePendingAction(String moving) {
+    return showModalBottomSheet<_PendingChoice>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'Waiting on a code for $moving',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              leading: const Icon(Icons.pin_outlined),
+              title: const Text('Enter the code'),
+              onTap: () => Navigator.pop(ctx, _PendingChoice.enterCode),
+            ),
+            ListTile(
+              leading: const Icon(Icons.undo_rounded),
+              title: const Text('Keep my current email'),
+              // The reassurance is the whole point of this option existing.
+              subtitle: const Text('Cancels the change. Nothing else changes.'),
+              onTap: () => Navigator.pop(ctx, _PendingChoice.discard),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cancelEmailChange() async {
+    final done = await _guard(
+      () => ref.read(repositoryProvider).cancelRecoveryEmailChange(),
+      onError: (_) => 'Couldn\'t cancel that. Check your connection.',
+    );
+    if (done == null || !mounted) return;
+    await _loadRecovery();
+    if (!mounted) return;
+    _snack('Change cancelled. Your recovery email is unchanged.');
+  }
+
   /// One sheet for every short text answer this screen needs.
   Future<String?> _promptForValue({
     required String title,
@@ -769,6 +952,17 @@ class _PasswordSecurityScreenState
                   controller: controller,
                   autofocus: true,
                   keyboardType: keyboard,
+                  // Every value this sheet collects is a machine identifier —
+                  // an email, a phone number, a 6-digit code. iOS capitalises
+                  // the first letter by default, which turned a typed address
+                  // into "Hughes.test.recovery@gmail.com" on a real device.
+                  // The server lowercases, so nothing broke, but showing
+                  // somebody a mangled version of what they just typed makes
+                  // them distrust the screen — and autocorrect on an email
+                  // field is free to substitute whole words.
+                  textCapitalization: TextCapitalization.none,
+                  autocorrect: false,
+                  enableSuggestions: false,
                   decoration: InputDecoration(
                     hintText: hint,
                     border: const OutlineInputBorder(),
@@ -790,6 +984,35 @@ class _PasswordSecurityScreenState
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// The code sheet, which needs to do more than collect six digits.
+  ///
+  /// A verification code that does not arrive is the normal case, not the edge
+  /// case — mail is delayed, it lands in spam, the number was mistyped, the
+  /// person closed the app and came back. Without a resend the only way out is
+  /// to abandon the change, which is how somebody ends up with no recovery
+  /// method at all. [onResend] returns null on success or a message to show.
+  Future<String?> _promptForCode({
+    required String sentTo,
+    required String Function(String target) blurb,
+    required Future<String?> Function() onResend,
+  }) {
+    return showModalBottomSheet<String>(
+      context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => _CodeSheet(
+        sentTo: sentTo,
+        blurb: blurb,
+        onResend: onResend,
       ),
     );
   }
@@ -1010,6 +1233,7 @@ class _Tile extends StatelessWidget {
     this.onTap,
     this.trailingBadge,
     this.danger = false,
+    this.muted = false,
   });
   final IconData icon;
   final String title;
@@ -1018,9 +1242,18 @@ class _Tile extends StatelessWidget {
   final String? trailingBadge;
   final bool danger;
 
+  /// Drains the colour so the row reads as unavailable rather than merely
+  /// undecorated. Without it a tile with no chevron looks identical to one
+  /// whose tap handler is broken.
+  final bool muted;
+
   @override
   Widget build(BuildContext context) {
-    final color = danger ? const Color(0xFFE05C5C) : VentlyColors.berryMagenta;
+    final color = muted
+        ? context.ink.withOpacity(0.32)
+        : danger
+        ? const Color(0xFFE05C5C)
+        : VentlyColors.berryMagenta;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
@@ -1052,7 +1285,7 @@ class _Tile extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 14.5,
-                          color: danger ? color : context.ink,
+                          color: (danger || muted) ? color : context.ink,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -1103,3 +1336,177 @@ class _Tile extends StatelessWidget {
 
 /// What to do with a recovery method that is already set.
 enum _ManageChoice { change, remove }
+
+/// What to do with a change that was requested but never confirmed.
+enum _PendingChoice { enterCode, discard }
+
+/// Collects a 6-digit code and can ask for a fresh one.
+///
+/// Stateful because of the cooldown. The server refuses a second code inside 60
+/// seconds with `resend_too_soon`, and a button that looks available but always
+/// fails is worse than one that says how long is left — people tap it three
+/// times, get three errors, and conclude the app is broken. So the countdown is
+/// shown, and the button is only live when a resend would actually work.
+class _CodeSheet extends StatefulWidget {
+  const _CodeSheet({
+    required this.sentTo,
+    required this.blurb,
+    required this.onResend,
+  });
+
+  final String sentTo;
+  final String Function(String target) blurb;
+
+  /// Null on success, or a message explaining why not.
+  final Future<String?> Function() onResend;
+
+  @override
+  State<_CodeSheet> createState() => _CodeSheetState();
+}
+
+class _CodeSheetState extends State<_CodeSheet> {
+  /// Matches the 60-second window enforced by set_recovery_email. Starting the
+  /// countdown at full assumes a code has just been sent, which is true at
+  /// every entry point into this sheet.
+  static const int _cooldownSeconds = 60;
+
+  final _controller = TextEditingController();
+  Timer? _ticker;
+  int _remaining = _cooldownSeconds;
+  bool _resending = false;
+  String? _notice;
+  bool _noticeIsError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCountdown();
+  }
+
+  void _startCountdown() {
+    _ticker?.cancel();
+    setState(() => _remaining = _cooldownSeconds);
+    _ticker = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() => _remaining--);
+      if (_remaining <= 0) timer.cancel();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _resend() async {
+    setState(() {
+      _resending = true;
+      _notice = null;
+    });
+    final error = await widget.onResend();
+    if (!mounted) return;
+    setState(() {
+      _resending = false;
+      _notice = error ?? 'A new code is on its way.';
+      _noticeIsError = error != null;
+    });
+    // Only restart the clock on success. A failed attempt did not consume the
+    // server's window, so making somebody wait another minute for it would be
+    // punishing them for our error.
+    if (error == null) _startCountdown();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final canResend = _remaining <= 0 && !_resending;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Enter the code',
+            style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            widget.blurb(widget.sentTo),
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurface.withOpacity(.7),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            textCapitalization: TextCapitalization.none,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: const InputDecoration(
+              hintText: '000000',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (v) => Navigator.pop(context, v),
+          ),
+          if (_notice != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _notice!,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: _noticeIsError
+                    ? const Color(0xFFE05C5C)
+                    : VentlyColors.berryMagenta,
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context, _controller.text),
+              child: const Text(
+                'Verify',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: TextButton(
+              onPressed: canResend ? _resend : null,
+              child: Text(
+                _resending
+                    ? 'Sending…'
+                    : canResend
+                    ? 'Send a new code'
+                    // Named in seconds rather than "try again later", so the
+                    // wait is a known quantity instead of an open question.
+                    : 'Send a new code in ${_remaining}s',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
