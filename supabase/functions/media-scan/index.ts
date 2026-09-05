@@ -228,23 +228,50 @@ Deno.serve(async (req) => {
     );
   }
 
-  const authorization = req.headers.get("Authorization");
-  const token = authorization?.replace(/^Bearer\s+/i, "").trim();
-  if (!token) {
-    return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), {
-      status: 401,
-      headers,
-    });
-  }
-
   const sb = adminClient();
-  const { data: authData, error: authError } = await sb.auth.getUser(token);
-  const callerId = authData.user?.id;
-  if (authError || !callerId) {
-    return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), {
-      status: 401,
-      headers,
-    });
+
+  // Two ways in, and only two.
+  //
+  // Normally the author's app calls this straight after uploading, with their
+  // own JWT. That path is unchanged.
+  //
+  // The second is the sweeper. Client dispatch is a best-effort fire-and-forget
+  // — if the app is killed, backgrounded, or loses signal in the second after
+  // posting, or if the classifier was asleep and the call timed out, the scan
+  // simply never happens and the image stays 'pending' for ever. Veiled is the
+  // safe failure, but a permanent veil on an ordinary photo is still a broken
+  // feature, and nothing was retrying. sweep_media_scans() now does, and it has
+  // no user JWT to present, so it authenticates with the cron secret and the
+  // author is taken from the row itself.
+  //
+  // That substitution is safe because callerId is only ever used to prove
+  // ownership to claim_media_scan, which requires author_id = p_user_id. Taking
+  // the author from the row satisfies that by construction rather than by
+  // assertion. It grants the sweeper nothing it could not already do.
+  const cronSecret = Deno.env.get("CRON_SECRET");
+  const isCron = !!cronSecret &&
+    req.headers.get("x-cron-secret") === cronSecret;
+
+  let callerId: string | undefined;
+
+  if (!isCron) {
+    const authorization = req.headers.get("Authorization");
+    const token = authorization?.replace(/^Bearer\s+/i, "").trim();
+    if (!token) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "unauthorized" }),
+        { status: 401, headers },
+      );
+    }
+
+    const { data: authData, error: authError } = await sb.auth.getUser(token);
+    callerId = authData.user?.id;
+    if (authError || !callerId) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "unauthorized" }),
+        { status: 401, headers },
+      );
+    }
   }
 
   let payload: { kind?: string; id?: string };
@@ -293,9 +320,35 @@ Deno.serve(async (req) => {
     });
   }
   const storedRow = stored as Record<string, unknown>;
+
+  // The sweeper adopts the row's author. Everything downstream — the ownership
+  // check in claim_media_scan, the storage path check below — then runs exactly
+  // as it does for a real caller, rather than being bypassed for cron.
+  if (isCron) {
+    const owner = storedRow.author_id;
+    if (typeof owner !== "string") {
+      return new Response(
+        JSON.stringify({ ok: false, error: "not_found" }),
+        { status: 404, headers },
+      );
+    }
+    callerId = owner;
+  }
+
   if (storedRow.author_id !== callerId) {
     return new Response(JSON.stringify({ ok: false, error: "forbidden" }), {
       status: 403,
+      headers,
+    });
+  }
+
+  // Unreachable in practice — the JWT branch returns 401 without one, and the
+  // cron branch returns 404 if the row has no author. It is here so callerId
+  // is a string for the ownership and storage-path checks below rather than
+  // string | undefined, which deno would reject at deploy time.
+  if (!callerId) {
+    return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), {
+      status: 401,
       headers,
     });
   }
