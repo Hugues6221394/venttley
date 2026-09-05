@@ -128,15 +128,39 @@ ${safeHttpsUrl(v.confirm_url)}
 
 If you didn't sign up, ignore this message.`,
   },
+  // Code first, link second. The reset is driven from inside the app, so a
+  // link would have to deep-link back into it — one more thing to break on a
+  // device where the app is not the default handler. The link branch stays for
+  // any caller still queueing reset_url.
   password_reset: {
-    subject: () => "Reset your Venttly password",
+    subject: () => "Your Venttly password reset code",
     html: (v) =>
-      `<p>Use this link within 1 hour to set a new password:</p>
+      v.code
+        ? `<p>Hi,</p>
+      <p>Enter this code in the app to set a new password:</p>
+      <p style="font-size:28px;font-weight:800;letter-spacing:6px;margin:16px 0;">${
+          htmlValue(v.code, "", 64)
+        }</p>
+      <p>It expires in 15 minutes. If you didn't ask to reset your password,
+      ignore this message — nothing has changed.</p>
+      <p>— The Venttly team</p>`
+        : `<p>Use this link within 1 hour to set a new password:</p>
       <p><a href="${
-        htmlValue(safeHttpsUrl(v.reset_url), "https://venttly.app", 2000)
-      }">Reset password</a></p>`,
+          htmlValue(safeHttpsUrl(v.reset_url), "https://venttly.app", 2000)
+        }">Reset password</a></p>`,
     text: (v) =>
-      `Use this link within 1 hour to set a new password:
+      v.code
+        ? `Hi,
+
+Enter this code in the app to set a new password:
+
+${plainValue(v.code, "", 64)}
+
+It expires in 15 minutes. If you didn't ask to reset your password, ignore this
+message — nothing has changed.
+
+— The Venttly team`
+        : `Use this link within 1 hour to set a new password:
 ${safeHttpsUrl(v.reset_url)}
 
 If you didn't request this, you can safely ignore it.`,

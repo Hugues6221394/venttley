@@ -401,10 +401,36 @@ verify_jwt = false
 verify_jwt = true
 
 # media-scan classifies uploaded images (nudity/gore) and writes an
-# authoritative verdict. User-triggered after upload, so JWT verification stays
-# ON; the verdict is computed server-side and can't be supplied by the caller.
+# authoritative verdict. The verdict is computed server-side and can never be
+# supplied by the caller.
+#
+# verify_jwt is OFF, and that is not a relaxation. It has two callers now: the
+# author's app with their JWT, and sweep_media_scans, which retries scans the
+# client never completed — a killed app, a backgrounded app, a classifier that
+# was asleep. The sweeper has no user JWT to present, and with platform
+# verification on it would be rejected before reaching the handler, failing
+# silently every minute and leaving ordinary photos veiled for ever.
+#
+# The handler does the verification itself and always has: no valid cron secret
+# and no valid JWT is a 401 in the first twenty lines, and getUser() is a real
+# check, not a decode. This is the same arrangement as account-purge,
+# email-dispatcher and storage-cleanup — the check moves into the function
+# rather than disappearing.
 [functions.media-scan]
-verify_jwt = true
+verify_jwt = false
+
+# password-reset is reached by people who cannot sign in — that is its entire
+# purpose — so it cannot require a session token. verify_jwt is OFF by
+# necessity rather than convenience.
+#
+# What stands in its place is in the handler and in SQL: only a VERIFIED
+# recovery address is ever accepted, the "request" branch returns an identical
+# response and levels its timing whether or not an account matched, codes are
+# stored as salted hashes and expire in 15 minutes, six wrong attempts locks a
+# code out, five requests per account per hour, and a successful reset revokes
+# every existing session.
+[functions.password-reset]
+verify_jwt = false
 
 # moderate is an authenticated, quota-bounded advisory endpoint. Authoritative
 # safety rules execute in Postgres; production makes no off-platform text call.
