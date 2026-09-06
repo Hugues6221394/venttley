@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
-import { audit } from "@/lib/audit";
+import { rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -35,17 +35,13 @@ async function createRuleAction(formData: FormData) {
   const note = String(formData.get("note") ?? "").trim() || null;
   if (!pattern) return;
 
-  const db = await createAdminClient();
-  const { data } = await db
-    .from("automod_rules")
-    .insert({ pattern, match_type, category, action, note })
-    .select("rule_id")
-    .maybeSingle();
-  await audit("automod.create", {
-    targetType: "automod_rule",
-    targetId: data?.rule_id,
-    after: { pattern, match_type, category, action },
-    reason: note ?? undefined,
+  await rpc("admin_create_automod_rule", {
+    p_pattern: pattern,
+    p_match_type: match_type,
+    p_category: category,
+    p_action: action,
+    p_note: note,
+    p_reason: note,
   });
   revalidatePath("/automod");
 }
@@ -55,13 +51,7 @@ async function toggleRuleAction(formData: FormData) {
   const id = String(formData.get("rule_id") ?? "");
   const next = String(formData.get("next") ?? "") === "true";
   if (!id) return;
-  const db = await createAdminClient();
-  await db.from("automod_rules").update({ is_active: next }).eq("rule_id", id);
-  await audit("automod.toggle", {
-    targetType: "automod_rule",
-    targetId: id,
-    after: { is_active: next },
-  });
+  await rpc("admin_toggle_automod_rule", { p_rule: id, p_active: next });
   revalidatePath("/automod");
 }
 
@@ -69,9 +59,7 @@ async function deleteRuleAction(formData: FormData) {
   "use server";
   const id = String(formData.get("rule_id") ?? "");
   if (!id) return;
-  const db = await createAdminClient();
-  await db.from("automod_rules").delete().eq("rule_id", id);
-  await audit("automod.delete", { targetType: "automod_rule", targetId: id });
+  await rpc("admin_delete_automod_rule", { p_rule: id });
   revalidatePath("/automod");
 }
 

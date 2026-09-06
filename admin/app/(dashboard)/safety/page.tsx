@@ -1,7 +1,6 @@
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
-import { createAdminClient, createSsrClient } from "@/lib/supabase/server";
-import { audit, rpc } from "@/lib/audit";
+import { rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -69,35 +68,16 @@ async function markReportHandledAction(formData: FormData) {
   revalidatePath("/safety");
 }
 
-const CRISIS_TABLE: Record<string, { table: string; idCol: string }> = {
-  post: { table: "posts", idCol: "post_id" },
-  whisper: { table: "whispers", idCol: "whisper_id" },
-  tribe_message: { table: "tribe_messages", idCol: "message_id" },
-  chat_message: { table: "chat_messages", idCol: "message_id" },
-};
-
 async function clearCrisisAction(formData: FormData) {
   "use server";
   const kind = String(formData.get("kind") ?? "");
   const id = String(formData.get("ref_id") ?? "");
   const note = String(formData.get("note") ?? "");
-  const map = CRISIS_TABLE[kind];
-  if (!id || !map) return;
-
-  const db = await createAdminClient();
-  const { table, idCol } = map;
-  const { data: before } = await db
-    .from(table)
-    .select("crisis_level")
-    .eq(idCol, id)
-    .maybeSingle();
-  await db.from(table).update({ crisis_level: null }).eq(idCol, id);
-  await audit(`${kind}.clear_crisis`, {
-    targetType: kind,
-    targetId: id,
-    before: before ?? undefined,
-    after: { crisis_level: null },
-    reason: note || "Safety review complete",
+  if (!id || !kind) return;
+  await rpc("admin_clear_crisis_flag", {
+    p_target_type: kind,
+    p_target_id: id,
+    p_reason: note || "Safety review complete",
   });
   revalidatePath("/safety");
 }

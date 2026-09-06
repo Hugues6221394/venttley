@@ -316,13 +316,45 @@ The next super-admin developer should work in this order.
 - `npm run check:routes` (also part of `npm run typecheck`) fails the build if
   a dashboard route has no `SECTION_ROLES` entry, so deny-by-default surfaces
   as an obvious build error rather than a page nobody can open.
-- Replace every direct service-role mutation in Server Actions (including
-  automod changes, broadcast deactivation, and crisis-flag clearing) with
-  narrowly scoped RPCs that verify `auth.uid()`, the exact capability, active
-  account state, target state, and allowed transition.
-- Make audit logging atomic with the privileged mutation. `audit()` currently
-  logs errors and lets the underlying action succeed, so the claim that every
-  privileged action is audited is not yet provable.
+- ~~Replace every direct service-role mutation in Server Actions~~ **Done.**
+  automod create/toggle/delete, broadcast deactivation, the feature-flag
+  description write, crisis-flag clearing (posts/Whispers/Tribe
+  messages/DMs), and the super-admin password reset all used
+  `createAdminClient()` — the service-role client, which bypasses RLS — to
+  write a table directly from TypeScript, with the only authorization check
+  being the Next.js layout/route gate. Each now goes through a new or existing
+  `admin_*` RPC (migration `20261002090000_admin_rpc_hardening.sql`) that
+  checks `is_staff()` inside the database before mutating.
+
+  This also closes the audit-atomicity item below for these paths: every one
+  of these RPCs does its `UPDATE`/`INSERT`/`DELETE` and its `admin_log(...)`
+  call in the same `plpgsql` function body, so a logging failure rolls back
+  the mutation instead of the old pattern (mutate via TypeScript, then call
+  `audit()` as a separate, best-effort statement afterwards).
+
+  Crisis-flag clearing had a second, sharper bug once moved to an RPC: a
+  `preserve_crisis_classification` trigger (added in
+  `20260816094705_close_client_metric_and_verification_bypasses.sql`) silently
+  reverts any `crisis_level` `UPDATE` unless `auth.role() = 'service_role'`
+  — exactly the role the old direct-service-role code ran as, which is why it
+  worked and why simply swapping in an RPC without touching the trigger would
+  have shipped a *worse* bug: the RPC would report success and write an audit
+  row claiming the flag was cleared while the row underneath it silently
+  reverted and the crisis banner kept showing. The trigger now also trusts
+  `is_staff()` for the same roles the RPC itself gates on, and this was
+  confirmed against a running local instance (not just typechecked) before
+  being called fixed.
+
+  The super-admin password reset previously duplicated its authorization
+  check inline in the Server Action and used the service-role Auth Admin API
+  as a second mutation path parallel to the existing `admin_reset_user_password`
+  RPC; the RPC's recovery-phrase guard was TypeScript-only, so it never
+  applied if anything else ever called the RPC directly. The guard now lives
+  in the RPC.
+- Make audit logging atomic with the privileged mutation for the remaining
+  paths not covered above. `audit()` is still callable as a standalone
+  best-effort helper for anything not yet on the RPC pattern; every new
+  privileged write should skip it and audit inside the RPC instead.
 - Enforce AAL2 for the highest-risk RPCs at the server/database boundary, not
   only in Next.js proxy logic. Revoke or expire active sessions promptly when a
   staff role is removed, an account is suspended, or credentials are reset.

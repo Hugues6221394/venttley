@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/server";
-import { audit, rpc } from "@/lib/audit";
+import { rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -189,22 +189,13 @@ async function clearCrisisFlagAction(formData: FormData) {
   const postId = String(formData.get("post_id") ?? "");
   const reason = String(formData.get("reason") ?? "");
   if (!postId) return;
-  // The classifier wrote crisis_level; admin override here. We do a direct
-  // UPDATE via the admin client because set_post_crisis is author-only; in
-  // the rebuild we expose admin overrides via admin_log + a direct write.
-  const db = await createAdminClient();
-  const { data: before } = await db
-    .from("posts")
-    .select("crisis_level")
-    .eq("post_id", postId)
-    .maybeSingle();
-  await db.from("posts").update({ crisis_level: null }).eq("post_id", postId);
-  await audit("post.clear_crisis", {
-    targetType: "post",
-    targetId: postId,
-    before: before ?? undefined,
-    after: { crisis_level: null },
-    reason: reason || undefined,
+  // The classifier wrote crisis_level; set_post_crisis is author-only, so the
+  // admin override goes through admin_clear_crisis_flag, which checks
+  // is_staff() and audits atomically with the update.
+  await rpc("admin_clear_crisis_flag", {
+    p_target_type: "post",
+    p_target_id: postId,
+    p_reason: reason || null,
   });
   revalidatePath("/moderation");
 }

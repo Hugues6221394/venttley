@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
-import { rpc, audit } from "@/lib/audit";
+import { rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -54,13 +54,7 @@ async function deactivateAction(formData: FormData) {
   "use server";
   const id = String(formData.get("broadcast_id") ?? "");
   if (!id) return;
-  const db = await createAdminClient();
-  await db.from("broadcasts").update({ is_active: false }).eq("broadcast_id", id);
-  await audit("broadcast.deactivate", {
-    targetType: "broadcast",
-    targetId: id,
-    after: { is_active: false },
-  });
+  await rpc("admin_deactivate_broadcast", { p_broadcast: id });
   revalidatePath("/broadcasts");
 }
 

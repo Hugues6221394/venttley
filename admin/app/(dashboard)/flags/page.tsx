@@ -40,24 +40,13 @@ async function createFlagAction(formData: FormData) {
   const key = String(formData.get("flag_key") ?? "").trim();
   const desc = String(formData.get("description") ?? "").trim();
   if (!key) return;
-  // First write the row at false/0%, then a follow-up update can set the
-  // description. admin_set_flag handles the upsert path and audit-logs.
   await rpc("admin_set_flag", {
     p_key: key,
     p_enabled: false,
     p_rollout_pct: 0,
     p_reason: `created: ${desc || "(no description)"}`,
+    p_description: desc || null,
   });
-  if (desc) {
-    // Description isn't surfaced through the RPC; set it directly. The
-    // admin_set_flag call above already wrote an audit row that captures
-    // the creation. No second audit needed.
-    const db = await createAdminClient();
-    await db
-      .from("feature_flags")
-      .update({ description: desc })
-      .eq("flag_key", key);
-  }
   revalidatePath("/flags");
 }
 
