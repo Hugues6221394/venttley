@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
 import { rpc } from "@/lib/audit";
+import { InvalidInput, intInRange, optStr, reqStr } from "@/lib/validate";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -20,32 +21,41 @@ type Flag = {
   created_at: string;
 };
 
+const FLAG_KEY_RE = /^[a-z0-9_]+$/;
+
+function flagKey(formData: FormData): string {
+  const key = reqStr(formData, "flag_key", 100);
+  if (!FLAG_KEY_RE.test(key)) {
+    throw new InvalidInput("flag_key", "must be lower_snake_case");
+  }
+  return key;
+}
+
 async function toggleFlagAction(formData: FormData) {
   "use server";
-  const key = String(formData.get("flag_key") ?? "");
-  const enabled = String(formData.get("enabled") ?? "") === "true";
-  const rollout = Number(formData.get("rollout_pct") ?? 0);
-  const reason = String(formData.get("reason") ?? "");
+  // rollout_pct previously took anything Number() would accept and only
+  // checked Number.isFinite, so -40 or 1e30 went to the RPC. The column has a
+  // BETWEEN 0 AND 100 check, so this was a constraint error rather than a bad
+  // write — but the caller saw a raw Postgres error instead of the field name.
   await rpc("admin_set_flag", {
-    p_key: key,
-    p_enabled: enabled,
-    p_rollout_pct: Number.isFinite(rollout) ? rollout : null,
-    p_reason: reason || null,
+    p_key: flagKey(formData),
+    p_enabled: String(formData.get("enabled") ?? "") === "true",
+    p_rollout_pct: intInRange(formData, "rollout_pct", 0, 100),
+    p_reason: optStr(formData, "reason", 500),
   });
   revalidatePath("/flags");
 }
 
 async function createFlagAction(formData: FormData) {
   "use server";
-  const key = String(formData.get("flag_key") ?? "").trim();
-  const desc = String(formData.get("description") ?? "").trim();
-  if (!key) return;
+  const key = flagKey(formData);
+  const desc = optStr(formData, "description", 500);
   await rpc("admin_set_flag", {
     p_key: key,
     p_enabled: false,
     p_rollout_pct: 0,
-    p_reason: `created: ${desc || "(no description)"}`,
-    p_description: desc || null,
+    p_reason: `created: ${desc ?? "(no description)"}`,
+    p_description: desc,
   });
   revalidatePath("/flags");
 }

@@ -2,6 +2,8 @@ import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/server";
 import { rpc } from "@/lib/audit";
+import { limitAction } from "@/lib/guard";
+import { optStr, uuid, uuidList } from "@/lib/validate";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -171,15 +173,19 @@ async function suspendLadderAction(formData: FormData) {
   revalidatePath("/moderation");
 }
 
+// One submission dismisses every pending report shown. The queue is capped at
+// 200 rows per page, so that is the honest ceiling; without a cap a forged
+// payload could dismiss the entire backlog in one request and leave a single
+// audit entry standing in for an arbitrary number of decisions.
+const BULK_RESOLVE_MAX = 200;
+
 async function bulkResolveAction(formData: FormData) {
   "use server";
-  const ids = formData.getAll("report_ids").map(String).filter(Boolean);
-  const reason = String(formData.get("reason") ?? "");
-  if (ids.length === 0) return;
+  await limitAction("bulk");
   await rpc("admin_bulk_resolve_reports", {
-    p_report_ids: ids,
+    p_report_ids: uuidList(formData, "report_ids", BULK_RESOLVE_MAX),
     p_action: "dismissed",
-    p_note: reason || "Bulk dismissed",
+    p_note: optStr(formData, "reason", 500) ?? "Bulk dismissed",
   });
   revalidatePath("/moderation");
 }

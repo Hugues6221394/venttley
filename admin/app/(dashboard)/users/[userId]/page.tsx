@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAdminClient, createRequiredAuthAdminClient } from "@/lib/supabase/server";
 import { rpc } from "@/lib/audit";
+import { limitAction } from "@/lib/guard";
+import { enumOf, optStr, uuid } from "@/lib/validate";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, Row as KV } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -27,70 +29,72 @@ const ROLES = [
   "admin",
   "super_admin",
   "read_only_auditor",
-];
+] as const;
+
+const STATUSES = ["active", "suspended", "banned", "shadow_banned"] as const;
 
 async function setStatus(formData: FormData) {
   "use server";
-  const id = String(formData.get("user_id") ?? "");
-  const status = String(formData.get("status") ?? "");
-  const reason = String(formData.get("reason") ?? "");
+  await limitAction("destructive");
+  const id = uuid(formData, "user_id");
   await rpc("admin_set_user_status", {
     p_target: id,
-    p_status: status,
-    p_reason: reason || null,
+    p_status: enumOf(formData, "status", STATUSES),
+    p_reason: optStr(formData, "reason", 500),
   });
   revalidatePath(`/users/${id}`);
 }
 
 async function setRole(formData: FormData) {
   "use server";
-  const id = String(formData.get("user_id") ?? "");
-  const role = String(formData.get("role") ?? "");
-  const reason = String(formData.get("reason") ?? "");
+  await limitAction("destructive");
+  const id = uuid(formData, "user_id");
   await rpc("admin_set_user_role", {
     p_target: id,
-    p_role: role,
-    p_reason: reason || null,
+    p_role: enumOf(formData, "role", ROLES),
+    p_reason: optStr(formData, "reason", 500),
   });
   revalidatePath(`/users/${id}`);
 }
 
 async function editProfile(formData: FormData) {
   "use server";
-  const id = String(formData.get("user_id") ?? "");
+  const id = uuid(formData, "user_id");
   const verified = String(formData.get("is_verified") ?? "");
   await rpc("admin_update_user_profile", {
     p_target: id,
-    p_pseudonym: (String(formData.get("pseudonym") ?? "").trim()) || null,
+    p_pseudonym: optStr(formData, "pseudonym", 100),
     p_is_verified: verified === "" ? null : verified === "true",
-    p_safety_tier: (String(formData.get("safety_tier") ?? "").trim()) || null,
-    p_home_city: (String(formData.get("home_city") ?? "").trim()) || null,
-    p_home_country: (String(formData.get("home_country") ?? "").trim()) || null,
-    p_reason: (String(formData.get("reason") ?? "").trim()) || null,
+    p_safety_tier: optStr(formData, "safety_tier", 50),
+    p_home_city: optStr(formData, "home_city", 100),
+    p_home_country: optStr(formData, "home_country", 100),
+    p_reason: optStr(formData, "reason", 500),
   });
   revalidatePath(`/users/${id}`);
 }
 
 async function setVerified(formData: FormData) {
   "use server";
-  const id = String(formData.get("user_id") ?? "");
-  const v = String(formData.get("verified") ?? "");
-  const reason = String(formData.get("reason") ?? "");
+  const id = uuid(formData, "user_id");
+  const v = enumOf(formData, "verified", ["true", "false", "clear"] as const);
   await rpc("admin_set_user_verified", {
     p_target: id,
     p_verified: v === "clear" ? null : v === "true",
-    p_reason: reason || null,
+    p_reason: optStr(formData, "reason", 500),
   });
   revalidatePath(`/users/${id}`);
 }
 
 async function resetPassword(formData: FormData) {
   "use server";
-  const id = String(formData.get("user_id") ?? "");
+  await limitAction("destructive");
+  const id = uuid(formData, "user_id");
   const pw = String(formData.get("password") ?? "");
-  const reason = String(formData.get("reason") ?? "");
-  if (pw.length < 12) {
-    throw new Error("Password must be at least 12 characters.");
+  const reason = optStr(formData, "reason", 500);
+  // Lower bound matches admin_authorize_password_reset's own check; the upper
+  // bound is here because bcrypt hashes whatever it is given.
+  if (pw.length < 12 || pw.length > 200) {
+    throw new Error("Password must be between 12 and 200 characters.");
   }
 
   // Checks is_staff(super_admin), AAL2, and the recovery-phrase guard in the
@@ -111,22 +115,25 @@ async function resetPassword(formData: FormData) {
   // can't deliver across that boundary.
   await rpc("admin_finalize_password_reset", {
     p_target: id,
-    p_reason: reason || null,
+    p_reason: reason,
   });
   revalidatePath(`/users/${id}`);
 }
 
 async function deleteUser(formData: FormData) {
   "use server";
-  const id = String(formData.get("user_id") ?? "");
+  await limitAction("destructive");
+  const id = uuid(formData, "user_id");
   const confirm = String(formData.get("confirm") ?? "");
   if (confirm !== "DELETE") {
     // Guard against accidental submits — require typing DELETE.
     revalidatePath(`/users/${id}`);
     return;
   }
-  const reason = String(formData.get("reason") ?? "");
-  await rpc("admin_delete_user", { p_target: id, p_reason: reason || null });
+  await rpc("admin_delete_user", {
+    p_target: id,
+    p_reason: optStr(formData, "reason", 500),
+  });
   redirect("/users");
 }
 

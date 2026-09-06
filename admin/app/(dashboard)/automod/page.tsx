@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
 import { rpc } from "@/lib/audit";
+import { enumOf, optStr, reqStr, uuid } from "@/lib/validate";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -26,20 +27,31 @@ const ACTION_TONE: Record<Rule["action"], "danger" | "warn" | "crisis"> = {
   crisis: "crisis",
 };
 
+// Mirror the automod_rules CHECK constraints (0085_moderation_power_tools.sql).
+// The <select>s already offer only these, but a Server Action is a POST
+// endpoint — the rendered form is not the only thing that can call it.
+const MATCH_TYPES = ["contains", "word", "regex"] as const;
+const RULE_ACTIONS = ["block", "flag", "crisis"] as const;
+const CATEGORIES = [
+  "harassment",
+  "hate",
+  "sexual_content",
+  "violence",
+  "privacy",
+  "self_harm",
+  "other",
+] as const;
+
 async function createRuleAction(formData: FormData) {
   "use server";
-  const pattern = String(formData.get("pattern") ?? "").trim();
-  const match_type = String(formData.get("match_type") ?? "contains");
-  const category = String(formData.get("category") ?? "other");
-  const action = String(formData.get("action") ?? "block");
-  const note = String(formData.get("note") ?? "").trim() || null;
-  if (!pattern) return;
-
+  // 200 is the pattern column's own CHECK bound.
+  const pattern = reqStr(formData, "pattern", 200);
+  const note = optStr(formData, "note", 500);
   await rpc("admin_create_automod_rule", {
     p_pattern: pattern,
-    p_match_type: match_type,
-    p_category: category,
-    p_action: action,
+    p_match_type: enumOf(formData, "match_type", MATCH_TYPES),
+    p_category: enumOf(formData, "category", CATEGORIES),
+    p_action: enumOf(formData, "action", RULE_ACTIONS),
     p_note: note,
     p_reason: note,
   });
@@ -48,18 +60,16 @@ async function createRuleAction(formData: FormData) {
 
 async function toggleRuleAction(formData: FormData) {
   "use server";
-  const id = String(formData.get("rule_id") ?? "");
-  const next = String(formData.get("next") ?? "") === "true";
-  if (!id) return;
-  await rpc("admin_toggle_automod_rule", { p_rule: id, p_active: next });
+  await rpc("admin_toggle_automod_rule", {
+    p_rule: uuid(formData, "rule_id"),
+    p_active: String(formData.get("next") ?? "") === "true",
+  });
   revalidatePath("/automod");
 }
 
 async function deleteRuleAction(formData: FormData) {
   "use server";
-  const id = String(formData.get("rule_id") ?? "");
-  if (!id) return;
-  await rpc("admin_delete_automod_rule", { p_rule: id });
+  await rpc("admin_delete_automod_rule", { p_rule: uuid(formData, "rule_id") });
   revalidatePath("/automod");
 }
 

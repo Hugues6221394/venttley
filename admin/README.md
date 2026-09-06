@@ -401,9 +401,84 @@ The next super-admin developer should work in this order.
   announce it. Verified against a running local instance: an AAL1 caller is
   rejected on every gated RPC, an AAL2 caller succeeds, and the target's
   session count drops to zero afterward.
-- Add CSRF/origin checks and explicit input schemas for every Server Action and
-  API route; rate-limit privileged writes and bulk operations, not only login
-  and telemetry.
+- ~~Add CSRF/origin checks…~~ **Done for the routes that lacked them.**
+  Next.js already applies a same-origin check to Server Actions (it compares
+  `Origin` against `Host` in its action handler and rejects a mismatch), so
+  the 35 Server Actions were already covered. That protection does **not**
+  extend to `app/api/**` route handlers — they never pass through that code
+  path — so all four API routes were reachable by any page on the internet
+  with the operator's cookies attached. `/api/admin/event` was the sharp one:
+  cookie-authenticated, writes a row, and calls `req.json()` regardless of
+  `Content-Type`, so a cross-origin `text/plain` POST (a "simple request"
+  that skips CORS preflight) would execute against the victim's session.
+  `lib/guard.ts#sameOrigin` now gates `event`, `login`, and `logout`.
+
+  It is deliberately stricter than Next's built-in check, which lets a
+  request through when `Origin` is absent entirely. That is defensible for
+  the framework, but "absent" is the easiest header state for an attacker to
+  arrange and these routes have no reason to accept it.
+
+  `audit-export` is deliberately **not** origin-checked: it is a read-only
+  GET reached by clicking a download link, so a legitimate top-level
+  navigation (or a bookmark, or a pasted URL) can arrive with no `Origin`
+  and sometimes no `Referer`. Requiring one would break the feature to
+  defend against a cross-origin read the same-origin policy already
+  prevents. It is rate-limited instead, since each call exports 5000 rows of
+  the most sensitive table in the system. Its `?from=`/`?to=` params also
+  used to reach `new Date(x).toISOString()` unchecked, so a malformed date
+  was an unhandled 500; it is now a 400.
+
+  Verified against the running console with a real authenticated session:
+  cross-origin, `text/plain` cross-origin, and no-`Origin` POSTs to
+  `/api/admin/event` are all rejected 403 with the session cookie attached,
+  while the same-origin call still returns `ok:true`. The logout button —
+  a plain `<form method="post">`, the case most likely to break under an
+  origin check — was exercised in a real browser and still returns its 303.
+- ~~…and explicit input schemas…~~ **Partially done.** `lib/validate.ts` is a
+  small dependency-free helper (`reqStr`/`optStr` with length caps, `enumOf`,
+  `uuid`, `uuidList` with a cap, `intInRange`, `optTimestamp`) that throws
+  rather than coercing — silently substituting a default is how an
+  out-of-range value becomes a successful-looking write of the wrong number.
+  Applied to the actions that had real gaps: `automod` and `broadcasts`
+  (enum fields forwarded unchecked; `title`/`body` capped only by `maxLength`
+  in the DOM, which is a UI hint on what is really a POST endpoint), `flags`
+  (`rollout_pct` accepted anything `Number()` would parse), `users/[userId]`
+  (every field), and `moderation`'s bulk dismissal.
+
+  The remaining ~20 actions in `csam`, `media`, `roles`, `safety`, `settings`,
+  `tribes`, `users`, and `verification` still read input ad-hoc. They are not
+  *unvalidated* — the `admin_*` RPCs and table CHECK constraints reject bad
+  values — but the rejection surfaces as a Postgres error rather than a named
+  field. Worth a follow-up sweep; not a security hole.
+- ~~…rate-limit privileged writes and bulk operations~~ **Done**, with a
+  caveat below. `lib/guard.ts#limitAction` keys on the acting staff member
+  rather than the IP the API routes use: a shared office IP would otherwise
+  let one operator's bulk run throttle everyone else. Applied to
+  `bulkResolveAction` (10/min) and to `setStatus`/`setRole`/`resetPassword`/
+  `deleteUser` (20/min). Limits are generous on purpose — this is a backstop
+  against a runaway loop or a scripted mass-action, not a workflow constraint
+  on a moderator working a queue. `bulkResolveAction` also had no cap on its
+  `report_ids[]` array at all; it is now bounded to 200, the queue's own page
+  size, so one request cannot dismiss an entire backlog behind a single audit
+  entry.
+
+  **Caveat, and the next thing to fix here:** `createRateLimiter` returns a
+  no-op that reports success whenever `UPSTASH_REDIS_REST_URL`/`TOKEN` are
+  unset. That is convenient for local dev and dangerous everywhere else — a
+  deployment missing those two env vars has *no* rate limiting on login,
+  telemetry, exports, or any of the above, and nothing says so. Confirmed
+  live: this console currently answers `redisConfigured: false`. The env
+  table above already lists Upstash as required before internet exposure,
+  but nothing enforces it. It should fail closed in production rather than
+  silently disable itself.
+- Surface validation failures next to the field instead of in the error
+  boundary. Rejected input now throws, and `app/(dashboard)/error.tsx`
+  catches it so the console shows a recoverable panel rather than Next's
+  default error screen — but Next redacts server error messages in
+  production, so the operator sees a generic string and a digest, not
+  "title: must be 120 characters or fewer". Fixing that properly means
+  moving these forms to `useActionState`, which is a larger change than the
+  hardening it would be attached to.
 
 ### P0 — complete moderation coverage
 

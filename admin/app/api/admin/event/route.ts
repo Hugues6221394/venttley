@@ -7,6 +7,7 @@ import {
   ipFrom,
   isRedisConfigured,
 } from "@/lib/redis";
+import { originRejection, sameOrigin } from "@/lib/guard";
 
 /**
  * Admin telemetry sink. Two responsibilities:
@@ -28,7 +29,16 @@ type Payload = {
   props?: Record<string, unknown>;
 };
 
+const SEVERITIES = ["debug", "info", "warn", "error"] as const;
+
 export async function POST(req: Request) {
+  // This route is cookie-authenticated and writes a row. Without an origin
+  // check, any page the operator visits could POST here with their session
+  // attached — and because the handler calls req.json() regardless of the
+  // declared Content-Type, an attacker could send it as a "simple request"
+  // (text/plain) that never triggers a CORS preflight.
+  if (!sameOrigin(req)) return originRejection();
+
   const gate = await eventLimiter.limit(ipFrom(req));
   if (!gate.success) {
     return NextResponse.json(
@@ -43,15 +53,27 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
-  const name = body.name;
-  if (!name) {
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name || name.length > 120) {
     return NextResponse.json(
-      { ok: false, error: "name is required" },
+      { ok: false, error: "name is required, 120 characters or fewer" },
       { status: 400 },
     );
   }
   const severity = body.severity ?? "info";
+  if (!SEVERITIES.includes(severity)) {
+    return NextResponse.json(
+      { ok: false, error: `severity must be one of ${SEVERITIES.join(", ")}` },
+      { status: 400 },
+    );
+  }
   const props = body.props ?? {};
+  if (typeof props !== "object" || Array.isArray(props)) {
+    return NextResponse.json(
+      { ok: false, error: "props must be an object" },
+      { status: 400 },
+    );
+  }
 
   const supabase = await createSsrClient();
   const { data: auth } = await supabase.auth.getUser();

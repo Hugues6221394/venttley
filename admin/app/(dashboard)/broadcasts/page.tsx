@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
 import { rpc } from "@/lib/audit";
+import { enumOf, optStr, optTimestamp, reqStr, uuid } from "@/lib/validate";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -24,17 +25,20 @@ type Row = {
   created_at: string;
 };
 
+// urgency mirrors the broadcasts CHECK constraint (0022_admin_foundation.sql).
+const URGENCIES = ["info", "warning", "critical", "crisis"] as const;
+const SCOPES = ["all", "region", "tribe", "role"] as const;
+
 async function sendBroadcastAction(formData: FormData) {
   "use server";
-  const title = String(formData.get("title") ?? "").trim();
-  const body = String(formData.get("body") ?? "").trim();
-  const urgency = String(formData.get("urgency") ?? "info");
-  const scope = String(formData.get("scope") ?? "all");
-  const scopeValue = String(formData.get("scope_value") ?? "").trim();
-  const scheduledFor = String(formData.get("scheduled_for") ?? "").trim();
-  const expiresAt = String(formData.get("expires_at") ?? "").trim();
-
-  if (!title || !body) return;
+  // The composer caps title at 120 and body at 1000 with maxLength; those are
+  // UI hints, so re-apply them here where they are actually enforceable. This
+  // reaches every active member, so an oversized or malformed one is not a
+  // small mistake.
+  const title = reqStr(formData, "title", 120);
+  const body = reqStr(formData, "body", 1000);
+  const scope = enumOf(formData, "scope", SCOPES);
+  const scopeValue = optStr(formData, "scope_value", 100);
 
   const audience: { scope: string; value?: string } = { scope };
   if (scope !== "all" && scopeValue) audience.value = scopeValue;
@@ -42,19 +46,19 @@ async function sendBroadcastAction(formData: FormData) {
   await rpc("admin_send_broadcast", {
     p_title: title,
     p_body: body,
-    p_urgency: urgency,
+    p_urgency: enumOf(formData, "urgency", URGENCIES),
     p_audience: audience,
-    p_scheduled_for: scheduledFor ? new Date(scheduledFor).toISOString() : null,
-    p_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+    p_scheduled_for: optTimestamp(formData, "scheduled_for"),
+    p_expires_at: optTimestamp(formData, "expires_at"),
   });
   revalidatePath("/broadcasts");
 }
 
 async function deactivateAction(formData: FormData) {
   "use server";
-  const id = String(formData.get("broadcast_id") ?? "");
-  if (!id) return;
-  await rpc("admin_deactivate_broadcast", { p_broadcast: id });
+  await rpc("admin_deactivate_broadcast", {
+    p_broadcast: uuid(formData, "broadcast_id"),
+  });
   revalidatePath("/broadcasts");
 }
 
