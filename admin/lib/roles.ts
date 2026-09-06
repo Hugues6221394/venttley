@@ -58,12 +58,43 @@ export function sectionOf(pathname: string): string | null {
   return match ?? null;
 }
 
-/** Whether a role may access a given pathname. Unknown sections default deny. */
+/**
+ * Paths that are intentionally not sections: the console root and the login
+ * screen. Everything else must declare its roles in SECTION_ROLES.
+ *
+ * An explicit list, because the alternative — treating "not in the table" as
+ * "allowed" — is what the bug below was.
+ */
+const UNSECTIONED_PATHS = new Set(["/", "/login"]);
+
+/**
+ * Whether a role may access a given pathname. Unknown sections are DENIED.
+ *
+ * This used to say that in the comment and do the opposite:
+ *
+ *     if (!section) return true; // non-sectioned paths — layout still gates staff
+ *
+ * A route absent from SECTION_ROLES was therefore open to every staff role,
+ * including analyst and read_only_auditor. That is not a hypothetical: the
+ * orphaned /notifications page was missing from the table, so any staff role
+ * could reach a page whose Server Action fanned a notification out to every
+ * active member using the service-role client. It has been removed and its
+ * capability lives at /broadcasts, behind admin_send_broadcast, which checks
+ * is_staff() in the database.
+ *
+ * A doc comment that contradicts its own code is worse than no comment: it
+ * tells a reviewer auditing this file that the case is handled.
+ *
+ * Deny-by-default means adding a dashboard route without a SECTION_ROLES entry
+ * makes it unreachable rather than public. `npm run check:routes` turns that
+ * into a build failure instead of a surprise.
+ */
 export function canAccess(role: string | null | undefined, pathname: string): boolean {
-  if (role === "super_admin") return true;
   if (!isStaffRole(role)) return false;
+  if (UNSECTIONED_PATHS.has(pathname)) return true;
+  if (role === "super_admin") return true;
   const section = sectionOf(pathname);
-  if (!section) return true; // non-sectioned paths (e.g. "/") — layout still gates staff
+  if (!section) return false;
   return SECTION_ROLES[section].includes(role);
 }
 

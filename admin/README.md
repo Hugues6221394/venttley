@@ -298,12 +298,24 @@ The next super-admin developer should work in this order.
 
 ### P0 — authorization and irreversible-action safety
 
-- Change `canAccess()` to deny unknown sections. The comment says default-deny,
-  but the current implementation returns `true` when a route is not listed.
-- Remove or explicitly role-gate `/notifications`. It is currently absent from
-  `lib/roles.ts` and performs direct service-role fanout to every active user.
-  Consolidate on `/broadcasts` with one idempotent, transactional,
-  role-checked RPC and a delivery job rather than synchronous N-row inserts.
+- ~~Change `canAccess()` to deny unknown sections.~~ **Done.** It returned
+  `true` for any path missing from `SECTION_ROLES` while its own doc comment
+  claimed default-deny. `/` and `/login` are now the only unsectioned paths,
+  named explicitly, and everything else must be declared.
+- ~~Remove or explicitly role-gate `/notifications`.~~ **Done — removed.** It
+  was orphaned (nothing linked to it), absent from `SECTION_ROLES` so the
+  fail-open above admitted every staff role, and its Server Action checked only
+  that *someone* was signed in before fanning a notification out to every
+  active member with the service-role client. Server Actions are directly
+  invocable, so the page gate was never the boundary. The capability lives at
+  `/broadcasts`, which calls `admin_send_broadcast` — that RPC checks
+  `is_staff(auth.uid(), ARRAY['super_admin','admin'])` in the database and
+  writes an audit row.
+  Still open from the original item: broadcasts remain a synchronous fanout
+  rather than an idempotent job with a delivery worker.
+- `npm run check:routes` (also part of `npm run typecheck`) fails the build if
+  a dashboard route has no `SECTION_ROLES` entry, so deny-by-default surfaces
+  as an obvious build error rather than a page nobody can open.
 - Replace every direct service-role mutation in Server Actions (including
   automod changes, broadcast deactivation, and crisis-flag clearing) with
   narrowly scoped RPCs that verify `auth.uid()`, the exact capability, active
