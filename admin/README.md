@@ -482,14 +482,61 @@ The next super-admin developer should work in this order.
 
 ### P0 — complete moderation coverage
 
-- Build a unified case model for posts, comments, Whispers, stories, questions,
-  profiles, media, DMs, group chat, and Tribes. The current report queue can
-  label chat/comment targets but often shows no evidence preview and only
-  offers complete delete/suspend actions when a joined post author is present.
-- Add durable case assignment, status, severity, policy code, evidence
+- ~~Build a unified case model~~ **Schema done; console not yet wired to it.**
+  Migration `20261004090000_moderation_case_model.sql` adds
+  `moderation_cases` (polymorphic `target_type`/`target_id` covering post,
+  comment, Whisper, story, question, profile, media, DM, Tribe message, chat
+  room and Tribe) plus append-only `moderation_case_events`.
+
+  A trigger on `reports` opens or joins a case on insert, so existing mobile
+  clients produce case-backed moderation without an app release, and reports
+  about the same target **deduplicate into one case** instead of becoming N
+  separate pieces of work with N chances to decide differently.
+
+  Still open: `/moderation` reads `reports` directly and does not show cases
+  yet. The RPCs it needs exist (`admin_case_queue`, `admin_assign_case`,
+  `admin_decide_case`, `admin_set_case_status`, `admin_set_case_legal_hold`);
+  the UI is the remaining work.
+- ~~Add durable case assignment, status, severity, policy code, evidence
   snapshot/hash, decision, reviewer, timestamps, SLA breach, and escalation
-  history. The current 15/60-minute safety target is computed in the UI and is
-  not a persisted or alerted workflow.
+  history.~~ **Done.** All of it is columns on `moderation_cases` with the
+  history in `moderation_case_events`, which carries the same immutability
+  trigger as `audit_log`.
+
+  Two parts worth calling out because they change behaviour rather than just
+  adding storage:
+
+  *Evidence is a snapshot, not a live read.* The console renders reported
+  content by joining to it at request time, so content edited or deleted after
+  the report — which is the next thing a bad actor does — simply shows the
+  moderator nothing. Evidence is now captured when the case opens and hashed
+  (sha256) so tampering is detectable. Verified by editing a post after the
+  report and confirming the case still holds the original text.
+
+  *The SLA is persisted.* The 15/60-minute target was computed in
+  `safety/page.tsx` from `created_at`, so it existed only while someone had the
+  tab open — nothing could alert on it, report on it, or prove it was met.
+  `sla_due_at` is now set from severity at open time, a per-minute sweep stamps
+  `sla_breached_at`, and a breach is written to case history. Severity can be
+  raised by a later report or by the classifier's `crisis_level` outranking the
+  reporter's chosen reason, and raising it pulls the deadline in rather than
+  leaving the lenient one set when the case looked routine.
+
+  Covered by `supabase/tests/database/0021_moderation_case_model.test.sql`
+  (16 assertions: deduplication, severity escalation tightening the SLA,
+  snapshot survival, DM body exclusion, append-only history, the note
+  requirement on impactful decisions, decision closing the linked reports, and
+  the support-role read/decide split).
+- **DM evidence, and a contradiction this surfaced.** Reported DMs record
+  metadata only — never the message body. That is not only a policy choice:
+  `chat_messages` stores `encrypted_payload`, not plaintext, so there is no
+  body available to snapshot. This contradicts the "Private chats are
+  server-readable under restricted staff access" line near the top of this
+  README and the safety queue's `(private DM — server-readable; access
+  restricted)` placeholder, both of which read as though a moderator can be
+  shown DM text. Either the encryption or that copy is wrong, and it should be
+  settled deliberately rather than by whatever the next moderation feature
+  assumes.
 - Add member appeals and independent second review for content removal,
   suspension, ban, shadow restriction, and verification decisions.
 - Add safe evidence retention/legal-hold controls and prevent normal account
