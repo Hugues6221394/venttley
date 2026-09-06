@@ -178,7 +178,7 @@ class _ReportCard extends ConsumerWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                DateFormat.MMMd().add_jm().format(report.createdAt),
+                DateFormat.MMMd().add_jm().format(report.createdAt.toLocal()),
                 style: TextStyle(
                   fontSize: 11,
                   color: scheme.onSurface.withOpacity(0.55),

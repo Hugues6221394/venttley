@@ -1456,24 +1456,39 @@ final _allRoomsProvider = FutureProvider.autoDispose<List<ChatRoom>>((
 
 String _smartInboxTimestamp(DateTime timestamp) {
   final now = DateTime.now();
-  final diff = now.difference(timestamp);
+  // Everything below this line reads calendar fields — .day, .weekday, .month
+  // — and builds local midnights to compare against. That only works if both
+  // sides are in the same zone, and `timestamp` arrives from a Postgres
+  // timestamptz, which DateTime.parse returns as UTC while DateTime.now() is
+  // local.
+  //
+  // Left alone, at UTC+2 a conversation from 01:00 this morning reported
+  // "Yesterday", and one from 01:00 yesterday named the wrong weekday. The
+  // "Xh ago" branch was reachable or not depending on which side of midnight
+  // UTC happened to be. Same defect as the chat date divider.
+  //
+  // The two Duration branches above were always right — difference() compares
+  // absolute instants and ignores the zone flag — which is exactly why this
+  // looked correct for recent messages and wrong for older ones.
+  final local = timestamp.toLocal();
+  final diff = now.difference(local);
   if (diff.inMinutes < 1) return 'Just now';
   if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (now.year == timestamp.year &&
-      now.month == timestamp.month &&
-      now.day == timestamp.day) {
+  if (now.year == local.year &&
+      now.month == local.month &&
+      now.day == local.day) {
     return '${diff.inHours}h ago';
   }
   final yesterday = DateTime(now.year, now.month, now.day - 1);
-  if (timestamp.isAfter(yesterday) &&
-      timestamp.isBefore(DateTime(now.year, now.month, now.day))) {
+  if (local.isAfter(yesterday) &&
+      local.isBefore(DateTime(now.year, now.month, now.day))) {
     return 'Yesterday';
   }
   if (diff.inDays < 7) {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return days[timestamp.weekday - 1];
+    return days[local.weekday - 1];
   }
-  return '${timestamp.month}/${timestamp.day}';
+  return '${local.month}/${local.day}';
 }
 
 // =========================================================================

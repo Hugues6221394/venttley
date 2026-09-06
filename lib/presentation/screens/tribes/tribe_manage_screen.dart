@@ -828,7 +828,7 @@ class _ActivityCard extends StatelessWidget {
       buckets[6 - i] = posts
           .where((p) => p.createdAt.isAfter(day) && p.createdAt.isBefore(next))
           .length;
-      labels.add(DateFormat.E().format(day).substring(0, 1));
+      labels.add(DateFormat.E().format(day.toLocal()).substring(0, 1));
     }
     final maxV = buckets.fold<int>(0, (a, b) => b > a ? b : a);
     final total = buckets.fold<int>(0, (a, b) => a + b);
@@ -1550,7 +1550,7 @@ class _MemberRow extends ConsumerWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          'Joined ${DateFormat.yMMMd().format(member.joinedAt)}',
+                          'Joined ${DateFormat.yMMMd().format(member.joinedAt.toLocal())}',
                           style: TextStyle(
                             fontSize: 10,
                             color: scheme.onSurface.withOpacity(0.55),
@@ -2273,8 +2273,8 @@ class _PromptRow extends ConsumerWidget {
                   scheduled == null
                       ? (prompt.isLive ? 'Posted now' : 'Draft')
                       : prompt.isLive
-                      ? 'Live · ${DateFormat('MMM d').format(scheduled)}'
-                      : 'Scheduled · ${DateFormat('MMM d · HH:mm').format(scheduled)}',
+                      ? 'Live · ${DateFormat('MMM d').format(scheduled.toLocal())}'
+                      : 'Scheduled · ${DateFormat('MMM d · HH:mm').format(scheduled.toLocal())}',
                   style: TextStyle(
                     fontSize: 11,
                     color: scheme.onSurface.withOpacity(0.55),

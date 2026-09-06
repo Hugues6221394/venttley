@@ -1254,7 +1254,7 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
     if (d.inMinutes < 60) return '${d.inMinutes}m';
     if (d.inHours < 24) return '${d.inHours}h';
     if (d.inDays < 7) return '${d.inDays}d';
-    return DateFormat.MMMd().format(ts);
+    return DateFormat.MMMd().format(ts.toLocal());
   }
 
   Future<void> _togglePin({required bool pin}) async {

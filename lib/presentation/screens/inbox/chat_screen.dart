@@ -1382,7 +1382,7 @@ class _Bubble extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    DateFormat.jm().format(message.createdAt),
+                    DateFormat.jm().format(message.createdAt.toLocal()),
                     style: TextStyle(
                       fontSize: 10,
                       color: scheme.onSurface.withOpacity(0.55),

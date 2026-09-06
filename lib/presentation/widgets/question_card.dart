@@ -693,7 +693,7 @@ class _AnswerBubble extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                DateFormat.MMMd().add_jm().format(answer.createdAt),
+                DateFormat.MMMd().add_jm().format(answer.createdAt.toLocal()),
                 style: TextStyle(
                   fontSize: 10,
                   color: scheme.onSurface.withOpacity(0.55),

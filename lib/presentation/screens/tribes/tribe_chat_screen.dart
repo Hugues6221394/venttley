@@ -943,7 +943,7 @@ class _MessageSearchResults extends StatelessWidget {
                         _HighlightedText(text: preview, query: query),
                         const SizedBox(height: 4),
                         Text(
-                          DateFormat('MMM d · h:mm a').format(msg.createdAt),
+                          DateFormat('MMM d · h:mm a').format(msg.createdAt.toLocal()),
                           style: TextStyle(
                             color: context.ink.withOpacity(0.5),
                             fontWeight: FontWeight.w700,
@@ -1168,17 +1168,31 @@ class _DateDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
+    // Converted once, up front, because this compares calendar fields and not
+    // just instants.
+    //
+    // `when` comes from a Postgres timestamptz, which DateTime.parse returns
+    // as UTC, while DateTime.now() is local. Reading .day off one and .day off
+    // the other compares two different calendars: at UTC+2, a message sent at
+    // 01:00 today is 23:00 UTC *yesterday*, so it was filed under the previous
+    // day's divider. The further a user is from UTC the wider the window —
+    // most of a working evening in Kigali, most of a morning in Honolulu.
+    //
+    // difference() below is unaffected either way, since it compares absolute
+    // instants and ignores the zone flag. It is the field-by-field comparison
+    // that has to be done in one zone.
+    final local = when.toLocal();
     String label;
-    if (now.year == when.year &&
-        now.month == when.month &&
-        now.day == when.day) {
+    if (now.year == local.year &&
+        now.month == local.month &&
+        now.day == local.day) {
       label = 'Today';
-    } else if (now.difference(when).inDays == 1) {
+    } else if (now.difference(local).inDays == 1) {
       label = 'Yesterday';
-    } else if (now.difference(when).inDays < 7) {
-      label = DateFormat.EEEE().format(when);
+    } else if (now.difference(local).inDays < 7) {
+      label = DateFormat.EEEE().format(local);
     } else {
-      label = DateFormat('MMM d').format(when);
+      label = DateFormat('MMM d').format(local);
     }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1230,7 +1244,7 @@ class _MessageBubble extends ConsumerWidget {
     final mine = message.sentByMe;
     final align = mine ? Alignment.centerRight : Alignment.centerLeft;
     final col = mine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final timeStr = DateFormat('h:mm a').format(message.createdAt);
+    final timeStr = DateFormat('h:mm a').format(message.createdAt.toLocal());
     if (message.isDeleted) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
@@ -2340,7 +2354,7 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
                                       ),
                                     ),
                                     Text(
-                                      DateFormat.jm().format(m.createdAt),
+                                      DateFormat.jm().format(m.createdAt.toLocal()),
                                       style: TextStyle(
                                         fontSize: 10,
                                         color: scheme.onSurface.withOpacity(

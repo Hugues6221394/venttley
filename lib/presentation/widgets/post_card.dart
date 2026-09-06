@@ -514,7 +514,7 @@ class PostCard extends ConsumerWidget {
     if (d.inMinutes < 60) return '${d.inMinutes}m ago';
     if (d.inHours < 24) return '${d.inHours}h ago';
     if (d.inDays < 7) return '${d.inDays}d ago';
-    return DateFormat.MMMd().format(ts);
+    return DateFormat.MMMd().format(ts.toLocal());
   }
 
   static String compactNumber(int n) {
