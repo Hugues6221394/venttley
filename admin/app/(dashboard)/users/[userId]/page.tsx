@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createRequiredAuthAdminClient } from "@/lib/supabase/server";
 import { rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, Row as KV } from "@/components/ui/section";
@@ -89,9 +89,28 @@ async function resetPassword(formData: FormData) {
   const id = String(formData.get("user_id") ?? "");
   const pw = String(formData.get("password") ?? "");
   const reason = String(formData.get("reason") ?? "");
-  await rpc("admin_reset_user_password", {
+  if (pw.length < 12) {
+    throw new Error("Password must be at least 12 characters.");
+  }
+
+  // Checks is_staff(super_admin), AAL2, and the recovery-phrase guard in the
+  // database. GoTrue owns auth.users' password hash, so the actual mutation
+  // stays on the Auth Admin API below rather than a direct SQL UPDATE.
+  await rpc("admin_authorize_password_reset", { p_target: id });
+
+  const authAdmin = createRequiredAuthAdminClient();
+  const { error } = await authAdmin.auth.admin.updateUserById(id, {
+    password: pw,
+  });
+  if (error) throw new Error(`Password reset failed: ${error.message}`);
+
+  // Audits and revokes the target's existing sessions now that the reset has
+  // actually happened. This can't be transactionally atomic with the Auth
+  // Admin API call above — that's a different system over the network — so
+  // this runs as the very next statement rather than claiming atomicity SQL
+  // can't deliver across that boundary.
+  await rpc("admin_finalize_password_reset", {
     p_target: id,
-    p_new_password: pw,
     p_reason: reason || null,
   });
   revalidatePath(`/users/${id}`);

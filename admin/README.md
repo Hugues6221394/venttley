@@ -347,17 +347,60 @@ The next super-admin developer should work in this order.
 
   The super-admin password reset previously duplicated its authorization
   check inline in the Server Action and used the service-role Auth Admin API
-  as a second mutation path parallel to the existing `admin_reset_user_password`
-  RPC; the RPC's recovery-phrase guard was TypeScript-only, so it never
-  applied if anything else ever called the RPC directly. The guard now lives
-  in the RPC.
-- Make audit logging atomic with the privileged mutation for the remaining
-  paths not covered above. `audit()` is still callable as a standalone
-  best-effort helper for anything not yet on the RPC pattern; every new
-  privileged write should skip it and audit inside the RPC instead.
-- Enforce AAL2 for the highest-risk RPCs at the server/database boundary, not
-  only in Next.js proxy logic. Revoke or expire active sessions promptly when a
-  staff role is removed, an account is suspended, or credentials are reset.
+  as a second mutation path parallel to `admin_reset_user_password`, an
+  existing RPC that mutated `auth.users.encrypted_password` directly via SQL.
+  That RPC turned out to already be deliberately retired
+  (`20260728174036_retire_direct_auth_password_mutation.sql`: *"GoTrue owns
+  auth.users password lifecycle. Direct SQL hash mutation can drift from the
+  Auth service's current contract"*) — its EXECUTE grant was revoked from
+  every role, including `service_role`. An earlier pass in this series
+  recreated the function's body without noticing the revocation; `CREATE OR
+  REPLACE` preserves existing grants, so that "fix" stayed unreachable by
+  everyone and would have broken the feature outright the moment it shipped.
+  Caught this by calling the RPC directly against local Postgres rather than
+  only typechecking. The real fix respects the GoTrue boundary: the mutation
+  stays on the Auth Admin API, and two small RPCs
+  (`admin_authorize_password_reset`, `admin_finalize_password_reset` —
+  migration `20261003090000_admin_aal2_and_session_revocation.sql`) hold the
+  `is_staff()`/AAL2/recovery-phrase checks and the post-mutation audit +
+  session revocation. Audit can't be transactionally atomic with a mutation
+  that happens in a different system over the network; staging it as the
+  very next call after the Auth Admin API succeeds is the honest ceiling here,
+  not a claim of atomicity SQL can't deliver across that boundary.
+- ~~Make audit logging atomic with the privileged mutation.~~ **Done** for
+  every RPC-backed write above. `audit()` remains available as a standalone
+  best-effort helper only for the password-reset case, where the mutation
+  itself is external to Postgres (see above) — every other new privileged
+  write should audit inside its RPC instead.
+- ~~Enforce AAL2 for the highest-risk RPCs at the server/database boundary~~
+  **Done**, migration `20261003090000_admin_aal2_and_session_revocation.sql`.
+  Previously 100% of AAL2/TOTP enforcement lived in `proxy.ts`, reading the
+  session's assurance level via the Supabase Auth SDK — Next.js middleware
+  that only runs for requests routed through the Next.js app. A caller with a
+  valid AAL1 token invoking `admin_delete_user` directly against PostgREST,
+  never touching a Next.js route, hit the database with no step-up check at
+  all: the same "enforced only in application code" shape as the
+  `lib/roles.ts` fail-open. `private.require_aal2()` reads the `aal` JWT claim
+  the same defensive way `private.current_auth_session_id()` already reads
+  `session_id`, and now gates `admin_delete_user`, `admin_set_user_role`,
+  `admin_authorize_password_reset`, and `admin_resolve_csam_incident` — the
+  super-admin-only, hardest-to-reverse tier. Ordinary moderation
+  (suspend/ban/shadow-ban, report resolution) stays at AAL1; moderators
+  triage these routinely and the README didn't ask for step-up there.
+
+  Sessions are now revoked (`DELETE FROM auth.sessions WHERE user_id = ...`)
+  on role change, suspension/ban (`admin_set_user_status` and
+  `admin_suspend_user_ladder`, both paths to the same state), and password
+  reset — matching the precedent already established by the self-service
+  device-session revocation in `20260828230000_...`, which deletes
+  `auth.sessions` rows directly and is unrelated to the password-hash
+  retirement above (that was specifically about `encrypted_password` format
+  ownership, not about touching `auth.sessions`). Shadow-ban is deliberately
+  excluded from revocation — its entire mechanism depends on the affected
+  member not being able to tell it happened, and forcing a fresh login would
+  announce it. Verified against a running local instance: an AAL1 caller is
+  rejected on every gated RPC, an AAL2 caller succeeds, and the target's
+  session count drops to zero afterward.
 - Add CSRF/origin checks and explicit input schemas for every Server Action and
   API route; rate-limit privileged writes and bulk operations, not only login
   and telemetry.
