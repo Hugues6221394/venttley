@@ -16,6 +16,7 @@ import 'poll_card.dart';
 import 'premium_motion.dart';
 import 'profile_avatar.dart';
 import 'user_profile_link.dart';
+import 'report_reason_sheet.dart';
 import 'share_post_to_friend_sheet.dart';
 import 'tagged_text.dart';
 import 'tribe_avatar.dart';
@@ -532,60 +533,26 @@ Future<void> openReportPostSheet(
   WidgetRef ref,
   String postId,
 ) async {
-  const reasons = <(String, String)>[
-    ('self_harm', 'Self-harm or suicide concern'),
-    ('hate', 'Hate speech'),
-    ('harassment', 'Harassment or bullying'),
-    ('sexual_content', 'Sexual content'),
-    ('violence', 'Violence or threats'),
-    ('privacy', 'Personal info / doxxing'),
-    ('spam', 'Spam or scam'),
-    ('other', 'Something else'),
-  ];
-  final choice = await showModalBottomSheet<String>(
-    context: context,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (ctx) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 44,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Text(
-                'Report this post',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Text(
-                'A moderator reviews every report. Reports are anonymous.',
-              ),
-            ),
-            const SizedBox(height: 8),
-            for (final r in reasons)
-              ListTile(
-                title: Text(r.$2),
-                onTap: () => Navigator.of(ctx).pop(r.$1),
-              ),
-          ],
-        ),
-      ),
-    ),
+  // Was a hand-rolled sheet: a plain Column of eight ListTiles inside a
+  // showModalBottomSheet with no isScrollControlled and nothing scrollable.
+  // On a 402x874 phone it overflowed by 198 pixels, so "Spam or scam" and
+  // "Something else" were simply off the bottom and unreachable — on the
+  // screen where somebody reports self-harm or harassment.
+  //
+  // showReportReasonSheet already solved this for the four other report entry
+  // points (both chats, group settings, chat options): isScrollControlled, a
+  // max height of 82%, and the list in an Expanded ListView. There is even a
+  // test named "report reasons remain usable on a compact phone" — it just
+  // never covered this call site, because this one did not use the helper.
+  //
+  // Reusing it also drops a second copy of the reason keys. The canonical list
+  // documents itself as matching the CHECK on reports.reason; a duplicate is
+  // free to drift from that constraint, and this one already had hate and
+  // harassment in a different order.
+  final choice = await showReportReasonSheet(
+    context,
+    title: 'Report this post',
+    subtitle: 'A moderator reviews every report. Reports are anonymous.',
   );
   if (choice == null) return;
   try {

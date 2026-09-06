@@ -15,6 +15,7 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../theme/vently_tokens.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/report_reason_sheet.dart';
 import '../../widgets/tagged_text.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/user_profile_link.dart';
@@ -589,11 +590,39 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     });
   }
 
-  void _openReportSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => _ReportSheet(postId: widget.postId),
+  Future<void> _openReportSheet(BuildContext context) async {
+    // Was a bespoke _ReportSheet with its own copy of the reason list.
+    //
+    // It scrolled, so it was never broken the way post_card's was — but it had
+    // drifted. Its labels differed ("Self-harm or suicide" against "Self-harm
+    // or suicide concern"), and it listed self-harm THIRD. The canonical list
+    // puts self-harm first on purpose, so the safety path is the most visible
+    // option; a person in crisis met a different screen depending on whether
+    // they reported from the feed or from a post they had opened.
+    //
+    // One list, matching the CHECK on reports.reason, in one order.
+    final reason = await showReportReasonSheet(
+      context,
+      title: 'Report this post',
+      subtitle:
+          'Venttly moderators review reports anonymously, usually within '
+          'minutes.',
     );
+    if (reason == null || !context.mounted) return;
+    try {
+      await ref
+          .read(repositoryProvider)
+          .reportPost(postId: widget.postId, reason: reason);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Thank you — a moderator will review.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not send: $e')));
+    }
   }
 
   void _openFullImage(BuildContext context, String url) =>
@@ -1794,74 +1823,6 @@ class _ComposerToolButton extends StatelessWidget {
         icon: Icon(icon, size: 21),
         color: scheme.primary,
         disabledColor: scheme.onSurface.withOpacity(0.28),
-      ),
-    );
-  }
-}
-
-class _ReportSheet extends ConsumerWidget {
-  const _ReportSheet({required this.postId});
-  final String postId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    const categories = [
-      ('harassment', 'Harassment or bullying'),
-      ('hate', 'Hate speech or slurs'),
-      ('self_harm', 'Self-harm or suicide'),
-      ('privacy', 'Doxxing or personal info'),
-      ('spam', 'Spam or scam'),
-      ('sexual_content', 'Sexual content'),
-      ('violence', 'Violence or threats'),
-      ('other', 'Something else'),
-    ];
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Report this post',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Venttly moderators review reports anonymously, usually within minutes.',
-              style: TextStyle(color: scheme.onSurface.withOpacity(0.65)),
-            ),
-            const SizedBox(height: 16),
-            for (final c in categories)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(c.$2),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () async {
-                  Navigator.pop(context);
-                  try {
-                    await ref
-                        .read(repositoryProvider)
-                        .reportPost(postId: postId, reason: c.$1);
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Thank you — a moderator will review.'),
-                      ),
-                    );
-                  } catch (e) {
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Could not send: $e')),
-                    );
-                  }
-                },
-              ),
-          ],
-        ),
       ),
     );
   }
