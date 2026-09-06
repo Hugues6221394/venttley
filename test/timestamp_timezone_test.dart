@@ -140,4 +140,48 @@ void main() {
       reason: 'the weekday must come from the local value',
     );
   });
+
+  test('day boundaries are computed in local time, not UTC', () {
+    // The instance the first sweep missed, and the reason it missed it: this
+    // compares two server timestamps against EACH OTHER. There is no local
+    // `now` for a UTC value to disagree with, so two wrong values produce a
+    // confidently wrong answer and nothing looks suspicious.
+    //
+    // Comparing UTC dates puts the divider at UTC midnight — 02:00 for a
+    // reader at UTC+2, 14:00 at UTC-10 — so a "Tuesday" divider landed in the
+    // middle of Monday night. It also has to agree with _DateDivider, which
+    // now picks its label from the local date; a divider that says one day and
+    // appears on another is worse than either bug alone.
+    final chat = File(
+      'lib/presentation/screens/tribes/tribe_chat_screen.dart',
+    ).readAsStringSync();
+
+    expect(chat, contains('final left = a.createdAt.toLocal();'));
+    expect(chat, contains('final right = b.createdAt.toLocal();'));
+    expect(
+      chat,
+      isNot(contains('a.createdAt.day != b.createdAt.day')),
+      reason: 'comparing two UTC dates draws the divider at UTC midnight',
+    );
+  });
+
+  test('a recording that captured nothing says so', () {
+    // `if (result == null || result.bytes.isEmpty) return;` — the recording bar
+    // vanished, no message appeared, and nothing was said. Reproduced on a
+    // simulator, which has no microphone; the same path runs on a real device
+    // when mic permission is denied or the recorder never started.
+    final chat = File(
+      'lib/presentation/screens/tribes/tribe_chat_screen.dart',
+    ).readAsStringSync();
+
+    final silent = RegExp(
+      r'result\s*==\s*null\s*\|\|\s*result\.bytes\.isEmpty\)\s*return;',
+    );
+    expect(
+      silent.hasMatch(chat),
+      isFalse,
+      reason: 'a failed recording must explain itself, not disappear',
+    );
+    expect(chat, contains("didn't capture any audio"));
+  });
 }

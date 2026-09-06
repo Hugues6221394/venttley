@@ -582,17 +582,55 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
     );
   }
 
+  /// Whether a day divider belongs between two messages.
+  ///
+  /// Compares LOCAL dates. Both timestamps are UTC, so comparing them to each
+  /// other is self-consistent and looks correct — but it puts the boundary at
+  /// UTC midnight, which is 02:00 for a reader at UTC+2 and 14:00 for one at
+  /// UTC-10. A conversation running through the evening got its "Tuesday"
+  /// divider dropped into the middle of Monday night.
+  ///
+  /// This is the same root cause as the timestamps themselves, and it survived
+  /// the first sweep precisely because there is no `now` here to disagree with:
+  /// two wrong values compared against each other give a confident wrong
+  /// answer. It also has to match _DateDivider, which reads the local date to
+  /// choose its label — otherwise the divider says one day and appears on
+  /// another.
   bool _newDayBoundary(TribeMessage a, TribeMessage b) {
-    return a.createdAt.year != b.createdAt.year ||
-        a.createdAt.month != b.createdAt.month ||
-        a.createdAt.day != b.createdAt.day;
+    final left = a.createdAt.toLocal();
+    final right = b.createdAt.toLocal();
+    return left.year != right.year ||
+        left.month != right.month ||
+        left.day != right.day;
   }
 
   Future<void> _toggleVoice(String tribeId) async {
     if (_recordingVoice) {
       setState(() => _recordingVoice = false);
       final result = await WhisperRecorder.instance.stop();
-      if (result == null || result.bytes.isEmpty) return;
+      // Was a bare `return`. The recording bar disappeared, no message
+      // appeared, and nothing was said — reproduced on a simulator, which has
+      // no microphone, so every attempt produced empty bytes and vanished
+      // silently. The same happens on a real device when the mic permission is
+      // denied or the recorder never started.
+      //
+      // The branch immediately below already tells somebody their recording
+      // was too short, so the intent to explain was there; this case was just
+      // treated as nothing having happened. It is the opposite: the person
+      // held the button, watched it record, and tapped send.
+      if (result == null || result.bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "That recording didn't capture any audio. Check Venttly has "
+                'microphone access and try again.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
       if (result.duration.inSeconds < 1) {
         if (mounted) {
           ScaffoldMessenger.of(
@@ -943,7 +981,9 @@ class _MessageSearchResults extends StatelessWidget {
                         _HighlightedText(text: preview, query: query),
                         const SizedBox(height: 4),
                         Text(
-                          DateFormat('MMM d · h:mm a').format(msg.createdAt.toLocal()),
+                          DateFormat(
+                            'MMM d · h:mm a',
+                          ).format(msg.createdAt.toLocal()),
                           style: TextStyle(
                             color: context.ink.withOpacity(0.5),
                             fontWeight: FontWeight.w700,
@@ -1908,6 +1948,7 @@ class _Composer extends StatelessWidget {
                         color: VentlyColors.berryMagenta,
                       ),
                       onPressed: _showAttachmentSheet(context),
+                      tooltip: 'More ways to share',
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1958,6 +1999,18 @@ class _Composer extends StatelessWidget {
                             ),
                             onPressed: onMicTap,
                             visualDensity: VisualDensity.compact,
+                            // Every control on this row was unlabelled, so
+                            // VoiceOver announced five anonymous buttons and
+                            // the composer was unusable without sight —
+                            // confirmed with `idb ui describe-all`, which
+                            // reported each one as ''.
+                            //
+                            // The mic label follows its state: "Record a voice
+                            // message" on a button that stops the recording
+                            // would be worse than no label at all.
+                            tooltip: recording
+                                ? 'Stop recording and send'
+                                : 'Record a voice message',
                           ),
                           IconButton(
                             icon: Icon(
@@ -1967,36 +2020,49 @@ class _Composer extends StatelessWidget {
                             ),
                             onPressed: onPickImage,
                             visualDensity: VisualDensity.compact,
+                            tooltip: 'Add a photo',
                           ),
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  SizedBox(
-                    width: 46,
-                    height: 46,
-                    child: FilledButton(
-                      onPressed: sending ? null : onSend,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: VentlyColors.berryMagenta,
-                        padding: EdgeInsets.zero,
-                        shape: const CircleBorder(),
-                      ),
-                      child: sending
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
+                  // Wrapped rather than given a tooltip parameter, because
+                  // FilledButton does not take one. Semantics still resolves
+                  // to a labelled button either way.
+                  Tooltip(
+                    message: sending ? 'Sending' : 'Send message',
+                    child: SizedBox(
+                      width: 46,
+                      height: 46,
+                      child: FilledButton(
+                        onPressed: sending ? null : onSend,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: VentlyColors.berryMagenta,
+                          padding: EdgeInsets.zero,
+                          shape: const CircleBorder(),
+                        ),
+                        child: sending
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5,
+                                ),
+                              )
+                            // semanticLabel on the icon, not just the
+                            // Tooltip above: the Tooltip alone left this
+                            // button reporting a null label, because the
+                            // FilledButton's own semantics node won. This is
+                            // the node a screen reader actually reads.
+                            : const Icon(
+                                Icons.send_rounded,
                                 color: Colors.white,
-                                strokeWidth: 2.5,
+                                size: 20,
+                                semanticLabel: 'Send message',
                               ),
-                            )
-                          : const Icon(
-                              Icons.send_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
+                      ),
                     ),
                   ),
                 ],
@@ -2354,7 +2420,9 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
                                       ),
                                     ),
                                     Text(
-                                      DateFormat.jm().format(m.createdAt.toLocal()),
+                                      DateFormat.jm().format(
+                                        m.createdAt.toLocal(),
+                                      ),
                                       style: TextStyle(
                                         fontSize: 10,
                                         color: scheme.onSurface.withOpacity(
