@@ -31,6 +31,10 @@ export function isStaffRole(role: string | null | undefined): role is StaffRole 
 // allowed everywhere.
 const SECTION_ROLES: Record<string, StaffRole[]> = {
   "/overview": STAFF_ROLES,
+  // Matches admin_global_search's own gate. Results are additionally scoped
+  // inside the RPC — a moderator searching an id that belongs to a CSAM
+  // incident gets nothing back rather than a row they cannot open.
+  "/search": ["super_admin", "admin", "moderator", "support"],
   "/safety": ["super_admin", "admin", "moderator", "support"],
   "/csam": ["super_admin"],
   "/moderation": ["super_admin", "admin", "moderator"],

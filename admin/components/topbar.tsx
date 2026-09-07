@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Search, Bell, ChevronDown, LogOut, Globe2 } from "./ui/icons";
 
 export default function Topbar({
@@ -15,6 +16,9 @@ export default function Topbar({
   unread?: number;
 }) {
   const [menu, setMenu] = useState(false);
+  // Keep what was searched in the box after navigating, so refining a query
+  // does not mean retyping it.
+  const query = useSearchParams().get("q") ?? "";
   const envTone =
     env === "production"
       ? "bg-ok/12 text-ok"
@@ -24,19 +28,27 @@ export default function Topbar({
 
   return (
     <header className="h-16 shrink-0 bg-white border-b border-line flex items-center px-6 gap-4">
-      <div className="flex-1 max-w-xl relative">
+      {/* A submit, not a live query. Every search is audited — searching for
+          a member on a pseudonymous platform is exactly the act that should be
+          reviewable — and querying per keystroke would flood that ledger and
+          let the box enumerate the platform a letter at a time. */}
+      <form action="/search" method="get" className="flex-1 max-w-xl relative">
         <Search
           size={16}
           className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted"
         />
         <input
+          name="q"
+          defaultValue={query}
+          minLength={4}
+          required
           className="input pl-9"
-          placeholder="Search users, posts, tribes, reports… (⌘K)"
+          placeholder="Search users, posts, tribes, or paste any ID…"
           onKeyDown={(e) => {
             if (e.key === "Escape") (e.currentTarget as HTMLInputElement).blur();
           }}
         />
-      </div>
+      </form>
 
       <div className="flex items-center gap-2 ml-auto">
         <span

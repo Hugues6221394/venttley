@@ -770,9 +770,35 @@ The next super-admin developer should work in this order.
   offender history across all surfaces, coordinated-harassment/brigading
   signals, spam/bot queues, and ban-evasion review with privacy-preserving
   device/network signals.
-- Make the top-bar global search functional. Today it is visual only. Add
-  exact-ID lookup and scoped search for users, content, reports, cases, and
-  Tribes without allowing broad extraction.
+- ~~Make the top-bar global search functional.~~ **Done**
+  (`20261012090000_admin_global_search.sql`, `/search`). The box was decorative;
+  it now submits to a results page covering members, posts, Tribes, and any
+  pasted ID — case, report, appeal, or CSAM incident.
+
+  "Without allowing broad extraction" was the whole design constraint, so this
+  is deliberately not a query tool. Minimum four characters, because two would
+  walk the member list a prefix at a time. Per-kind result caps. Previews
+  truncated to 120 characters — enough to recognise a post, not to read the
+  feed through the search box. IDs are matched exactly or not at all, so they
+  cannot be guessed a character at a time. Result kinds are gated *inside* the
+  query rather than filtered after, so a moderator pasting an ID that belongs
+  to a CSAM incident is not told one exists.
+
+  Every search is audited with the actor and the query. On a platform whose
+  promise is that members are pseudonymous to each other, staff looking a
+  person up is exactly the act that should be reviewable — which is also why
+  the box submits deliberately instead of querying as you type.
+
+  DM and private-room bodies are deliberately **not** searchable. They are
+  reachable only through a case, behind `admin_read_case_sensitive_evidence`,
+  which logs each read; a search box that could find a private message by its
+  text would route around that entirely.
+
+  Covered by `0027_global_search_scoping.test.sql` (7 assertions), and driven
+  in a browser — which is how the one real bug surfaced: the function was
+  marked `STABLE`, so PostgREST ran it in a READ ONLY transaction and every
+  search failed on the audit insert. Invisible from psql, where the
+  transaction is read-write.
 - Add queue pagination/cursors, saved filters, assignment, internal notes,
   policy templates, keyboard workflow, bulk-action caps, confirmation/preview,
   partial-failure reporting, and retry-safe operation IDs.
