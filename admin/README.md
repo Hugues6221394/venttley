@@ -619,9 +619,35 @@ The next super-admin developer should work in this order.
   both reports that fed it.
 - Add member appeals and independent second review for content removal,
   suspension, ban, shadow restriction, and verification decisions.
-- Add safe evidence retention/legal-hold controls and prevent normal account
-  deletion or cleanup from destroying open-case material. Access to CSAM and
-  highly sensitive evidence must be separately logged and tightly scoped.
+- ~~…prevent normal account deletion from destroying open-case material.~~
+  **Done for legal hold** (`20261006090000_legal_hold_actually_holds.sql`).
+  `moderation_cases.legal_hold` and its audited setter landed in
+  `20261004090000` wired to nothing: an operator could place a case under hold,
+  believe the evidence was safe, and the subject's account could still be
+  deleted out from under it, leaving the case pointing at a NULL subject. A
+  preservation flag that preserves nothing is worse than no flag. Verified
+  before and after.
+
+  It extends the existing `private.prevent_legal_hold_user_delete` (from
+  `20260811222118`) rather than adding a competing trigger — that function
+  already refused deletion while an open CSAM incident named the author, which
+  is the same job for a narrower case.
+
+  Deliberately gated on `legal_hold`, not on "any open case": an ordinary
+  unresolved spam report is not a preservation order, and treating it as one
+  would refuse a member's own deletion request over a flag. `legal_hold` is the
+  reasoned, audited signal — `admin_set_case_legal_hold` already requires a
+  reason. Covered by
+  `supabase/tests/database/0023_legal_hold_enforcement.test.sql`, including
+  that an unheld account is still deletable and the CSAM hold did not regress.
+
+  Still open from the original item: retention/expiry policy for held evidence
+  (a hold currently has no end date), and cleanup jobs other than account
+  deletion have not been audited for the same hazard.
+- Access to CSAM and highly sensitive evidence must be separately logged and
+  tightly scoped. Partly addressed for private-message bodies — see the DM
+  evidence entry above — but CSAM evidence access itself is still not
+  separately logged.
 - Validate CSAM reporting channels, retention, jurisdiction, and response
   clocks with qualified counsel and trained specialists. UI copy is not legal
   compliance, and classifier output is not a final determination.
