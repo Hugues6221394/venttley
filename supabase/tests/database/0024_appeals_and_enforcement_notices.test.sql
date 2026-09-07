@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(15);
+SELECT plan(16);
 
 SET session_replication_role = replica;
 
@@ -185,9 +185,23 @@ SELECT throws_ok(
 );
 RESET role;
 
+-- Scoped to this appeal, not a global count. audit_log is append-only, so a
+-- count across the whole table depends on the database being pristine and
+-- fails the moment anything else has ever overturned an appeal.
 SELECT is(
-  (SELECT count(*)::int FROM public.audit_log WHERE action = 'appeal.overturned'),
+  (SELECT count(*)::int FROM public.audit_log
+    WHERE action = 'appeal.overturned' AND target_id = :'ap'::uuid),
   1, 'the appeal outcome is in the privileged audit log'
+);
+
+-- Filing an appeal used to make the account undeletable:
+-- moderation_case_events.actor_id was a FK with ON DELETE SET NULL, and the
+-- append-only trigger refuses that cascade UPDATE, so a deletion request would
+-- fail with "rows are immutable" and no clue why. Fixed in 20261010090000 by
+-- dropping the FK rather than weakening the immutability.
+SELECT lives_ok(
+  $$DELETE FROM public.users WHERE user_id = 'ccc10000-0000-4000-8000-000000000003'$$,
+  'a member who filed an appeal can still be deleted'
 );
 
 SELECT * FROM finish();

@@ -51,6 +51,15 @@ export default async function DashboardLayout({
       ),
   ]);
 
+  // Open appeals. Read with the service-role client for the same reason as the
+  // counters above: moderation_appeals is own-read for authenticated callers,
+  // so the SSR client would count only the operator's own appeals rather than
+  // the queue.
+  const { count: openAppeals } = await db
+    .from("moderation_appeals")
+    .select("appeal_id", { count: "exact", head: true })
+    .eq("status", "open");
+
   // Open safety-queue count via the SSR (logged-in) client — the RPC is gated
   // by is_staff(auth.uid()), which the service-role client can't satisfy.
   const { data: openSafety } = await supabase.rpc("admin_safety_open_count");
@@ -64,6 +73,7 @@ export default async function DashboardLayout({
         pendingReports={pendingReports ?? 0}
         openIncidents={crisis24h ?? 0}
         openSafety={typeof openSafety === "number" ? openSafety : 0}
+        openAppeals={openAppeals ?? 0}
       />
       <div className="flex flex-col flex-1 min-w-0">
         <Topbar

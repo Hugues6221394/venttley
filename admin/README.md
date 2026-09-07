@@ -710,11 +710,24 @@ The next super-admin developer should work in this order.
   member-facing channel and the decision reached nobody but staff.
 
   Covered by `supabase/tests/database/0024_appeals_and_enforcement_notices.test.sql`
-  (15 assertions). Still open: the console has no appeals queue UI yet
-  (`admin_appeal_queue` and `admin_decide_appeal` exist), the mobile client
-  cannot yet file one (`submit_appeal` is granted to `authenticated` but
-  nothing calls it), and verification denials notify but have no appeal path
-  wired to `verification_request_id` yet.
+  (16 assertions).
+
+  **The console has an appeals queue** at `/appeals` (moderator and above,
+  matching `admin_appeal_queue`'s own gate — `support` is excluded rather than
+  offered a section where every action is refused). It leads with the member's
+  statement, since that is the thing under review, and shows the decision
+  being contested underneath so the reviewer does not have to leave the page.
+  Where independence forbids review, the controls are **not rendered** and the
+  reason is stated: `admin_appeal_queue` returns `reviewable_by_me`, so the UI
+  hides what the RPC would refuse rather than inviting a rejected submission.
+  Overturning states its consequence before it is chosen ("Overturning
+  restores the content"). Driven in a browser: an overturn submitted through
+  the rendered form restored the post, notified the member, and the appeal a
+  reviewer had decided themselves showed no controls at all.
+
+  Still open: the mobile client cannot file an appeal (`submit_appeal` is
+  granted to `authenticated` but nothing calls it), and verification denials
+  notify but have no appeal path wired to `verification_request_id`.
 - ~~…prevent normal account deletion from destroying open-case material.~~
   **Done for legal hold** (`20261006090000_legal_hold_actually_holds.sql`).
   `moderation_cases.legal_hold` and its audited setter landed in

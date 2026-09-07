@@ -3,6 +3,7 @@
 export {
   // Brand / shell
   Heart,
+  Scale,
   Search,
   Bell,
   Settings as SettingsIcon,

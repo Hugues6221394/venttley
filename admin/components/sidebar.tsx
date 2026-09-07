@@ -23,6 +23,7 @@ import {
   Heart,
   LifeBuoy,
   Sparkles,
+  Scale,
 } from "./ui/icons";
 
 type Item = {
@@ -45,6 +46,7 @@ const groups: Group[] = [
       { href: "/safety",     label: "Safety & Crisis", icon: LifeBuoy },
       { href: "/csam",       label: "CSAM incidents", icon: AlertTriangle },
       { href: "/moderation", label: "Moderation",     icon: ShieldAlert },
+      { href: "/appeals",    label: "Appeals",        icon: Scale },
       { href: "/automod",    label: "Automod rules",  icon: ShieldCheck },
       { href: "/media",      label: "Media safety",   icon: ImageIcon },
       { href: "/broadcasts", label: "Broadcasts",     icon: Megaphone },
@@ -83,11 +85,13 @@ export default function Sidebar({
   pendingReports = 0,
   openIncidents = 0,
   openSafety = 0,
+  openAppeals = 0,
 }: {
   role?: string;
   pendingReports?: number;
   openIncidents?: number;
   openSafety?: number;
+  openAppeals?: number;
 }) {
   const pathname = usePathname();
   // Least-privilege: a role only sees the sections it may open. The middleware
@@ -129,11 +133,13 @@ export default function Sidebar({
                 const badge =
                   it.href === "/moderation"
                     ? pendingReports
-                    : it.href === "/safety"
-                      ? openSafety
-                      : it.href === "/system"
-                        ? openIncidents
-                        : undefined;
+                    : it.href === "/appeals"
+                      ? openAppeals
+                      : it.href === "/safety"
+                        ? openSafety
+                        : it.href === "/system"
+                          ? openIncidents
+                          : undefined;
                 return (
                   <Link
                     key={it.href}

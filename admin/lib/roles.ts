@@ -34,6 +34,11 @@ const SECTION_ROLES: Record<string, StaffRole[]> = {
   "/safety": ["super_admin", "admin", "moderator", "support"],
   "/csam": ["super_admin"],
   "/moderation": ["super_admin", "admin", "moderator"],
+  // Matches admin_appeal_queue's own is_staff gate. support is excluded
+  // deliberately: it can triage the safety queue but cannot decide an appeal,
+  // and a section that loads only to refuse every action is worse than a
+  // section that is not offered.
+  "/appeals": ["super_admin", "admin", "moderator"],
   "/automod": ["super_admin", "admin", "moderator"],
   "/media": ["super_admin", "admin", "moderator"],
   "/users": ["super_admin", "admin", "moderator", "support"],
