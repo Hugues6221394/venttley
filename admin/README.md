@@ -182,6 +182,35 @@ supabase db reset --local --no-seed
 supabase test db supabase/tests/database --local
 ```
 
+**A fresh clone cannot do that yet, and the reason is not discoverable.**
+Migration `20260915090000_email_dispatch_watchdog.sql` raises unless a Vault
+secret named `account_purge_cron_secret` already exists, and it sits partway
+through the chain — so `supabase start` and `supabase db reset` both abort with
+"vault secret account_purge_cron_secret is missing or empty. […] Add the
+secret, then re-run this migration", which does not say how. The only
+instructions are a SQL comment on line 30 of
+`0076_schedule_account_purge.sql`. Create it first:
+
+```bash
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+  -c "select vault.create_secret('<any-local-value>', 'account_purge_cron_secret');"
+```
+
+The awkward part is the ordering: the secret lives in the database, so it has
+to be inserted *after* the container accepts connections but *before* the
+runner reaches that migration. On a fresh volume that means letting
+`supabase start` begin, inserting the secret while the earlier migrations
+apply, or applying the chain in two passes with `supabase migration up`.
+Either way it is a real onboarding defect — the migration should tolerate a
+missing secret and skip scheduling with a notice, rather than failing the
+whole chain.
+
+If the local stack also stalls on `logflare Pulling`, that is the analytics
+container; nothing in this console needs it, and `[analytics] enabled = false`
+in `supabase/config.toml` skips the pull. `-x analytics` alone does not — the
+CLI pulls images for everything enabled in the config before applying
+exclusions.
+
 Then configure and run the console:
 
 ```bash
@@ -578,6 +607,16 @@ The next super-admin developer should work in this order.
   decisions map onto that real model, and the two legacy call sites are fixed
   alongside. `admin_set_user_status` still advertises the two impossible
   values and should stop.
+- **Verified end to end.** The case queue was exercised against a local stack
+  rebuilt from an empty volume: the full migration chain applies from scratch
+  (ledger head `20261005090000`), `0021` and `0022` pass, and the page renders
+  with an SLA-breached badge on a two-report case, `CRITICAL` with the correct
+  15-minute deadline on a crisis post, and evidence snapshots for content that
+  had since been edited. Revealing a DM body showed the message, displayed the
+  "logged against your account" notice, and wrote both the case-history event
+  and the audit row. Submitting a `content_removed` decision through the
+  rendered form resolved the case, actually soft-deleted the post, and closed
+  both reports that fed it.
 - Add member appeals and independent second review for content removal,
   suspension, ban, shadow restriction, and verification decisions.
 - Add safe evidence retention/legal-hold controls and prevent normal account
