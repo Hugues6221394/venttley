@@ -551,7 +551,7 @@ The next super-admin developer should work in this order.
 
 ### P0 — complete moderation coverage
 
-- ~~Build a unified case model~~ **Schema done; console not yet wired to it.**
+- ~~Build a unified case model~~ **Done — schema and console.**
   Migration `20261004090000_moderation_case_model.sql` adds
   `moderation_cases` (polymorphic `target_type`/`target_id` covering post,
   comment, Whisper, story, question, profile, media, DM, Tribe message, chat
@@ -562,10 +562,17 @@ The next super-admin developer should work in this order.
   about the same target **deduplicate into one case** instead of becoming N
   separate pieces of work with N chances to decide differently.
 
-  Still open: `/moderation` reads `reports` directly and does not show cases
-  yet. The RPCs it needs exist (`admin_case_queue`, `admin_assign_case`,
-  `admin_decide_case`, `admin_set_case_status`, `admin_set_case_legal_hold`);
-  the UI is the remaining work.
+  `/moderation` now defaults to the case queue (`admin_case_queue`,
+  `admin_assign_case`, `admin_decide_case`, `admin_set_case_status`,
+  `admin_set_case_legal_hold`), showing severity, the persisted SLA, the
+  evidence snapshot, and claim/second-review/escalate/decide. The older
+  per-report tabs remain, relabelled, as the same work seen per report. See
+  the end-to-end verification entry below.
+
+  Still open on this surface: reports about *different* targets by the same
+  member are still separate cases — clustering is the P1 abuse-intelligence
+  item, not this one. And `target_type` covers story, question, profile and
+  media, but nothing can report those yet, so no case is ever opened for them.
 - ~~Add durable case assignment, status, severity, policy code, evidence
   snapshot/hash, decision, reviewer, timestamps, SLA breach, and escalation
   history.~~ **Done.** All of it is columns on `moderation_cases` with the
