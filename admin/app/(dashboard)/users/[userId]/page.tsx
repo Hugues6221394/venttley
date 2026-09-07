@@ -31,7 +31,12 @@ const ROLES = [
   "read_only_auditor",
 ] as const;
 
-const STATUSES = ["active", "suspended", "banned", "shadow_banned"] as const;
+// Only what users_account_status_check actually permits. The dropdown used to
+// offer "banned" and "shadow_banned"; neither is a valid account_status, so
+// both failed at the database every time. A permanent ban is 'suspended' with
+// suspended_until NULL (see 0085_moderation_power_tools.sql); shadow
+// restriction is a separate boolean, set from /moderation.
+const STATUSES = ["active", "suspended", "restricted"] as const;
 
 async function setStatus(formData: FormData) {
   "use server";
@@ -304,8 +309,7 @@ export default async function UserDetailPage({
                   <select name="status" className="select flex-1" defaultValue={user.account_status}>
                     <option value="active">active</option>
                     <option value="suspended">suspended</option>
-                    <option value="banned">banned</option>
-                    <option value="shadow_banned">shadow_banned</option>
+                    <option value="restricted">restricted</option>
                   </select>
                   <input
                     type="text"

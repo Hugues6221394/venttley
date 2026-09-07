@@ -1,14 +1,15 @@
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createSsrClient } from "@/lib/supabase/server";
 import { rpc } from "@/lib/audit";
 import { limitAction } from "@/lib/guard";
-import { optStr, uuid, uuidList } from "@/lib/validate";
+import { enumOf, optStr, uuid, uuidList } from "@/lib/validate";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
+import { CaseQueue, type CaseRow } from "./case-queue";
 import {
   AlertCircle,
   Ban,
@@ -137,9 +138,13 @@ async function shadowBanAction(formData: FormData) {
   const reportId = String(formData.get("report_id") ?? "");
   const reason = String(formData.get("reason") ?? "");
   if (!userId) return;
-  await rpc("admin_set_user_status", {
-    p_target: userId,
-    p_status: "shadow_banned",
+  // This used to call admin_set_user_status with 'shadow_banned', which
+  // users_account_status_check rejects — the button has never worked. Shadow
+  // restriction is the users.shadow_banned boolean, which is what
+  // can_view_post_author and the search functions actually consult.
+  await rpc("admin_set_shadow_ban", {
+    p_user: userId,
+    p_banned: true,
     p_reason: reason || null,
   });
   if (reportId) {
@@ -206,15 +211,79 @@ async function clearCrisisFlagAction(formData: FormData) {
   revalidatePath("/moderation");
 }
 
+// ─────────────────────────── Case actions ───────────────────────────
+// Every report opens or joins a moderation_case (20261004090000), so the case
+// is the unit of work. These wrap the RPCs; all four check is_staff() and
+// audit inside the database.
+
+const CASE_DECISIONS = [
+  "no_action",
+  "content_removed",
+  "user_warned",
+  "user_suspended",
+  "user_banned",
+  "user_shadow_restricted",
+  "escalated_external",
+] as const;
+
+const CASE_STATUSES = [
+  "open",
+  "in_review",
+  "awaiting_second_review",
+  "escalated",
+  "reopened",
+] as const;
+
+async function claimCaseAction(formData: FormData) {
+  "use server";
+  const caseId = uuid(formData, "case_id");
+  const ssr = await createSsrClient();
+  const {
+    data: { user },
+  } = await ssr.auth.getUser();
+  if (!user) throw new Error("Not signed in.");
+  await rpc("admin_assign_case", {
+    p_case: caseId,
+    p_assignee: user.id,
+    p_reason: "claimed from the queue",
+  });
+  revalidatePath("/moderation");
+}
+
+async function decideCaseAction(formData: FormData) {
+  "use server";
+  await limitAction("destructive");
+  await rpc("admin_decide_case", {
+    p_case: uuid(formData, "case_id"),
+    p_decision: enumOf(formData, "decision", CASE_DECISIONS),
+    p_policy_code: optStr(formData, "policy_code", 60),
+    p_note: optStr(formData, "note", 1000),
+  });
+  revalidatePath("/moderation");
+}
+
+async function setCaseStatusAction(formData: FormData) {
+  "use server";
+  await rpc("admin_set_case_status", {
+    p_case: uuid(formData, "case_id"),
+    p_status: enumOf(formData, "status", CASE_STATUSES),
+    p_note: optStr(formData, "note", 500),
+  });
+  revalidatePath("/moderation");
+}
+
 // ──────────────────────────── Page ────────────────────────────
 
 export default async function ModerationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; reason?: string }>;
+  searchParams: Promise<{ tab?: string; reason?: string; reveal?: string }>;
 }) {
   const params = await searchParams;
-  const tab = params.tab ?? "pending";
+  // Cases are the default view: a report now opens or joins one, so the case
+  // is the unit of work and the reports tabs below are the older, per-report
+  // view of the same thing.
+  const tab = params.tab ?? "cases";
   const reasonFilter = params.reason ?? "";
 
   const db = await createAdminClient();
@@ -239,8 +308,45 @@ export default async function ModerationPage({
 
   let reports: ReportRow[] = [];
   let crisis: CrisisRow[] = [];
+  let cases: CaseRow[] = [];
+  let revealed: { caseId: string; body: string } | null = null;
 
-  if (tab === "crisis") {
+  const { count: openCaseCount } = await db
+    .from("moderation_cases")
+    .select("case_id", { count: "exact", head: true })
+    .neq("status", "resolved");
+
+  if (tab === "cases" || tab === "cases_resolved") {
+    cases =
+      (await rpc<CaseRow[]>("admin_case_queue", {
+        p_status: tab === "cases" ? "unresolved" : "resolved",
+        p_assignee: null,
+        p_limit: 200,
+      })) ?? [];
+
+    // Reading a private-message body is a separate, logged act. The RPC writes
+    // a case-history event and an audit row every time, so this runs once per
+    // view of ?reveal=<case_id> rather than on every queue load.
+    if (params.reveal) {
+      try {
+        const body = await rpc<{ body?: string } | null>(
+          "admin_read_case_sensitive_evidence",
+          {
+            p_case: params.reveal,
+            p_reason: "opened from the moderation case queue",
+          }
+        );
+        if (body?.body) revealed = { caseId: params.reveal, body: body.body };
+      } catch {
+        // A bad id, or a role without permission to read it. Fall through and
+        // simply show the case without the body rather than failing the page.
+      }
+    }
+  }
+
+  if (tab === "cases" || tab === "cases_resolved") {
+    // already fetched above
+  } else if (tab === "crisis") {
     const { data } = await db
       .from("feed_posts")
       .select(
@@ -268,8 +374,14 @@ export default async function ModerationPage({
 
   const tabs = [
     {
+      key: "cases",
+      label: "Cases",
+      count: openCaseCount ?? 0,
+      tone: (openCaseCount ?? 0) > 0 ? ("warn" as const) : ("neutral" as const),
+    },
+    {
       key: "pending",
-      label: "Pending",
+      label: "Reports",
       count: pendingCountRes.count ?? 0,
       tone: (pendingCountRes.count ?? 0) > 0 ? ("warn" as const) : ("neutral" as const),
     },
@@ -279,8 +391,9 @@ export default async function ModerationPage({
       count: crisisCountRes.count ?? 0,
       tone: (crisisCountRes.count ?? 0) > 0 ? ("danger" as const) : ("neutral" as const),
     },
-    { key: "resolved", label: "Resolved", count: resolvedCountRes.count ?? 0 },
-    { key: "all", label: "All" },
+    { key: "cases_resolved", label: "Decided" },
+    { key: "resolved", label: "Resolved reports", count: resolvedCountRes.count ?? 0 },
+    { key: "all", label: "All reports" },
   ];
 
   return (
@@ -288,7 +401,7 @@ export default async function ModerationPage({
       <PageHeader
         eyebrow="Operate"
         title="Moderation"
-        subtitle="Triage reports, manage crisis-flagged posts, and act on accounts. Every action is captured in the audit log."
+        subtitle="Cases are the unit of work — a report opens or joins one, and deciding a case carries the decision out. Every action is captured in the audit log."
         actions={
           <Link href="/audit?action=user" className="btn-secondary">
             Moderator activity
@@ -303,11 +416,22 @@ export default async function ModerationPage({
         extraParams={{ reason: reasonFilter }}
       />
 
-      {tab !== "crisis" && (
+      {tab !== "crisis" && tab !== "cases" && tab !== "cases_resolved" && (
         <ReasonFilter active={reasonFilter} basePath="/moderation" tab={tab} />
       )}
 
-      {tab === "crisis" ? (
+      {tab === "cases" || tab === "cases_resolved" ? (
+        <CaseQueue
+          rows={cases}
+          onClaim={claimCaseAction}
+          onDecide={decideCaseAction}
+          onSetStatus={setCaseStatusAction}
+          revealHref={(id) =>
+            `/moderation?tab=${tab}&reveal=${encodeURIComponent(id)}`
+          }
+          revealed={revealed}
+        />
+      ) : tab === "crisis" ? (
         <CrisisQueue
           rows={crisis}
           onDelete={softDeletePostAction}

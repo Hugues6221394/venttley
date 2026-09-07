@@ -527,16 +527,57 @@ The next super-admin developer should work in this order.
   snapshot survival, DM body exclusion, append-only history, the note
   requirement on impactful decisions, decision closing the linked reports, and
   the support-role read/decide split).
-- **DM evidence, and a contradiction this surfaced.** Reported DMs record
-  metadata only — never the message body. That is not only a policy choice:
-  `chat_messages` stores `encrypted_payload`, not plaintext, so there is no
-  body available to snapshot. This contradicts the "Private chats are
-  server-readable under restricted staff access" line near the top of this
-  README and the safety queue's `(private DM — server-readable; access
-  restricted)` placeholder, both of which read as though a moderator can be
-  shown DM text. Either the encryption or that copy is wrong, and it should be
-  settled deliberately rather than by whatever the next moderation feature
-  assumes.
+- **DM evidence — and a correction to what this README said one commit ago.**
+  The entry that stood here claimed `chat_messages` stores ciphertext, that
+  there was therefore no DM body to snapshot, and that this contradicted the
+  "private chats are server-readable under restricted staff access" line near
+  the top of this file. That was wrong, and it pointed at the wrong half.
+
+  `encrypted_payload` is a historical column name. The product stores
+  server-readable plaintext there: the Flutter client reads that column
+  straight into a field it calls `plaintext` with no decryption step, and the
+  server-side text-safety guard analyses the same value, which is only
+  possible on plaintext. That guard's own source says so — *"Historical column
+  name; the current product stores server-readable plaintext for abuse review
+  and must never label this value as E2EE."* The README line was correct all
+  along; the migration comment was not. Both are fixed in
+  `20261005090000_case_decisions_enact_and_dm_evidence.sql`.
+
+  So withholding DM bodies is a policy choice, not a technical limit — and
+  withholding them entirely is the wrong one, because a harassment report
+  about a DM is unreviewable without the message, which is the exact "no
+  evidence preview" gap the case model exists to close. The body is now
+  captured into `moderation_cases.sensitive_evidence`, deliberately excluded
+  from the `admin_case_queue` projection that every staff role including
+  support can call, and readable only through
+  `admin_read_case_sensitive_evidence` (moderator and above), which writes
+  both a case-history event and an audit row. That is what "access to highly
+  sensitive evidence must be separately logged and tightly scoped" asks for.
+
+  Renaming that column is worth doing on its own: a name asserting encryption
+  over plaintext is how this went wrong once already, and it will mislead the
+  next reader too.
+- ~~Decisions are enacted, not just recorded.~~ **Fixed.** `admin_decide_case`
+  originally recorded a decision without carrying it out, so a moderator
+  choosing "remove content" got a resolved case and an audit row claiming
+  removal while the content stayed live. A record asserting an action nobody
+  took is worse than no record — it is what an appeal, a transparency report
+  and a quality review are all read against. Enactment now happens in the same
+  transaction, reusing `admin_set_post_deleted`, `admin_set_user_status` and
+  `admin_set_shadow_ban` rather than reimplementing them.
+- **Two enforcement actions in the console have never worked, and that is not
+  new.** `users_account_status_check` allows only
+  `('active','suspended','restricted')` — there is no `banned` and no
+  `shadow_banned` account status. But `admin_set_user_status` accepts both, and
+  the `/users/[userId]` dropdown and `/moderation`'s "Shadow-ban" button both
+  offer them, so both have always failed on the CHECK constraint at the
+  database. The real model, per `0085_moderation_power_tools.sql`, is that a
+  permanent ban is `account_status='suspended'` with `suspended_until` NULL,
+  and shadow restriction is the separate `users.shadow_banned` boolean — the
+  value `can_view_post_author` and the search functions actually consult. Case
+  decisions map onto that real model, and the two legacy call sites are fixed
+  alongside. `admin_set_user_status` still advertises the two impossible
+  values and should stop.
 - Add member appeals and independent second review for content removal,
   suspension, ban, shadow restriction, and verification decisions.
 - Add safe evidence retention/legal-hold controls and prevent normal account

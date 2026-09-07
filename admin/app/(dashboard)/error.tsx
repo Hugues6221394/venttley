@@ -24,13 +24,17 @@ export default function DashboardError({
 }) {
   return (
     <div className="max-w-[700px]">
+      {/* This boundary catches both a rejected Server Action and a failed
+          render, so the copy must be true of either. "Nothing was changed" is
+          safe to say: actions validate before they mutate, and a failed load
+          changed nothing by definition. */}
       <ErrorPanel
-        title="That action didn't go through."
+        title="This didn't go through."
         detail={error.message}
         hint={
           error.digest
-            ? `Nothing was changed. Reference ${error.digest} if you need to report this.`
-            : "Nothing was changed. Check the values you entered and try again."
+            ? `Nothing was changed. Quote ${error.digest} if you report this.`
+            : "Nothing was changed. If you were submitting a form, check the values and try again."
         }
       />
       <button type="button" onClick={reset} className="btn-secondary mt-4">
