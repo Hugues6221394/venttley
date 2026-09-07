@@ -815,7 +815,39 @@ The next super-admin developer should work in this order.
 - Split `super_admin` into explicit capabilities with least-privilege,
   just-in-time elevation, approval expiry, and two-person authorization for
   role grants, permanent deletion, evidence export, and global broadcasts.
-- Add staff account lifecycle, periodic access review, offboarding, break-glass
+- ~~…offboarding…~~ **Unblocked** (`20261011090000_ledgers_stop_blocking_deletion.sql`).
+  Staff offboarding was impossible, not merely unbuilt: `audit_log.actor_id`
+  was a foreign key with `ON DELETE SET NULL` while `audit_log_immutable()`
+  refuses every UPDATE, so any staff account that had taken one audited action
+  could not be deleted.
+
+  **Worse, and found while fixing it: `admin_delete_user` could not delete
+  anybody who had ever signed in.** `security_events_user_id_fkey` is
+  `ON DELETE CASCADE` and that table refuses DELETE too, so the console's
+  Delete user button — super_admin, AAL2-gated, type DELETE to confirm —
+  raised "security_events is append-only" for every real account. A deletion
+  request could not be fulfilled through the console at all. Pre-existing,
+  from `20260828230000`.
+
+  Fixed by dropping the foreign keys rather than weakening immutability, and
+  for `audit_log` the cascade was actively wrong: `ON DELETE SET NULL` would
+  have erased which staff member took a privileged action, with the trigger
+  the only thing preventing it. The id is now retained, which is what an audit
+  trail is for.
+
+  The `security_events` CASCADE needed a decision rather than a constraint
+  change, because both sides are right: those rows are the member's own
+  personal data and erasure must remove them, while the table is append-only
+  so a login history cannot be quietly rewritten. Account deletion now gets a
+  narrow, transaction-local way through and nothing else does. It cannot be
+  abused — the flag is worthless without DELETE privilege on the table, and
+  neither `authenticated` nor `anon` has it (asserted in the tests).
+
+  Covered by `0026_deletion_and_ledger_immutability.test.sql`: deletion works
+  for a signed-in member and for staff with audit history, the deleted
+  account's own security events go with it, the audit row survives still
+  naming its actor, and both ledgers still refuse direct writes.
+- Add staff account lifecycle, periodic access review, break-glass
   procedures, secret rotation, and tamper-evident audit export/retention.
 - Version community policies and automation rules, record which version drove
   each decision, stage changes, measure false positives, and support instant
