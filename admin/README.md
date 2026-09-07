@@ -664,8 +664,57 @@ The next super-admin developer should work in this order.
   and the audit row. Submitting a `content_removed` decision through the
   rendered form resolved the case, actually soft-deleted the post, and closed
   both reports that fed it.
-- Add member appeals and independent second review for content removal,
-  suspension, ban, shadow restriction, and verification decisions.
+- ~~Add member appeals and independent second review~~ **Database done; console
+  not yet wired.** Migration `20261007090000_enforcement_notices_and_appeals.sql`.
+
+  **This item could not be built in the order the list gives it.** Appeals are
+  P0 and "member-visible enforcement notices" is P1, but not one enforcement
+  path told the member anything: `admin_set_user_status`,
+  `admin_suspend_user_ladder`, `admin_set_shadow_ban`, `admin_set_post_deleted`,
+  `admin_decide_case` and `admin_review_verification` between them wrote zero
+  rows a member could see. An appeal system on top of silent enforcement is a
+  door nobody knows exists. So the notice is part of this migration:
+  `notifications.kind` has reserved `'moderation_action'` since
+  `0001_init_schema` and nothing ever wrote it.
+
+  The notice carries the action, the policy code, the moderator's note and
+  whether it can be appealed. It never names or hints at the reporter —
+  reporter privacy already cost this project a bug (`f71d9c2`).
+
+  **Shadow restriction deliberately sends nothing, and is unappealable.** Its
+  whole mechanism is that the member cannot tell, so a notice would defeat it
+  — the same reason it is excluded from session revocation. That makes it the
+  one enforcement action with no notice and no recourse, which is a real
+  asymmetry and should be settled as policy rather than left as an
+  implementation detail.
+
+  Appeals: the subject only (a case id in someone else's hands is not a way to
+  act on a decision about a third party), within 30 days of the decision, one
+  bite at this tier — withdrawing does not spend it, being heard does. The
+  member can read their own appeals through RLS, so "appeal status" is not
+  another thing decided about them that they cannot see.
+
+  **Independence is enforced, not documented:** `admin_decide_appeal` refuses
+  if the actor took the decision being appealed, or is the appellant. And
+  `admin_decide_case` now refuses a second review from whoever asked for it —
+  `awaiting_second_review` existed but nothing stopped the requester supplying
+  their own second opinion, which made the status a formality.
+
+  **Overturning reverses the enactment** — restores the content, lifts the
+  suspension through `admin_lift_suspension` so the reinstatement is audited
+  like any other status change. An upheld-but-nothing-happens appeal is the
+  same defect as a decision that records without enacting: the record says the
+  member won and their content is still gone.
+
+  `user_warned` is now actually delivered; before this there was no
+  member-facing channel and the decision reached nobody but staff.
+
+  Covered by `supabase/tests/database/0024_appeals_and_enforcement_notices.test.sql`
+  (15 assertions). Still open: the console has no appeals queue UI yet
+  (`admin_appeal_queue` and `admin_decide_appeal` exist), the mobile client
+  cannot yet file one (`submit_appeal` is granted to `authenticated` but
+  nothing calls it), and verification denials notify but have no appeal path
+  wired to `verification_request_id` yet.
 - ~~…prevent normal account deletion from destroying open-case material.~~
   **Done for legal hold** (`20261006090000_legal_hold_actually_holds.sql`).
   `moderation_cases.legal_hold` and its audited setter landed in

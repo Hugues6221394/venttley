@@ -27,7 +27,11 @@ const ROLES = [
   "super_admin",
   "read_only_auditor",
 ];
-const STATUSES = ["active", "suspended", "banned", "shadow_banned"];
+// The real account_status enum. "banned" and "shadow_banned" were offered
+// here as filters, and users_account_status_check permits neither, so both
+// silently matched nothing. A permanent ban is 'suspended' with no end date;
+// shadow restriction is the separate users.shadow_banned boolean.
+const STATUSES = ["active", "suspended", "restricted"];
 
 type Row = {
   user_id: string;
