@@ -278,6 +278,28 @@ and audited. Demo/test seeds must never be applied to production.
 
 ## Production deployment requirements
 
+> **Blocking, as of 2026-09-07: the linked production project is 45 migrations
+> behind.** Its last applied migration is `20260828201411`; local head is
+> `20261006090000`. That is roughly six weeks of schema change — device
+> sessions, login risk scoring, block enforcement, media quarantine, recovery
+> email/phone and password reset, tribe permissions and rules versioning,
+> personal feed, and only then the six admin/moderation migrations from this
+> branch. Check with `supabase migration list --linked` before assuming
+> anything about production's shape.
+>
+> **`supabase db push` would fail partway and leave production half-migrated.**
+> It applies 23 migrations, then raises on
+> `20260915090000_email_dispatch_watchdog`, which requires a Vault secret named
+> `account_purge_cron_secret` to already exist —
+> `20260916090000` and `20260918090000` need it too. Create it on the
+> production project *first* (see Local prerequisites for the statement), then
+> push.
+>
+> `/moderation` now defaults to the case queue, so the console must not be
+> deployed ahead of at least `20261004090000` or its default view fails. Step 1
+> below — apply to an isolated staging project and run pgTAP — is the right
+> gate for a 45-migration catch-up on a live database, and has not been done.
+
 Before deploying:
 
 1. Apply migrations to an isolated staging project and run pgTAP.
