@@ -342,4 +342,9 @@ BEGIN
                               'suspension_count', v_count + 1);
 END $$;
 
+-- The ledger has to be able to tell whether this ran.
+SELECT public.record_migration(
+  '20261003090000', 'admin_aal2_and_session_revocation'
+);
+
 NOTIFY pgrst, 'reload schema';

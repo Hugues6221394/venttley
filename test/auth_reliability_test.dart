@@ -80,14 +80,15 @@ void main() {
       '20260728174036_retire_direct_auth_password_mutation.sql',
     ).readAsStringSync();
 
+    final guards = File(
+      'supabase/migrations/'
+      '20261003090000_admin_aal2_and_session_revocation.sql',
+    ).readAsStringSync();
+
+    // GoTrue owns the password hash, so the mutation stays on the Auth Admin
+    // API and must never go back to direct SQL.
     expect(adminUser, contains('createRequiredAuthAdminClient()'));
     expect(adminUser, contains('auth.admin.updateUserById(id'));
-    expect(adminUser, contains('actorProfile?.user_role !== "super_admin"'));
-    expect(adminUser, contains('actorProfile.account_status !== "active"'));
-    expect(adminUser, contains('if (pw.length < 12)'));
-    expect(adminUser, contains('.select("recovery_blob")'));
-    expect(adminUser, contains('recoveryState.recovery_blob'));
-    expect(adminUser, contains('protected by a recovery phrase'));
     expect(adminUser, isNot(contains('rpc("admin_reset_user_password"')));
     expect(server, contains('SUPABASE_SERVICE_ROLE_KEY'));
     expect(server, contains('detectSessionInUrl: false'));
@@ -95,5 +96,31 @@ void main() {
       migration,
       contains('FROM PUBLIC, anon, authenticated, service_role'),
     );
+
+    // The Server Action authorizes through the database and records the
+    // result there, rather than deciding for itself.
+    expect(adminUser, contains('rpc("admin_authorize_password_reset"'));
+    expect(adminUser, contains('rpc("admin_finalize_password_reset"'));
+
+    // These guards used to be inline TypeScript in the Server Action, and
+    // this test pinned them there. They now live in the RPC, which binds
+    // every caller rather than only this one form — so assert them where
+    // they are actually enforced. A guard checked in the page is a guard a
+    // direct PostgREST call skips.
+    expect(guards, contains("is_staff(auth.uid(), ARRAY['super_admin'])"));
+    expect(guards, contains('private.require_aal2()'));
+    expect(guards, contains('recovery_blob IS NOT NULL'));
+    expect(guards, contains('protected by a recovery phrase'));
+
+    // The 12-character minimum is enforced in the Server Action and nowhere
+    // else. It cannot move into admin_authorize_password_reset, because that
+    // RPC deliberately never receives the password — passing plaintext into
+    // Postgres would put it in statement parameters and logs. GoTrue's own
+    // floor (config.toml minimum_password_length) is 8, so 12 is this
+    // console's policy rather than a platform guarantee. Raising the GoTrue
+    // floor would bind every path including signup, which is a product
+    // decision, not a side effect of an admin refactor.
+    expect(adminUser, contains('pw.length < 12'));
+    expect(adminUser, contains('pw.length > 200'));
   });
 }

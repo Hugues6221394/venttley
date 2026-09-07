@@ -260,4 +260,9 @@ END $$;
 REVOKE ALL ON FUNCTION public.admin_clear_crisis_flag(TEXT,UUID,TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.admin_clear_crisis_flag(TEXT,UUID,TEXT) TO authenticated;
 
+-- The ledger has to be able to tell whether this ran.
+SELECT public.record_migration(
+  '20261002090000', 'admin_rpc_hardening'
+);
+
 NOTIFY pgrst, 'reload schema';

@@ -63,4 +63,9 @@ $$;
 REVOKE ALL ON FUNCTION private.prevent_legal_hold_user_delete()
   FROM PUBLIC, anon, authenticated;
 
+-- The ledger has to be able to tell whether this ran.
+SELECT public.record_migration(
+  '20261006090000', 'legal_hold_actually_holds'
+);
+
 NOTIFY pgrst, 'reload schema';

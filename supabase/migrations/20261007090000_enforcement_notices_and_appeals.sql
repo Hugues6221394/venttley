@@ -723,4 +723,9 @@ END $$;
 REVOKE ALL ON FUNCTION public.admin_decide_case(UUID, TEXT, TEXT, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.admin_decide_case(UUID, TEXT, TEXT, TEXT) TO authenticated;
 
+-- The ledger has to be able to tell whether this ran.
+SELECT public.record_migration(
+  '20261007090000', 'enforcement_notices_and_appeals'
+);
+
 NOTIFY pgrst, 'reload schema';

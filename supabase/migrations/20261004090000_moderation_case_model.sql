@@ -788,4 +788,9 @@ BEGIN
 END
 $backfill$;
 
+-- The ledger has to be able to tell whether this ran.
+SELECT public.record_migration(
+  '20261004090000', 'moderation_case_model'
+);
+
 NOTIFY pgrst, 'reload schema';
