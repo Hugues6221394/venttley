@@ -71,4 +71,12 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20260929090000': 'private_tribes_discoverable',
   '20260930090000': 'record_birth_month_at_signup',
   '20261001090000': 'keeper_attestation_at_creation',
+  '20261002090000': 'admin_rpc_hardening',
+  '20261003090000': 'admin_aal2_and_session_revocation',
+  '20261004090000': 'moderation_case_model',
+  '20261005090000': 'case_decisions_enact_and_dm_evidence',
+  '20261006090000': 'legal_hold_actually_holds',
+  '20261007090000': 'enforcement_notices_and_appeals',
+  '20261008090000': 'policy_consent_at_signup',
+  '20261009090000': 'membership_state_kpis',
 };

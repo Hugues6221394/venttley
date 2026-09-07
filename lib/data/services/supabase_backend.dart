@@ -4681,6 +4681,12 @@ class SupabaseBackend {
       pinnedCount: _coerceInt(r['pinned_count']) ?? 0,
       scheduledPrompts: _coerceInt(r['scheduled_prompts']) ?? 0,
       openReports: _coerceInt(r['open_reports']) ?? 0,
+      // Appended by 20261009090000. Absent on a database that has not run it,
+      // and 0 is the honest reading of a column that is not there yet.
+      membersActive24h: _coerceInt(r['members_active_24h']) ?? 0,
+      moderatorCount: _coerceInt(r['moderator_count']) ?? 0,
+      pendingRequests: _coerceInt(r['pending_requests']) ?? 0,
+      bannedCount: _coerceInt(r['banned_count']) ?? 0,
     );
   }
 
@@ -4953,6 +4959,59 @@ class SupabaseBackend {
     final rows = await _client.from('weak_password_bases').select('base');
     return {for (final row in (rows as List)) (row['base'] as String?) ?? ''}
       ..removeWhere((b) => b.isEmpty);
+  }
+
+  // ──────────────── Policy consent (20261008090000) ────────────────
+
+  /// The in-force Terms and Privacy Policy.
+  ///
+  /// Callable before sign-in on purpose — somebody has to be able to read the
+  /// documents while deciding whether to create an account, so the RPC is
+  /// granted to `anon`.
+  ///
+  /// This one does **not** swallow its errors. Everything else read at signup
+  /// degrades safely when it fails, but a consent screen that renders with no
+  /// document would either block the person for no stated reason or, worse,
+  /// present an empty agreement as something to accept.
+  Future<PolicyBundle> currentPolicies() async {
+    final rows = await _client.rpc('current_policies');
+    return PolicyBundle.fromRows([
+      for (final row in (rows as List? ?? const []))
+        Map<String, dynamic>.from(row as Map),
+    ]);
+  }
+
+  /// Current documents the signed-in account has not accepted.
+  ///
+  /// Empty means fully consented. Non-empty drives both the signup gate and
+  /// re-consent after a material policy change — the server decides which,
+  /// so a new version reaches every account with no client release.
+  Future<PolicyBundle> myOutstandingPolicies() async {
+    final rows = await _client.rpc('my_outstanding_policies');
+    return PolicyBundle.fromRows([
+      for (final row in (rows as List? ?? const []))
+        Map<String, dynamic>.from(row as Map),
+    ]);
+  }
+
+  /// Record agreement to the exact versions that were displayed.
+  ///
+  /// The versions are passed back rather than resolved server-side from
+  /// scratch: if the policy changed while the person was reading, the server
+  /// raises `policy_version_stale` and they are asked to read the new text.
+  /// Substituting the current version here would record an acceptance of
+  /// something nobody saw.
+  Future<void> acceptPolicies({
+    required String termsVersion,
+    required String privacyVersion,
+  }) async {
+    await _client.rpc(
+      'accept_policies',
+      params: {
+        'p_terms_version': termsVersion,
+        'p_privacy_version': privacyVersion,
+      },
+    );
   }
 
   Future<List<String>> myTribePermissions(String tribeId) async {

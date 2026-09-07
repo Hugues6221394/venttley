@@ -28,6 +28,8 @@ import '../screens/onboarding/password_reset_screen.dart';
 import '../screens/onboarding/recover_screen.dart';
 import '../screens/onboarding/recovery_key_screen.dart';
 import '../screens/onboarding/phone_signin_screen.dart';
+import '../screens/onboarding/policy_consent_screen.dart';
+import '../screens/onboarding/policy_reader_screen.dart';
 import '../screens/onboarding/verify_email_screen.dart';
 import '../screens/notifications/notifications_screen.dart';
 import '../screens/onboarding/welcome_screen.dart';
@@ -79,9 +81,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       final pendingMfa = ref.read(pendingMfaFactorIdProvider);
       final path = state.matchedLocation;
       final onboardingRoute = path.startsWith('/onboarding');
+      // The policy documents are readable with no session at all. Somebody
+      // has to be able to read the Terms while deciding whether to sign up,
+      // and the signup screen links straight to them — without this they
+      // would bounce to /onboarding and the consent links would be dead.
+      final legalRoute = path.startsWith('/legal');
       final onMfa = path == '/onboarding/mfa';
-      if (pendingMfa != null && !onMfa) return '/onboarding/mfa';
-      if (session == null && !onboardingRoute) return '/onboarding';
+      if (pendingMfa != null && !onMfa && !legalRoute) {
+        return '/onboarding/mfa';
+      }
+      if (session == null && !onboardingRoute && !legalRoute) {
+        return '/onboarding';
+      }
       if (session != null &&
           session.birthYear == null &&
           path != '/onboarding/age' &&
@@ -92,6 +103,29 @@ final routerProvider = Provider<GoRouter>((ref) {
           session.birthYear != null &&
           path == '/onboarding/age') {
         return '/feed';
+      }
+      // Outstanding consent, which happens two ways: the acceptance write
+      // failed after the account was created, or a policy version changed
+      // materially and everybody owes a fresh agreement.
+      //
+      // `valueOrNull` on purpose. While the answer is still loading, or if it
+      // could not be fetched at all, this is null and nobody is redirected —
+      // an unknown answer must not lock somebody out of a mental-health app.
+      // What makes consent trustworthy is that the acceptance row can only be
+      // written by the server-side RPC, not that this gate is airtight.
+      if (session != null &&
+          session.birthYear != null &&
+          !legalRoute &&
+          path != '/onboarding/consent' &&
+          !onMfa) {
+        final outstanding = ref.read(outstandingPoliciesProvider).valueOrNull;
+        if (outstanding != null && !outstanding.isEmpty) {
+          return '/onboarding/consent';
+        }
+      }
+      if (session != null && path == '/onboarding/consent') {
+        final outstanding = ref.read(outstandingPoliciesProvider).valueOrNull;
+        if (outstanding != null && outstanding.isEmpty) return '/feed';
       }
       if (session != null && path == '/onboarding') return '/feed';
       return null;
@@ -163,6 +197,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding/email',
         builder: (_, __) => const EmailSignupScreen(),
+      ),
+      // Top level, not under /onboarding, because these are also reached
+      // from Settings by an account that signed up long ago — and they must
+      // stay reachable without a session, since somebody has to be able to
+      // read the Terms before deciding to create one.
+      GoRoute(
+        path: '/onboarding/consent',
+        builder: (_, __) => const PolicyConsentScreen(),
+      ),
+      GoRoute(
+        path: '/legal/terms',
+        builder: (_, __) => const PolicyReaderScreen(kind: 'terms'),
+      ),
+      GoRoute(
+        path: '/legal/privacy',
+        builder: (_, __) => const PolicyReaderScreen(kind: 'privacy'),
       ),
       GoRoute(
         path: '/onboarding/phone',

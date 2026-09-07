@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/analytics_events.dart';
 import '../../core/constants.dart';
+import '../../core/logger.dart';
 import '../../domain/entities/entities.dart';
 import '../../domain/home/home_discovery.dart';
 import '../../domain/keeper/keeper_mode.dart';
@@ -2587,6 +2588,63 @@ class VentlyRepository implements MusicProvider {
       return live.replaceTribeRules(tribeId, rules, changeNote: changeNote);
     }
     return Future.value(_mock.replaceTribeRules(tribeId, rules));
+  }
+
+  /// The Terms and Privacy Policy a person is being asked to agree to.
+  ///
+  /// Errors propagate, and offline returns an empty bundle. Both end at the
+  /// same place: `PolicyBundle.isComplete` is false, and the consent step
+  /// refuses to offer a checkbox for a document it could not load. The one
+  /// outcome this must never produce is a screen that looks like consent and
+  /// records nothing.
+  Future<PolicyBundle> currentPolicies() async {
+    final live = _live;
+    if (live == null) return PolicyBundle.empty;
+    return live.currentPolicies();
+  }
+
+  /// Current documents this account has not yet accepted.
+  ///
+  /// Empty offline, which reads as "nothing outstanding" and lets the app
+  /// through. That is deliberate: the answer is genuinely unknown without a
+  /// server, and locking somebody out of a mental-health app over an
+  /// unanswerable question is the worse failure. It costs nothing, because the
+  /// gate is not what makes consent trustworthy — the acceptance row is, and
+  /// that can only be written by the server-side RPC.
+  Future<PolicyBundle> myOutstandingPolicies() async {
+    final live = _live;
+    if (live == null) return PolicyBundle.empty;
+    try {
+      return await live.myOutstandingPolicies();
+    } catch (e) {
+      // A database that has not run the policy migration answers 404 here.
+      // Reported, not swallowed silently, and treated as "unknown" rather
+      // than as a wall.
+      log.warn(
+        'policy.outstanding_unavailable',
+        props: {'error': e.toString()},
+      );
+      return PolicyBundle.empty;
+    }
+  }
+
+  /// Record agreement to the versions that were displayed.
+  ///
+  /// Deliberately has no offline path. There is no local stand-in for consent:
+  /// queuing it in the outbox would let the UI move on while the record did
+  /// not exist, which is exactly the silent acceptance this feature forbids.
+  Future<void> acceptPolicies({
+    required String termsVersion,
+    required String privacyVersion,
+  }) async {
+    final live = _live;
+    if (live == null) {
+      throw StateError('Consent needs a connection — nothing was recorded.');
+    }
+    await live.acceptPolicies(
+      termsVersion: termsVersion,
+      privacyVersion: privacyVersion,
+    );
   }
 
   /// Words that make a password guessable however it is decorated.

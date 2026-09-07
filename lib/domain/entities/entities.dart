@@ -533,6 +533,28 @@ class TribeStudioStats {
   final int scheduledPrompts;
   final int openReports;
 
+  /// Members seen in the last 24 hours, from `tribe_members.last_seen_at`.
+  ///
+  /// **Presence, not membership status.** There is no such thing as an
+  /// inactive membership in this schema — every `tribe_members` row is active,
+  /// which is why there is no `activeMembers` here to sit next to
+  /// [memberCount] showing the identical number under a second label. Label
+  /// this "Active today" in the UI, never just "Active".
+  final int membersActive24h;
+
+  /// Members holding `mod` or `keeper`.
+  final int moderatorCount;
+
+  /// Join requests still awaiting a decision — people who are *not* members.
+  ///
+  /// RLS-gated to tribe managers, so this reads 0 for a caller who does not
+  /// manage the tribe rather than failing. Only meaningful on Studio surfaces.
+  final int pendingRequests;
+
+  /// Former members blocked from rejoining. Manager-gated like
+  /// [pendingRequests].
+  final int bannedCount;
+
   const TribeStudioStats({
     required this.tribeId,
     required this.memberCount,
@@ -545,6 +567,13 @@ class TribeStudioStats {
     required this.pinnedCount,
     required this.scheduledPrompts,
     required this.openReports,
+    // Defaulted, not required: a database that has not run
+    // 20261009090000 returns no such key, and the Studio should render the
+    // numbers it does have rather than failing to build the row.
+    this.membersActive24h = 0,
+    this.moderatorCount = 0,
+    this.pendingRequests = 0,
+    this.bannedCount = 0,
   });
 }
 
@@ -3117,4 +3146,83 @@ class RecoveryMethods {
   /// How many recovery routes actually work. Drives the security score, so it
   /// counts verified only — a pending address recovers nothing.
   int get verifiedCount => (email.verified ? 1 : 0) + (phone.verified ? 1 : 0);
+}
+
+/// A version of the Terms & Conditions or the Privacy Policy.
+///
+/// The version string is carried through the whole consent flow unchanged and
+/// handed back to `accept_policies`, which refuses it if it is no longer
+/// current. So this is not decoration — it is the evidence that the person
+/// agreed to the text they were actually shown, and the client must never
+/// substitute a value of its own.
+class PolicyDocument {
+  /// `terms` or `privacy`.
+  final String kind;
+  final String version;
+  final String title;
+
+  /// What changed since the previous version, when there was one. Shown on the
+  /// re-consent screen: "agree again" without saying what moved is how consent
+  /// becomes a click-through.
+  final String? summary;
+  final String bodyMarkdown;
+  final String? bodyUrl;
+  final DateTime? effectiveAt;
+
+  const PolicyDocument({
+    required this.kind,
+    required this.version,
+    required this.title,
+    required this.bodyMarkdown,
+    this.summary,
+    this.bodyUrl,
+    this.effectiveAt,
+  });
+
+  bool get isTerms => kind == 'terms';
+  bool get isPrivacy => kind == 'privacy';
+
+  factory PolicyDocument.fromJson(Map<String, dynamic> json) => PolicyDocument(
+        kind: (json['kind'] as String?) ?? '',
+        version: (json['version'] as String?) ?? '',
+        title: (json['title'] as String?) ?? '',
+        bodyMarkdown: (json['body_markdown'] as String?) ?? '',
+        summary: json['summary'] as String?,
+        bodyUrl: json['body_url'] as String?,
+        effectiveAt: json['effective_at'] == null
+            ? null
+            : DateTime.tryParse(json['effective_at'] as String)?.toLocal(),
+      );
+}
+
+/// The pair a person must agree to before the account is usable.
+///
+/// Both halves are required. A build that reached the consent step with one of
+/// them missing has a database that has not run the policy migration, and it
+/// must not present a half-consent as complete — [isComplete] is what the UI
+/// gates the checkbox pair on.
+class PolicyBundle {
+  final PolicyDocument? terms;
+  final PolicyDocument? privacy;
+
+  const PolicyBundle({this.terms, this.privacy});
+
+  static const PolicyBundle empty = PolicyBundle();
+
+  bool get isComplete => terms != null && privacy != null;
+
+  /// True when there is nothing outstanding. Used for the signup gate, where
+  /// an empty bundle means fully consented.
+  bool get isEmpty => terms == null && privacy == null;
+
+  factory PolicyBundle.fromRows(List<Map<String, dynamic>> rows) {
+    PolicyDocument? terms;
+    PolicyDocument? privacy;
+    for (final row in rows) {
+      final doc = PolicyDocument.fromJson(row);
+      if (doc.isTerms) terms = doc;
+      if (doc.isPrivacy) privacy = doc;
+    }
+    return PolicyBundle(terms: terms, privacy: privacy);
+  }
 }

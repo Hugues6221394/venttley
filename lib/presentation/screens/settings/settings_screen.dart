@@ -301,6 +301,35 @@ class SettingsScreen extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => _showCrisisSheet(context),
           ),
+          // Reachable after signup, not only during it. Somebody who agreed
+          // eighteen months ago should be able to read what they agreed to
+          // without reinstalling the app, and these are the same routes and
+          // the same live documents the consent step links to.
+          const _SectionHeader('Legal'),
+          ListTile(
+            leading: const Icon(
+              Icons.gavel_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Terms & Conditions',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => context.push('/legal/terms'),
+          ),
+          ListTile(
+            leading: const Icon(
+              Icons.privacy_tip_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Privacy Policy',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => context.push('/legal/privacy'),
+          ),
           const _SectionHeader('Session'),
           ListTile(
             leading: Icon(

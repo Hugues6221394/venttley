@@ -942,10 +942,67 @@ final isKeeperProvider = FutureProvider.autoDispose<bool>((ref) async {
 });
 
 /// Primary tribe for studio dashboards (highest member count among kept).
+///
+/// Kept for the one caller that genuinely wants "a" tribe rather than the
+/// scoped one — the nav bar's Tribe Chat tab. Studio *pages* must not use it:
+/// a keeper of three tribes would only ever see the biggest, which is the bug
+/// [studioTribeScopeProvider] exists to fix.
 final primaryKeeperTribeProvider = Provider.autoDispose<Tribe?>((ref) {
   final tribes = ref.watch(tribesIKeepProvider).valueOrNull;
   if (tribes == null || tribes.isEmpty) return null;
   return tribes.first;
+});
+
+// ----------------------------------------------------------------------
+// Keeper Studio tribe scope
+// ----------------------------------------------------------------------
+
+/// Which tribe the Studio is currently showing. `null` means All Tribes.
+///
+/// Holds the id rather than the [Tribe] so it survives a refresh of
+/// `tribesIKeepProvider` without pinning a stale row — the object is resolved
+/// on demand by [studioSelectedTribeProvider].
+///
+/// Deliberately **not** autoDispose: the selection is Studio-wide chrome, and
+/// an autoDispose scope would silently reset to All Tribes every time the last
+/// screen watching it was popped — so navigating from Members into a member
+/// profile and back would lose the tribe the keeper had chosen.
+final studioTribeScopeProvider = StateProvider<String?>((ref) => null);
+
+/// The scoped tribe, or `null` when the scope is All Tribes.
+///
+/// Self-healing: a scope naming a tribe that is no longer kept — deleted,
+/// transferred away, or simply not loaded yet — resolves to `null` and reads
+/// as All Tribes. Returning a stale object would leave every page showing
+/// numbers for a tribe the keeper no longer has.
+final studioSelectedTribeProvider = Provider.autoDispose<Tribe?>((ref) {
+  final scopedId = ref.watch(studioTribeScopeProvider);
+  if (scopedId == null) return null;
+  final tribes = ref.watch(tribesIKeepProvider).valueOrNull ?? const <Tribe>[];
+  for (final tribe in tribes) {
+    if (tribe.tribeId == scopedId) return tribe;
+  }
+  return null;
+});
+
+/// Every tribe the current scope covers: the one selected, or all kept.
+///
+/// This is what a page should aggregate over. It is the single definition of
+/// "what am I looking at", so a KPI, a member list and a content list on
+/// three different pages cannot disagree about the answer.
+final studioScopedTribesProvider = Provider.autoDispose<List<Tribe>>((ref) {
+  final selected = ref.watch(studioSelectedTribeProvider);
+  if (selected != null) return <Tribe>[selected];
+  return ref.watch(tribesIKeepProvider).valueOrNull ?? const <Tribe>[];
+});
+
+/// True when the keeper actually has more than one tribe to switch between.
+///
+/// The selector hides itself on a single tribe: a dropdown with one option is
+/// furniture, and it would imply the keeper is missing something.
+final studioHasMultipleTribesProvider = Provider.autoDispose<bool>((ref) {
+  final tribes = ref.watch(tribesIKeepProvider).valueOrNull ?? const <Tribe>[];
+  return tribes.length > 1;
 });
 
 /// When true, keepers see the normal member feed instead of Control Center.
@@ -967,6 +1024,17 @@ final keeperOverviewProvider = FutureProvider.autoDispose<KeeperOverview>((
   }
   return KeeperOverview(tribes: tribes, statsByTribeId: byId);
 });
+
+/// [keeperOverviewProvider] narrowed to the current Studio scope.
+///
+/// One fetch either way — the underlying provider already pulls every kept
+/// tribe in parallel, so switching scope is instant and costs no round trip.
+final studioScopedOverviewProvider = FutureProvider.autoDispose<KeeperOverview>(
+  (ref) async {
+    final overview = await ref.watch(keeperOverviewProvider.future);
+    return overview.scopedTo(ref.watch(studioTribeScopeProvider));
+  },
+);
 
 final keeperModerationQueueProvider = FutureProvider.autoDispose
     .family<KeeperModerationQueue, String>(
@@ -1136,6 +1204,29 @@ final hugsReceivedProvider = FutureProvider.autoDispose.family<int, String>(
 final myVerificationStatusProvider = FutureProvider.autoDispose<String>((ref) {
   ref.watch(sessionProvider);
   return ref.watch(repositoryProvider).myVerificationStatus();
+});
+
+// ----------------------------------------------------------------------
+// Policy consent (migration 20261008090000)
+// ----------------------------------------------------------------------
+
+/// The Terms and Privacy Policy to display at signup.
+///
+/// Not `autoDispose`, and deliberately not keyed on the session: the consent
+/// step reads it before an account exists, and the documents are the same for
+/// everybody. Keeping one copy means the version handed to `accept_policies`
+/// is the version that was rendered, even across a rebuild.
+final currentPoliciesProvider = FutureProvider<PolicyBundle>(
+  (ref) => ref.watch(repositoryProvider).currentPolicies(),
+);
+
+/// What the signed-in account still owes. Empty means fully consented.
+///
+/// Watches the session so signing in re-asks, and so a fresh account gets its
+/// answer rather than the previous account's.
+final outstandingPoliciesProvider = FutureProvider<PolicyBundle>((ref) {
+  ref.watch(sessionProvider);
+  return ref.watch(repositoryProvider).myOutstandingPolicies();
 });
 
 // ----------------------------------------------------------------------
