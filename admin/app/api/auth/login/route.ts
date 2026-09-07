@@ -11,11 +11,15 @@ import { originRejection, sameOrigin } from "@/lib/guard";
  * not per-process. Cookies are set on the response automatically by
  * the SSR helper.
  *
- * When UPSTASH_REDIS_REST_URL is unset the limiter no-ops and the
- * route degrades to "Supabase auth only" — fine for dev.
+ * When UPSTASH_REDIS_REST_URL is unset the limiter is permissive in
+ * development and refuses outright in production — see UnconfiguredPolicy in
+ * lib/redis.ts. It used to no-op everywhere, which meant a production deploy
+ * missing two env vars accepted unlimited password attempts silently.
  */
 
-const loginLimiter = createRateLimiter("login", 5, 60);
+// Fails closed: an admin console with unlimited password attempts is worse
+// than one that refuses to sign anybody in until Upstash is configured.
+const loginLimiter = createRateLimiter("login", 5, 60, "deny");
 
 export async function POST(req: Request) {
   // Not a CSRF target in the usual sense — there is no session to ride yet —
@@ -27,6 +31,18 @@ export async function POST(req: Request) {
   const ip = ipFrom(req);
   const gate = await loginLimiter.limit(ip);
   if (!gate.success) {
+    // 503, not 429, when the control itself cannot run: "try again in a
+    // minute" would send an operator away to wait for something that will
+    // never clear on its own. The message stays generic either way — telling
+    // an anonymous caller which control is missing is telling an attacker
+    // exactly when the console is weakest. The detail is in the server log
+    // and on /system.
+    if (gate.unavailable) {
+      return NextResponse.json(
+        { ok: false, error: "Sign-in is temporarily unavailable." },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       {
         ok: false,

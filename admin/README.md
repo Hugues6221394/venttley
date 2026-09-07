@@ -491,15 +491,33 @@ The next super-admin developer should work in this order.
   size, so one request cannot dismiss an entire backlog behind a single audit
   entry.
 
-  **Caveat, and the next thing to fix here:** `createRateLimiter` returns a
-  no-op that reports success whenever `UPSTASH_REDIS_REST_URL`/`TOKEN` are
-  unset. That is convenient for local dev and dangerous everywhere else — a
-  deployment missing those two env vars has *no* rate limiting on login,
-  telemetry, exports, or any of the above, and nothing says so. Confirmed
-  live: this console currently answers `redisConfigured: false`. The env
-  table above already lists Upstash as required before internet exposure,
-  but nothing enforces it. It should fail closed in production rather than
-  silently disable itself.
+  ~~**Caveat:** `createRateLimiter` returns a no-op whenever Upstash is
+  unset.~~ **Fixed.** It no longer has one answer for everything. Each call
+  site declares what happens when rate limiting cannot run:
+
+  - **`"deny"` — login, audit export, telemetry.** These are controls whose
+    absence *is* the vulnerability: unlimited password attempts against an
+    admin console, or uncapped export of the audit log. In production they now
+    refuse, which turns a silent hole into an obvious deployment failure whose
+    fix is one environment variable. They return **503, not 429** — "try again
+    in a minute" would send an operator away to wait for something that never
+    clears, and the page explaining why is behind the login that is failing.
+    The message to the caller stays generic: telling an anonymous client which
+    control is missing tells an attacker when the console is weakest.
+  - **`"allow-loudly"` — privileged writes and bulk actions.** These run
+    anyway and log every occurrence. Refusing them would stop a moderator
+    suspending an account or working a crisis queue because a cache is
+    unconfigured, trading a small abuse risk for a real safety harm.
+
+  Outside production everything stays permissive so local development needs no
+  Upstash, with one warning at load instead of per call. `/system` now reports
+  **"Rate limiting: enforced / NOT enforced"** as a separate row from "Upstash
+  configured", because those were never the same statement and only the second
+  was shown.
+
+  Note for this checkout: `admin/.env.local` has no Upstash keys at all, so
+  rate limiting is not enforced here — which is exactly the state that used to
+  be invisible.
 - Surface validation failures next to the field instead of in the error
   boundary. Rejected input now throws, and `app/(dashboard)/error.tsx`
   catches it so the console shows a recoverable panel rather than Next's

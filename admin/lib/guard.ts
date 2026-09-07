@@ -67,9 +67,13 @@ export function originRejection(): Response {
  * loop or a scripted mass-action, not a workflow constraint on a moderator
  * working a queue.
  */
+// These run loudly rather than closed when Upstash is missing. Refusing them
+// would stop a moderator suspending an account or clearing a crisis queue
+// because a cache is unconfigured — trading a small abuse risk for a real
+// safety harm. The failure is logged on every call instead of hidden.
 const actionLimiters = {
-  destructive: createRateLimiter("admin_destructive", 20, 60),
-  bulk: createRateLimiter("admin_bulk", 10, 60),
+  destructive: createRateLimiter("admin_destructive", 20, 60, "allow-loudly"),
+  bulk: createRateLimiter("admin_bulk", 10, 60, "allow-loudly"),
 } as const;
 
 export async function limitAction(

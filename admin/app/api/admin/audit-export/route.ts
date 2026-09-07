@@ -16,7 +16,9 @@ import { createRateLimiter, ipFrom } from "@/lib/redis";
  * It is rate-limited instead, because each call is a 5000-row export of the
  * most sensitive table in the system.
  */
-const exportLimiter = createRateLimiter("audit_export", 10, 300);
+// Fails closed: each call exports 5000 rows of the audit log, so an
+// unthrottled export endpoint is an exfiltration path, not a convenience.
+const exportLimiter = createRateLimiter("audit_export", 10, 300, "deny");
 
 export async function GET(req: NextRequest) {
   const ssr = await createSsrClient();
@@ -36,6 +38,12 @@ export async function GET(req: NextRequest) {
 
   const gate = await exportLimiter.limit(user.id || ipFrom(req));
   if (!gate.success) {
+    if (gate.unavailable) {
+      return new NextResponse(
+        "Export is unavailable: rate limiting is not configured on this deployment.",
+        { status: 503 }
+      );
+    }
     return new NextResponse(
       "Too many exports. Wait a few minutes and try again.",
       { status: 429 }

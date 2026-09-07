@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
-import { redis, isRedisConfigured } from "@/lib/redis";
+import { redis, isRedisConfigured, rateLimitingStatus } from "@/lib/redis";
 import { PageHeader, SectionHeader } from "@/components/ui/page-header";
 import { Card, Row as KV } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -102,6 +102,26 @@ export default async function SystemHealthPage() {
             )
           }
         />
+        {/* "Upstash configured" and "rate limiting enforced" are not the same
+            statement, and the console previously only showed the first — so a
+            production deploy with no rate limiting looked merely untidy. */}
+        <KV
+          label="Rate limiting"
+          value={
+            rateLimitingStatus().enforced ? (
+              <Badge tone="ok">enforced</Badge>
+            ) : process.env.NODE_ENV === "production" ? (
+              <Badge tone="danger">NOT enforced</Badge>
+            ) : (
+              <Badge tone="warn">permissive (dev)</Badge>
+            )
+          }
+        />
+        <KV label="" value={
+          <span className="text-[11px] text-ink-muted">
+            {rateLimitingStatus().detail}
+          </span>
+        } />
         <KV
           label="Node env"
           value={

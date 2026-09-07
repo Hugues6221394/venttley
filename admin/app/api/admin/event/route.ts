@@ -21,7 +21,9 @@ import { originRejection, sameOrigin } from "@/lib/guard";
  * record_event RPC.
  */
 
-const eventLimiter = createRateLimiter("admin_event", 60, 60);
+// Fails closed. Dropping telemetry costs nothing; letting a runaway client
+// drown record_event does.
+const eventLimiter = createRateLimiter("admin_event", 60, 60, "deny");
 
 type Payload = {
   name?: string;
@@ -42,8 +44,11 @@ export async function POST(req: Request) {
   const gate = await eventLimiter.limit(ipFrom(req));
   if (!gate.success) {
     return NextResponse.json(
-      { ok: false, error: "Rate limited" },
-      { status: 429 },
+      {
+        ok: false,
+        error: gate.unavailable ? "Rate limiting unavailable" : "Rate limited",
+      },
+      { status: gate.unavailable ? 503 : 429 },
     );
   }
 
