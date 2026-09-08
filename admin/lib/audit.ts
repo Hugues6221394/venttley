@@ -1,63 +1,20 @@
-import { headers } from "next/headers";
 import { createSsrClient } from "./supabase/server";
 
-/** Best-effort: pull a usable IP from the request headers when behind a proxy. */
-async function callerIp(): Promise<string | null> {
-  const h = await headers();
-  return (
-    h.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    h.get("x-real-ip") ??
-    null
-  );
-}
-
-async function callerUserAgent(): Promise<string | null> {
-  const h = await headers();
-  return h.get("user-agent");
-}
-
 /**
- * Write an audit row from a Server Action. Uses the cookie-bound SSR client
- * so auth.uid() inside admin_log() resolves to the acting admin's user_id.
+ * NOTE: the `audit()` helper that used to live here has been removed.
  *
- * The action label should be a dotted noun.verb, e.g. "user.suspend",
- * "post.restore", "broadcast.send", "flag.update", "role.assign".
+ * It called public.admin_log directly, which 20260816092420 revoked from
+ * `authenticated` — so every call had been failing, and it logged the error
+ * and continued by design, which is why nothing surfaced. By then it also had
+ * no callers left: every privileged write goes through an admin_* RPC that
+ * writes its audit row in the same transaction as the mutation, which is
+ * stronger than a best-effort call afterwards could ever be.
+ *
+ * If a future action needs to audit something with no natural RPC, add a
+ * narrow function like admin_log_login() — fixed action, fixed target, actor
+ * from auth.uid() — rather than re-exposing admin_log, which takes an
+ * arbitrary action and target and could be used to forge entries.
  */
-export async function audit(
-  action: string,
-  opts?: {
-    targetType?: string;
-    targetId?: string;
-    targetLabel?: string;
-    before?: unknown;
-    after?: unknown;
-    reason?: string;
-    metadata?: Record<string, unknown>;
-  }
-) {
-  const supabase = await createSsrClient();
-  const ip = await callerIp();
-  const ua = await callerUserAgent();
-  const meta: Record<string, unknown> = { ...(opts?.metadata ?? {}) };
-  if (ip) meta.ip = ip;
-  if (ua) meta.user_agent = ua;
-  const { error } = await supabase.rpc("admin_log", {
-    p_action: action,
-    p_target_type: opts?.targetType ?? null,
-    p_target_id: opts?.targetId ?? null,
-    p_target_label: opts?.targetLabel ?? null,
-    p_before: opts?.before ?? null,
-    p_after: opts?.after ?? null,
-    p_reason: opts?.reason ?? null,
-    p_metadata: meta,
-  });
-  if (error) {
-    // Audit failure must not silently swallow — surface in server logs so
-    // operators can investigate. Do NOT throw: a failed audit shouldn't
-    // block the underlying user-facing action from completing.
-    console.error("[audit] failed", { action, error });
-  }
-}
 
 /**
  * Invoke one of the SECURITY DEFINER admin_* RPCs. Throws if the RPC

@@ -68,9 +68,16 @@ SELECT ok(
   ),
   'a user with no history receives global database posts'
 );
+-- Asks for a generous page rather than the top 8. The claim is that a
+-- cold-start user gets suggestions out of the database at all, not that this
+-- particular fixture outranks everyone: with 8 or more other accounts present
+-- — which the investor-demo seed alone provides — the fixture is pushed off a
+-- top-8 list and this failed for reasons that had nothing to do with the
+-- behaviour under test. Confirmed by measuring it both ways: 8 suggestions
+-- and absent with the demo seed loaded, 4 and present without it.
 SELECT ok(
   EXISTS (
-    SELECT 1 FROM public.friend_suggestions(8)
+    SELECT 1 FROM public.friend_suggestions(100)
      WHERE user_id = '71000000-0000-4000-8000-000000000001'
   ),
   'a user with no friends receives database-backed people suggestions'

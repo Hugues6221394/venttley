@@ -827,9 +827,50 @@ The next super-admin developer should work in this order.
 - Add browser E2E tests for login, TOTP enrollment/challenge, route denial,
   every role, every destructive action, confirmation requirements, audit
   atomicity, session revocation, and service failure.
-- Add pgTAP authorization matrices for every `admin_*` function and staff RLS
-  policy: anonymous, normal, suspended staff, each staff role, super admin, and
-  service role.
+- ~~Add pgTAP authorization matrices for every `admin_*` function~~ **Done for
+  the function surface** (`0028_admin_authorization_matrix.test.sql`); staff RLS
+  policies are still hand-tested per table.
+
+  Written over the catalog rather than as a list of names, so it covers
+  functions nobody has written yet: a new `admin_*` RPC added without a
+  `REVOKE`, or with the role check forgotten, fails the file without anyone
+  remembering to update it. Six properties — nothing `admin_*` reachable by
+  `anon`; everything reachable by `authenticated` consults the caller's staff
+  role (a grant to `authenticated` is not authorization, every member holds
+  it); nothing that writes is marked `STABLE`; every `SECURITY DEFINER`
+  function pins `search_path`; deletion, role assignment, password reset and
+  CSAM resolution all require AAL2; and `admin_log` stays unreachable by
+  clients so audit rows cannot be forged.
+
+  **It found two defects immediately**, neither visible by reading code:
+  `admin_authorize_password_reset` and `admin_finalize_password_reset` were
+  created with no `REVOKE`/`GRANT`, so they kept Postgres's default
+  `EXECUTE TO PUBLIC` and were the only `admin_*` functions reachable by
+  `anon` — not exploitable, since both refuse a caller with no `auth.uid()`,
+  but "refused after being called" is not "not callable". And `admin_log` was
+  revoked from `authenticated` by `20260816092420`, which silently broke the
+  login audit — see below.
+- ~~Admin sign-ins were not audited at all.~~ **Fixed**
+  (`20261013090000_login_audit_and_grant_hygiene.sql`). `20260816092420`
+  revoked `admin_log` from clients, correctly: it takes an arbitrary action and
+  target, so a caller holding it could forge an entry against someone else. But
+  `/api/auth/login` still called it directly inside a `try/catch` that
+  swallowed the failure, so every sign-in since had gone unrecorded. Measured
+  zero `action='admin.login'` rows on a database where sign-ins had happened.
+  Nor could it have worked any other way: `admin_log` derives its actor from
+  `auth.uid()`, and `service_role` — the one role still holding the grant —
+  has none.
+
+  `admin_log_login()` takes no action or target, so it can be granted to
+  `authenticated` without reopening what that migration closed: there is
+  nothing to forge. The failure no longer blocks signing in, but it is logged
+  instead of discarded.
+
+  The `audit()` helper in `lib/audit.ts` is removed. It called `admin_log`
+  directly, so it had been failing too — and it had no callers left, every
+  privileged write now auditing inside its own RPC transaction.
+- Add staff RLS policy matrices per table: anonymous, normal, suspended staff,
+  each staff role, super admin, and service role.
 - Add adversarial tests for forged IDs/roles, stale forms, cross-route Server
   Action calls, unknown routes, duplicate submissions, large inputs, regex
   abuse, CSV injection, and pagination races.

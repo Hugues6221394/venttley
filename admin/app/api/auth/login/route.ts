@@ -91,22 +91,23 @@ export async function POST(req: Request) {
   }
 
   // Session audit: record the successful admin sign-in. Same client instance,
-  // so it now carries the fresh session and auth.uid() resolves to this admin.
-  // admin_log() is staff-gated; a non-staff sign-in simply fails the log
-  // (caught) and gets bounced by middleware anyway.
-  try {
-    await supabase.rpc("admin_log", {
-      p_action: "admin.login",
-      p_target_type: "session",
-      p_target_id: null,
-      p_target_label: username,
-      p_before: null,
-      p_after: null,
-      p_reason: null,
-      p_metadata: { ip },
-    });
-  } catch {
-    // Never block login on an audit failure.
+  // so it carries the fresh session and auth.uid() resolves to this admin.
+  //
+  // This used to call admin_log directly, which stopped working when
+  // 20260816092420 revoked that function from `authenticated` — correctly, as
+  // it takes an arbitrary action and target and so could be used to forge
+  // audit entries. A try/catch here swallowed the failure, so nobody noticed:
+  // every admin sign-in silently went unaudited. admin_log_login takes no
+  // action or target, so it can be granted without reopening that.
+  //
+  // The failure still does not block signing in, but it is logged rather than
+  // discarded — a console that cannot record its own logins is worth knowing
+  // about.
+  const { error: auditError } = await supabase.rpc("admin_log_login", {
+    p_ip: ip,
+  });
+  if (auditError) {
+    console.error("[login] sign-in was not audited", auditError);
   }
 
   return NextResponse.json({ ok: true });
