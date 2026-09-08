@@ -810,10 +810,47 @@ The next super-admin developer should work in this order.
 
 ### P1 — observability and operations
 
-- Define and instrument queue age, time to first action, time to resolution,
-  reversal/appeal rate, repeat-offender rate, action failure rate, audit-write
-  failure rate, notification delivery, media-scan latency, and crisis/CSAM
-  acknowledgement SLOs. Metrics must not contain authored content.
+- ~~Define and instrument queue age, time to first action, time to resolution,
+  reversal/appeal rate, repeat-offender rate, media-scan latency, and
+  crisis acknowledgement SLOs.~~ **Done** — `/slo`, backed by
+  `20261015090000_moderation_slo.sql`. Fifteen metrics across queue, speed,
+  quality and pipelines, all computed from what the case model already
+  persists. No authored content is read: the function returns names, numbers
+  and units.
+
+  **Two of the listed metrics are deliberately absent rather than
+  approximated**, and the page says so on itself. *Audit-write failure rate*
+  is unmeasurable because audit rows are written in the same transaction as
+  the action they describe, so a failure rolls the action back and leaves no
+  trace — measuring it means logging failures outside that transaction. *In-app
+  notification delivery* is unmeasurable because `notifications` has `is_read`
+  but no delivery timestamp, so "delivered" cannot be told apart from
+  "inserted"; push delivery **is** reported, because `push_delivery_outbox`
+  records an outcome. A dashboard showing a plausible number for something it
+  cannot measure is worse than one that admits the gap.
+
+  **A pass is only shown where a pass means something.** A rate or percentile
+  needs 20 observations before the page calls it met or missed — "SLA met:
+  100%" on two cases reads as reassurance while meaning nothing. Getting that
+  rule too broad was a bug in the first version: it rendered "0 jobs stuck"
+  as a thin sample, i.e. it made the *good* state look unmeasured. The RPC now
+  returns `needs_sample`, so point-in-time counts of a bad condition are
+  judged immediately and only rates wait for evidence.
+
+  **The targets are provisional.** The 15-minute crisis target is the
+  product's own, from `private.case_sla`. The rest are engineering
+  placeholders chosen to be plausible, not decisions anyone signed off, and
+  the page labels them as such. They should move into configuration.
+
+  Verified in a browser in both directions — a clean queue reads "no target
+  missed", and a case backdated past its deadline flips the header to "1
+  target missed" with the row marked missed. Covered by
+  `0030_moderation_slo.test.sql` (6 assertions, including the analyst tier
+  being admitted, a member refused, and the sample-gating distinction).
+- **Not done in this item:** action failure rate, and CSAM acknowledgement as
+  distinct from crisis acknowledgement. Neither has a timing source yet —
+  failed actions are not recorded anywhere, and `csam_incidents` has
+  `detected_at`/`reviewed_at` but no first-touch stamp.
 - Connect user-outcome alerts to an on-call system. The current pages are pull-
   based dashboards; they do not prove paging, acknowledgement, or escalation.
 - Add dead-letter visibility and replay for broadcasts, scans, and moderation

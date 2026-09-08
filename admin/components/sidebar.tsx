@@ -66,6 +66,7 @@ const groups: Group[] = [
     label: "Insight",
     items: [
       { href: "/analytics", label: "Analytics", icon: LineChart },
+      { href: "/slo",       label: "Service levels", icon: LineChart },
       { href: "/ops",       label: "Ops & cost", icon: TrendingUp },
       { href: "/audit",     label: "Audit log", icon: ScrollText },
       { href: "/system",    label: "System health", icon: Activity },

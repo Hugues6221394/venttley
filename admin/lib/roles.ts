@@ -50,6 +50,10 @@ const SECTION_ROLES: Record<string, StaffRole[]> = {
   "/broadcasts": ["super_admin", "admin"],
   "/analytics": ["super_admin", "admin", "analyst", "read_only_auditor"],
   "/ops": ["super_admin", "admin", "analyst", "read_only_auditor"],
+  // Same tier as /ops and /analytics: aggregates with no authored content, so
+  // the analyst and auditor roles belong here. Matches admin_moderation_slo's
+  // own gate.
+  "/slo": ["super_admin", "admin", "analyst", "read_only_auditor"],
   "/audit": ["super_admin", "admin", "read_only_auditor"],
   "/system": ["super_admin", "admin"],
   "/flags": ["super_admin", "admin"],
