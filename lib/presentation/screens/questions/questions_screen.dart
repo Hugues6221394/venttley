@@ -25,101 +25,89 @@ class QuestionsScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: const VentlyLogo(size: 26),
-      ),
+      appBar: AppBar(title: const VentlyLogo(size: 26)),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openAskSheet(context, ref),
         backgroundColor: VentlyColors.berryMagenta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.help_outline_rounded),
-        label: const Text(
-          'Ask',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
+        label: const Text('Ask', style: TextStyle(fontWeight: FontWeight.w800)),
       ),
       body: async.isLoading && prompts.isEmpty
           ? const QuestionsSkeletonList()
           : prompts.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.help_outline,
-                            size: 56,
-                            color: scheme.primary.withOpacity(0.5)),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'No questions yet.',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Be the first — ask your friends anything.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: scheme.onSurface.withOpacity(0.6),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: () => _openAskSheet(context, ref),
-                          icon: const Icon(Icons.add_rounded, size: 18),
-                          label: const Text('Ask a question'),
-                        ),
-                      ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.help_outline,
+                      size: 56,
+                      color: scheme.primary.withOpacity(0.5),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'No questions yet.',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Be the first — ask your friends anything.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: scheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () => _openAskSheet(context, ref),
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Ask a question'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: () async => ref.invalidate(promptsProvider),
+              child: ListView(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                    child: Text(
+                      'Question of the day',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: scheme.onSurface.withOpacity(0.7),
+                      ),
                     ),
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: () async => ref.invalidate(promptsProvider),
-                  child: ListView(
-                    children: [
-                      Padding(
-                        padding:
-                            const EdgeInsets.fromLTRB(20, 14, 20, 4),
-                        child: Text(
-                          'Question of the day',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: scheme.onSurface.withOpacity(0.7),
-                              ),
-                        ),
-                      ),
-                      PromptCard(
-                        prompt: prompts.first,
-                        onTap: () => _openThread(context, prompts.first),
-                        onSubmit: (answer) =>
-                            _submitAnswer(context, ref, prompts.first, answer),
-                      ),
-                      if (prompts.length > 1) ...[
-                        Padding(
-                          padding:
-                              const EdgeInsets.fromLTRB(20, 14, 20, 4),
-                          child: Text(
-                            'More open questions',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  color: scheme.onSurface.withOpacity(0.7),
-                                ),
-                          ),
-                        ),
-                        for (final p in prompts.skip(1))
-                          QuestionCard(prompt: p),
-                      ],
-                      // Was 32, leaving the last prompt card under the nav pill.
-                      const SizedBox(height: HomeShell.navClearance),
-                    ],
+                  PromptCard(
+                    prompt: prompts.first,
+                    onTap: () => _openThread(context, prompts.first),
+                    onSubmit: (answer) =>
+                        _submitAnswer(context, ref, prompts.first, answer),
                   ),
-                ),
+                  if (prompts.length > 1) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                      child: Text(
+                        'More open questions',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: scheme.onSurface.withOpacity(0.7),
+                        ),
+                      ),
+                    ),
+                    for (final p in prompts.skip(1)) QuestionCard(prompt: p),
+                  ],
+                  // Was 32, leaving the last prompt card under the nav pill.
+                  const SizedBox(height: HomeShell.navClearance),
+                ],
+              ),
+            ),
     );
   }
 
@@ -138,8 +126,9 @@ class QuestionsScreen extends ConsumerWidget {
             if (text.isEmpty || sending) return;
             setSheetState(() => sending = true);
             try {
-              final moderation =
-                  await ref.read(moderationServiceProvider).review(text);
+              final moderation = await ref
+                  .read(moderationServiceProvider)
+                  .review(text);
               if (!ctx.mounted) return;
               if (moderation.isBlocked) {
                 setSheetState(() => sending = false);
@@ -162,17 +151,19 @@ class QuestionsScreen extends ConsumerWidget {
               Navigator.of(ctx).pop();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(audience == 'friends'
-                      ? 'Question sent to your friends.'
-                      : 'Question posted for everyone.'),
+                  content: Text(
+                    audience == 'friends'
+                        ? 'Question sent to your friends.'
+                        : 'Question posted for everyone.',
+                  ),
                 ),
               );
             } catch (e) {
               if (!ctx.mounted) return;
               setSheetState(() => sending = false);
-              ScaffoldMessenger.of(ctx).showSnackBar(
-                SnackBar(content: Text('Could not ask: $e')),
-              );
+              ScaffoldMessenger.of(
+                ctx,
+              ).showSnackBar(SnackBar(content: Text('Could not ask: $e')));
             }
           }
 
@@ -183,8 +174,10 @@ class QuestionsScreen extends ConsumerWidget {
               onTap: () => setSheetState(() => audience = key),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: selected
                       ? scheme.primary
@@ -199,9 +192,11 @@ class QuestionsScreen extends ConsumerWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon,
-                        size: 14,
-                        color: selected ? Colors.white : scheme.primary),
+                    Icon(
+                      icon,
+                      size: 14,
+                      color: selected ? Colors.white : scheme.primary,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       label,
@@ -238,7 +233,9 @@ class QuestionsScreen extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.55),
+                    color: Theme.of(
+                      ctx,
+                    ).colorScheme.onSurface.withOpacity(0.55),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -258,7 +255,10 @@ class QuestionsScreen extends ConsumerWidget {
                     audiencePill('everyone', Icons.public_rounded, 'Everyone'),
                     const SizedBox(width: 8),
                     audiencePill(
-                        'friends', Icons.people_alt_outlined, 'Friends'),
+                      'friends',
+                      Icons.people_alt_outlined,
+                      'Friends',
+                    ),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -288,9 +288,12 @@ class QuestionsScreen extends ConsumerWidget {
   }
 
   Future<void> _submitAnswer(
-      BuildContext context, WidgetRef ref, PlugPrompt prompt, String text) async {
-    final moderation =
-        await ref.read(moderationServiceProvider).review(text);
+    BuildContext context,
+    WidgetRef ref,
+    PlugPrompt prompt,
+    String text,
+  ) async {
+    final moderation = await ref.read(moderationServiceProvider).review(text);
     if (!context.mounted) return;
     if (moderation.isBlocked) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -316,9 +319,9 @@ class QuestionsScreen extends ConsumerWidget {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not post: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not post: $e')));
     }
   }
 

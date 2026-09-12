@@ -58,7 +58,7 @@ class VentlyColors {
   // ---------------- Semantic helpers ----------------
   static const Color successGreen = Color(0xFF6BA56F);
   static const Color warningAmber = Color(0xFFE6B65C);
-  static const Color dangerRed    = Color(0xFFCC4747);
+  static const Color dangerRed = Color(0xFFCC4747);
 
   /// Online-presence dot (matches the ad mockups' fresh green).
   static const Color onlineGreen = Color(0xFF34C759);

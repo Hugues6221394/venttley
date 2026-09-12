@@ -16,36 +16,153 @@ class TribeRuleItem {
   });
 
   factory TribeRuleItem.fromJson(Map<String, dynamic> json) => TribeRuleItem(
-        ruleId: json['rule_id'] as String?,
-        position: (json['position'] as num?)?.toInt() ?? 0,
-        title: (json['title'] as String?) ?? '',
-        description: json['description'] as String?,
-        templateKey: json['template_key'] as String?,
-        isEnabled: json['is_enabled'] != false,
-      );
+    ruleId: json['rule_id'] as String?,
+    position: (json['position'] as num?)?.toInt() ?? 0,
+    title: (json['title'] as String?) ?? '',
+    description: json['description'] as String?,
+    templateKey: json['template_key'] as String?,
+    isEnabled: json['is_enabled'] != false,
+  );
 
   Map<String, dynamic> toJson() => {
-        'position': position,
-        'title': title.trim(),
-        if (description?.trim().isNotEmpty == true)
-          'description': description!.trim(),
-        if (templateKey != null) 'template_key': templateKey,
-        'is_enabled': isEnabled,
-      };
+    'position': position,
+    'title': title.trim(),
+    if (description?.trim().isNotEmpty == true)
+      'description': description!.trim(),
+    if (templateKey != null) 'template_key': templateKey,
+    'is_enabled': isEnabled,
+  };
 
   TribeRuleItem copyWith({
     int? position,
     String? title,
     String? description,
     bool? isEnabled,
-  }) =>
-      TribeRuleItem(
-        ruleId: ruleId,
-        position: position ?? this.position,
-        title: title ?? this.title,
-        description: description ?? this.description,
-        templateKey: templateKey,
-        isEnabled: isEnabled ?? this.isEnabled,
+  }) => TribeRuleItem(
+    ruleId: ruleId,
+    position: position ?? this.position,
+    title: title ?? this.title,
+    description: description ?? this.description,
+    templateKey: templateKey,
+    isEnabled: isEnabled ?? this.isEnabled,
+  );
+}
+
+/// The capabilities a Keeper can hand to someone else.
+///
+/// The list comes from the database rather than the app so that adding one
+/// does not need a release, and so the description a Keeper reads when
+/// choosing is the same string the permission is actually named by.
+class TribePermissionOption {
+  final String key;
+  final String label;
+  final String description;
+
+  const TribePermissionOption({
+    required this.key,
+    required this.label,
+    required this.description,
+  });
+
+  factory TribePermissionOption.fromJson(Map<String, dynamic> json) =>
+      TribePermissionOption(
+        key: (json['key'] as String?) ?? '',
+        label: (json['label'] as String?) ?? '',
+        description: (json['description'] as String?) ?? '',
+      );
+}
+
+/// One member and what they currently hold.
+class TribeHelper {
+  final String userId;
+  final String pseudonym;
+  final String? avatarSeed;
+  final String role;
+  final List<String> permissions;
+
+  const TribeHelper({
+    required this.userId,
+    required this.pseudonym,
+    this.avatarSeed,
+    this.role = 'member',
+    this.permissions = const [],
+  });
+
+  factory TribeHelper.fromJson(Map<String, dynamic> json) => TribeHelper(
+    userId: (json['user_id'] as String?) ?? '',
+    pseudonym: (json['pseudonym'] as String?) ?? 'Someone',
+    avatarSeed: json['avatar_seed'] as String?,
+    role: (json['role'] as String?) ?? 'member',
+    permissions: [
+      for (final key in (json['permissions'] as List? ?? const []))
+        key as String,
+    ],
+  );
+}
+
+/// The grant screen's payload: what can be given, and who holds what.
+class TribePermissionGrants {
+  final List<TribePermissionOption> catalog;
+  final List<TribeHelper> helpers;
+
+  const TribePermissionGrants({
+    this.catalog = const [],
+    this.helpers = const [],
+  });
+
+  factory TribePermissionGrants.fromJson(Map<String, dynamic> json) =>
+      TribePermissionGrants(
+        catalog: [
+          for (final row in (json['catalog'] as List? ?? const []))
+            TribePermissionOption.fromJson(
+              Map<String, dynamic>.from(row as Map),
+            ),
+        ],
+        helpers: [
+          for (final row in (json['members'] as List? ?? const []))
+            TribeHelper.fromJson(Map<String, dynamic>.from(row as Map)),
+        ],
+      );
+}
+
+/// Where a member stands relative to a Tribe's current rules.
+///
+/// [needsAcknowledgement] is decided on the server, because it depends on when
+/// the member joined and what they have already confirmed — facts the client
+/// does not hold and should not be trusted to weigh.
+class TribeRulesStatus {
+  final int version;
+  final DateTime? publishedAt;
+  final String? changeNote;
+  final int? acknowledgedVersion;
+  final bool isMember;
+  final bool needsAcknowledgement;
+  final List<TribeRuleItem> rules;
+
+  const TribeRulesStatus({
+    this.version = 0,
+    this.publishedAt,
+    this.changeNote,
+    this.acknowledgedVersion,
+    this.isMember = false,
+    this.needsAcknowledgement = false,
+    this.rules = const [],
+  });
+
+  factory TribeRulesStatus.fromJson(Map<String, dynamic> json) =>
+      TribeRulesStatus(
+        version: (json['version'] as num?)?.toInt() ?? 0,
+        publishedAt: json['published_at'] == null
+            ? null
+            : DateTime.tryParse(json['published_at'] as String)?.toLocal(),
+        changeNote: json['change_note'] as String?,
+        acknowledgedVersion: (json['acknowledged_version'] as num?)?.toInt(),
+        isMember: json['is_member'] == true,
+        needsAcknowledgement: json['needs_acknowledgement'] == true,
+        rules: [
+          for (final row in (json['rules'] as List? ?? const []))
+            TribeRuleItem.fromJson(Map<String, dynamic>.from(row as Map)),
+        ],
       );
 }
 
@@ -96,18 +213,18 @@ class TribeGovernanceSettings {
   }
 
   Map<String, dynamic> toJson() => {
-        'join_approval_required': joinApprovalRequired,
-        'minimum_account_age_days': minimumAccountAgeDays,
-        'post_approval_mode': postApprovalMode,
-        'posting_permission': postingPermission,
-        'slow_mode_seconds': slowModeSeconds,
-        'allow_whispers': allowWhispers,
-        'allow_polls': allowPolls,
-        'allow_anonymous_reactions': allowAnonymousReactions,
-        'content_sensitivity_filter': contentSensitivityFilter,
-        'show_content_when_paused': showContentWhenPaused,
-        'invite_links_enabled': inviteLinksEnabled,
-      };
+    'join_approval_required': joinApprovalRequired,
+    'minimum_account_age_days': minimumAccountAgeDays,
+    'post_approval_mode': postApprovalMode,
+    'posting_permission': postingPermission,
+    'slow_mode_seconds': slowModeSeconds,
+    'allow_whispers': allowWhispers,
+    'allow_polls': allowPolls,
+    'allow_anonymous_reactions': allowAnonymousReactions,
+    'content_sensitivity_filter': contentSensitivityFilter,
+    'show_content_when_paused': showContentWhenPaused,
+    'invite_links_enabled': inviteLinksEnabled,
+  };
 
   TribeGovernanceSettings copyWith({
     bool? joinApprovalRequired,
@@ -121,24 +238,21 @@ class TribeGovernanceSettings {
     String? contentSensitivityFilter,
     bool? showContentWhenPaused,
     bool? inviteLinksEnabled,
-  }) =>
-      TribeGovernanceSettings(
-        joinApprovalRequired: joinApprovalRequired ?? this.joinApprovalRequired,
-        minimumAccountAgeDays:
-            minimumAccountAgeDays ?? this.minimumAccountAgeDays,
-        postApprovalMode: postApprovalMode ?? this.postApprovalMode,
-        postingPermission: postingPermission ?? this.postingPermission,
-        slowModeSeconds: slowModeSeconds ?? this.slowModeSeconds,
-        allowWhispers: allowWhispers ?? this.allowWhispers,
-        allowPolls: allowPolls ?? this.allowPolls,
-        allowAnonymousReactions:
-            allowAnonymousReactions ?? this.allowAnonymousReactions,
-        contentSensitivityFilter:
-            contentSensitivityFilter ?? this.contentSensitivityFilter,
-        showContentWhenPaused:
-            showContentWhenPaused ?? this.showContentWhenPaused,
-        inviteLinksEnabled: inviteLinksEnabled ?? this.inviteLinksEnabled,
-      );
+  }) => TribeGovernanceSettings(
+    joinApprovalRequired: joinApprovalRequired ?? this.joinApprovalRequired,
+    minimumAccountAgeDays: minimumAccountAgeDays ?? this.minimumAccountAgeDays,
+    postApprovalMode: postApprovalMode ?? this.postApprovalMode,
+    postingPermission: postingPermission ?? this.postingPermission,
+    slowModeSeconds: slowModeSeconds ?? this.slowModeSeconds,
+    allowWhispers: allowWhispers ?? this.allowWhispers,
+    allowPolls: allowPolls ?? this.allowPolls,
+    allowAnonymousReactions:
+        allowAnonymousReactions ?? this.allowAnonymousReactions,
+    contentSensitivityFilter:
+        contentSensitivityFilter ?? this.contentSensitivityFilter,
+    showContentWhenPaused: showContentWhenPaused ?? this.showContentWhenPaused,
+    inviteLinksEnabled: inviteLinksEnabled ?? this.inviteLinksEnabled,
+  );
 }
 
 class TribePendingTransfer {

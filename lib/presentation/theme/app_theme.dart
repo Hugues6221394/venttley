@@ -66,10 +66,7 @@ class VentlyTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radius),
           ),
-          textStyle: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 15,
-          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
           elevation: 0,
         ),
       ),
@@ -81,10 +78,7 @@ class VentlyTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radius),
           ),
-          textStyle: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -96,25 +90,29 @@ class VentlyTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-        hintStyle: TextStyle(
-          color: VentlyColors.deepBurgundy.withOpacity(0.5),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 16,
         ),
+        hintStyle: TextStyle(color: VentlyColors.deepBurgundy.withOpacity(0.5)),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
-          borderSide:
-              BorderSide(color: VentlyColors.softMauve.withOpacity(0.7)),
+          borderSide: BorderSide(
+            color: VentlyColors.softMauve.withOpacity(0.7),
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
-          borderSide:
-              BorderSide(color: VentlyColors.softMauve.withOpacity(0.7)),
+          borderSide: BorderSide(
+            color: VentlyColors.softMauve.withOpacity(0.7),
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
-          borderSide:
-              const BorderSide(color: VentlyColors.berryMagenta, width: 1.5),
+          borderSide: const BorderSide(
+            color: VentlyColors.berryMagenta,
+            width: 1.5,
+          ),
         ),
       ),
       chipTheme: ChipThemeData(
@@ -152,8 +150,9 @@ class VentlyTheme {
   static ThemeData dark({bool pureBlack = false}) {
     final canvas = pureBlack ? VentlyColors.pureBlack : VentlyColors.charcoal;
     final card = pureBlack ? VentlyColors.cardBlack : VentlyColors.cardDark;
-    final divider =
-        pureBlack ? VentlyColors.dividerBlack : VentlyColors.dividerDark;
+    final divider = pureBlack
+        ? VentlyColors.dividerBlack
+        : VentlyColors.dividerDark;
     final base = ThemeData.dark(useMaterial3: true);
     final textTheme = base.textTheme.apply(
       bodyColor: VentlyColors.softOffWhite,
@@ -187,10 +186,7 @@ class VentlyTheme {
         ),
       ),
       dividerColor: divider,
-      dividerTheme: DividerThemeData(
-        color: divider,
-        thickness: 0.6,
-      ),
+      dividerTheme: DividerThemeData(color: divider, thickness: 0.6),
       cardTheme: CardThemeData(
         color: card,
         elevation: 0,
@@ -207,10 +203,7 @@ class VentlyTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radius),
           ),
-          textStyle: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 15,
-          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
           elevation: 0,
         ),
       ),
@@ -234,11 +227,11 @@ class VentlyTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: card,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-        hintStyle: TextStyle(
-          color: VentlyColors.softOffWhite.withOpacity(0.5),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 16,
         ),
+        hintStyle: TextStyle(color: VentlyColors.softOffWhite.withOpacity(0.5)),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
           borderSide: BorderSide(color: divider),
@@ -249,8 +242,10 @@ class VentlyTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
-          borderSide:
-              const BorderSide(color: VentlyColors.berryDesat, width: 1.5),
+          borderSide: const BorderSide(
+            color: VentlyColors.berryDesat,
+            width: 1.5,
+          ),
         ),
       ),
       chipTheme: ChipThemeData(

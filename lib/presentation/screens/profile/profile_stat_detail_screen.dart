@@ -134,9 +134,14 @@ class ProfileStatDetailScreen extends ConsumerWidget {
               margin: const EdgeInsets.only(top: 8),
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.favorite, color: VentlyColors.berryMagenta),
-                title: const Text('Most loved vent',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                leading: const Icon(
+                  Icons.favorite,
+                  color: VentlyColors.berryMagenta,
+                ),
+                title: const Text(
+                  'Most loved vent',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
                 subtitle: Text(
                   profile.mostLiked!.content,
                   maxLines: 2,
@@ -161,10 +166,16 @@ class ProfileStatDetailScreen extends ConsumerWidget {
                 contentPadding: EdgeInsets.zero,
                 leading: CircleAvatar(
                   backgroundColor: VentlyColors.berryMagenta.withOpacity(0.15),
-                  child: const Icon(Icons.diversity_3,
-                      color: VentlyColors.berryMagenta, size: 20),
+                  child: const Icon(
+                    Icons.diversity_3,
+                    color: VentlyColors.berryMagenta,
+                    size: 20,
+                  ),
                 ),
-                title: Text(t.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+                title: Text(
+                  t.name,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
                 subtitle: Text(t.slug),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push('/tribe/${t.slug}'),
@@ -175,7 +186,8 @@ class ProfileStatDetailScreen extends ConsumerWidget {
         return [
           _InsightCard(
             title: '${profile.badgesCount ?? profile.badges.length} badges',
-            body: 'Milestones for posting, kindness, streaks, and tribe leadership.',
+            body:
+                'Milestones for posting, kindness, streaks, and tribe leadership.',
           ),
           if (profile.badges.isNotEmpty)
             BadgeShelf(userId: profile.userId, earnedBadges: profile.badges)
@@ -201,8 +213,11 @@ class ProfileStatDetailScreen extends ConsumerWidget {
           GlassCard(
             child: Row(
               children: [
-                const Icon(Icons.local_fire_department,
-                    size: 36, color: VentlyColors.berryMagenta),
+                const Icon(
+                  Icons.local_fire_department,
+                  size: 36,
+                  color: VentlyColors.berryMagenta,
+                ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -239,14 +254,14 @@ class _Header extends StatelessWidget {
   final ProfileStatKind kind;
 
   int get _value => switch (kind) {
-        ProfileStatKind.connections => profile.connectionsCount,
-        ProfileStatKind.vents => profile.vents,
-        ProfileStatKind.comments => profile.comments ?? 0,
-        ProfileStatKind.reactions => profile.reactionsReceived ?? 0,
-        ProfileStatKind.tribes => profile.activeTribes,
-        ProfileStatKind.badges => profile.badgesCount ?? profile.badges.length,
-        ProfileStatKind.streak => profile.currentStreak ?? 0,
-      };
+    ProfileStatKind.connections => profile.connectionsCount,
+    ProfileStatKind.vents => profile.vents,
+    ProfileStatKind.comments => profile.comments ?? 0,
+    ProfileStatKind.reactions => profile.reactionsReceived ?? 0,
+    ProfileStatKind.tribes => profile.activeTribes,
+    ProfileStatKind.badges => profile.badgesCount ?? profile.badges.length,
+    ProfileStatKind.streak => profile.currentStreak ?? 0,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -323,10 +338,7 @@ class _VentsStatBody extends ConsumerWidget {
         padding: EdgeInsets.symmetric(vertical: 24),
         child: Center(child: CircularProgressIndicator()),
       ),
-      error: (e, _) => _InsightCard(
-        title: 'Could not load vents',
-        body: '$e',
-      ),
+      error: (e, _) => _InsightCard(title: 'Could not load vents', body: '$e'),
       data: (posts) {
         if (posts.isEmpty) {
           return const _InsightCard(
@@ -363,9 +375,10 @@ class _InsightCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w900, fontSize: 15)),
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+          ),
           const SizedBox(height: 6),
           Text(
             body,

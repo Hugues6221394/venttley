@@ -24,13 +24,15 @@ class BadgeShelf extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final catalogue = ref.watch(badgeCatalogueProvider).valueOrNull ?? const [];
-    final earned = earnedBadges ??
+    final earned =
+        earnedBadges ??
         ref.watch(badgesForUserProvider(userId)).valueOrNull ??
         const [];
     if (catalogue.isEmpty) return const SizedBox.shrink();
 
     final earnedKeys = earned.map((b) => b.key).toSet();
-    final sorted = [...catalogue]..sort((a, b) {
+    final sorted = [...catalogue]
+      ..sort((a, b) {
         final ae = earnedKeys.contains(a.key) ? 0 : 1;
         final be = earnedKeys.contains(b.key) ? 0 : 1;
         if (ae != be) return ae - be;
@@ -53,17 +55,26 @@ class BadgeShelf extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
           child: Row(
             children: [
-              Icon(Icons.emoji_events_outlined, size: 16, color: scheme.primary),
+              Icon(
+                Icons.emoji_events_outlined,
+                size: 16,
+                color: scheme.primary,
+              ),
               const SizedBox(width: 6),
               Text(
                 title,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const Spacer(),
               if (streak != null)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: scheme.primary.withOpacity(0.14),
                     borderRadius: BorderRadius.circular(12),
@@ -71,8 +82,11 @@ class BadgeShelf extends ConsumerWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.local_fire_department,
-                          size: 12, color: scheme.primary),
+                      Icon(
+                        Icons.local_fire_department,
+                        size: 12,
+                        color: scheme.primary,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         '$streak-day streak',
@@ -104,10 +118,7 @@ class BadgeShelf extends ConsumerWidget {
             separatorBuilder: (_, __) => const SizedBox(width: 10),
             itemBuilder: (_, i) {
               final def = sorted[i];
-              return BadgeChip(
-                def: def,
-                earned: earnedKeys.contains(def.key),
-              );
+              return BadgeChip(def: def, earned: earnedKeys.contains(def.key));
             },
           ),
         ),

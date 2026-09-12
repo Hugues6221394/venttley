@@ -8,6 +8,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/tribe_category_labels.dart';
 import '../../../core/user_friendly_errors.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_recommendations.dart';
@@ -761,12 +762,7 @@ class _RecommendedTribeCardState extends ConsumerState<_RecommendedTribeCard> {
 
   @override
   Widget build(BuildContext context) {
-    final category = switch (tribe.category) {
-      'interest_group' => 'Interest',
-      String value when value.isNotEmpty =>
-        '${value[0].toUpperCase()}${value.substring(1)}',
-      _ => 'Community',
-    };
+    final category = tribeCategoryLabel(ref, tribe.category);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(

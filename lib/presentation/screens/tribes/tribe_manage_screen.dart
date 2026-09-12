@@ -12,6 +12,7 @@ import '../../widgets/user_profile_link.dart';
 import '../../widgets/keeper_action_center.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/post_card.dart';
+import 'tribe_helpers_screen.dart' show myTribePermissionsProvider;
 
 /// Plugz / Keeper creator dashboard.
 ///
@@ -43,7 +44,25 @@ class TribeManageScreen extends ConsumerWidget {
         body: const Center(child: Text('Tribe not found')),
       );
     }
-    if (me == null || tribe.keeperId != me.userId) {
+    // The Keeper is let in immediately: they own the Tribe, and making the
+    // owner wait on a round trip to be told so would be a regression for the
+    // person who opens this screen most. Everyone else is admitted on the
+    // strength of a delegated capability, which only the server can answer.
+    final isKeeper = me != null && tribe.keeperId == me.userId;
+    final myPermissions = isKeeper
+        ? const AsyncValue<List<String>>.data(<String>[])
+        : ref.watch(myTribePermissionsProvider(tribe.tribeId));
+    final canOpen =
+        isKeeper || (myPermissions.valueOrNull ?? const []).isNotEmpty;
+
+    if (me == null || (!canOpen && myPermissions.isLoading)) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(title: Text(tribe.name)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (!canOpen) {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(title: Text(tribe.name)),
@@ -62,7 +81,8 @@ class TribeManageScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Only the Plug of this Tribe can open the dashboard.',
+                  'This is the Keeper Studio. The Keeper can give you a hand '
+                  'in here if they want help running the Tribe.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
@@ -249,7 +269,7 @@ class _HeaderCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       stats != null && stats!.openReports > 0
-                          ? 'Plug · ${stats!.openReports} open report${stats!.openReports == 1 ? '' : 's'}'
+                          ? 'Keeper · ${stats!.openReports} open report${stats!.openReports == 1 ? '' : 's'}'
                           : 'Kept by you',
                       style: TextStyle(
                         fontSize: 11,
@@ -1454,7 +1474,7 @@ class _MemberRow extends ConsumerWidget {
   String _roleLabel(String role) {
     switch (role) {
       case 'keeper':
-        return 'Plug';
+        return 'Keeper';
       case 'mod':
         return 'Mod';
       default:
@@ -1658,7 +1678,7 @@ class _MemberRow extends ConsumerWidget {
             context,
             title: 'Transfer keepership?',
             body:
-                'You will become a mod. @${member.pseudonym} will be the new Plug of ${tribe.name}.',
+                'You will become a mod. @${member.pseudonym} will be the new Keeper of ${tribe.name}.',
             confirm: 'Transfer',
             destructive: true,
           );
@@ -1667,7 +1687,7 @@ class _MemberRow extends ConsumerWidget {
             tribeId: tribe.tribeId,
             toUserId: member.userId,
           );
-          _snack(context, 'Plug role transferred to @${member.pseudonym}.');
+          _snack(context, 'Keeper role transferred to @${member.pseudonym}.');
           invalidate();
           break;
       }

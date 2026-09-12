@@ -8,10 +8,10 @@
 //   * sensitive → borderline (suggestive / gore) → shown behind a warning veil.
 //   * clean     → shown normally.
 //
-// Provider: Sightengine (nudity-2.1 + gore), a simple REST API — set
-// SIGHTENGINE_USER / SIGHTENGINE_SECRET. If not configured, we FAIL SAFE and
-// mark the media 'sensitive' (veiled), never 'clean' — nudity must not slip
-// through unscanned.
+// Providers: optional self-hosted NudeNet (NSFW_CLASSIFIER_URL) first, then
+// Sightengine (SIGHTENGINE_USER / SIGHTENGINE_SECRET). Worst verdict wins.
+// CSAM stays on Sightengine only. If neither provider answers, we FAIL SAFE
+// and mark the media 'sensitive' (veiled), never 'clean'.
 //
 // CSAM: Sightengine also offers a separately enabled CSAM model. When enabled,
 // a hit is quarantined through record_csam_incident for mandated human review;
@@ -24,6 +24,7 @@
 import { adminClient } from "../_shared/supabase.ts";
 import { corsHeaders, handleOptions } from "../_shared/cors.ts";
 import { rolloutEnabled } from "../_shared/internal_auth.ts";
+import { looksLikeSupportedImage } from "./image_magic.ts";
 import { isOwnedStoragePath, ownedPathFromPublicUrl } from "./ownership.ts";
 
 type Verdict = "clean" | "sensitive" | "blocked";
@@ -62,21 +63,64 @@ function csamProb(body: Record<string, unknown>): number {
   return Math.max(0, ...candidates.map((n) => (typeof n === "number" ? n : 0)));
 }
 
-async function scan(
-  imageUrl: string,
-): Promise<
-  { verdict: Verdict; labels: Record<string, unknown>; csam: boolean }
-> {
-  const user = Deno.env.get("SIGHTENGINE_USER");
-  const secret = Deno.env.get("SIGHTENGINE_SECRET");
-  // Fail safe: no scanner configured → veil, never show unscanned nudity.
-  if (!user || !secret) {
+type ScanResult = {
+  verdict: Verdict;
+  labels: Record<string, unknown>;
+  csam: boolean;
+};
+
+function worse(a: Verdict, b: Verdict): Verdict {
+  const rank: Record<Verdict, number> = {
+    clean: 0,
+    sensitive: 1,
+    blocked: 2,
+  };
+  return rank[a] >= rank[b] ? a : b;
+}
+
+async function scanLocal(bytes: Uint8Array): Promise<ScanResult | null> {
+  const base = Deno.env.get("NSFW_CLASSIFIER_URL")?.replace(/\/$/, "");
+  if (!base) return null;
+
+  // Free hosting tiers sleep. Render warns that a cold start "can delay
+  // requests by 50 seconds or more", and the original 8s budget guaranteed
+  // that every first upload after a quiet spell timed out and got quarantined
+  // — safe, but it would look like the scanner does not work.
+  //
+  // Generous because nothing is waiting on this: the client fires media-scan
+  // and polls media_status, so a slow scan costs a few more seconds of "being
+  // checked", not a blocked screen. Configurable so a paid always-on host can
+  // tighten it back down.
+  const timeoutMs = Number(Deno.env.get("NSFW_TIMEOUT_MS") ?? "60000");
+
+  try {
+    const form = new FormData();
+    form.append("file", new Blob([bytes]), "image.bin");
+    const res = await fetch(`${base}/classify`, {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const verdict = body.verdict;
+    if (verdict !== "clean" && verdict !== "sensitive" && verdict !== "blocked") {
+      return null;
+    }
     return {
-      verdict: "sensitive",
-      labels: { reason: "scanner_not_configured" },
+      verdict,
+      labels: (body.labels as Record<string, unknown>) ?? {},
       csam: false,
     };
+  } catch (_) {
+    return null;
   }
+}
+
+async function scanSightengine(imageUrl: string): Promise<ScanResult | null> {
+  const user = Deno.env.get("SIGHTENGINE_USER");
+  const secret = Deno.env.get("SIGHTENGINE_SECRET");
+  if (!user || !secret) return null;
   const models = Deno.env.get("SIGHTENGINE_MODELS") ?? "nudity-2.1,gore";
   const api = new URL("https://api.sightengine.com/1.0/check.json");
   api.searchParams.set("url", imageUrl);
@@ -115,6 +159,52 @@ async function scan(
   }
 }
 
+async function scan(
+  imageUrl: string,
+  bytes: Uint8Array,
+): Promise<ScanResult> {
+  if (!looksLikeSupportedImage(bytes)) {
+    return {
+      verdict: "blocked",
+      labels: { reason: "invalid_image_magic" },
+      csam: false,
+    };
+  }
+  const local = await scanLocal(bytes);
+  const remote = await scanSightengine(imageUrl);
+  if (remote?.csam) return remote;
+  if (!local && !remote) {
+    return {
+      verdict: "sensitive",
+      labels: { reason: "scanner_not_configured" },
+      csam: false,
+    };
+  }
+  return {
+    verdict: worse(local?.verdict ?? "clean", remote?.verdict ?? "clean"),
+    labels: { local: local?.labels, remote: remote?.labels },
+    csam: false,
+  };
+}
+
+async function copyToQuarantine(
+  sb: ReturnType<typeof adminClient>,
+  sourceBucket: string,
+  storedPath: string,
+  kind: string,
+  id: string,
+  bytes: Uint8Array,
+): Promise<void> {
+  const dest = `${kind}/${id}/${storedPath}`;
+  const { error } = await sb.storage.from("media-quarantine").upload(dest, bytes, {
+    contentType: "application/octet-stream",
+    upsert: true,
+  });
+  if (error) {
+    console.error("quarantine copy failed", sourceBucket);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return handleOptions()!;
   const headers = { ...corsHeaders, "Content-Type": "application/json" };
@@ -138,23 +228,50 @@ Deno.serve(async (req) => {
     );
   }
 
-  const authorization = req.headers.get("Authorization");
-  const token = authorization?.replace(/^Bearer\s+/i, "").trim();
-  if (!token) {
-    return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), {
-      status: 401,
-      headers,
-    });
-  }
-
   const sb = adminClient();
-  const { data: authData, error: authError } = await sb.auth.getUser(token);
-  const callerId = authData.user?.id;
-  if (authError || !callerId) {
-    return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), {
-      status: 401,
-      headers,
-    });
+
+  // Two ways in, and only two.
+  //
+  // Normally the author's app calls this straight after uploading, with their
+  // own JWT. That path is unchanged.
+  //
+  // The second is the sweeper. Client dispatch is a best-effort fire-and-forget
+  // — if the app is killed, backgrounded, or loses signal in the second after
+  // posting, or if the classifier was asleep and the call timed out, the scan
+  // simply never happens and the image stays 'pending' for ever. Veiled is the
+  // safe failure, but a permanent veil on an ordinary photo is still a broken
+  // feature, and nothing was retrying. sweep_media_scans() now does, and it has
+  // no user JWT to present, so it authenticates with the cron secret and the
+  // author is taken from the row itself.
+  //
+  // That substitution is safe because callerId is only ever used to prove
+  // ownership to claim_media_scan, which requires author_id = p_user_id. Taking
+  // the author from the row satisfies that by construction rather than by
+  // assertion. It grants the sweeper nothing it could not already do.
+  const cronSecret = Deno.env.get("CRON_SECRET");
+  const isCron = !!cronSecret &&
+    req.headers.get("x-cron-secret") === cronSecret;
+
+  let callerId: string | undefined;
+
+  if (!isCron) {
+    const authorization = req.headers.get("Authorization");
+    const token = authorization?.replace(/^Bearer\s+/i, "").trim();
+    if (!token) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "unauthorized" }),
+        { status: 401, headers },
+      );
+    }
+
+    const { data: authData, error: authError } = await sb.auth.getUser(token);
+    callerId = authData.user?.id;
+    if (authError || !callerId) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "unauthorized" }),
+        { status: 401, headers },
+      );
+    }
   }
 
   let payload: { kind?: string; id?: string };
@@ -203,9 +320,35 @@ Deno.serve(async (req) => {
     });
   }
   const storedRow = stored as Record<string, unknown>;
+
+  // The sweeper adopts the row's author. Everything downstream — the ownership
+  // check in claim_media_scan, the storage path check below — then runs exactly
+  // as it does for a real caller, rather than being bypassed for cron.
+  if (isCron) {
+    const owner = storedRow.author_id;
+    if (typeof owner !== "string") {
+      return new Response(
+        JSON.stringify({ ok: false, error: "not_found" }),
+        { status: 404, headers },
+      );
+    }
+    callerId = owner;
+  }
+
   if (storedRow.author_id !== callerId) {
     return new Response(JSON.stringify({ ok: false, error: "forbidden" }), {
       status: 403,
+      headers,
+    });
+  }
+
+  // Unreachable in practice — the JWT branch returns 401 without one, and the
+  // cron branch returns 404 if the row has no author. It is here so callerId
+  // is a string for the ownership and storage-path checks below rather than
+  // string | undefined, which deno would reject at deploy time.
+  if (!callerId) {
+    return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), {
+      status: 401,
       headers,
     });
   }
@@ -243,6 +386,14 @@ Deno.serve(async (req) => {
       },
     );
   }
+  const downloaded = await sb.storage.from(bucket).download(storedPath);
+  if (downloaded.error || !downloaded.data) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "media_download_failed" }),
+      { status: 500, headers },
+    );
+  }
+  const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
   const imageUrl =
     sb.storage.from(bucket).getPublicUrl(storedPath).data.publicUrl;
   const leaseId = crypto.randomUUID();
@@ -270,7 +421,10 @@ Deno.serve(async (req) => {
       { status: 409, headers },
     );
   }
-  const { verdict, labels, csam } = await scan(imageUrl);
+  const { verdict, labels, csam } = await scan(imageUrl, bytes);
+  if (verdict === "blocked" || verdict === "sensitive") {
+    await copyToQuarantine(sb, bucket, storedPath, kind, id, bytes);
+  }
 
   // CSAM hit → route to the incident pipeline: quarantine (preserve, don't
   // delete) + open a super-admin incident for mandated review/reporting.

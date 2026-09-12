@@ -18,6 +18,15 @@ import 'package:vently_app/presentation/router/app_router.dart';
 import 'package:vently_app/presentation/theme/app_theme.dart';
 import 'package:vently_app/presentation/widgets/post_card.dart';
 
+class _StaticFeedPostsNotifier extends FeedPostsNotifier {
+  _StaticFeedPostsNotifier(this._posts);
+
+  final List<Post> _posts;
+
+  @override
+  Future<List<Post>> build() async => _posts;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -200,7 +209,7 @@ Future<void> _pumpScreen(
       overrides: [
         repositoryProvider.overrideWithValue(repository),
         feedPostsProvider.overrideWith(
-          (_) => Stream.value(feedPosts ?? _posts),
+          () => _StaticFeedPostsNotifier(feedPosts ?? _posts),
         ),
         if (discoveryPosts != null)
           homeDiscoveryPostsProvider.overrideWith((_) async => discoveryPosts),
@@ -243,7 +252,7 @@ Future<void> _pumpMemberShell(WidgetTester tester) async {
     ProviderScope(
       overrides: [
         repositoryProvider.overrideWithValue(repository),
-        feedPostsProvider.overrideWith((_) => Stream.value(_posts)),
+        feedPostsProvider.overrideWith(() => _StaticFeedPostsNotifier(_posts)),
         homeDiscoveryPostsProvider.overrideWith((_) async => _posts),
         homeFriendStoriesProvider.overrideWith((_) async => const []),
         myFriendsProvider.overrideWith((_) async => _friends),

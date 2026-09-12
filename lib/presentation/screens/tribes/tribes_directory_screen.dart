@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/tribe_category_labels.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/premium_motion.dart';
@@ -172,15 +173,7 @@ class _TribeCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final categoryLabel = switch (tribe.category) {
-      'campus' => 'Campus',
-      'city' => 'City',
-      'interest_group' => 'Interest',
-      'hobby' => 'Hobby',
-      'support' => 'Support',
-      'venting' => 'Venting',
-      _ => tribe.category,
-    };
+    final categoryLabel = tribeCategoryLabel(ref, tribe.category);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: InkWell(

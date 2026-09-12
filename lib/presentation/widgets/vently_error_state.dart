@@ -24,16 +24,21 @@ class VentlyErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_off_rounded,
-                size: 40, color: VentlyColors.berryMagenta),
+            const Icon(
+              Icons.cloud_off_rounded,
+              size: 40,
+              color: VentlyColors.berryMagenta,
+            ),
             const SizedBox(height: VentlyTokens.s12),
-            Text(title,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 16,
-                  color: context.ink,
-                )),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+                color: context.ink,
+              ),
+            ),
             const SizedBox(height: 8),
             Text(
               UserFriendlyErrors.message(error),
@@ -49,8 +54,10 @@ class VentlyErrorState extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Try again',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                label: const Text(
+                  'Try again',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
               ),
             ],
           ],

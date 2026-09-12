@@ -32,9 +32,11 @@ class GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final sigma = blur ?? (isDark ? GlassTokens.blurHeavy : GlassTokens.blurMedium);
+    final sigma =
+        blur ?? (isDark ? GlassTokens.blurHeavy : GlassTokens.blurMedium);
     final surfaceTint = tint ?? GlassTokens.tint(context);
-    final border = borderColor ??
+    final border =
+        borderColor ??
         (isDark
             ? VentlyColors.berryDesat.withOpacity(0.22)
             : GlassTokens.border(context));
@@ -57,7 +59,28 @@ class GlassCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(borderRadius),
                 border: Border.all(color: border, width: 1),
               ),
-              child: child,
+              // The tint above is a DecoratedBox with a real colour sitting
+              // between the content and the nearest Material, so anything
+              // inside that paints ink on its Material ancestor — ListTile,
+              // InkWell, ChoiceChip — drew its splash UNDER the glass, where
+              // it cannot be seen. Flutter says so out loud in debug:
+              //
+              //   ListTile background color or ink splashes may be invisible.
+              //   The ListTile is wrapped in a DecoratedBox that has a
+              //   background color. [...] To fix this, wrap the ListTile in
+              //   its own Material widget.
+              //
+              // It was firing three times on the "your Tribe is live" screen,
+              // where every one of the next-step rows is a ListTile in a
+              // GlassCard, so those taps had no visible feedback at all.
+              //
+              // Fixed here rather than at each of the twelve call sites: the
+              // cause is this tint, so this is where the ink surface belongs.
+              // GlassSheet already does exactly this for the same reason, so
+              // the two glass surfaces now behave the same way. Transparency
+              // means it contributes an ink surface and nothing else — no
+              // colour, no elevation, no shape of its own.
+              child: Material(type: MaterialType.transparency, child: child),
             ),
           ),
         ),

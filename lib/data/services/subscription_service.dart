@@ -16,8 +16,9 @@ import '../../core/logger.dart';
 /// — the call returns false when the user is signed-out or Stripe
 /// isn't wired up yet, so plumbing this in early is harmless.
 abstract class SubscriptionService {
-  static final SubscriptionService instance =
-      _SupabaseSubscriptionService(Supabase.instance.client);
+  static final SubscriptionService instance = _SupabaseSubscriptionService(
+    Supabase.instance.client,
+  );
 
   /// Refresh from the server. Returns the current snapshot.
   Future<SubscriptionSnapshot> refresh();
@@ -30,8 +31,9 @@ abstract class SubscriptionService {
 }
 
 class SubscriptionSnapshot {
-  final String status; // 'free' | 'trialing' | 'active' | 'past_due' | 'canceled'
-  final String tier;   // 'free' | 'plus' | 'pro' | …
+  final String
+  status; // 'free' | 'trialing' | 'active' | 'past_due' | 'canceled'
+  final String tier; // 'free' | 'plus' | 'pro' | …
   final DateTime? renewsAt;
   final DateTime? canceledAt;
   const SubscriptionSnapshot({

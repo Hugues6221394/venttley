@@ -12,10 +12,8 @@ class KeeperMode {
     this.tribesKept = 0,
   });
 
-  factory KeeperMode.guest() => const KeeperMode(
-        isKeeper: false,
-        displayRole: 'guest',
-      );
+  factory KeeperMode.guest() =>
+      const KeeperMode(isKeeper: false, displayRole: 'guest');
 
   factory KeeperMode.fromJson(Map<String, dynamic> json) {
     final role = json['display_role'];
@@ -35,9 +33,9 @@ class KeeperMode {
       case 'super_admin':
         return 'Super Admin';
       case 'plug':
-        return 'Verified Plug';
+        return 'Verified Keeper';
       case 'keeper':
-        return 'Plug';
+        return 'Keeper';
       default:
         return 'Member';
     }

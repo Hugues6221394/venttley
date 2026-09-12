@@ -48,12 +48,7 @@ class _KeeperPromptComposerSheetState
     super.initState();
     if (widget.scheduleRequired) {
       final tomorrow = DateTime.now().add(const Duration(days: 1));
-      _scheduledFor = DateTime(
-        tomorrow.year,
-        tomorrow.month,
-        tomorrow.day,
-        9,
-      );
+      _scheduledFor = DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 9);
     }
   }
 
@@ -110,7 +105,9 @@ class _KeeperPromptComposerSheetState
     }
     setState(() => _busy = true);
     try {
-      await ref.read(repositoryProvider).schedulePrompt(
+      await ref
+          .read(repositoryProvider)
+          .schedulePrompt(
             tribeId: widget.tribeId,
             text: prompt,
             scheduledFor: _scheduledFor,
@@ -155,8 +152,9 @@ class _KeeperPromptComposerSheetState
                 width: 42,
                 height: 4,
                 decoration: BoxDecoration(
-                  color:
-                      Theme.of(context).colorScheme.onSurface.withOpacity(.16),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(.16),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -197,8 +195,9 @@ class _KeeperPromptComposerSheetState
             ),
             if (!widget.scheduleRequired && _scheduledFor != null)
               TextButton(
-                onPressed:
-                    _busy ? null : () => setState(() => _scheduledFor = null),
+                onPressed: _busy
+                    ? null
+                    : () => setState(() => _scheduledFor = null),
                 child: const Text('Post immediately instead'),
               ),
             const SizedBox(height: 10),

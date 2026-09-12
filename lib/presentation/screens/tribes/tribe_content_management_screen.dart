@@ -72,7 +72,7 @@ class _TribeContentManagementScreenState
         appBar: AppBar(title: const Text('Content')),
         body: const Center(
           child: Text(
-            'Only the current Plug can manage Tribe content.',
+            'Only the current Keeper can manage Tribe content.',
             textAlign: TextAlign.center,
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
@@ -84,10 +84,10 @@ class _TribeContentManagementScreenState
     final posts = postsAsync.valueOrNull ?? const <TribeManagedPost>[];
     final visible = _isPinSelection
         ? posts
-            .where(
-              (post) => !post.isPinned && !post.isArchived && !post.isPending,
-            )
-            .toList(growable: false)
+              .where(
+                (post) => !post.isPinned && !post.isArchived && !post.isPending,
+              )
+              .toList(growable: false)
         : _applyFilter(posts);
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -105,8 +105,9 @@ class _TribeContentManagementScreenState
                   child: _Header(
                     tribe: tribe,
                     pendingCount: posts.where((post) => post.isPending).length,
-                    attentionCount:
-                        posts.where((post) => post.needsAttention).length,
+                    attentionCount: posts
+                        .where((post) => post.needsAttention)
+                        .length,
                     pinSelection: _isPinSelection,
                     onBack: () => context.pop(),
                   ),
@@ -209,7 +210,9 @@ class _TribeContentManagementScreenState
     }
     setState(() => _busyPostId = post.postId);
     try {
-      await ref.read(repositoryProvider).manageTribePost(
+      await ref
+          .read(repositoryProvider)
+          .manageTribePost(
             tribeId: tribe.tribeId,
             postId: post.postId,
             action: action,
@@ -220,9 +223,9 @@ class _TribeContentManagementScreenState
       ref.invalidate(tribeManagementProvider(tribe.tribeId));
       ref.invalidate(feedPostsProvider);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_successMessage(action))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_successMessage(action))));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -239,9 +242,9 @@ class _TribeContentManagementScreenState
       spaces = await ref.read(spacesByTribeProvider(tribeId).future);
     } catch (error) {
       if (!mounted) return null;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load Spaces: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not load Spaces: $error')));
       return null;
     }
     if (!mounted) return null;
@@ -288,10 +291,7 @@ class _TribeContentManagementScreenState
     );
   }
 
-  Future<String?> _askReason(
-    String action,
-    TribeManagedPost post,
-  ) async {
+  Future<String?> _askReason(String action, TribeManagedPost post) async {
     final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) => ModalTextControllerScope(
@@ -352,23 +352,23 @@ class _TribeContentManagementScreenState
   }
 
   static String _actionLabel(String action) => switch (action) {
-        'approve' => 'Approve vent',
-        'reject' => 'Reject vent',
-        'pin' => 'Pin vent',
-        'unpin' => 'Unpin vent',
-        'feature' => 'Feature vent',
-        'unfeature' => 'Remove feature',
-        'hide' => 'Hide vent',
-        'unhide' => 'Restore hidden vent',
-        'lock' => 'Lock replies',
-        'unlock' => 'Unlock replies',
-        'sensitive' => 'Mark sensitive',
-        'archive' => 'Archive discussion',
-        'unarchive' => 'Restore discussion',
-        'move' => 'Move vent',
-        'remove' => 'Remove vent',
-        _ => 'Update vent',
-      };
+    'approve' => 'Approve vent',
+    'reject' => 'Reject vent',
+    'pin' => 'Pin vent',
+    'unpin' => 'Unpin vent',
+    'feature' => 'Feature vent',
+    'unfeature' => 'Remove feature',
+    'hide' => 'Hide vent',
+    'unhide' => 'Restore hidden vent',
+    'lock' => 'Lock replies',
+    'unlock' => 'Unlock replies',
+    'sensitive' => 'Mark sensitive',
+    'archive' => 'Archive discussion',
+    'unarchive' => 'Restore discussion',
+    'move' => 'Move vent',
+    'remove' => 'Remove vent',
+    _ => 'Update vent',
+  };
 
   static String _successMessage(String action) =>
       '${_actionLabel(action)} completed.';
@@ -391,46 +391,46 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 20, 12),
-        child: Row(
-          children: [
-            IconButton(
-              tooltip: 'Back',
-              onPressed: onBack,
-              icon: const Icon(Icons.arrow_back_rounded),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    pinSelection ? 'Pin a vent' : 'Content control',
-                    style: const TextStyle(
-                      fontSize: 25,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  Text(
-                    pinSelection
-                        ? 'Choose a vent to keep at the top of ${tribe.name}'
-                        : tribe.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: context.inkMuted,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            _CountBadge(label: 'Pending', count: pendingCount),
-            const SizedBox(width: 8),
-            _CountBadge(label: 'Review', count: attentionCount),
-          ],
+    padding: const EdgeInsets.fromLTRB(12, 8, 20, 12),
+    child: Row(
+      children: [
+        IconButton(
+          tooltip: 'Back',
+          onPressed: onBack,
+          icon: const Icon(Icons.arrow_back_rounded),
         ),
-      );
+        const SizedBox(width: 4),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                pinSelection ? 'Pin a vent' : 'Content control',
+                style: const TextStyle(
+                  fontSize: 25,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                pinSelection
+                    ? 'Choose a vent to keep at the top of ${tribe.name}'
+                    : tribe.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.inkMuted,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        _CountBadge(label: 'Pending', count: pendingCount),
+        const SizedBox(width: 8),
+        _CountBadge(label: 'Review', count: attentionCount),
+      ],
+    ),
+  );
 }
 
 class _CountBadge extends StatelessWidget {
@@ -441,21 +441,18 @@ class _CountBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        children: [
-          Text(
-            '$count',
-            style: const TextStyle(
-              color: VentlyColors.berryMagenta,
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(color: context.inkMuted, fontSize: 10),
-          ),
-        ],
-      );
+    children: [
+      Text(
+        '$count',
+        style: const TextStyle(
+          color: VentlyColors.berryMagenta,
+          fontSize: 17,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+      Text(label, style: TextStyle(color: context.inkMuted, fontSize: 10)),
+    ],
+  );
 }
 
 class _FilterBar extends StatelessWidget {
@@ -466,28 +463,28 @@ class _FilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        height: 54,
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          scrollDirection: Axis.horizontal,
-          children: [
-            for (final filter in _ContentFilter.values) ...[
-              ChoiceChip(
-                label: Text(switch (filter) {
-                  _ContentFilter.all => 'All',
-                  _ContentFilter.pinned => 'Pinned',
-                  _ContentFilter.pending => 'Pending',
-                  _ContentFilter.attention => 'Needs attention',
-                  _ContentFilter.archived => 'Archived',
-                }),
-                selected: selected == filter,
-                onSelected: (_) => onChanged(filter),
-              ),
-              const SizedBox(width: 8),
-            ],
-          ],
-        ),
-      );
+    height: 54,
+    child: ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      scrollDirection: Axis.horizontal,
+      children: [
+        for (final filter in _ContentFilter.values) ...[
+          ChoiceChip(
+            label: Text(switch (filter) {
+              _ContentFilter.all => 'All',
+              _ContentFilter.pinned => 'Pinned',
+              _ContentFilter.pending => 'Pending',
+              _ContentFilter.attention => 'Needs attention',
+              _ContentFilter.archived => 'Archived',
+            }),
+            selected: selected == filter,
+            onSelected: (_) => onChanged(filter),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ],
+    ),
+  );
 }
 
 class _ManagedPostCard extends StatelessWidget {
@@ -511,208 +508,212 @@ class _ManagedPostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GlassCard(
-        padding: const EdgeInsets.all(16),
-        borderRadius: 18,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    padding: const EdgeInsets.all(16),
+    borderRadius: 18,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                InkWell(
-                  onTap: onAuthor,
-                  customBorder: const CircleBorder(),
-                  child: ProfileAvatar(
-                    avatarSeed: post.authorAvatarSeed,
-                    label: post.authorPseudonym,
-                    profilePhotoUrl: post.authorProfilePhotoUrl,
-                    size: 42,
-                  ),
-                ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: InkWell(
-                    onTap: onAuthor,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          post.authorPseudonym,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        Text(
-                          '${post.spaceName ?? 'General'} · ${_age(post.createdAt)}',
-                          style: TextStyle(
-                            color: context.inkMuted,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (busy)
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  PopupMenuButton<String>(
-                    tooltip: 'Manage vent',
-                    icon: const Icon(Icons.more_horiz_rounded),
-                    onSelected: onAction,
-                    itemBuilder: (_) => _actions(post),
-                  ),
-              ],
-            ),
-            if (_statusLabels(post).isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final status in _statusLabels(post))
-                    _StatusChip(label: status.$1, color: status.$2),
-                ],
-              ),
-            ],
-            const SizedBox(height: 13),
             InkWell(
-              onTap: onOpen,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Text(
-                  post.content.isEmpty ? '(media vent)' : post.content,
-                  maxLines: 5,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 16, height: 1.42),
+              onTap: onAuthor,
+              customBorder: const CircleBorder(),
+              child: ProfileAvatar(
+                avatarSeed: post.authorAvatarSeed,
+                label: post.authorPseudonym,
+                profilePhotoUrl: post.authorProfilePhotoUrl,
+                size: 42,
+              ),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: InkWell(
+                onTap: onAuthor,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      post.authorPseudonym,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      '${post.spaceName ?? 'General'} · ${_age(post.createdAt)}',
+                      style: TextStyle(
+                        color: context.inkMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Icon(Icons.favorite_border_rounded,
-                    size: 17, color: context.inkMuted),
-                const SizedBox(width: 5),
-                Text('${post.likesCount}', style: _metricStyle(context)),
-                const SizedBox(width: 18),
-                Icon(Icons.chat_bubble_outline_rounded,
-                    size: 17, color: context.inkMuted),
-                const SizedBox(width: 5),
-                Text('${post.commentsCount}', style: _metricStyle(context)),
-                const Spacer(),
-                if (primaryActionLabel != null && onPrimaryAction != null) ...[
-                  FilledButton.icon(
-                    onPressed: busy ? null : onPrimaryAction,
-                    icon: const Icon(Icons.push_pin_outlined, size: 16),
-                    label: Text(primaryActionLabel!),
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                TextButton.icon(
-                  onPressed: onOpen,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                  label: const Text('Open'),
-                ),
-              ],
+            if (busy)
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              PopupMenuButton<String>(
+                tooltip: 'Manage vent',
+                icon: const Icon(Icons.more_horiz_rounded),
+                onSelected: onAction,
+                itemBuilder: (_) => _actions(post),
+              ),
+          ],
+        ),
+        if (_statusLabels(post).isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final status in _statusLabels(post))
+                _StatusChip(label: status.$1, color: status.$2),
+            ],
+          ),
+        ],
+        const SizedBox(height: 13),
+        InkWell(
+          onTap: onOpen,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(
+              post.content.isEmpty ? '(media vent)' : post.content,
+              maxLines: 5,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 16, height: 1.42),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Icon(
+              Icons.favorite_border_rounded,
+              size: 17,
+              color: context.inkMuted,
+            ),
+            const SizedBox(width: 5),
+            Text('${post.likesCount}', style: _metricStyle(context)),
+            const SizedBox(width: 18),
+            Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 17,
+              color: context.inkMuted,
+            ),
+            const SizedBox(width: 5),
+            Text('${post.commentsCount}', style: _metricStyle(context)),
+            const Spacer(),
+            if (primaryActionLabel != null && onPrimaryAction != null) ...[
+              FilledButton.icon(
+                onPressed: busy ? null : onPrimaryAction,
+                icon: const Icon(Icons.push_pin_outlined, size: 16),
+                label: Text(primaryActionLabel!),
+              ),
+              const SizedBox(width: 6),
+            ],
+            TextButton.icon(
+              onPressed: onOpen,
+              icon: const Icon(Icons.open_in_new_rounded, size: 16),
+              label: const Text('Open'),
             ),
           ],
         ),
-      );
+      ],
+    ),
+  );
 
   static List<PopupMenuEntry<String>> _actions(TribeManagedPost post) => [
-        if (post.isPending)
-          const PopupMenuItem(
-            value: 'approve',
-            child: _ActionLabel(Icons.check_circle_outline, 'Approve'),
-          ),
-        if (post.isPending)
-          const PopupMenuItem(
-            value: 'reject',
-            child: _ActionLabel(Icons.cancel_outlined, 'Reject'),
-          ),
-        PopupMenuItem(
-          value: post.isPinned ? 'unpin' : 'pin',
-          child: _ActionLabel(
-            post.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
-            post.isPinned ? 'Unpin' : 'Pin',
-          ),
-        ),
-        PopupMenuItem(
-          value: post.isFeatured ? 'unfeature' : 'feature',
-          child: _ActionLabel(
-            post.isFeatured ? Icons.star : Icons.star_outline_rounded,
-            post.isFeatured ? 'Remove feature' : 'Feature',
-          ),
-        ),
-        PopupMenuItem(
-          value: post.isHidden ? 'unhide' : 'hide',
-          child: _ActionLabel(
-            post.isHidden
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined,
-            post.isHidden ? 'Restore visibility' : 'Hide',
-          ),
-        ),
-        PopupMenuItem(
-          value: post.isLocked ? 'unlock' : 'lock',
-          child: _ActionLabel(
-            post.isLocked
-                ? Icons.lock_open_rounded
-                : Icons.lock_outline_rounded,
-            post.isLocked ? 'Unlock replies' : 'Lock replies',
-          ),
-        ),
-        if (!post.isSensitive)
-          const PopupMenuItem(
-            value: 'sensitive',
-            child: _ActionLabel(Icons.shield_outlined, 'Mark sensitive'),
-          ),
-        const PopupMenuItem(
-          value: 'move',
-          child: _ActionLabel(Icons.drive_file_move_outline, 'Move to Space'),
-        ),
-        PopupMenuItem(
-          value: post.isArchived ? 'unarchive' : 'archive',
-          child: _ActionLabel(
-            post.isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
-            post.isArchived ? 'Restore discussion' : 'Archive discussion',
-          ),
-        ),
-        const PopupMenuDivider(),
-        const PopupMenuItem(
-          value: 'remove',
-          child: _ActionLabel(
-            Icons.delete_outline_rounded,
-            'Remove vent',
-            danger: true,
-          ),
-        ),
-      ];
+    if (post.isPending)
+      const PopupMenuItem(
+        value: 'approve',
+        child: _ActionLabel(Icons.check_circle_outline, 'Approve'),
+      ),
+    if (post.isPending)
+      const PopupMenuItem(
+        value: 'reject',
+        child: _ActionLabel(Icons.cancel_outlined, 'Reject'),
+      ),
+    PopupMenuItem(
+      value: post.isPinned ? 'unpin' : 'pin',
+      child: _ActionLabel(
+        post.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+        post.isPinned ? 'Unpin' : 'Pin',
+      ),
+    ),
+    PopupMenuItem(
+      value: post.isFeatured ? 'unfeature' : 'feature',
+      child: _ActionLabel(
+        post.isFeatured ? Icons.star : Icons.star_outline_rounded,
+        post.isFeatured ? 'Remove feature' : 'Feature',
+      ),
+    ),
+    PopupMenuItem(
+      value: post.isHidden ? 'unhide' : 'hide',
+      child: _ActionLabel(
+        post.isHidden
+            ? Icons.visibility_outlined
+            : Icons.visibility_off_outlined,
+        post.isHidden ? 'Restore visibility' : 'Hide',
+      ),
+    ),
+    PopupMenuItem(
+      value: post.isLocked ? 'unlock' : 'lock',
+      child: _ActionLabel(
+        post.isLocked ? Icons.lock_open_rounded : Icons.lock_outline_rounded,
+        post.isLocked ? 'Unlock replies' : 'Lock replies',
+      ),
+    ),
+    if (!post.isSensitive)
+      const PopupMenuItem(
+        value: 'sensitive',
+        child: _ActionLabel(Icons.shield_outlined, 'Mark sensitive'),
+      ),
+    const PopupMenuItem(
+      value: 'move',
+      child: _ActionLabel(Icons.drive_file_move_outline, 'Move to Space'),
+    ),
+    PopupMenuItem(
+      value: post.isArchived ? 'unarchive' : 'archive',
+      child: _ActionLabel(
+        post.isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+        post.isArchived ? 'Restore discussion' : 'Archive discussion',
+      ),
+    ),
+    const PopupMenuDivider(),
+    const PopupMenuItem(
+      value: 'remove',
+      child: _ActionLabel(
+        Icons.delete_outline_rounded,
+        'Remove vent',
+        danger: true,
+      ),
+    ),
+  ];
 
   static List<(String, Color)> _statusLabels(TribeManagedPost post) => [
-        if (post.isPending) ('Pending approval', VentlyColors.warningAmber),
-        if (post.isPinned) ('Pinned', VentlyColors.berryMagenta),
-        if (post.isFeatured) ('Featured', VentlyColors.successGreen),
-        if (post.isHidden) ('Hidden', VentlyColors.dangerRed),
-        if (post.isLocked) ('Replies locked', VentlyColors.softMauve),
-        if (post.isSensitive) ('Sensitive', VentlyColors.warningAmber),
-        if (post.isArchived) ('Archived', VentlyColors.softMauve),
-      ];
+    if (post.isPending) ('Pending approval', VentlyColors.warningAmber),
+    if (post.isPinned) ('Pinned', VentlyColors.berryMagenta),
+    if (post.isFeatured) ('Featured', VentlyColors.successGreen),
+    if (post.isHidden) ('Hidden', VentlyColors.dangerRed),
+    if (post.isLocked) ('Replies locked', VentlyColors.softMauve),
+    if (post.isSensitive) ('Sensitive', VentlyColors.warningAmber),
+    if (post.isArchived) ('Archived', VentlyColors.softMauve),
+  ];
 
   static TextStyle _metricStyle(BuildContext context) => TextStyle(
-        color: context.inkMuted,
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-      );
+    color: context.inkMuted,
+    fontSize: 12,
+    fontWeight: FontWeight.w700,
+  );
 
   static String _age(DateTime date) {
     final elapsed = DateTime.now().difference(date);
@@ -733,22 +734,18 @@ class _ActionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-        children: [
-          Icon(
-            icon,
-            size: 19,
-            color: danger ? VentlyColors.dangerRed : null,
-          ),
-          const SizedBox(width: 10),
-          Text(
-            label,
-            style: TextStyle(
-              color: danger ? VentlyColors.dangerRed : null,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      );
+    children: [
+      Icon(icon, size: 19, color: danger ? VentlyColors.dangerRed : null),
+      const SizedBox(width: 10),
+      Text(
+        label,
+        style: TextStyle(
+          color: danger ? VentlyColors.dangerRed : null,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ],
+  );
 }
 
 class _StatusChip extends StatelessWidget {
@@ -759,63 +756,59 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: color == VentlyColors.softMauve ? context.inkMuted : color,
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.12),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: color == VentlyColors.softMauve ? context.inkMuted : color,
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.filter,
-    this.pinSelection = false,
-  });
+  const _EmptyState({required this.filter, this.pinSelection = false});
 
   final _ContentFilter filter;
   final bool pinSelection;
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.task_alt_rounded,
-                size: 48,
-                color: VentlyColors.successGreen,
-              ),
-              const SizedBox(height: 14),
-              Text(
-                pinSelection
-                    ? 'Every eligible vent is already pinned'
-                    : filter == _ContentFilter.all
-                        ? 'No Tribe vents yet'
-                        : 'Nothing in this queue',
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                pinSelection
-                    ? 'Unpin a vent from Content control to choose another.'
-                    : 'Pull to refresh whenever you need a fresh moderation view.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: context.inkMuted),
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.task_alt_rounded,
+            size: 48,
+            color: VentlyColors.successGreen,
           ),
-        ),
-      );
+          const SizedBox(height: 14),
+          Text(
+            pinSelection
+                ? 'Every eligible vent is already pinned'
+                : filter == _ContentFilter.all
+                ? 'No Tribe vents yet'
+                : 'Nothing in this queue',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            pinSelection
+                ? 'Unpin a vent from Content control to choose another.'
+                : 'Pull to refresh whenever you need a fresh moderation view.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.inkMuted),
+          ),
+        ],
+      ),
+    ),
+  );
 }

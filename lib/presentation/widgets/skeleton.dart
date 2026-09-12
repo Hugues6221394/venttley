@@ -27,13 +27,13 @@ class _Surface extends StatelessWidget {
 }
 
 Widget _bar(double h, double w) => Container(
-      height: h,
-      width: w,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-      ),
-    );
+  height: h,
+  width: w,
+  decoration: BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(8),
+  ),
+);
 
 class PostSkeletonList extends StatelessWidget {
   const PostSkeletonList({super.key, this.count = 4});
@@ -52,25 +52,27 @@ class PostSkeletonList extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
+                Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _bar(10, 120),
-                      const SizedBox(height: 6),
-                      _bar(8, 60),
-                    ],
-                  ),
-                ]),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _bar(10, 120),
+                        const SizedBox(height: 6),
+                        _bar(8, 60),
+                      ],
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 14),
                 _bar(10, double.infinity),
                 const SizedBox(height: 6),

@@ -59,25 +59,31 @@ class _GifPickerSheetState extends State<_GifPickerSheet> {
       final base = query.trim().isEmpty
           ? 'https://tenor.googleapis.com/v2/featured'
           : 'https://tenor.googleapis.com/v2/search';
-      final uri = Uri.parse(base).replace(queryParameters: {
-        'key': VentlyConfig.tenorApiKey,
-        if (query.trim().isNotEmpty) 'q': query.trim(),
-        'limit': '24',
-        'media_filter': 'tinygif,gif',
-        'contentfilter': 'high', // SFW only — this is a support space
-        'client_key': 'venttly',
-      });
+      final uri = Uri.parse(base).replace(
+        queryParameters: {
+          'key': VentlyConfig.tenorApiKey,
+          if (query.trim().isNotEmpty) 'q': query.trim(),
+          'limit': '24',
+          'media_filter': 'tinygif,gif',
+          'contentfilter': 'high', // SFW only — this is a support space
+          'client_key': 'venttly',
+        },
+      );
       final res = await http.get(uri);
       if (res.statusCode != 200) {
         throw Exception('Tenor ${res.statusCode}');
       }
       final data = jsonDecode(res.body) as Map<String, dynamic>;
-      final results = (data['results'] as List? ?? []).map((r) {
-        final media = (r as Map)['media_formats'] as Map?;
-        final full = (media?['gif'] as Map?)?['url'] as String?;
-        final preview = (media?['tinygif'] as Map?)?['url'] as String? ?? full;
-        return _Gif(preview: preview ?? '', full: full ?? preview ?? '');
-      }).where((g) => g.full.isNotEmpty).toList();
+      final results = (data['results'] as List? ?? [])
+          .map((r) {
+            final media = (r as Map)['media_formats'] as Map?;
+            final full = (media?['gif'] as Map?)?['url'] as String?;
+            final preview =
+                (media?['tinygif'] as Map?)?['url'] as String? ?? full;
+            return _Gif(preview: preview ?? '', full: full ?? preview ?? '');
+          })
+          .where((g) => g.full.isNotEmpty)
+          .toList();
       if (!mounted) return;
       setState(() {
         _results = results;
@@ -139,7 +145,8 @@ class _GifPickerSheetState extends State<_GifPickerSheet> {
     if (!VentlyConfig.gifSearchEnabled) {
       return const _Centered(
         icon: Icons.gif_box_outlined,
-        text: 'GIF search isn\'t configured yet.\n'
+        text:
+            'GIF search isn\'t configured yet.\n'
             'Add a Tenor API key (TENOR_API_KEY) to enable it.',
       );
     }
@@ -151,7 +158,9 @@ class _GifPickerSheetState extends State<_GifPickerSheet> {
     }
     if (_results.isEmpty) {
       return const _Centered(
-          icon: Icons.search_off_rounded, text: 'No GIFs found.');
+        icon: Icons.search_off_rounded,
+        text: 'No GIFs found.',
+      );
     }
     return GridView.builder(
       padding: const EdgeInsets.all(12),

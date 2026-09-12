@@ -123,8 +123,10 @@ class _TribeSpacesCard extends ConsumerWidget {
                 ),
                 TextButton(
                   onPressed: () => context.push('/tribe/${tribe.slug}/manage'),
-                  child: const Text('Manage',
-                      style: TextStyle(fontWeight: FontWeight.w900)),
+                  child: const Text(
+                    'Manage',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
                 ),
               ],
             ),
@@ -158,7 +160,8 @@ class _TribeSpacesCard extends ConsumerWidget {
                       _SpaceRow(
                         space: s,
                         onTap: () => context.push(
-                            '/tribe/${tribe.slug}/space/${s.spaceId}'),
+                          '/tribe/${tribe.slug}/space/${s.spaceId}',
+                        ),
                       ),
                   ],
                 );
@@ -208,8 +211,11 @@ class _SpaceRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               alignment: Alignment.center,
-              child: const Icon(Icons.tag_rounded,
-                  color: VentlyColors.berryMagenta, size: 18),
+              child: const Icon(
+                Icons.tag_rounded,
+                color: VentlyColors.berryMagenta,
+                size: 18,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -235,8 +241,10 @@ class _SpaceRow extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                color: VentlyColors.berryMagenta),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: VentlyColors.berryMagenta,
+            ),
           ],
         ),
       ),
@@ -256,8 +264,11 @@ class _Empty extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.diversity_3_rounded,
-                size: 48, color: VentlyColors.berryMagenta),
+            const Icon(
+              Icons.diversity_3_rounded,
+              size: 48,
+              color: VentlyColors.berryMagenta,
+            ),
             const SizedBox(height: 14),
             const Text(
               'No tribes yet',
@@ -269,7 +280,10 @@ class _Empty extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 18),
-            FilledButton(onPressed: onCreate, child: const Text('Create tribe')),
+            FilledButton(
+              onPressed: onCreate,
+              child: const Text('Create tribe'),
+            ),
           ],
         ),
       ),

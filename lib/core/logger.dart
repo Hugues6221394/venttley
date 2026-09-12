@@ -30,32 +30,28 @@ class Logger {
     Map<String, Object?> props = const {},
     Object? error,
     StackTrace? stack,
-  }) =>
-      _emit(LogLevel.debug, event, props, error: error, stack: stack);
+  }) => _emit(LogLevel.debug, event, props, error: error, stack: stack);
 
   void info(
     String event, {
     Map<String, Object?> props = const {},
     Object? error,
     StackTrace? stack,
-  }) =>
-      _emit(LogLevel.info, event, props, error: error, stack: stack);
+  }) => _emit(LogLevel.info, event, props, error: error, stack: stack);
 
   void warn(
     String event, {
     Map<String, Object?> props = const {},
     Object? error,
     StackTrace? stack,
-  }) =>
-      _emit(LogLevel.warn, event, props, error: error, stack: stack);
+  }) => _emit(LogLevel.warn, event, props, error: error, stack: stack);
 
   void error(
     String event, {
     Map<String, Object?> props = const {},
     Object? error,
     StackTrace? stack,
-  }) =>
-      _emit(LogLevel.error, event, props, error: error, stack: stack);
+  }) => _emit(LogLevel.error, event, props, error: error, stack: stack);
 
   void _emit(
     LogLevel level,

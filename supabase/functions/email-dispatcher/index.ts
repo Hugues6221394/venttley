@@ -40,6 +40,8 @@ interface EmailDelivery {
   template: string;
   variables: Record<string, unknown> | null;
   attempts: number;
+  /** Explicit recipient; null means resolve from the account. */
+  to_address: string | null;
 }
 
 function plainValue(
@@ -126,15 +128,39 @@ ${safeHttpsUrl(v.confirm_url)}
 
 If you didn't sign up, ignore this message.`,
   },
+  // Code first, link second. The reset is driven from inside the app, so a
+  // link would have to deep-link back into it — one more thing to break on a
+  // device where the app is not the default handler. The link branch stays for
+  // any caller still queueing reset_url.
   password_reset: {
-    subject: () => "Reset your Venttly password",
+    subject: () => "Your Venttly password reset code",
     html: (v) =>
-      `<p>Use this link within 1 hour to set a new password:</p>
+      v.code
+        ? `<p>Hi,</p>
+      <p>Enter this code in the app to set a new password:</p>
+      <p style="font-size:28px;font-weight:800;letter-spacing:6px;margin:16px 0;">${
+          htmlValue(v.code, "", 64)
+        }</p>
+      <p>It expires in 15 minutes. If you didn't ask to reset your password,
+      ignore this message — nothing has changed.</p>
+      <p>— The Venttly team</p>`
+        : `<p>Use this link within 1 hour to set a new password:</p>
       <p><a href="${
-        htmlValue(safeHttpsUrl(v.reset_url), "https://venttly.app", 2000)
-      }">Reset password</a></p>`,
+          htmlValue(safeHttpsUrl(v.reset_url), "https://venttly.app", 2000)
+        }">Reset password</a></p>`,
     text: (v) =>
-      `Use this link within 1 hour to set a new password:
+      v.code
+        ? `Hi,
+
+Enter this code in the app to set a new password:
+
+${plainValue(v.code, "", 64)}
+
+It expires in 15 minutes. If you didn't ask to reset your password, ignore this
+message — nothing has changed.
+
+— The Venttly team`
+        : `Use this link within 1 hour to set a new password:
 ${safeHttpsUrl(v.reset_url)}
 
 If you didn't request this, you can safely ignore it.`,
@@ -160,6 +186,31 @@ If you didn't request this, you can safely ignore it.`,
 - Location (approx): ${plainValue(v.location, "unknown", 100)}
 
 If this wasn't you, change your password immediately.`,
+  },
+  // Account changes rather than sign-ins: a password rotation, two-factor
+  // being switched off, a device the user just blocked. security_alert is
+  // shaped around "we saw a sign-in" and reads as a non-sequitur for these,
+  // so they get their own headline/detail pair supplied by the caller.
+  security_account_change: {
+    subject: (v) =>
+      `Venttly security: ${plainValue(v.headline, "an account change", 120)}`,
+    html: (v) =>
+      `<p>${htmlValue(v.headline, "Something changed on your account", 120)}</p>
+      <p>${
+        htmlValue(v.detail, "Open the app to review your recent activity.", 400)
+      }</p>
+      <p>When: ${htmlValue(v.when, "just now", 100)}</p>
+      <p>You can review every device and security event in the app under
+      Profile → Password &amp; security.</p>`,
+    text: (v) =>
+      `${plainValue(v.headline, "Something changed on your account", 120)}
+
+${plainValue(v.detail, "Open the app to review your recent activity.", 400)}
+
+When: ${plainValue(v.when, "just now", 100)}
+
+You can review every device and security event in the app under
+Profile > Password & security.`,
   },
   weekly_digest: {
     subject: () => "Your Venttly week — stories you might have missed",
@@ -237,15 +288,28 @@ async function deliverOne(
     await complete(supabase, delivery, "failed", "unknown_template");
     return "failed";
   }
-  const recipient = await supabase.auth.admin.getUserById(delivery.user_id);
-  if (recipient.error) {
-    await complete(supabase, delivery, "retry", "recipient_lookup_failed");
-    return "retried";
-  }
-  const to = recipient.data.user?.email;
-  if (!to || to.endsWith("@id.venttly.app")) {
-    await complete(supabase, delivery, "skipped", "no_real_email");
-    return "skipped";
+  // An explicit recipient wins and skips the auth lookup entirely. This is how
+  // a recovery address gets verified: the whole point is to mail somewhere the
+  // account does not yet own, so resolving from auth.users.email would defeat
+  // it. Only SECURITY DEFINER callers can set the column — clients have no
+  // INSERT privilege on email_outbox — and a CHECK constraint refuses the
+  // synthetic domain there.
+  let to = delivery.to_address ?? null;
+
+  if (!to) {
+    const recipient = await supabase.auth.admin.getUserById(delivery.user_id);
+    if (recipient.error) {
+      await complete(supabase, delivery, "retry", "recipient_lookup_failed");
+      return "retried";
+    }
+    to = recipient.data.user?.email ?? null;
+    if (!to || to.endsWith("@id.venttly.app")) {
+      // Every anonymous account has a synthetic address, so this is the normal
+      // outcome for them rather than an error — and it is why nothing queued
+      // without an explicit recipient has ever reached one.
+      await complete(supabase, delivery, "skipped", "no_real_email");
+      return "skipped";
+    }
   }
 
   const variables = delivery.variables ?? {};

@@ -39,7 +39,7 @@ class _TribeRulesEditorScreenState
           child: Padding(
             padding: EdgeInsets.all(28),
             child: Text(
-              'Only the current Plug can edit Tribe rules.',
+              'Only the Keeper can edit Tribe rules.',
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
@@ -54,20 +54,25 @@ class _TribeRulesEditorScreenState
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('Tribe rules',
-            style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Tribe rules',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         actions: [
           TextButton(
-            onPressed:
-                saving || loaded == null ? null : () => _save(tribe.tribeId),
+            onPressed: saving || loaded == null
+                ? null
+                : () => _save(tribe.tribeId),
             child: saving
                 ? const SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Save',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                : const Text(
+                    'Save',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
           ),
         ],
       ),
@@ -98,8 +103,10 @@ class _TribeRulesEditorScreenState
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.touch_app_outlined,
-                            color: VentlyColors.berryMagenta),
+                        const Icon(
+                          Icons.touch_app_outlined,
+                          color: VentlyColors.berryMagenta,
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
@@ -124,7 +131,8 @@ class _TribeRulesEditorScreenState
                       final rule = current[index];
                       return _RuleCard(
                         key: ValueKey(
-                            rule.ruleId ?? 'rule-$index-${rule.title}'),
+                          rule.ruleId ?? 'rule-$index-${rule.title}',
+                        ),
                         index: index,
                         rule: rule,
                         onToggle: (enabled) => setState(() {
@@ -175,52 +183,158 @@ class _TribeRulesEditorScreenState
     setState(() {
       rules = const [
         TribeRuleItem(
-            position: 0,
-            title: 'Be respectful',
-            description:
-                'Disagree without attacking, mocking, or shaming people.'),
+          position: 0,
+          title: 'Be respectful',
+          description:
+              'Disagree without attacking, mocking, or shaming people.',
+        ),
         TribeRuleItem(
-            position: 1,
-            title: 'No hate speech',
-            description:
-                'Hate, harassment, and dehumanizing language are not allowed.'),
+          position: 1,
+          title: 'No hate speech',
+          description:
+              'Hate, harassment, and dehumanizing language are not allowed.',
+        ),
         TribeRuleItem(
-            position: 2,
-            title: 'Protect personal information',
-            description:
-                'Do not share names, phone numbers, addresses, or private screenshots.'),
+          position: 2,
+          title: 'Protect personal information',
+          description:
+              'Do not share names, phone numbers, addresses, or private screenshots.',
+        ),
         TribeRuleItem(
-            position: 3,
-            title: 'Stay on topic',
-            description: 'Use the right Space and keep discussions relevant.'),
+          position: 3,
+          title: 'Stay on topic',
+          description: 'Use the right Space and keep discussions relevant.',
+        ),
       ];
     });
   }
 
   Future<void> _save(String tribeId) async {
+    // A note describes a change, so it is only asked for when there is one to
+    // describe. Writing rules for the first time is not a change to anybody —
+    // no member has read the old set, because there wasn't one.
+    final hadRules =
+        ref
+            .read(tribeManagementProvider(tribeId))
+            .valueOrNull
+            ?.rules
+            .isNotEmpty ??
+        false;
+    String? note;
+    if (hadRules) {
+      final answer = await showDialog<String?>(
+        context: context,
+        builder: (_) => const _ChangeNoteDialog(),
+      );
+      // Dismissing the dialog cancels the save rather than saving silently:
+      // a member is about to be told the rules changed, and the Keeper should
+      // be the one who decides that, not a stray tap outside a sheet.
+      if (answer == null) return;
+      note = answer.trim().isEmpty ? null : answer.trim();
+    }
+    if (!mounted) return;
     setState(() => saving = true);
     try {
-      await ref.read(repositoryProvider).replaceTribeRules(
-        tribeId,
-        [
-          for (var i = 0; i < (rules?.length ?? 0); i++)
-            rules![i].copyWith(position: i),
-        ],
-      );
+      await ref.read(repositoryProvider).replaceTribeRules(tribeId, [
+        for (var i = 0; i < (rules?.length ?? 0); i++)
+          rules![i].copyWith(position: i),
+      ], changeNote: note);
       ref.invalidate(tribeManagementProvider(tribeId));
       ref.invalidate(tribeBySlugProvider(widget.slug));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Rules saved and ready for members.')),
+        SnackBar(
+          content: Text(
+            hadRules
+                ? 'Rules published. Members who joined before today will be asked to read them.'
+                : 'Rules saved and ready for members.',
+          ),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save rules: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save rules: $error')));
     } finally {
       if (mounted) setState(() => saving = false);
     }
+  }
+}
+
+/// Asked once, when rules that members have already lived under are about to
+/// change. The note is what those members see beside the notice, so a Keeper
+/// can say "added a rule about screenshots" instead of leaving everyone to
+/// diff two lists themselves.
+class _ChangeNoteDialog extends StatefulWidget {
+  const _ChangeNoteDialog();
+
+  @override
+  State<_ChangeNoteDialog> createState() => _ChangeNoteDialogState();
+}
+
+class _ChangeNoteDialogState extends State<_ChangeNoteDialog> {
+  final _ctl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text(
+        'What changed?',
+        style: TextStyle(fontWeight: FontWeight.w900),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Members who joined before now will be asked to read the new '
+            'rules. A short note tells them what to look for.',
+            style: TextStyle(
+              color: context.ink.withOpacity(.7),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _ctl,
+            autofocus: true,
+            maxLength: 280,
+            maxLines: 3,
+            minLines: 1,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              hintText: 'Added a rule about sharing screenshots',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(''),
+          child: const Text('Skip'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_ctl.text),
+          child: const Text(
+            'Publish',
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -261,19 +375,23 @@ class _RuleCard extends StatelessWidget {
                     color: VentlyColors.berryMagenta.withOpacity(.10),
                     shape: BoxShape.circle,
                   ),
-                  child: Text('${index + 1}',
-                      style: const TextStyle(
-                        color: VentlyColors.berryMagenta,
-                        fontWeight: FontWeight.w900,
-                      )),
+                  child: Text(
+                    '${index + 1}',
+                    style: const TextStyle(
+                      color: VentlyColors.berryMagenta,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(rule.title,
-                          style: const TextStyle(fontWeight: FontWeight.w900)),
+                      Text(
+                        rule.title,
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
                       if (rule.description?.isNotEmpty == true)
                         Text(
                           rule.description!,
@@ -319,8 +437,9 @@ class _RuleDialog extends StatefulWidget {
 
 class _RuleDialogState extends State<_RuleDialog> {
   late final title = TextEditingController(text: widget.initial?.title);
-  late final description =
-      TextEditingController(text: widget.initial?.description);
+  late final description = TextEditingController(
+    text: widget.initial?.description,
+  );
 
   @override
   void dispose() {
@@ -355,21 +474,22 @@ class _RuleDialogState extends State<_RuleDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: title.text.trim().length < 2
               ? null
               : () => Navigator.pop(
-                    context,
-                    TribeRuleItem(
-                      ruleId: widget.initial?.ruleId,
-                      position: widget.position,
-                      title: title.text.trim(),
-                      description: description.text.trim(),
-                      isEnabled: widget.initial?.isEnabled ?? true,
-                    ),
+                  context,
+                  TribeRuleItem(
+                    ruleId: widget.initial?.ruleId,
+                    position: widget.position,
+                    title: title.text.trim(),
+                    description: description.text.trim(),
+                    isEnabled: widget.initial?.isEnabled ?? true,
                   ),
+                ),
           child: const Text('Save'),
         ),
       ],
@@ -390,11 +510,16 @@ class _EmptyRules extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.rule_rounded,
-                size: 48, color: VentlyColors.berryMagenta),
+            const Icon(
+              Icons.rule_rounded,
+              size: 48,
+              color: VentlyColors.berryMagenta,
+            ),
             const SizedBox(height: 12),
-            const Text('Set the tone for your Tribe',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const Text(
+              'Set the tone for your Tribe',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
             const SizedBox(height: 8),
             const Text(
               'Rules appear before joining and give moderators a shared standard.',

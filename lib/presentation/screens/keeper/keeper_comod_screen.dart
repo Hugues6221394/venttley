@@ -23,7 +23,7 @@ class KeeperComodScreen extends ConsumerWidget {
 
     return KeeperStudioScaffold(
       title: 'Co-mod permissions',
-      subtitle: 'Plug + moderator capability matrix',
+      subtitle: 'Keeper + moderator capability matrix',
       onRefresh: () async {
         if (tribeId != null) {
           ref.invalidate(keeperComodMatrixProvider(tribeId));
@@ -46,8 +46,10 @@ class KeeperComodScreen extends ConsumerWidget {
                   '/tribe/${tribe.slug}/manage/settings/members',
                 ),
                 icon: const Icon(Icons.person_add_alt_1, size: 18),
-                label: const Text('Promote members to mod',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                label: const Text(
+                  'Promote members to mod',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
               ),
             const SizedBox(height: 16),
             Text(
@@ -74,12 +76,13 @@ class KeeperComodScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   const _LegendRow(
-                      label: 'Plug',
-                      detail: 'Full control — promote, kick mods, transfer'),
+                    label: 'Keeper',
+                    detail: 'Full control — promote, kick mods, transfer',
+                  ),
                   const _LegendRow(
-                      label: 'Mod',
-                      detail:
-                          'Warn, review reports, pin, schedule, kick members'),
+                    label: 'Mod',
+                    detail: 'Warn, review reports, pin, schedule, kick members',
+                  ),
                 ],
               ),
             ),
@@ -122,7 +125,7 @@ class _ModCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        row.role == 'keeper' ? 'Plug' : 'Co-mod',
+                        row.role == 'keeper' ? 'Keeper' : 'Co-mod',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,

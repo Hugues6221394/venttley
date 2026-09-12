@@ -11,57 +11,50 @@ import 'package:flutter/material.dart';
 /// in the existing dataset breaks.
 
 enum AvatarSilhouette {
-  orb,      // Rounded square — the legacy shape, kept as default
-  blob,     // Organic rounded blob
-  leaf,     // Pointed-tip leaf
+  orb, // Rounded square — the legacy shape, kept as default
+  blob, // Organic rounded blob
+  leaf, // Pointed-tip leaf
   crescent, // Moon arc
-  diamond,  // Soft diamond
-  heart,    // Heart silhouette (anchors brand)
+  diamond, // Soft diamond
+  heart, // Heart silhouette (anchors brand)
 }
 
 enum AvatarPalette {
-  berry,    // brand pink-magenta
-  rose,     // soft rose
-  plum,     // deep purple
-  sky,      // calm cyan
-  teal,     // healing green
-  amber,    // warm gold
-  slate,    // muted neutrals
+  berry, // brand pink-magenta
+  rose, // soft rose
+  plum, // deep purple
+  sky, // calm cyan
+  teal, // healing green
+  amber, // warm gold
+  slate, // muted neutrals
   midnight, // deep indigo
 }
 
 enum AvatarHair {
   none,
-  wave,     // Soft top wave
-  spike,    // Three short spikes
-  bun,      // Top-knot circle
-  curl,     // Twin curls on the sides
+  wave, // Soft top wave
+  spike, // Three short spikes
+  bun, // Top-knot circle
+  curl, // Twin curls on the sides
 }
 
 enum AvatarAccessory {
   none,
-  glasses,  // Round eyeglass loops
-  mask,     // Half-mask across the upper half
-  bow,      // Small bow at the top
-  earring,  // Stud on the side
+  glasses, // Round eyeglass loops
+  mask, // Half-mask across the upper half
+  bow, // Small bow at the top
+  earring, // Stud on the side
 }
 
 enum AvatarAura {
   none,
-  glow,     // Soft outer glow
-  sparkle,  // 3-4 sparkle dots
-  pulse,    // Single concentric ring
-  shadow,   // Anchored bottom shadow
+  glow, // Soft outer glow
+  sparkle, // 3-4 sparkle dots
+  pulse, // Single concentric ring
+  shadow, // Anchored bottom shadow
 }
 
-enum AvatarOutfit {
-  none,
-  hoodie,
-  varsity,
-  jacket,
-  tee,
-  scarf,
-}
+enum AvatarOutfit { none, hoodie, varsity, jacket, tee, scarf }
 
 /// Immutable customisation snapshot.
 class AvatarDesign {
@@ -88,15 +81,14 @@ class AvatarDesign {
     AvatarAccessory? accessory,
     AvatarAura? aura,
     AvatarOutfit? outfit,
-  }) =>
-      AvatarDesign(
-        silhouette: silhouette ?? this.silhouette,
-        palette: palette ?? this.palette,
-        hair: hair ?? this.hair,
-        accessory: accessory ?? this.accessory,
-        aura: aura ?? this.aura,
-        outfit: outfit ?? this.outfit,
-      );
+  }) => AvatarDesign(
+    silhouette: silhouette ?? this.silhouette,
+    palette: palette ?? this.palette,
+    hair: hair ?? this.hair,
+    accessory: accessory ?? this.accessory,
+    aura: aura ?? this.aura,
+    outfit: outfit ?? this.outfit,
+  );
 
   /// Serialise to the v2 seed format the DB stores.
   String toSeed() =>
@@ -123,12 +115,18 @@ class AvatarDesign {
     }
 
     return AvatarDesign(
-      silhouette:
-          parse(AvatarSilhouette.values, 'silhouette', AvatarSilhouette.orb),
+      silhouette: parse(
+        AvatarSilhouette.values,
+        'silhouette',
+        AvatarSilhouette.orb,
+      ),
       palette: parse(AvatarPalette.values, 'palette', AvatarPalette.berry),
       hair: parse(AvatarHair.values, 'hair', AvatarHair.none),
-      accessory:
-          parse(AvatarAccessory.values, 'accessory', AvatarAccessory.none),
+      accessory: parse(
+        AvatarAccessory.values,
+        'accessory',
+        AvatarAccessory.none,
+      ),
       aura: parse(AvatarAura.values, 'aura', AvatarAura.none),
       outfit: parse(AvatarOutfit.values, 'outfit', AvatarOutfit.none),
     );
@@ -146,28 +144,52 @@ class AvatarColors {
     switch (p) {
       case AvatarPalette.berry:
         return const AvatarColors(
-            Color(0xFFE5A1B4), Color(0xFFD12E65), Color(0xFF4A0E17));
+          Color(0xFFE5A1B4),
+          Color(0xFFD12E65),
+          Color(0xFF4A0E17),
+        );
       case AvatarPalette.rose:
         return const AvatarColors(
-            Color(0xFFF4C5C8), Color(0xFFE07B89), Color(0xFF6B2E36));
+          Color(0xFFF4C5C8),
+          Color(0xFFE07B89),
+          Color(0xFF6B2E36),
+        );
       case AvatarPalette.plum:
         return const AvatarColors(
-            Color(0xFFC3A5D7), Color(0xFF7C3AED), Color(0xFF35145C));
+          Color(0xFFC3A5D7),
+          Color(0xFF7C3AED),
+          Color(0xFF35145C),
+        );
       case AvatarPalette.sky:
         return const AvatarColors(
-            Color(0xFFA8D8F0), Color(0xFF0EA5E9), Color(0xFF0E3A55));
+          Color(0xFFA8D8F0),
+          Color(0xFF0EA5E9),
+          Color(0xFF0E3A55),
+        );
       case AvatarPalette.teal:
         return const AvatarColors(
-            Color(0xFF8FD4C0), Color(0xFF10B981), Color(0xFF0F4035));
+          Color(0xFF8FD4C0),
+          Color(0xFF10B981),
+          Color(0xFF0F4035),
+        );
       case AvatarPalette.amber:
         return const AvatarColors(
-            Color(0xFFF7D399), Color(0xFFF59E0B), Color(0xFF5C3E08));
+          Color(0xFFF7D399),
+          Color(0xFFF59E0B),
+          Color(0xFF5C3E08),
+        );
       case AvatarPalette.slate:
         return const AvatarColors(
-            Color(0xFFCBD5E1), Color(0xFF475569), Color(0xFF1E293B));
+          Color(0xFFCBD5E1),
+          Color(0xFF475569),
+          Color(0xFF1E293B),
+        );
       case AvatarPalette.midnight:
         return const AvatarColors(
-            Color(0xFF8B9DD8), Color(0xFF3B4D9C), Color(0xFF111639));
+          Color(0xFF8B9DD8),
+          Color(0xFF3B4D9C),
+          Color(0xFF111639),
+        );
     }
   }
 }
@@ -175,65 +197,65 @@ class AvatarColors {
 /// Display label / icon hints used by the builder UI.
 extension AvatarSilhouetteUI on AvatarSilhouette {
   String get label => switch (this) {
-        AvatarSilhouette.orb => 'Orb',
-        AvatarSilhouette.blob => 'Blob',
-        AvatarSilhouette.leaf => 'Leaf',
-        AvatarSilhouette.crescent => 'Crescent',
-        AvatarSilhouette.diamond => 'Diamond',
-        AvatarSilhouette.heart => 'Heart',
-      };
+    AvatarSilhouette.orb => 'Orb',
+    AvatarSilhouette.blob => 'Blob',
+    AvatarSilhouette.leaf => 'Leaf',
+    AvatarSilhouette.crescent => 'Crescent',
+    AvatarSilhouette.diamond => 'Diamond',
+    AvatarSilhouette.heart => 'Heart',
+  };
 }
 
 extension AvatarPaletteUI on AvatarPalette {
   String get label => switch (this) {
-        AvatarPalette.berry => 'Berry',
-        AvatarPalette.rose => 'Rose',
-        AvatarPalette.plum => 'Plum',
-        AvatarPalette.sky => 'Sky',
-        AvatarPalette.teal => 'Teal',
-        AvatarPalette.amber => 'Amber',
-        AvatarPalette.slate => 'Slate',
-        AvatarPalette.midnight => 'Midnight',
-      };
+    AvatarPalette.berry => 'Berry',
+    AvatarPalette.rose => 'Rose',
+    AvatarPalette.plum => 'Plum',
+    AvatarPalette.sky => 'Sky',
+    AvatarPalette.teal => 'Teal',
+    AvatarPalette.amber => 'Amber',
+    AvatarPalette.slate => 'Slate',
+    AvatarPalette.midnight => 'Midnight',
+  };
 }
 
 extension AvatarHairUI on AvatarHair {
   String get label => switch (this) {
-        AvatarHair.none => 'Bare',
-        AvatarHair.wave => 'Wave',
-        AvatarHair.spike => 'Spikes',
-        AvatarHair.bun => 'Top knot',
-        AvatarHair.curl => 'Curls',
-      };
+    AvatarHair.none => 'Bare',
+    AvatarHair.wave => 'Wave',
+    AvatarHair.spike => 'Spikes',
+    AvatarHair.bun => 'Top knot',
+    AvatarHair.curl => 'Curls',
+  };
 }
 
 extension AvatarAccessoryUI on AvatarAccessory {
   String get label => switch (this) {
-        AvatarAccessory.none => 'None',
-        AvatarAccessory.glasses => 'Glasses',
-        AvatarAccessory.mask => 'Mask',
-        AvatarAccessory.bow => 'Bow',
-        AvatarAccessory.earring => 'Earring',
-      };
+    AvatarAccessory.none => 'None',
+    AvatarAccessory.glasses => 'Glasses',
+    AvatarAccessory.mask => 'Mask',
+    AvatarAccessory.bow => 'Bow',
+    AvatarAccessory.earring => 'Earring',
+  };
 }
 
 extension AvatarAuraUI on AvatarAura {
   String get label => switch (this) {
-        AvatarAura.none => 'None',
-        AvatarAura.glow => 'Glow',
-        AvatarAura.sparkle => 'Sparkle',
-        AvatarAura.pulse => 'Pulse',
-        AvatarAura.shadow => 'Shadow',
-      };
+    AvatarAura.none => 'None',
+    AvatarAura.glow => 'Glow',
+    AvatarAura.sparkle => 'Sparkle',
+    AvatarAura.pulse => 'Pulse',
+    AvatarAura.shadow => 'Shadow',
+  };
 }
 
 extension AvatarOutfitUI on AvatarOutfit {
   String get label => switch (this) {
-        AvatarOutfit.none => 'None',
-        AvatarOutfit.hoodie => 'Hoodie',
-        AvatarOutfit.varsity => 'Varsity',
-        AvatarOutfit.jacket => 'Jacket',
-        AvatarOutfit.tee => 'Tee',
-        AvatarOutfit.scarf => 'Scarf',
-      };
+    AvatarOutfit.none => 'None',
+    AvatarOutfit.hoodie => 'Hoodie',
+    AvatarOutfit.varsity => 'Varsity',
+    AvatarOutfit.jacket => 'Jacket',
+    AvatarOutfit.tee => 'Tee',
+    AvatarOutfit.scarf => 'Scarf',
+  };
 }

@@ -62,8 +62,11 @@ class _SensitiveMediaVeilState extends State<SensitiveMediaVeil> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.visibility_off_rounded,
-                          color: Colors.white, size: 26),
+                      const Icon(
+                        Icons.visibility_off_rounded,
+                        color: Colors.white,
+                        size: 26,
+                      ),
                       const SizedBox(height: 8),
                       Text(
                         widget.pending
@@ -77,9 +80,7 @@ class _SensitiveMediaVeilState extends State<SensitiveMediaVeil> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        widget.pending
-                            ? 'Tap to view anyway'
-                            : 'Tap to view',
+                        widget.pending ? 'Tap to view anyway' : 'Tap to view',
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.85),
                           fontWeight: FontWeight.w600,

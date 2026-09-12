@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/password_policy.dart';
 import '../../../core/providers.dart';
 import '../../../core/user_friendly_errors.dart';
 import '../../../data/repositories/vently_repository.dart';
@@ -26,6 +27,17 @@ class IdentityScreen extends ConsumerStatefulWidget {
 }
 
 class _IdentityScreenState extends ConsumerState<IdentityScreen> {
+  /// Fetched once when the screen opens. Empty until it arrives, and empty
+  /// forever if it cannot be fetched — the rest of the rules still apply, and
+  /// a wordlist that failed to load must never block somebody signing up.
+  Set<String> _weakBases = const {};
+
+  Future<void> _loadWeakBases() async {
+    final bases = await ref.read(repositoryProvider).weakPasswordBases();
+    if (!mounted) return;
+    setState(() => _weakBases = bases);
+  }
+
   DateTime? _birthDate;
   late final TextEditingController _username;
   final _password = TextEditingController();
@@ -40,6 +52,7 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
     super.initState();
     _username = TextEditingController(text: PseudonymGenerator.pseudonym());
     _avatarSeed = PseudonymGenerator.avatarSeed();
+    _loadWeakBases();
   }
 
   @override
@@ -90,8 +103,15 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       );
       return;
     }
-    if (_password.text.length < 8) {
-      setState(() => _error = 'Password must be at least 8 characters.');
+    // Checked before the network call so somebody is told what is wrong while
+    // they are still looking at the field, rather than after a round trip.
+    // The server enforces the same rules regardless.
+    final passwordProblem = PasswordPolicy.problem(
+      _password.text,
+      weakBases: _weakBases,
+    );
+    if (passwordProblem != null) {
+      setState(() => _error = passwordProblem);
       return;
     }
     if (_password.text != _passwordConfirm.text) {

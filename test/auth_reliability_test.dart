@@ -7,12 +7,23 @@ void main() {
     final recovery = File(
       'lib/presentation/screens/onboarding/recover_screen.dart',
     ).readAsStringSync();
+    final phone = File(
+      'lib/presentation/screens/onboarding/phone_signin_screen.dart',
+    ).readAsStringSync();
+    final challenge = File(
+      'lib/presentation/screens/onboarding/mfa_challenge_screen.dart',
+    ).readAsStringSync();
+    final router = File('lib/presentation/router/app_router.dart').readAsStringSync();
 
-    expect(recovery, contains('var verifying = false'));
-    expect(recovery, contains('onPressed: verifying'));
-    expect(recovery, contains("ref.read(sessionProvider) == null"));
-    expect(recovery, contains('your session could not be restored'));
-    expect(recovery, contains('ModalTextControllerScope('));
+    expect(recovery, contains("context.go('/onboarding/mfa')"));
+    expect(phone, contains("context.go('/onboarding/mfa')"));
+    expect(router, contains("path: '/onboarding/mfa'"));
+    expect(router, contains('pendingMfaFactorIdProvider'));
+    expect(challenge, contains('var verifying = false'));
+    expect(challenge, contains('onPressed: verifying'));
+    expect(challenge, contains("ref.read(sessionProvider) == null"));
+    expect(challenge, contains('your session could not be restored'));
+    expect(challenge, contains('ModalTextControllerScope('));
   });
 
   test('onboarding async work cannot update disposed screens', () {

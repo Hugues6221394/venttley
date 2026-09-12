@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/connection.dart';
 import '../../../core/providers.dart';
+import '../../../core/user_friendly_errors.dart';
 import '../../../data/services/draft_store.dart';
 import '../../../data/services/outbox.dart';
 import '../../../domain/entities/entities.dart';
@@ -251,7 +252,15 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
         _pendingGifUrl = null;
         _sending = false;
       });
-    } catch (_) {
+    } catch (error) {
+      if (UserFriendlyErrors.isPermanent(error)) {
+        if (!mounted) return;
+        setState(() => _sending = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(UserFriendlyErrors.message(error))),
+        );
+        return;
+      }
       if (_pendingImageBytes != null && stagedMedia == null) {
         if (!mounted) return;
         setState(() => _sending = false);
@@ -1362,7 +1371,10 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
     }
     if (s.contains('not_author')) return 'You can only edit your own comments.';
     if (s.contains('empty')) return 'Comment can\'t be empty.';
-    return 'Something went wrong. Try again.';
+    return UserFriendlyErrors.message(
+      e,
+      fallback: 'Something went wrong. Try again.',
+    );
   }
 
   void _openDeeperReplies(BuildContext context, ThreadedComment root) {

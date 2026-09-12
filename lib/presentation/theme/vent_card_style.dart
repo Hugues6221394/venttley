@@ -39,23 +39,23 @@ class VentCardStyle {
   }
 
   static String backgroundLabel(String? value) => switch (value) {
-        null => 'Default',
-        '#FFF7FA' => 'Blush',
-        '#FFE6EF' => 'Rose',
-        '#F1EAFF' => 'Lavender',
-        '#E7F6F1' => 'Mint',
-        '#FFF1D6' => 'Sunlight',
-        '#231820' => 'Midnight',
-        _ => 'Custom',
-      };
+    null => 'Default',
+    '#FFF7FA' => 'Blush',
+    '#FFE6EF' => 'Rose',
+    '#F1EAFF' => 'Lavender',
+    '#E7F6F1' => 'Mint',
+    '#FFF1D6' => 'Sunlight',
+    '#231820' => 'Midnight',
+    _ => 'Custom',
+  };
 
   static String textLabel(String? value) => switch (value) {
-        null => 'Auto',
-        '#21161B' => 'Ink',
-        '#FFFFFF' => 'White',
-        '#B91452' => 'Berry',
-        '#5A3FA3' => 'Violet',
-        '#176C61' => 'Teal',
-        _ => 'Custom',
-      };
+    null => 'Auto',
+    '#21161B' => 'Ink',
+    '#FFFFFF' => 'White',
+    '#B91452' => 'Berry',
+    '#5A3FA3' => 'Violet',
+    '#176C61' => 'Teal',
+    _ => 'Custom',
+  };
 }

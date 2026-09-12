@@ -60,11 +60,9 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
     setState(() => _loadingMore = true);
     try {
       final offset = first.length + _extraPosts.length;
-      final next = await ref.read(repositoryProvider).postsByKeeper(
-            plugId,
-            limit: _pageSize,
-            offset: offset,
-          );
+      final next = await ref
+          .read(repositoryProvider)
+          .postsByKeeper(plugId, limit: _pageSize, offset: offset);
       if (!mounted) return;
       final seen = {
         ...first.map((p) => p.postId),
@@ -97,13 +95,14 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(),
-        body: const Center(child: Text('Plug not found')),
+        body: const Center(child: Text('Keeper not found')),
       );
     }
 
     final me = ref.watch(sessionProvider);
     final isSelf = me?.userId == plug.plugId;
-    final tribes = ref.watch(plugTribesProvider(plug.plugId)).valueOrNull ??
+    final tribes =
+        ref.watch(plugTribesProvider(plug.plugId)).valueOrNull ??
         const <Tribe>[];
     final firstPosts =
         ref.watch(plugPostsProvider(plug.plugId)).valueOrNull ?? const <Post>[];
@@ -112,8 +111,7 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
     final prompts = allPrompts
         .where((p) => p.plugDisplayName == widget.displayName)
         .toList();
-    final totalMembers =
-        tribes.fold<int>(0, (sum, t) => sum + t.memberCount);
+    final totalMembers = tribes.fold<int>(0, (sum, t) => sum + t.memberCount);
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -140,7 +138,7 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () => context.pop(),
               ),
-              title: const Text('Plug'),
+              title: const Text('Keeper'),
             ),
             SliverToBoxAdapter(
               child: Container(
@@ -151,9 +149,7 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      context.isDark
-                          ? scheme.surface
-                          : VentlyColors.cardBlush,
+                      context.isDark ? scheme.surface : VentlyColors.cardBlush,
                       scheme.surface,
                     ],
                   ),
@@ -171,7 +167,9 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: scheme.primary,
                             borderRadius: BorderRadius.circular(12),
@@ -192,7 +190,8 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                     Text(
                       plug.displayName,
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
                             fontWeight: FontWeight.w900,
                             color: context.ink,
                           ),
@@ -215,8 +214,11 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.location_on_outlined,
-                                size: 14, color: scheme.primary),
+                            Icon(
+                              Icons.location_on_outlined,
+                              size: 14,
+                              color: scheme.primary,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               plug.locationLabel!,
@@ -260,8 +262,10 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                         width: double.infinity,
                         child: FilledButton.icon(
                           onPressed: () => context.push('/plug-dashboard'),
-                          icon: const Icon(Icons.dashboard_customize_rounded,
-                              size: 18),
+                          icon: const Icon(
+                            Icons.dashboard_customize_rounded,
+                            size: 18,
+                          ),
                           label: const Text(
                             'Open plug dashboard',
                             style: TextStyle(fontWeight: FontWeight.w900),
@@ -281,9 +285,9 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                   child: Text(
                     'Tribes they keep',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: context.ink,
-                        ),
+                      fontWeight: FontWeight.w900,
+                      color: context.ink,
+                    ),
                   ),
                 ),
               ),
@@ -312,9 +316,9 @@ class _PlugProfileScreenState extends ConsumerState<PlugProfileScreen> {
                 child: Text(
                   'Recent tribe activity',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        color: context.ink,
-                      ),
+                    fontWeight: FontWeight.w900,
+                    color: context.ink,
+                  ),
                 ),
               ),
             ),

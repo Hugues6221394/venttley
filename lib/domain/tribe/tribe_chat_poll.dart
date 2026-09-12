@@ -33,8 +33,7 @@ class TribeChatPoll {
   final bool isClosed;
   final bool anonymousVotes;
 
-  int get totalVotes =>
-      optionCounts.values.fold<int>(0, (sum, n) => sum + n);
+  int get totalVotes => optionCounts.values.fold<int>(0, (sum, n) => sum + n);
 
   bool get hasVoted => myVoteOptionId != null;
   bool get showResults => hasVoted || isClosed;
@@ -52,11 +51,12 @@ class TribeChatPoll {
     final rawOptions = meta['options'];
     final options = rawOptions is List
         ? rawOptions
-            .whereType<Map>()
-            .map((e) => TribeChatPollOption.fromJson(
-                  Map<String, dynamic>.from(e),
-                ))
-            .toList()
+              .whereType<Map>()
+              .map(
+                (e) =>
+                    TribeChatPollOption.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .toList()
         : const <TribeChatPollOption>[];
 
     return TribeChatPoll(
@@ -89,10 +89,7 @@ class TribeChatPoll {
 
 /// Keeper prompt card (`metadata.kind = question`).
 class TribeChatQuestion {
-  const TribeChatQuestion({
-    required this.prompt,
-    this.autoCheckin = false,
-  });
+  const TribeChatQuestion({required this.prompt, this.autoCheckin = false});
   final String prompt;
   final bool autoCheckin;
 
@@ -121,23 +118,23 @@ class TribeChatReaction {
   static const all = [same, proud, tea, heart];
 
   static String label(String key) => switch (key) {
-        same => 'Same',
-        proud => 'Proud',
-        tea => 'Tea',
-        heart => 'Heart',
-        _ => key,
-      };
+    same => 'Same',
+    proud => 'Proud',
+    tea => 'Tea',
+    heart => 'Heart',
+    _ => key,
+  };
 
   /// Maps the four legacy preset keys to their emoji. Any other value is
   /// already a raw emoji the user picked from their keyboard, so it renders
   /// as itself.
   static String emoji(String key) => switch (key) {
-        same => '🙌',
-        proud => '💪',
-        tea => '🍵',
-        heart => '💜',
-        _ => key,
-      };
+    same => '🙌',
+    proud => '💪',
+    tea => '🍵',
+    heart => '💜',
+    _ => key,
+  };
 
   /// True for the four built-in reaction keys; false for a raw keyboard emoji.
   static bool isPreset(String key) => all.contains(key);

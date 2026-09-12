@@ -26,10 +26,7 @@ abstract class AuthProvider {
     final existing = _instance;
     if (existing != null) return existing;
     if (VentlyConfig.isClerkEnabled) {
-      log.warn(
-        'auth.clerk_not_implemented',
-        props: {'fallback': 'supabase'},
-      );
+      log.warn('auth.clerk_not_implemented', props: {'fallback': 'supabase'});
     }
     _instance = _SupabaseAuthProvider(supabase);
     return _instance!;
@@ -52,10 +49,7 @@ abstract class AuthProvider {
     required DateTime birthDate,
   });
 
-  Future<AppUser> signIn({
-    required String username,
-    required String password,
-  });
+  Future<AppUser> signIn({required String username, required String password});
 
   Future<AppUser> signInEmail({
     required String email,
@@ -66,8 +60,8 @@ abstract class AuthProvider {
 }
 
 class AuthOutcome {
-  final AppUser? user;             // null when email verification pending
-  final String? recoveryPhrase;    // null on email-only flows
+  final AppUser? user; // null when email verification pending
+  final String? recoveryPhrase; // null on email-only flows
   final bool emailConfirmationPending;
   const AuthOutcome({
     this.user,
@@ -102,9 +96,10 @@ class _SupabaseAuthProvider implements AuthProvider {
     required DateTime birthDate,
   }) async {
     throw UnimplementedError(
-        'Use VentlyRepository.registerAccount — the recovery-phrase '
-        'pipeline lives there. This provider exposes the surface that '
-        'a Clerk implementation will replace.');
+      'Use VentlyRepository.registerAccount — the recovery-phrase '
+      'pipeline lives there. This provider exposes the surface that '
+      'a Clerk implementation will replace.',
+    );
   }
 
   @override
@@ -115,23 +110,20 @@ class _SupabaseAuthProvider implements AuthProvider {
     required String avatarSeed,
     required DateTime birthDate,
   }) async {
-    throw UnimplementedError(
-        'Use VentlyRepository.registerAccountWithEmail.');
+    throw UnimplementedError('Use VentlyRepository.registerAccountWithEmail.');
   }
 
   @override
   Future<AppUser> signIn({
     required String username,
     required String password,
-  }) =>
-      _live.signIn(username: username, password: password);
+  }) => _live.signIn(username: username, password: password);
 
   @override
   Future<AppUser> signInEmail({
     required String email,
     required String password,
-  }) =>
-      _live.signInWithEmail(email: email, password: password);
+  }) => _live.signInWithEmail(email: email, password: password);
 
   @override
   Future<void> signOut() => _live.logout();

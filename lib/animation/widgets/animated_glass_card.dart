@@ -39,8 +39,10 @@ class _AnimatedGlassCardState extends State<AnimatedGlassCard>
     vsync: this,
     duration: MotionTokens.entrance.duration,
   );
-  late final CurvedAnimation _curved =
-      CurvedAnimation(parent: _controller, curve: MotionTokens.entrance.curve);
+  late final CurvedAnimation _curved = CurvedAnimation(
+    parent: _controller,
+    curve: MotionTokens.entrance.curve,
+  );
 
   @override
   void initState() {
@@ -87,10 +89,7 @@ class _AnimatedGlassCardState extends State<AnimatedGlassCard>
           final t = _curved.value;
           return Transform.translate(
             offset: Offset(0, 12 * (1 - t)),
-            child: Transform.scale(
-              scale: 0.98 + 0.02 * t,
-              child: child,
-            ),
+            child: Transform.scale(scale: 0.98 + 0.02 * t, child: child),
           );
         },
       ),

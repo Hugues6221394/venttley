@@ -32,8 +32,8 @@ class DraftStore {
 
     // One-time migration from the former plaintext SharedPreferences store.
     for (final key in prefs.getKeys().where(
-          (key) => key.startsWith(_legacyPrefix) && !key.startsWith(_prefix),
-        )) {
+      (key) => key.startsWith(_legacyPrefix) && !key.startsWith(_prefix),
+    )) {
       final value = prefs.getString(key);
       if (value == null) continue;
       final scopedKey =

@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants.dart';
+import '../../core/image_magic_bytes.dart';
 import '../../core/image_metadata_scrubber.dart';
 import '../../core/logger.dart';
 import 'row_shape_guard.dart';
@@ -17,6 +18,7 @@ import '../../domain/keeper/keeper_mode.dart';
 import '../../domain/keeper/keeper_studio_v2.dart';
 import '../../domain/tribe/tribe_chat_hub.dart';
 import '../../domain/tribe/tribe_management.dart';
+import '../models/feed_page.dart';
 import 'identity_service.dart';
 
 /// Coerces JSONB `{text: "…"}` or plain strings into a nullable String.
@@ -73,13 +75,30 @@ class SupabaseBackend {
   }
 
   bool _geoPinged = false;
+  Future<void>? _geoInFlight;
 
-  Future<void> _pingGeoCapture() async {
-    try {
-      await _client.functions.invoke('geo-capture');
-    } catch (_) {
-      // Best-effort analytics signal — never surface or block on failure.
-    }
+  Future<void> _pingGeoCapture() => ensureCountryCaptured();
+
+  /// Resolve and store this session's coarse country, at most once.
+  ///
+  /// Awaitable, and safe to await from several places: the first caller starts
+  /// the request and everyone else joins it. Device registration needs this to
+  /// have finished, because register_device_session reads users.last_country —
+  /// so when this was fire-and-forget the very first sign-in on a new device,
+  /// the one the risk engine cares about most, always recorded a null country
+  /// and could never raise the new-country signal.
+  Future<void> ensureCountryCaptured() {
+    final inFlight = _geoInFlight;
+    if (inFlight != null) return inFlight;
+    final future = () async {
+      try {
+        await _client.functions.invoke('geo-capture');
+      } catch (_) {
+        // Best-effort signal — never surface or block on failure.
+      }
+    }();
+    _geoInFlight = future;
+    return future;
   }
 
   factory SupabaseBackend.of(SupabaseClient client) =>
@@ -114,12 +133,23 @@ class SupabaseBackend {
       '$_userBaseSelect, profile_photo_url, profile_banner_url, bio, pronouns';
 
   // ----- realtime fan-out used by the repository to stream the UI -----
-  final _postsController = StreamController<List<Post>>.broadcast();
+  final _feedInvalidationController = StreamController<void>.broadcast();
   final _roomsController = StreamController<List<ChatRoom>>.broadcast();
-  Stream<List<Post>> get postsStream => _postsController.stream;
+
+  /// Debounced signal that the caller's active feed may have new rows.
+  /// Listeners refetch with their own filters — never a global feed snapshot.
+  Stream<void> get feedInvalidationStream => _feedInvalidationController.stream;
   Stream<List<ChatRoom>> get roomsStream => _roomsController.stream;
 
-  RealtimeChannel? _postsChannel;
+  static const _feedRealtimeDebounce = Duration(seconds: 4);
+  static const _maxTribeFeedRealtimeFilters = 20;
+  static const _maxInboxRealtimeRoomFilters = 30;
+  Timer? _feedInvalidationTimer;
+  bool _feedInvalidationScheduled = false;
+
+  final Set<String> _inboxRoomIds = {};
+
+  RealtimeChannel? _feedChannel;
   RealtimeChannel? _roomsChannel;
   RealtimeChannel? _messagesNotifyChannel;
 
@@ -136,6 +166,9 @@ class SupabaseBackend {
     required String password,
     required String avatarSeed,
     required int birthYear,
+    // Optional so any caller that genuinely has only a year still compiles;
+    // the trigger treats a missing month exactly as it did before.
+    int? birthMonth,
     required String safetyTier,
     required String recoveryBlob,
     required String recoverySalt,
@@ -150,6 +183,11 @@ class SupabaseBackend {
           'pseudonym': username,
           'avatar_seed': avatarSeed,
           'birth_year': birthYear,
+          // Sent so the age gate never has to ask for it later. The signup
+          // picker already collected a full date of birth and this was the
+          // only piece being discarded — which is what made "we need one more
+          // detail about your age" reachable at all.
+          if (birthMonth != null) 'birth_month': birthMonth,
           'safety_tier': safetyTier,
         },
       );
@@ -206,6 +244,9 @@ class SupabaseBackend {
     required String username,
     required String avatarSeed,
     required int birthYear,
+    // Optional so any caller that genuinely has only a year still compiles;
+    // the trigger treats a missing month exactly as it did before.
+    int? birthMonth,
     required String safetyTier,
     required String recoveryBlob,
     required String recoverySalt,
@@ -213,12 +254,19 @@ class SupabaseBackend {
     final AuthResponse res;
     try {
       res = await _client.auth.signUp(
-        email: email,
+        // Normalised for the same reason sign-in is: an account created with a
+        // stray space is an account nobody can sign back into.
+        email: _normalizeEmail(email),
         password: password,
         data: {
           'pseudonym': username,
           'avatar_seed': avatarSeed,
           'birth_year': birthYear,
+          // Sent so the age gate never has to ask for it later. The signup
+          // picker already collected a full date of birth and this was the
+          // only piece being discarded — which is what made "we need one more
+          // detail about your age" reachable at all.
+          if (birthMonth != null) 'birth_month': birthMonth,
           'safety_tier': safetyTier,
         },
       );
@@ -268,13 +316,27 @@ class SupabaseBackend {
     return _me;
   }
 
+  /// The address as an identifier rather than as typed.
+  ///
+  /// GoTrue lowercases addresses itself but does not trim them, and a mobile
+  /// keyboard will happily hand us " you@example.com" after an autocomplete
+  /// tap. That signs up fine and then fails to sign in, with the only
+  /// available message being "invalid credentials" — someone locked out of
+  /// their own account by an invisible space. Normalising here covers every
+  /// caller, and matches what set_recovery_email already does server-side
+  /// (`lower(btrim(...))`) so the two cannot drift.
+  static String _normalizeEmail(String email) => email.trim().toLowerCase();
+
   /// Email-based sign-in for accounts created with [signUpWithEmail].
   Future<AppUser> signInWithEmail({
     required String email,
     required String password,
   }) async {
     try {
-      await _client.auth.signInWithPassword(email: email, password: password);
+      await _client.auth.signInWithPassword(
+        email: _normalizeEmail(email),
+        password: password,
+      );
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
       if (msg.contains('invalid') || msg.contains('credentials')) {
@@ -290,25 +352,43 @@ class SupabaseBackend {
     return user;
   }
 
-  /// Throws [MfaChallengeRequiredException] when the freshly-signed-in
-  /// session is AAL1 but the user has a verified TOTP factor.
-  Future<void> _maybeRequireMfa() async {
+  /// Factor id that still needs a TOTP code, or null when this session
+  /// is allowed to enter the app. Safe to call with only an AAL1 JWT.
+  Future<String?> pendingMfaFactorId() async {
     try {
       final factors = await _client.auth.mfa.listFactors();
       final verified = factors.totp
           .where((f) => f.status == FactorStatus.verified)
           .toList();
-      if (verified.isEmpty) return;
+      if (verified.isEmpty) return null;
       final aal = _client.auth.mfa.getAuthenticatorAssuranceLevel();
       if (aal.nextLevel == AuthenticatorAssuranceLevels.aal2 &&
           aal.currentLevel != AuthenticatorAssuranceLevels.aal2) {
-        throw MfaChallengeRequiredException(verified.first.id);
+        return verified.first.id;
       }
-    } on MfaChallengeRequiredException {
-      rethrow;
+      return null;
     } catch (_) {
       // Swallow listing errors — if we can't tell, let the user proceed
       // rather than locking them out of their account.
+      return null;
+    }
+  }
+
+  /// Throws [MfaChallengeRequiredException] when the freshly-signed-in
+  /// session is AAL1 but the user has a verified TOTP factor.
+  Future<void> _maybeRequireMfa() async {
+    final factorId = await pendingMfaFactorId();
+    if (factorId != null) throw MfaChallengeRequiredException(factorId);
+  }
+
+  /// Last time this account's password was rotated. Null means never
+  /// since the column landed — the checkup must not pretend otherwise.
+  Future<DateTime?> myPasswordChangedAt() async {
+    try {
+      final res = await _client.rpc('my_password_changed_at');
+      return _coerceDate(res);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -445,6 +525,7 @@ class SupabaseBackend {
     required String token,
   }) async {
     await _client.auth.verifyOTP(phone: phone, token: token, type: OtpType.sms);
+    await _maybeRequireMfa();
     final user = await restore();
     if (user == null) {
       throw StateError('Verified phone but no matching profile row');
@@ -547,10 +628,11 @@ class SupabaseBackend {
   }
 
   Future<void> logout() async {
-    await _postsChannel?.unsubscribe();
+    _feedInvalidationTimer?.cancel();
+    await _feedChannel?.unsubscribe();
     await _roomsChannel?.unsubscribe();
     await _messagesNotifyChannel?.unsubscribe();
-    _postsChannel = null;
+    _feedChannel = null;
     _roomsChannel = null;
     _messagesNotifyChannel = null;
     await _client.auth.signOut();
@@ -594,22 +676,136 @@ class SupabaseBackend {
     final email = _client.auth.currentUser?.email;
     if (email == null) throw StateError('You are not signed in.');
     await _client.auth.signInWithPassword(email: email, password: password);
+    await _maybeRequireMfa();
   }
 
   /// Attach (or change) a real recovery email on an account. Supabase emails
   /// a confirmation to the new address; the change finalises when the link is
   /// confirmed. Login-by-username keeps working either way.
-  Future<void> setRecoveryEmail(String email) async {
-    await _client.auth.updateUser(UserAttributes(email: email.trim()));
+  /// Nominate a recovery email. Returns it masked, as the server sees fit to
+  /// show it back.
+  ///
+  /// Deliberately NOT auth.updateUser(email:), which is what this used to be.
+  /// That replaces the account's login address — so adding a recovery email
+  /// silently changed what the person signs in with — and it failed anyway,
+  /// because Supabase confirms an email change to the OLD address too and the
+  /// old address is the synthetic @id.venttly.app that GoTrue rejects.
+  Future<String?> setRecoveryEmail(String email) async {
+    final masked = await _client.rpc(
+      'set_recovery_email',
+      params: {'p_email': email.trim()},
+    );
+    return masked as String?;
+  }
+
+  /// Confirm the 6-digit code. False means wrong or expired, not an error —
+  /// the server burns an attempt and the caller says so plainly.
+  Future<bool> confirmRecoveryEmail(String code) async {
+    final ok = await _client.rpc(
+      'confirm_recovery_email',
+      params: {'p_code': code.trim()},
+    );
+    return ok == true;
+  }
+
+  Future<void> clearRecoveryEmail() async {
+    await _client.rpc('clear_recovery_email');
+  }
+
+  /// Abandon a requested-but-unconfirmed address. Never touches the verified
+  /// one, so it is always the safe way out of a half-finished change.
+  Future<bool> cancelRecoveryEmailChange() async {
+    final ok = await _client.rpc('cancel_recovery_email_change');
+    return ok == true;
+  }
+
+  /// Ask for a reset code at the account's verified recovery address.
+  ///
+  /// [identifier] is either that address or the account's handle, because
+  /// somebody locked out will not reliably remember which we want.
+  ///
+  /// Returns nothing and throws for nothing that depends on the account. The
+  /// server answers identically whether the account exists, has no verified
+  /// address, or is rate limited — otherwise this becomes a way to test who
+  /// has a Venttly account, which is the one thing the app promises it is not.
+  /// So there is nothing here for the UI to branch on, and the screen says
+  /// "check your inbox" either way.
+  Future<void> requestPasswordReset(String identifier) async {
+    await _client.functions.invoke(
+      'password-reset',
+      body: {'action': 'request', 'identifier': identifier.trim()},
+    );
+  }
+
+  /// Set a new password using a code from [requestPasswordReset].
+  ///
+  /// Returns null on success, or a message to show. A wrong code, an expired
+  /// code and an exhausted one all come back the same way, on purpose.
+  Future<String?> confirmPasswordReset({
+    required String identifier,
+    required String code,
+    required String newPassword,
+  }) async {
+    final res = await _client.functions.invoke(
+      'password-reset',
+      body: {
+        'action': 'confirm',
+        'identifier': identifier.trim(),
+        'code': code.trim(),
+        'new_password': newPassword,
+      },
+    );
+
+    final data = res.data;
+    final body = data is Map ? Map<String, dynamic>.from(data) : const {};
+    if (body['ok'] == true) return null;
+
+    // The server sends a specific message only for a weak password, which is
+    // about what the person just typed and gives them something to act on.
+    final error = body['error'];
+    if (error == 'weak_password') {
+      return (body['message'] as String?) ?? 'Choose a stronger password.';
+    }
+    if (error == 'reset_failed') {
+      return 'That code was right, but we could not finish. Ask for a new '
+          'code and try once more.';
+    }
+    return 'That code was wrong or has expired. Ask for a new one.';
+  }
+
+  Future<String?> setRecoveryPhone(String phone) async {
+    final masked = await _client.rpc(
+      'set_recovery_phone',
+      params: {'p_phone': phone.trim()},
+    );
+    return masked as String?;
+  }
+
+  /// Marks the recovery phone verified, but only if Supabase Auth has already
+  /// confirmed that exact number on this account. Returns false until then —
+  /// which is the normal answer while no SMS provider is configured.
+  Future<bool> confirmRecoveryPhone() async {
+    final ok = await _client.rpc('confirm_recovery_phone');
+    return ok == true;
+  }
+
+  Future<void> clearRecoveryPhone() async {
+    await _client.rpc('clear_recovery_phone');
+  }
+
+  Future<RecoveryMethods> myRecoveryMethods() async {
+    final raw = await _client.rpc('my_recovery_methods');
+    return RecoveryMethods.fromJson(Map<String, dynamic>.from(raw as Map));
   }
 
   /// Global sign-out — revokes the refresh token on EVERY device, not just
   /// this one. Same local teardown as [logout].
   Future<void> signOutEverywhere() async {
-    await _postsChannel?.unsubscribe();
+    _feedInvalidationTimer?.cancel();
+    await _feedChannel?.unsubscribe();
     await _roomsChannel?.unsubscribe();
     await _messagesNotifyChannel?.unsubscribe();
-    _postsChannel = null;
+    _feedChannel = null;
     _roomsChannel = null;
     _messagesNotifyChannel = null;
     await _client.auth.signOut(scope: SignOutScope.global);
@@ -621,11 +817,23 @@ class SupabaseBackend {
 
   Future<void> _hydrateRealtime() async {
     await _refreshLikedAndSaved();
-    _subscribePostsRealtime();
+    _subscribeFeedRealtime();
     _subscribeRoomsRealtime();
-    _subscribeMessagesNotifyRealtime();
-    _emitPosts();
+    await _syncInboxRealtimeSubscriptions();
+    _scheduleFeedInvalidation(immediate: true);
     _emitRooms();
+  }
+
+  Future<void> _syncInboxRealtimeSubscriptions() async {
+    try {
+      final rooms = await inbox(tab: 'all');
+      _inboxRoomIds
+        ..clear()
+        ..addAll(rooms.map((r) => r.roomId));
+    } catch (_) {
+      // Inbox may be empty on a fresh account — still subscribe once rooms land.
+    }
+    _subscribeMessagesNotifyRealtime();
   }
 
   Future<void> _refreshLikedAndSaved() async {
@@ -656,19 +864,68 @@ class SupabaseBackend {
     _joinedTribes
       ..clear()
       ..addAll(memberships.map((r) => r['tribe_id'] as String));
+    _subscribeFeedRealtime();
   }
 
-  void _subscribePostsRealtime() {
-    _postsChannel?.unsubscribe();
-    _postsChannel = _client
-        .channel('public:posts')
+  /// Scoped feed realtime — never subscribe to the global posts WAL.
+  ///
+  /// At scale a single `public:posts` channel fans every insert/update to
+  /// every connected client and each event used to trigger a full feed refetch.
+  /// We only listen for (a) the caller's own posts and (b) inserts in tribes
+  /// they joined. Global discovery updates arrive on pull-to-refresh instead.
+  void _subscribeFeedRealtime() {
+    _feedChannel?.unsubscribe();
+    final uid = _uid;
+    if (uid == null) return;
+
+    var channel = _client.channel('feed:scoped:$uid');
+    channel = channel
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'posts',
-          callback: (_) => _emitPosts(),
-        )
-        .subscribe();
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'author_id',
+            value: uid,
+          ),
+          callback: (_) => _scheduleFeedInvalidation(),
+        );
+
+    for (final tribeId in _joinedTribes.take(_maxTribeFeedRealtimeFilters)) {
+      channel = channel.onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'posts',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'tribe_id',
+          value: tribeId,
+        ),
+        callback: (_) => _scheduleFeedInvalidation(),
+      );
+    }
+
+    _feedChannel = channel..subscribe();
+  }
+
+  void _scheduleFeedInvalidation({bool immediate = false}) {
+    if (_feedInvalidationController.isClosed) return;
+    if (immediate) {
+      _feedInvalidationTimer?.cancel();
+      _feedInvalidationScheduled = false;
+      _feedInvalidationController.add(null);
+      return;
+    }
+    if (_feedInvalidationScheduled) return;
+    _feedInvalidationScheduled = true;
+    _feedInvalidationTimer?.cancel();
+    _feedInvalidationTimer = Timer(_feedRealtimeDebounce, () {
+      _feedInvalidationScheduled = false;
+      if (!_feedInvalidationController.isClosed) {
+        _feedInvalidationController.add(null);
+      }
+    });
   }
 
   void _subscribeRoomsRealtime() {
@@ -684,29 +941,37 @@ class SupabaseBackend {
         .subscribe();
   }
 
-  /// New messages don't always touch chat_rooms — refresh inbox on INSERT
-  /// so unread counts + foreground notifications stay current.
+  /// Scoped inbox realtime — one INSERT listener per room the caller belongs to.
+  /// Avoids the global `chat_messages` WAL fan-out that crushed Free-tier latency.
   void _subscribeMessagesNotifyRealtime() {
     _messagesNotifyChannel?.unsubscribe();
-    _messagesNotifyChannel = _client
-        .channel('public:chat_messages:inbox-notify')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'chat_messages',
-          callback: (payload) {
-            _emitRooms();
-            // The client has now received this message — stamp the
-            // "delivered" tick for the sender (migration 0114). RLS
-            // already scopes events to rooms we belong to.
-            final roomId = payload.newRecord['room_id'] as String?;
-            final senderId = payload.newRecord['sender_id'] as String?;
-            if (roomId != null && senderId != null && senderId != _uid) {
-              unawaited(markRoomDelivered(roomId));
-            }
-          },
-        )
-        .subscribe();
+    final uid = _uid;
+    if (uid == null || _inboxRoomIds.isEmpty) return;
+
+    var channel = _client.channel('inbox:scoped:$uid');
+    for (final roomId in _inboxRoomIds.take(_maxInboxRealtimeRoomFilters)) {
+      channel = channel.onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'chat_messages',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'room_id',
+          value: roomId,
+        ),
+        callback: (payload) {
+          _emitRooms();
+          final senderId = payload.newRecord['sender_id'] as String?;
+          if (senderId != null && senderId != uid) {
+            unawaited(markRoomDelivered(roomId));
+          }
+          // If the open DM thread is watching, postgres_changes on that room
+          // already appends — this path is for inbox badges + background rooms.
+        },
+      );
+    }
+
+    _messagesNotifyChannel = channel..subscribe();
   }
 
   // ===================================================================
@@ -720,6 +985,30 @@ class SupabaseBackend {
     String sort = 'fresh', // fresh | hot | foryou
     int limit = 30,
     int offset = 0,
+    FeedCursor? cursor,
+  }) async {
+    final page = await feedPage(
+      category: category,
+      mood: mood,
+      tribeSlug: tribeSlug,
+      locationBucket: locationBucket,
+      sort: sort,
+      limit: limit,
+      offset: offset,
+      cursor: cursor,
+    );
+    return page.posts;
+  }
+
+  Future<FeedPage> feedPage({
+    String? category,
+    String? mood,
+    String? tribeSlug,
+    String? locationBucket,
+    String sort = 'fresh',
+    int limit = 30,
+    int offset = 0,
+    FeedCursor? cursor,
   }) async {
     // "For You" is a server-side blended ranking (migration 0015).
     // The personal_score already factors in local + tribe affinity, so
@@ -727,20 +1016,23 @@ class SupabaseBackend {
     // (those would just over-constrain the candidate pool).
     if (sort == 'foryou' && tribeSlug == null) {
       try {
+        final params = <String, dynamic>{
+          'p_limit': limit,
+          'p_category': category,
+          'p_mood': mood,
+        };
+        if (cursor != null) {
+          params['p_before_score'] = cursor.personalScore;
+          params['p_before_created_at'] = cursor.createdAt.toUtc().toIso8601String();
+          params['p_before_post_id'] = cursor.postId;
+        } else {
+          params['p_offset'] = offset;
+        }
         final rows =
-            await _client.rpc(
-                  'personal_feed',
-                  params: {
-                    'p_limit': limit,
-                    'p_offset': offset,
-                    'p_category': category,
-                    'p_mood': mood,
-                  },
-                )
-                as List<dynamic>;
+            await _client.rpc('personal_feed', params: params) as List<dynamic>;
         final cutoff = DateTime.now().subtract(const Duration(hours: 24));
-        final personalized = rows
-            .cast<Map<String, dynamic>>()
+        final raw = rows.cast<Map<String, dynamic>>();
+        final personalized = raw
             .map<Post>(_postFromRow)
             .where(
               (p) =>
@@ -748,10 +1040,15 @@ class SupabaseBackend {
             )
             .toList();
         if (personalized.isNotEmpty ||
+            cursor != null ||
             offset > 0 ||
             category != null ||
             mood != null) {
-          return _hydratePosts(personalized);
+          final hydrated = await _hydratePosts(personalized);
+          return FeedPage(
+            posts: hydrated,
+            nextCursor: _personalFeedCursor(raw, hydrated),
+          );
         }
       } on PostgrestException catch (error) {
         if (!_isMissingRpc(error, 'personal_feed')) rethrow;
@@ -759,7 +1056,7 @@ class SupabaseBackend {
 
       // Cold-start resilience: use the same RLS-protected database feed,
       // ranked globally, when a new account has no affinity signals yet.
-      return feed(
+      return feedPage(
         category: category,
         mood: mood,
         tribeSlug: tribeSlug,
@@ -767,6 +1064,7 @@ class SupabaseBackend {
         sort: 'hot',
         limit: limit,
         offset: offset,
+        cursor: cursor,
       );
     }
 
@@ -778,21 +1076,110 @@ class SupabaseBackend {
     if (locationBucket != null) {
       query = query.eq('location_bucket', locationBucket);
     }
+
+    if (cursor != null) {
+      final iso = cursor.createdAt.toUtc().toIso8601String();
+      if (sort == 'hot') {
+        final hotScore = cursor.hotScore ?? await _hotScoreForPost(cursor.postId);
+        if (hotScore != null) {
+          query = query.or(
+            'hot_score.lt.$hotScore,'
+            'and(hot_score.eq.$hotScore,created_at.lt.$iso),'
+            'and(hot_score.eq.$hotScore,and(created_at.eq.$iso,post_id.lt.${cursor.postId}))',
+          );
+        } else {
+          query = query.or(
+            'created_at.lt.$iso,'
+            'and(created_at.eq.$iso,post_id.lt.${cursor.postId})',
+          );
+        }
+      } else {
+        query = query.or(
+          'created_at.lt.$iso,'
+          'and(created_at.eq.$iso,post_id.lt.${cursor.postId})',
+        );
+      }
+    }
+
     final ordered = sort == 'hot'
-        ? query.order('hot_score', ascending: false)
-        : query.order('created_at', ascending: false);
-    final rows = await ordered.range(offset, offset + limit - 1);
+        ? query
+            .order('hot_score', ascending: false)
+            .order('created_at', ascending: false)
+            .order('post_id', ascending: false)
+        : query
+            .order('created_at', ascending: false)
+            .order('post_id', ascending: false);
+    final rows = cursor == null
+        ? await ordered.range(offset, offset + limit - 1)
+        : await ordered.limit(limit);
     // Whispers vanish from the feed after 24h. We filter client-side
     // because PostgREST's `or` filter doesn't cleanly express
     // "is_whisper = false OR created_at > now() - 24h" against a view.
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
-    final posts = rows
+    final raw = (rows as List).cast<Map<String, dynamic>>();
+    final posts = raw
         .map<Post>(_postFromRow)
         .where(
           (p) => (!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff),
         )
         .toList();
-    return _hydratePosts(posts);
+    final hydrated = await _hydratePosts(posts);
+    return FeedPage(
+      posts: hydrated,
+      nextCursor: _viewFeedCursor(raw, hydrated, sort: sort),
+    );
+  }
+
+  Map<String, dynamic>? _rowForPost(
+    List<Map<String, dynamic>> raw,
+    String postId,
+  ) {
+    for (final row in raw) {
+      if (row['post_id'] == postId) return row;
+    }
+    return null;
+  }
+
+  FeedCursor? _personalFeedCursor(
+    List<Map<String, dynamic>> raw,
+    List<Post> hydrated,
+  ) {
+    if (hydrated.isEmpty) return null;
+    final lastPost = hydrated.last;
+    final rawRow = _rowForPost(raw, lastPost.postId);
+    final score = (rawRow?['personal_score'] as num?)?.toDouble();
+    if (score == null) return null;
+    return FeedCursor(
+      createdAt: lastPost.createdAt,
+      postId: lastPost.postId,
+      personalScore: score,
+    );
+  }
+
+  FeedCursor? _viewFeedCursor(
+    List<Map<String, dynamic>> raw,
+    List<Post> hydrated, {
+    required String sort,
+  }) {
+    if (hydrated.isEmpty) return null;
+    final lastPost = hydrated.last;
+    final rawRow = _rowForPost(raw, lastPost.postId);
+    return FeedCursor(
+      createdAt: lastPost.createdAt,
+      postId: lastPost.postId,
+      hotScore: sort == 'hot'
+          ? (rawRow?['hot_score'] as num?)?.toDouble()
+          : null,
+    );
+  }
+
+  Future<double?> _hotScoreForPost(String postId) async {
+    final row = await _client
+        .from('feed_hot')
+        .select('hot_score')
+        .eq('post_id', postId)
+        .maybeSingle();
+    return (row?['hot_score'] as num?)?.toDouble();
   }
 
   Future<List<Post>> friendStories({int limit = 24}) async {
@@ -992,7 +1379,7 @@ class SupabaseBackend {
         mediaStatus: hasImage ? 'pending' : 'clean',
       );
     }
-    unawaited(_emitPosts());
+    _scheduleFeedInvalidation(immediate: true);
     return post;
   }
 
@@ -1053,6 +1440,14 @@ class SupabaseBackend {
     return scrubbed.bytes;
   }
 
+  /// Image uploads only. Filename and Content-Type are claims; the first
+  /// bytes have to actually be a JPEG, PNG, GIF, WebP or HEIC.
+  Uint8List _imageUploadBytes(List<int> bytes) {
+    final input = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+    assertSupportedImage(input);
+    return _scrubbedUploadBytes(input);
+  }
+
   Future<({String path, String url})> uploadPostImage({
     required List<int> bytes,
     required String extension,
@@ -1070,7 +1465,7 @@ class SupabaseBackend {
         .from('post-media')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('post-media').getPublicUrl(path);
@@ -1111,10 +1506,37 @@ class SupabaseBackend {
 
   /// RLS-aware category totals. Unlike a feed page, this RPC aggregates every
   /// post visible to the caller so Home counts match category results.
+  /// Prefers the personalised ordering, falling back to the global aggregate
+  /// when the RPC is not deployed. A trending rail that 500s is worse than one
+  /// that is merely impersonal.
+  Future<List<dynamic>> _trendingTopicRows(int limit) async {
+    try {
+      return await _client.rpc(
+            'trending_topics_for_me',
+            params: {'p_limit': limit},
+          )
+          as List<dynamic>;
+    } on PostgrestException catch (error) {
+      if (!_isMissingRpc(error, 'trending_topics_for_me')) rethrow;
+      return await _client.rpc(
+            'trending_topic_stats',
+            params: {'p_limit': limit},
+          )
+          as List<dynamic>;
+    }
+  }
+
+  /// Trending categories, ordered for this person.
+  ///
+  /// trending_topic_stats is a pure global aggregate with no auth.uid() in it,
+  /// so it gave every account the same order: whoever posts most overall wins
+  /// for everyone. trending_topics_for_me blends that global trend 55/45
+  /// against what you actually engage with, both log-normalised, and returns
+  /// the same row shape — post_count and trend_score are still the true
+  /// app-wide figures, so nothing displayed becomes a lie. Only the order is
+  /// personal.
   Future<List<TrendingTopic>> trendingTopicStats({int limit = 8}) async {
-    final rows =
-        await _client.rpc('trending_topic_stats', params: {'p_limit': limit})
-            as List<dynamic>;
+    final rows = await _trendingTopicRows(limit);
     return rows
         .map((row) {
           final data = (row as Map).cast<String, dynamic>();
@@ -1208,6 +1630,65 @@ class SupabaseBackend {
       params: {'p_post_id': postId},
     );
     return (res as bool?) ?? false;
+  }
+
+  /// Who viewed a story. Author only — enforced server-side.
+  ///
+  /// story_views has held (post_id, viewer_id, viewed_at) since 0038, so this
+  /// data always existed; nothing ever asked for it. RLS on that table lets a
+  /// person read only their own row, so the list can only come through the
+  /// SECURITY DEFINER RPC.
+  Future<List<StoryViewerUser>> storyViewers(String postId) async {
+    final List<dynamic> rows;
+    try {
+      rows =
+          await _client.rpc(
+                'story_viewers_for_owner',
+                params: {'p_post_id': postId},
+              )
+              as List<dynamic>;
+    } on PostgrestException catch (error) {
+      // An app newer than its database must not take the whole activity sheet
+      // down with it. Returning empty means the sheet still opens and still
+      // shows the reaction count; the viewer list simply is not there yet.
+      // This exact mismatch — client expecting something the server has not
+      // got — is what produced several of today's silent blank sections.
+      if (!_isMissingRpc(error, 'story_viewers_for_owner')) rethrow;
+      return const [];
+    }
+    return rows
+        .map((raw) {
+          final row = (raw as Map).cast<String, dynamic>();
+          return StoryViewerUser(
+            userId: row['user_id'] as String,
+            pseudonym: (row['pseudonym'] as String?) ?? 'Someone',
+            avatarSeed: (row['avatar_seed'] as String?) ?? 'default-orb',
+            profilePhotoUrl: row['profile_photo_url'] as String?,
+            isVerified: (row['is_verified'] as bool?) ?? false,
+            viewedAt: DateTime.parse(row['viewed_at'] as String),
+            reactionType: row['reaction_type'] as String?,
+          );
+        })
+        .toList(growable: false);
+  }
+
+  /// The newest story by [userId] the caller may watch, or null.
+  ///
+  /// Lets a profile screen offer the story alongside the profile photo without
+  /// fetching the whole friend rail to find out whether there is one.
+  Future<String?> activeStoryForUser(String userId) async {
+    try {
+      final res = await _client.rpc(
+        'active_story_for_user',
+        params: {'p_user_id': userId},
+      );
+      return res as String?;
+    } on PostgrestException catch (error) {
+      // A profile must still open on an older database. No story offered is
+      // the correct degradation; a failed profile is not.
+      if (!_isMissingRpc(error, 'active_story_for_user')) rethrow;
+      return null;
+    }
   }
 
   Future<bool> storyRepliesEnabled() async {
@@ -1713,33 +2194,58 @@ class SupabaseBackend {
   /// thread on every event so reads include the joined sender row.
   Stream<List<TribeMessage>> watchTribeMessages(String tribeId) {
     final controller = StreamController<List<TribeMessage>>();
-    Future<void> emit() async {
-      try {
-        controller.add(await tribeMessages(tribeId));
-      } catch (_) {}
-    }
 
-    _tribeMessageRefreshers[tribeId] = emit;
+    Future<void> reload() => _reloadTribe(tribeId, controller);
 
-    final channel = _client.channel('tribe_chat_$tribeId')
-      ..onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'tribe_messages',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'tribe_id',
-          value: tribeId,
-        ),
-        callback: (_) => emit(),
-      )
-      ..subscribe((_, __) {});
-    emit();
+    _tribeMessageRefreshers[tribeId] = reload;
+    _tribePublishers[tribeId] = (list) {
+      if (!controller.isClosed) controller.add(list);
+    };
 
-    controller.onCancel = () async {
+    final channel = _client
+        .channel('tribe_chat_$tribeId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'tribe_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'tribe_id',
+            value: tribeId,
+          ),
+          callback: (payload) =>
+              _appendTribeFromRealtime(tribeId, controller, payload.newRecord),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'tribe_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'tribe_id',
+            value: tribeId,
+          ),
+          callback: (_) => reload(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'tribe_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'tribe_id',
+            value: tribeId,
+          ),
+          callback: (_) => reload(),
+        )
+        .subscribe();
+
+    controller.onListen = reload;
+    controller.onCancel = () {
       _tribeMessageRefreshers.remove(tribeId);
-      await channel.unsubscribe();
-      await controller.close();
+      _tribePublishers.remove(tribeId);
+      _tribeSnapshots.remove(tribeId);
+      channel.unsubscribe();
     };
     return controller.stream;
   }
@@ -1773,7 +2279,18 @@ class SupabaseBackend {
         'p_metadata': metadata,
       },
     );
-    return res as String;
+    final messageId = res as String;
+    try {
+      final row = await _client
+          .from('tribe_messages_feed')
+          .select()
+          .eq('message_id', messageId)
+          .single();
+      _injectTribeMessage(tribeId, _tribeMessageFromRow(row));
+    } catch (_) {
+      unawaited(refreshTribeMessages(tribeId));
+    }
+    return messageId;
   }
 
   Future<void> voteTribeChatPoll({
@@ -1820,7 +2337,7 @@ class SupabaseBackend {
         .from('tribe-chat-media')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('tribe-chat-media').getPublicUrl(path);
@@ -2200,7 +2717,11 @@ class SupabaseBackend {
       likesCount: (r['likes_count'] as int?) ?? 0,
       commentsCount: (r['comments_count'] as int?) ?? 0,
       crisisLevel: r['crisis_level'] as String?,
-      mediaStatus: (r['media_status'] as String?) ?? 'clean',
+      // 'pending' when absent, never 'clean'. A row that does not carry
+      // media_status must veil, because the alternative is publishing
+      // unscanned media — and PostgREST omits a column it was not asked
+      // for, so "absent" and "safe" are indistinguishable here.
+      mediaStatus: (r['media_status'] as String?) ?? 'pending',
       // Music bed. Read defensively: these columns and the joined track are
       // absent until 20260816130000 is applied, and a whisper must render
       // without them.
@@ -2595,7 +3116,9 @@ class SupabaseBackend {
         .from('whispers-media')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          contentType.startsWith('image/')
+              ? _imageUploadBytes(bytes)
+              : _scrubbedUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('whispers-media').getPublicUrl(path);
@@ -2749,14 +3272,49 @@ class SupabaseBackend {
         .replaceAll('.', '')
         .toLowerCase()
         .replaceAll(RegExp('[^a-z0-9]'), '');
+    // Under the uploader's own uid, not at tribes/<id>/….
+    //
+    // The tribes/ prefix relies on the "post media tribe manager insert"
+    // policy from 0067, which kept returning 403 "new row violates row-level
+    // security policy" even after that migration was re-applied — so every
+    // Tribe created with pictures got "its images could not be saved yet" and
+    // no picture. Reproduced twice, before and after re-applying the policy.
+    //
+    // The uid-prefixed path is covered by the bucket's original 0038 policy,
+    // which is demonstrably working: post images and story images go through
+    // it constantly, including one uploaded minutes before this was changed.
+    // Using the path that provably works beats continuing to debug a policy
+    // whose failing clause I could not isolate from outside the database.
+    //
+    // The tribe id stays in the path so an object is still traceable to its
+    // Tribe, and updateTribeConfiguration records the resulting URL either way.
     final path =
-        'tribes/$tribeId/${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
+        '$uid/tribes/$tribeId/${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
     await _client.storage
         .from('post-media')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
-          fileOptions: FileOptions(contentType: contentType, upsert: true),
+          _imageUploadBytes(bytes),
+          // upsert: false, and that is the actual fix.
+          //
+          // This was upsert: true, which makes the storage client issue an
+          // upsert rather than a plain insert — and an upsert needs UPDATE
+          // permission on storage.objects. The post-media bucket has no UPDATE
+          // policy at all: 0038 defines "post media owner insert",
+          // "post media owner delete" and "post media public read", and
+          // nothing else. So every tribe image upload came back
+          // "403 new row violates row-level security policy" and every Tribe
+          // created with pictures got "its images could not be saved yet".
+          //
+          // It also explains why post and story images were always fine:
+          // uploadPostImage uses upsert: false and therefore only ever needs
+          // the INSERT policy, which exists.
+          //
+          // Nothing is lost by dropping it. The path above contains a fresh
+          // Uuid().v4() on every call, so there is never an existing object at
+          // that key to overwrite — the upsert could not have been doing
+          // anything except requiring a privilege the bucket does not grant.
+          fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('post-media').getPublicUrl(path);
     return (path: path, url: url);
@@ -3116,8 +3674,28 @@ class SupabaseBackend {
       displayName = row?['display_name'] as String?;
       bio = row?['bio'] as String?;
       pronouns = row?['pronouns'] as String?;
-    } catch (_) {
-      // RLS or transient — leave at defaults rather than failing the open.
+    } catch (e) {
+      // Was `catch (_) { }`.
+      //
+      // This swallowed a 42501 on every single profile open for months.
+      // public.users has a blanket REVOKE SELECT with individual columns
+      // re-granted since, connections_count was never granted, and Postgres
+      // refuses the whole statement when one column is denied — so bio,
+      // pronouns and display_name were nulled by a permission error on a
+      // counter, silently. Somebody's biography saved fine and was invisible
+      // to everyone, with nothing anywhere to explain it.
+      //
+      // Still non-fatal: a profile that opens without its bio beats one that
+      // does not open. But never again unlogged, and the field names are in
+      // the message so the next missing grant is a one-line diagnosis.
+      log.warn(
+        'profile.detail_read_failed',
+        props: {
+          'target': otherUserId,
+          'fields': 'connections_count,display_name,bio,pronouns',
+        },
+        error: e,
+      );
     }
     // Banner stats: total posts (vents + whispers) + total hugs received.
     int postsTotal = 0;
@@ -3424,7 +4002,7 @@ class SupabaseBackend {
     } else {
       _myReactions[postId] = result as String;
     }
-    _emitPosts();
+    _scheduleFeedInvalidation();
     return result as String?;
   }
 
@@ -3445,7 +4023,7 @@ class SupabaseBackend {
       });
       _savedPosts.add(postId);
     }
-    _emitPosts();
+    _scheduleFeedInvalidation();
   }
 
   Future<void> reportPost({
@@ -3602,7 +4180,7 @@ class SupabaseBackend {
         .from('profile-photos')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('profile-photos').getPublicUrl(path);
@@ -3761,7 +4339,7 @@ class SupabaseBackend {
         .from('profile-photos')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     final url = _client.storage.from('profile-photos').getPublicUrl(path);
@@ -4351,18 +4929,80 @@ class SupabaseBackend {
 
   Future<TribeManagementOverview> replaceTribeRules(
     String tribeId,
-    List<TribeRuleItem> rules,
-  ) async {
+    List<TribeRuleItem> rules, {
+    String? changeNote,
+  }) async {
     final raw = await _client.rpc(
-      'replace_tribe_rules',
+      'publish_tribe_rules',
       params: {
         'p_tribe_id': tribeId,
         'p_rules': [for (final rule in rules) rule.toJson()],
+        'p_change_note': changeNote?.trim().isEmpty == true
+            ? null
+            : changeNote?.trim(),
       },
     );
     return TribeManagementOverview.fromJson(
       Map<String, dynamic>.from(raw as Map),
     );
+  }
+
+  /// The weak-password wordlist. Readable before sign-in, because that is
+  /// exactly when it is needed.
+  Future<Set<String>> weakPasswordBases() async {
+    final rows = await _client.from('weak_password_bases').select('base');
+    return {for (final row in (rows as List)) (row['base'] as String?) ?? ''}
+      ..removeWhere((b) => b.isEmpty);
+  }
+
+  Future<List<String>> myTribePermissions(String tribeId) async {
+    final raw = await _client.rpc(
+      'my_tribe_permissions',
+      params: {'p_tribe_id': tribeId},
+    );
+    return [for (final key in (raw as List? ?? const [])) key as String];
+  }
+
+  Future<TribePermissionGrants> tribePermissionGrants(String tribeId) async {
+    final raw = await _client.rpc(
+      'tribe_permission_grants',
+      params: {'p_tribe_id': tribeId},
+    );
+    return TribePermissionGrants.fromJson(
+      Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<List<String>> setTribeMemberPermissions(
+    String tribeId,
+    String userId,
+    List<String> permissions,
+  ) async {
+    final raw = await _client.rpc(
+      'set_tribe_member_permissions',
+      params: {
+        'p_tribe_id': tribeId,
+        'p_user_id': userId,
+        'p_permissions': permissions,
+      },
+    );
+    return [for (final key in (raw as List? ?? const [])) key as String];
+  }
+
+  Future<TribeRulesStatus> myTribeRulesStatus(String tribeId) async {
+    final raw = await _client.rpc(
+      'my_tribe_rules_status',
+      params: {'p_tribe_id': tribeId},
+    );
+    return TribeRulesStatus.fromJson(Map<String, dynamic>.from(raw as Map));
+  }
+
+  Future<int> acknowledgeTribeRules(String tribeId, int version) async {
+    final raw = await _client.rpc(
+      'acknowledge_tribe_rules',
+      params: {'p_tribe_id': tribeId, 'p_version': version},
+    );
+    return _coerceInt(raw) ?? version;
   }
 
   Future<List<TribeJoinRequest>> tribeJoinRequests(String tribeId) async {
@@ -4474,6 +5114,24 @@ class SupabaseBackend {
     return TribeManagementOverview.fromJson(
       Map<String, dynamic>.from(raw as Map),
     );
+  }
+
+  /// Delete a tribe outright, with no 30-day window.
+  ///
+  /// Separate from [setTribeLifecycle] because it is a different act: that one
+  /// schedules and is reversible with 'cancel_delete', this one is not. The
+  /// server requires the caller to be the keeper and to have typed the tribe's
+  /// name; the repository re-authenticates first, as it does for scheduling.
+  Future<int> deleteTribeNow({
+    required String tribeId,
+    required String confirmedName,
+  }) async {
+    final raw = await _client.rpc(
+      'delete_tribe_now',
+      params: {'p_tribe_id': tribeId, 'p_confirm_name': confirmedName},
+    );
+    final body = raw is Map ? Map<String, dynamic>.from(raw) : const {};
+    return (body['posts_affected'] as num?)?.toInt() ?? 0;
   }
 
   Future<List<TribeAuditEvent>> tribeAuditLog(
@@ -4845,7 +5503,7 @@ class SupabaseBackend {
     final me = _me;
     final tree = await comments(postId);
     final created = _findInTree(tree, id);
-    _emitPosts();
+    _scheduleFeedInvalidation();
     return created ??
         ThreadedComment(
           commentId: id,
@@ -4919,13 +5577,97 @@ class SupabaseBackend {
   bool joinedTribe(String tribeId) => _joinedTribes.contains(tribeId);
 
   Future<List<Tribe>> tribes({String? category, String? search}) async {
-    var q = _client.from('tribe_directory').select();
+    // Only living tribes are discoverable.
+    //
+    // A tribe scheduled for deletion, paused, or archived kept appearing in
+    // search results exactly as before — the view did not expose
+    // lifecycle_status, so nothing could filter on it. Someone searched for a
+    // tribe they had already scheduled for deletion and found it sitting there.
+    //
+    // This filters discovery only. tribeBySlug and tribesByKeeper deliberately
+    // do not, because a keeper has to be able to open a paused or
+    // pending-deletion tribe to restore it.
+    var q = _client
+        .from('tribe_directory')
+        .select()
+        .eq('lifecycle_status', 'active');
     if (category != null) q = q.eq('category', category);
     if (search != null && search.trim().isNotEmpty) {
       q = q.ilike('name', '%${search.trim()}%');
     }
     final rows = await q.order('member_count', ascending: false);
     return rows.map<Tribe>(_tribeFromRow).toList();
+  }
+
+  /// Tribes to suggest to *this* person, in an order that changes.
+  ///
+  /// The home rail used to be `tribes()` — tribe_directory ordered by
+  /// member_count — which is one global ranking. Two different accounts saw the
+  /// same six tribes, and pulling to refresh re-fetched the same six. This
+  /// ranks on who your friends are, what you engage with, and which tribes are
+  /// actually active, then subtracts a decaying penalty for what you were shown
+  /// recently so a refresh genuinely brings something new.
+  ///
+  /// Falls back to [tribes] if the RPC is not deployed yet: a home screen with
+  /// an empty tribes rail would be a worse regression than a global ordering.
+  Future<List<Tribe>> recommendedTribes({int limit = 10}) async {
+    try {
+      final rows =
+          await _client.rpc('recommended_tribes', params: {'p_limit': limit})
+              as List<dynamic>;
+      return rows
+          .map<Tribe>((r) => _tribeFromRow((r as Map).cast<String, dynamic>()))
+          .toList();
+    } on PostgrestException catch (error) {
+      if (!_isMissingRpc(error, 'recommended_tribes')) rethrow;
+      final all = await tribes();
+      return all.take(limit).toList();
+    }
+  }
+
+  /// Whispers for the home rail, ranked for this person and rotated.
+  ///
+  /// The rail used to fetch [listWhispers] and sort it client-side by
+  /// plays + likes*2 + comments — a fixed formula over a recency-ordered
+  /// global list, so every account saw the same whispers in the same order and
+  /// a refresh changed nothing. This asks the server, which knows who your
+  /// friends are and what it has already shown you.
+  ///
+  /// Falls back to the old path if the RPC is not deployed: an empty rail on a
+  /// support platform reads as abandonment, which is worse than a stale one.
+  Future<List<Whisper>> whispersForMe({int limit = 24}) async {
+    try {
+      final rows =
+          await _client.rpc('whispers_for_me', params: {'p_limit': limit})
+              as List<dynamic>;
+      return rows
+          .map<Whisper>(
+            (r) => _whisperFromRow((r as Map).cast<String, dynamic>()),
+          )
+          .toList();
+    } on PostgrestException catch (error) {
+      if (!_isMissingRpc(error, 'whispers_for_me')) rethrow;
+      return listWhispers(limit: limit);
+    }
+  }
+
+  /// Tell the server what a discovery rail actually put on screen, so the next
+  /// refresh can show something else. Best-effort: failing to record an
+  /// impression must never surface to somebody scrolling.
+  Future<void> noteDiscoveryImpressions({
+    required String kind,
+    required List<String> ids,
+  }) async {
+    if (ids.isEmpty) return;
+    try {
+      await _client.rpc(
+        'note_discovery_impressions',
+        params: {'p_kind': kind, 'p_ids': ids},
+      );
+    } catch (_) {
+      // Rotation degrades to "no rotation", which is the old behaviour, not a
+      // broken screen.
+    }
   }
 
   Future<List<Tribe>> tribesByKeeper(String keeperId) async {
@@ -5269,6 +6011,33 @@ class SupabaseBackend {
     );
   }
 
+  /// The signed-in keeper's agreement for this Tribe, or null if there is
+  /// none.
+  ///
+  /// Null is a real and expected answer, not an error: every Tribe created
+  /// before 20261001090000 has no attestation, because the agreement did not
+  /// exist to be given. The UI says so rather than inventing a date.
+  Future<KeeperAttestation?> myKeeperAttestation(String tribeId) async {
+    final res = await _client.rpc(
+      'my_keeper_attestation',
+      params: {'p_tribe_id': tribeId},
+    );
+    // RETURNS TABLE arrives as a list of rows; own-row-only, so at most one.
+    final rows = (res as List?) ?? const [];
+    if (rows.isEmpty) return null;
+    final row = (rows.first as Map).cast<String, dynamic>();
+    final at = _coerceDate(row['attested_at']);
+    if (at == null) return null;
+    return KeeperAttestation(
+      version: _coerceInt(row['version']) ?? 1,
+      // Absent rather than defaulted to 'adult': claiming the server verified
+      // an age it did not report is the kind of comfortable default this
+      // codebase has been bitten by before.
+      ageStatus: (row['age_status'] as String?) ?? 'unknown',
+      attestedAt: at,
+    );
+  }
+
   /// Record the birth month for an account in its 18th year. Write-once on the
   /// server, so a wrong answer cannot be retried into a right one.
   Future<TribeCreationEligibility> setMyBirthMonth(int month) async {
@@ -5283,6 +6052,45 @@ class SupabaseBackend {
     );
   }
 
+  /// The Tribe category taxonomy, newest source of truth.
+  ///
+  /// Returns an empty list when the table is not there yet — the caller falls
+  /// back to the built-in set rather than showing a Tribe form with no
+  /// categories, which would make the screen unusable against a database that
+  /// is one migration behind.
+  Future<List<TribeCategory>> tribeCategories() async {
+    try {
+      final rows = await _client
+          .from('tribe_categories')
+          .select('category_key, label, sort_order')
+          .eq('is_active', true)
+          .order('sort_order');
+      return [
+        for (final row in (rows as List).cast<Map<String, dynamic>>())
+          TribeCategory(
+            key: row['category_key'] as String,
+            label: row['label'] as String,
+          ),
+      ];
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST205' ||
+          e.code == '42P01' ||
+          e.message.contains('does not exist')) {
+        log.warn(
+          'db.missing_columns',
+          props: {
+            'source': 'tribe_categories',
+            'count': 1,
+            'columns': const ['tribe_categories'],
+            'migrations': const ['tribe_category_taxonomy'],
+          },
+        );
+        return const [];
+      }
+      rethrow;
+    }
+  }
+
   Future<Tribe> createTribe({
     required String name,
     required String category,
@@ -5293,11 +6101,20 @@ class SupabaseBackend {
     String? welcomeMessage,
     TribeGovernanceSettings settings = const TribeGovernanceSettings(),
     List<TribeRuleItem> rules = const [],
+    required String idempotencyKey,
+    required bool keeperAttested,
+    required int attestationVersion,
   }) async {
     if (_uid == null) throw StateError('Not signed in');
+    // Required, not optional. A Tribe is not a post: a duplicate carries
+    // members, spaces, rules and an audit trail, and the owner cannot tell
+    // which copy people actually joined. The key comes from the caller so it
+    // survives a retry — generating one here would make every retry a new
+    // Tribe, which is the bug.
     final tribeId = await _client.rpc(
-      'create_managed_tribe',
+      'create_managed_tribe_idempotent',
       params: {
+        'p_mutation_id': idempotencyKey,
         'p_name': name,
         'p_category': category,
         if (description != null) 'p_description': description,
@@ -5306,6 +6123,12 @@ class SupabaseBackend {
         if (welcomeMessage != null) 'p_welcome_message': welcomeMessage,
         'p_settings': settings.toJson(),
         'p_rules': [for (final rule in rules) rule.toJson()],
+        // Sent explicitly rather than left to the server's default, which is
+        // FALSE: the server refuses an unattested creation with
+        // keeper_attestation_required, so a caller that forgets this gets a
+        // named error instead of an unattested Tribe.
+        'p_keeper_attested': keeperAttested,
+        'p_attestation_version': attestationVersion,
       },
     );
     final row = await _client
@@ -6084,6 +6907,147 @@ class SupabaseBackend {
     await _client.rpc('touch_last_seen');
   }
 
+  // ---- Devices, sessions, and the security ledger -------------------------
+
+  /// Bind this installation to the current auth session.
+  ///
+  /// Safe to call repeatedly: the same GoTrue session reattaches to its
+  /// existing row rather than opening a second one.
+  Future<DeviceRegistration> registerDeviceSession({
+    required String deviceId,
+    String? deviceName,
+    String deviceType = 'unknown',
+    String? osName,
+    String? osVersion,
+    String? appVersion,
+  }) async {
+    final rows =
+        await _client.rpc(
+              'register_device_session',
+              params: {
+                'p_device_id': deviceId,
+                'p_device_name': deviceName,
+                'p_device_type': deviceType,
+                'p_os_name': osName,
+                'p_os_version': osVersion,
+                'p_app_version': appVersion,
+              },
+            )
+            as List<dynamic>;
+    if (rows.isEmpty) {
+      throw StateError('Device registration returned no result.');
+    }
+    return DeviceRegistration.fromJson(rows.first as Map<String, dynamic>);
+  }
+
+  Future<List<DeviceSession>> myDeviceSessions() async {
+    final rows = await _client.rpc('my_device_sessions') as List<dynamic>;
+    return rows
+        .map((r) => DeviceSession.fromJson(r as Map<String, dynamic>))
+        .toList(growable: false);
+  }
+
+  Future<bool> revokeDeviceSession(String deviceSessionId) async {
+    final res = await _client.rpc(
+      'revoke_device_session',
+      params: {'p_device_session_id': deviceSessionId},
+    );
+    return res == true;
+  }
+
+  /// Ends every session except this one. Returns how many were closed.
+  Future<int> revokeOtherDeviceSessions() async {
+    final res = await _client.rpc('revoke_other_device_sessions');
+    return (res as int?) ?? 0;
+  }
+
+  /// Returns false when this session has been revoked elsewhere, or its device
+  /// blocked. The caller is expected to sign out locally when that happens.
+  Future<bool> touchDeviceSession() async {
+    final res = await _client.rpc('touch_device_session');
+    return res != false;
+  }
+
+  Future<bool> trustDevice(String deviceRowId) async {
+    final res = await _client.rpc(
+      'trust_device',
+      params: {'p_device_row_id': deviceRowId},
+    );
+    return res == true;
+  }
+
+  /// Blocks the device and ends its other sessions. Returns how many closed.
+  Future<int> blockDevice(String deviceRowId) async {
+    final res = await _client.rpc(
+      'block_device',
+      params: {'p_device_row_id': deviceRowId},
+    );
+    return (res as int?) ?? 0;
+  }
+
+  Future<List<SecurityEvent>> mySecurityEvents({
+    int limit = 30,
+    DateTime? before,
+  }) async {
+    final rows =
+        await _client.rpc(
+              'my_security_events',
+              params: {
+                'p_limit': limit,
+                'p_before': before?.toUtc().toIso8601String(),
+              },
+            )
+            as List<dynamic>;
+    return rows
+        .map((r) => SecurityEvent.fromJson(r as Map<String, dynamic>))
+        .toList(growable: false);
+  }
+
+  /// For changes GoTrue owns, where no trigger of ours can observe them.
+  /// The server enforces which kinds a client may report.
+  Future<void> logSecurityEvent(
+    String kind, {
+    Map<String, dynamic>? context,
+  }) async {
+    await _client.rpc(
+      'log_my_security_event',
+      params: {'p_kind': kind, 'p_context': context ?? <String, dynamic>{}},
+    );
+  }
+
+  /// Callable before authentication, so it never assumes a session.
+  Future<void> recordFailedLogin(String identifier) async {
+    await _client.rpc(
+      'record_failed_login',
+      params: {'p_identifier': identifier},
+    );
+  }
+
+  /// Sign-ins the server flagged and the user has not answered for yet.
+  ///
+  /// Polled on resume rather than only handled at sign-in: the whole point is
+  /// the session the user was not present for.
+  Future<List<SecurityAlert>> myUnresolvedSecurityAlerts() async {
+    final rows =
+        await _client.rpc('my_unresolved_security_alerts') as List<dynamic>;
+    return rows
+        .map((r) => SecurityAlert.fromJson(r as Map<String, dynamic>))
+        .toList(growable: false);
+  }
+
+  /// Answer a "was this you?" prompt. True trusts the device; false blocks it
+  /// and ends its sessions.
+  Future<bool> resolveSuspiciousLogin({
+    required String deviceSessionId,
+    required bool wasMe,
+  }) async {
+    final res = await _client.rpc(
+      'resolve_suspicious_login',
+      params: {'p_device_session_id': deviceSessionId, 'p_was_me': wasMe},
+    );
+    return res == true;
+  }
+
   /// Peer presence tier: online | recent | offline | hidden (+ last_seen).
   Future<({String state, DateTime? lastSeen})> peerPresence(
     String userId,
@@ -6119,6 +7083,10 @@ class SupabaseBackend {
   /// swaps it in place.
   final Map<String, Future<void> Function()> _messageRefreshers = {};
   final Map<String, Future<void> Function()> _tribeMessageRefreshers = {};
+  final Map<String, List<ChatMessage>> _dmSnapshots = {};
+  final Map<String, List<TribeMessage>> _tribeSnapshots = {};
+  final Map<String, void Function(List<ChatMessage>)> _dmPublishers = {};
+  final Map<String, void Function(List<TribeMessage>)> _tribePublishers = {};
 
   /// Re-read a conversation without collapsing its stream. A no-op when nothing
   /// is watching, because then there is nothing on screen to keep.
@@ -6128,22 +7096,140 @@ class SupabaseBackend {
   Future<void> refreshTribeMessages(String tribeId) async =>
       _tribeMessageRefreshers[tribeId]?.call();
 
+  void _publishDm(String roomId, List<ChatMessage> list) {
+    _dmSnapshots[roomId] = list;
+    _dmPublishers[roomId]?.call(list);
+  }
+
+  void _publishTribe(String tribeId, List<TribeMessage> list) {
+    _tribeSnapshots[tribeId] = list;
+    _tribePublishers[tribeId]?.call(list);
+  }
+
+  void _injectDmMessage(String roomId, ChatMessage message) {
+    final current = _dmSnapshots[roomId];
+    if (current != null && _dmPublishers.containsKey(roomId)) {
+      if (!current.any((m) => m.messageId == message.messageId)) {
+        _publishDm(roomId, [...current, message]);
+      }
+      unawaited(_messageRefreshers[roomId]?.call());
+      return;
+    }
+    unawaited(_messageRefreshers[roomId]?.call());
+  }
+
+  void _injectTribeMessage(String tribeId, TribeMessage message) {
+    final current = _tribeSnapshots[tribeId];
+    if (current != null && _tribePublishers.containsKey(tribeId)) {
+      if (!current.any((m) => m.messageId == message.messageId)) {
+        _publishTribe(tribeId, [...current, message]);
+      }
+      unawaited(_tribeMessageRefreshers[tribeId]?.call());
+      return;
+    }
+    unawaited(_tribeMessageRefreshers[tribeId]?.call());
+  }
+
+  Future<void> _appendDmFromRealtime(
+    String roomId,
+    StreamController<List<ChatMessage>> controller,
+    Map<String, dynamic> record,
+  ) async {
+    try {
+      final incoming = _messageFromRow(record);
+      final current = _dmSnapshots[roomId];
+      if (current == null) {
+        await _reloadDm(roomId, controller);
+        return;
+      }
+      if (current.any((m) => m.messageId == incoming.messageId)) {
+        await _reloadDm(roomId, controller);
+        return;
+      }
+      final next = [...current, incoming];
+      _publishDm(roomId, next);
+      if (!controller.isClosed) controller.add(next);
+      unawaited(_reloadDm(roomId, controller));
+    } catch (_) {
+      await _reloadDm(roomId, controller);
+    }
+  }
+
+  Future<void> _reloadDm(
+    String roomId,
+    StreamController<List<ChatMessage>> controller,
+  ) async {
+    try {
+      final list = await messages(roomId);
+      _dmSnapshots[roomId] = list;
+      if (!controller.isClosed) controller.add(list);
+    } catch (_) {
+      /* listener retries on next event */
+    }
+  }
+
+  Future<void> _appendTribeFromRealtime(
+    String tribeId,
+    StreamController<List<TribeMessage>> controller,
+    Map<String, dynamic> record,
+  ) async {
+    try {
+      final rows = await _client
+          .from('tribe_messages_feed')
+          .select()
+          .eq('message_id', record['message_id'] as String)
+          .limit(1);
+      if ((rows as List).isEmpty) {
+        await _reloadTribe(tribeId, controller);
+        return;
+      }
+      final incoming = _tribeMessageFromRow(
+        (rows.first as Map).cast<String, dynamic>(),
+      );
+      final current = _tribeSnapshots[tribeId];
+      if (current == null) {
+        await _reloadTribe(tribeId, controller);
+        return;
+      }
+      if (current.any((m) => m.messageId == incoming.messageId)) {
+        await _reloadTribe(tribeId, controller);
+        return;
+      }
+      final next = [...current, incoming];
+      _publishTribe(tribeId, next);
+      if (!controller.isClosed) controller.add(next);
+    } catch (_) {
+      await _reloadTribe(tribeId, controller);
+    }
+  }
+
+  Future<void> _reloadTribe(
+    String tribeId,
+    StreamController<List<TribeMessage>> controller,
+  ) async {
+    try {
+      final list = await tribeMessages(tribeId);
+      _tribeSnapshots[tribeId] = list;
+      if (!controller.isClosed) controller.add(list);
+    } catch (_) {
+      /* listener retries on next event */
+    }
+  }
+
   Stream<List<ChatMessage>> watchMessages(String roomId) {
     final controller = StreamController<List<ChatMessage>>();
-    Future<void> emit() async {
-      try {
-        controller.add(await messages(roomId));
-      } catch (_) {
-        /* listener retries on next event */
-      }
-    }
 
-    _messageRefreshers[roomId] = emit;
+    Future<void> reload() => _reloadDm(roomId, controller);
 
-    final channel = _client
-        .channel('public:chat_messages:room=$roomId')
+    _messageRefreshers[roomId] = reload;
+    _dmPublishers[roomId] = (list) {
+      if (!controller.isClosed) controller.add(list);
+    };
+
+    final msgChannel = _client
+        .channel('dm:msgs:$roomId')
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'chat_messages',
           filter: PostgresChangeFilter(
@@ -6151,20 +7237,57 @@ class SupabaseBackend {
             column: 'room_id',
             value: roomId,
           ),
-          callback: (_) => emit(),
+          callback: (payload) =>
+              _appendDmFromRealtime(roomId, controller, payload.newRecord),
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'chat_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id',
+            value: roomId,
+          ),
+          callback: (_) => reload(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'chat_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id',
+            value: roomId,
+          ),
+          callback: (_) => reload(),
+        )
+        .subscribe();
+
+    // Reactions are on a separate channel so a missing `room_id` column
+    // (pre-migration) cannot break message delivery.
+    final reactionChannel = _client
+        .channel('dm:rxn:$roomId')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'chat_message_reactions',
-          callback: (_) => emit(),
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id',
+            value: roomId,
+          ),
+          callback: (_) => reload(),
         )
         .subscribe();
 
-    controller.onListen = emit;
+    controller.onListen = reload;
     controller.onCancel = () {
       _messageRefreshers.remove(roomId);
-      channel.unsubscribe();
+      _dmPublishers.remove(roomId);
+      _dmSnapshots.remove(roomId);
+      msgChannel.unsubscribe();
+      reactionChannel.unsubscribe();
     };
     return controller.stream;
   }
@@ -6290,7 +7413,7 @@ class SupabaseBackend {
         .from('chat-media')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     return (path: path, messageId: messageId);
@@ -6312,7 +7435,7 @@ class SupabaseBackend {
         .from('chat-media')
         .uploadBinary(
           path,
-          _scrubbedUploadBytes(bytes),
+          _imageUploadBytes(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     return path;
@@ -6390,8 +7513,7 @@ class SupabaseBackend {
               },
             )
             as String;
-    unawaited(_emitRooms());
-    return ChatMessage(
+    final message = ChatMessage(
       messageId: messageId,
       roomId: roomId,
       senderId: uid,
@@ -6403,6 +7525,9 @@ class SupabaseBackend {
       attachedMediaType: attachedMediaType,
       parentMessageId: parentMessageId,
     );
+    _injectDmMessage(roomId, message);
+    unawaited(_emitRooms());
+    return message;
   }
 
   // ===================================================================
@@ -6991,24 +8116,25 @@ class SupabaseBackend {
     }
   }
 
-  Future<void> _emitPosts() async {
-    try {
-      final list = await feed();
-      _postsController.add(list);
-    } catch (_) {
-      // ignore — stream listeners will retry on the next emit
-    }
-  }
-
   Future<void> _emitRooms() async {
     try {
       final list = await inbox(tab: 'all');
       _roomsController.add(list);
+      final nextIds = list.map((r) => r.roomId).toSet();
+      if (nextIds.length != _inboxRoomIds.length ||
+          !nextIds.containsAll(_inboxRoomIds)) {
+        _inboxRoomIds
+          ..clear()
+          ..addAll(nextIds);
+        _subscribeMessagesNotifyRealtime();
+      }
     } catch (_) {}
   }
 
   Post _postFromRow(Map<String, dynamic> r) {
     expectColumns('posts', r, const {
+      // A read path that forgets this one renders unscanned media as clean.
+      'media_status': '0087_media_safety',
       'card_background_color': '20260727133836_post_card_colors',
       'card_text_color': '20260727133836_post_card_colors',
       'is_story': '20260727190030_distinct_stories_and_audience',
@@ -7071,7 +8197,11 @@ class SupabaseBackend {
       myReaction: _myReactions[r['post_id']],
       savedByMe: _savedPosts.contains(r['post_id']),
       crisisLevel: r['crisis_level'] as String?,
-      mediaStatus: (r['media_status'] as String?) ?? 'clean',
+      // 'pending' when absent, never 'clean'. A row that does not carry
+      // media_status must veil, because the alternative is publishing
+      // unscanned media — and PostgREST omits a column it was not asked
+      // for, so "absent" and "safe" are indistinguishable here.
+      mediaStatus: (r['media_status'] as String?) ?? 'pending',
     );
   }
 

@@ -41,17 +41,42 @@ void main() {
       passwordSecurity,
       contains("Couldn\\'t verify that code. Check your connection"),
     );
+    // These were counts — "3 sheets, 3 scopes" — which described a structure
+    // rather than a requirement, and broke the moment three near-identical
+    // sheets were consolidated into one. What actually matters is asserted
+    // directly instead, and it holds however the screen is arranged.
+
+    // Every sheet clears the floating nav. HomeShell paints its pill over the
+    // branch, so a sheet on the branch navigator has its lower rows swallowed.
     expect(
       'useRootNavigator: true'.allMatches(passwordSecurity).length,
-      3,
+      'showModalBottomSheet'.allMatches(passwordSecurity).length,
+      reason: 'every bottom sheet must use the root navigator',
     );
+
+    // Was: no controller may be created by hand at all, on the reasoning that
+    // ModalTextControllerScope is the only thing that disposes them. That held
+    // while every sheet here was stateless. _CodeSheet is not — it owns a
+    // resend countdown, so it is a real StatefulWidget with a real dispose(),
+    // and owning its controller there is correct rather than a bypass.
+    //
+    // So assert the property the rule existed to protect: nothing is created
+    // without being disposed. A hand-made controller with no matching dispose
+    // fails this exactly as before.
+    expect(
+      '_controller.dispose()'.allMatches(passwordSecurity).length,
+      'TextEditingController('.allMatches(passwordSecurity).length,
+      reason: 'every hand-made text controller must be disposed by its State',
+    );
+
+    // Every sheet that takes text is scrollable, or the keyboard overflows it
+    // on a small screen.
     expect(
       'SingleChildScrollView('.allMatches(passwordSecurity).length,
-      greaterThanOrEqualTo(3),
-    );
-    expect(
-      'ModalTextControllerScope('.allMatches(passwordSecurity).length,
-      3,
+      greaterThanOrEqualTo(
+        'ModalTextControllerScope('.allMatches(passwordSecurity).length,
+      ),
+      reason: 'each text-entry sheet must scroll with the keyboard up',
     );
     expect(controllerScope, contains('controller.dispose()'));
     expect(settings, contains('useRootNavigator: true'));

@@ -19,9 +19,12 @@ import '../screens/inbox/group_chat_settings_screen.dart';
 import '../screens/inbox/group_invite_screen.dart';
 import '../screens/whispers/create_whisper_screen.dart';
 import '../widgets/keep_alive.dart';
+import '../widgets/tribe_age_gate.dart';
 import '../screens/onboarding/email_signup_screen.dart';
 import '../screens/onboarding/age_completion_screen.dart';
 import '../screens/onboarding/identity_screen.dart';
+import '../screens/onboarding/mfa_challenge_screen.dart';
+import '../screens/onboarding/password_reset_screen.dart';
 import '../screens/onboarding/recover_screen.dart';
 import '../screens/onboarding/recovery_key_screen.dart';
 import '../screens/onboarding/phone_signin_screen.dart';
@@ -29,10 +32,12 @@ import '../screens/onboarding/verify_email_screen.dart';
 import '../screens/notifications/notifications_screen.dart';
 import '../screens/onboarding/welcome_screen.dart';
 import '../screens/plugz/plug_profile_screen.dart';
+import '../screens/profile/active_devices_screen.dart';
 import '../screens/profile/avatar_builder_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/profile/profile_stat_detail_screen.dart';
+import '../screens/profile/security_check_screen.dart';
 import '../screens/profile/security_screen.dart';
 import '../screens/profile/password_security_screen.dart';
 import '../screens/settings/settings_screen.dart';
@@ -48,6 +53,7 @@ import '../screens/tribes/tribe_content_management_screen.dart';
 import '../screens/tribes/tribe_detail_screen.dart';
 import '../screens/tribes/tribe_members_management_screen.dart';
 import '../screens/tribes/space_home_screen.dart';
+import '../screens/tribes/tribe_helpers_screen.dart';
 import '../screens/tribes/tribe_manage_screen.dart';
 import '../screens/tribes/tribe_moderation_screen.dart';
 import '../screens/tribes/tribe_reports_screen.dart';
@@ -70,12 +76,16 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/onboarding',
     redirect: (context, state) {
       final session = ref.read(sessionProvider);
+      final pendingMfa = ref.read(pendingMfaFactorIdProvider);
       final path = state.matchedLocation;
       final onboardingRoute = path.startsWith('/onboarding');
+      final onMfa = path == '/onboarding/mfa';
+      if (pendingMfa != null && !onMfa) return '/onboarding/mfa';
       if (session == null && !onboardingRoute) return '/onboarding';
       if (session != null &&
           session.birthYear == null &&
-          path != '/onboarding/age') {
+          path != '/onboarding/age' &&
+          !onMfa) {
         return '/onboarding/age';
       }
       if (session != null &&
@@ -147,12 +157,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const RecoverScreen(),
       ),
       GoRoute(
+        path: '/onboarding/reset-password',
+        builder: (_, __) => const PasswordResetScreen(),
+      ),
+      GoRoute(
         path: '/onboarding/email',
         builder: (_, __) => const EmailSignupScreen(),
       ),
       GoRoute(
         path: '/onboarding/phone',
         builder: (_, __) => const PhoneSignInScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding/mfa',
+        builder: (_, __) => const MfaChallengeScreen(),
       ),
 
       // Bottom-nav shell. Five stateful branches plus the Friends shortcut:
@@ -338,6 +356,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                               slug: st.pathParameters['slug']!,
                             ),
                           ),
+                          GoRoute(
+                            path: 'helpers',
+                            builder: (ctx, st) => TribeHelpersScreen(
+                              slug: st.pathParameters['slug']!,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -346,16 +370,16 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
               GoRoute(
                 path: '/tribes/new',
-                builder: (_, __) => const CreateTribeScreen(),
+                // Gated here rather than at each button: eight screens push
+                // this path and only one of them was checking.
+                builder: (_, __) =>
+                    const TribeCreationGate(child: CreateTribeScreen()),
               ),
               GoRoute(
                 path: '/questions',
                 builder: (_, __) => const QuestionsScreen(),
               ),
-              GoRoute(
-                path: '/goals',
-                builder: (_, __) => const GoalsScreen(),
-              ),
+              GoRoute(path: '/goals', builder: (_, __) => const GoalsScreen()),
               GoRoute(
                 path: '/user/:userId',
                 builder: (ctx, st) =>
@@ -426,6 +450,14 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/profile/password-security',
                 builder: (_, __) => const PasswordSecurityScreen(),
+              ),
+              GoRoute(
+                path: '/profile/devices',
+                builder: (_, __) => const ActiveDevicesScreen(),
+              ),
+              GoRoute(
+                path: '/security-check',
+                builder: (_, __) => const SecurityCheckScreen(),
               ),
               GoRoute(
                 path: '/settings',
@@ -527,6 +559,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(this.ref) {
     ref.listen(sessionProvider, (_, __) => notifyListeners());
+    ref.listen(pendingMfaFactorIdProvider, (_, __) => notifyListeners());
   }
   final Ref ref;
 }

@@ -76,7 +76,9 @@ class BlockedAccountsSheet extends ConsumerWidget {
                           final b = blocks[i];
                           return Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: ctx.glass(1),
                               borderRadius: BorderRadius.circular(18),
@@ -121,8 +123,9 @@ class BlockedAccountsSheet extends ConsumerWidget {
                                       if (ctx.mounted) {
                                         ScaffoldMessenger.of(ctx).showSnackBar(
                                           SnackBar(
-                                            content:
-                                                Text('Could not unblock: $e'),
+                                            content: Text(
+                                              'Could not unblock: $e',
+                                            ),
                                           ),
                                         );
                                       }

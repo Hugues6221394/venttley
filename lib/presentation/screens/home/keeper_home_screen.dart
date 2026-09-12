@@ -53,7 +53,9 @@ class KeeperHomeScreen extends ConsumerWidget {
             data: (overview) {
               if (overview.tribes.isEmpty) {
                 return _EmptyKeeperState(
-                    me: me, onRefresh: () => _refresh(ref));
+                  me: me,
+                  onRefresh: () => _refresh(ref),
+                );
               }
               return RefreshIndicator(
                 color: VentlyColors.berryMagenta,
@@ -61,9 +63,7 @@ class KeeperHomeScreen extends ConsumerWidget {
                 child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
-                    SliverToBoxAdapter(
-                      child: _TopBar(me: me),
-                    ),
+                    SliverToBoxAdapter(child: _TopBar(me: me)),
                     SliverToBoxAdapter(
                       child: _KeeperWelcome(me: me, overview: overview),
                     ),
@@ -171,21 +171,21 @@ class _KeeperWelcome extends StatelessWidget {
             () => context.push('/keeper/moderation'),
           )
         : quiet
-            ? (
-                Icons.auto_awesome_rounded,
-                "It's quiet right now.\nSend a Prompt to spark a conversation.",
-                primary == null
-                    ? null
-                    : () => showKeeperPromptComposer(
-                          context,
-                          tribeId: primary.tribeId,
-                        ),
-              )
-            : (
-                Icons.favorite_rounded,
-                'Your community is active and safe.\nKeep nurturing it.',
-                null,
-              );
+        ? (
+            Icons.auto_awesome_rounded,
+            "It's quiet right now.\nSend a Prompt to spark a conversation.",
+            primary == null
+                ? null
+                : () => showKeeperPromptComposer(
+                    context,
+                    tribeId: primary.tribeId,
+                  ),
+          )
+        : (
+            Icons.favorite_rounded,
+            'Your community is active and safe.\nKeep nurturing it.',
+            null,
+          );
 
     final isDark = context.isDark;
     return Container(
@@ -199,8 +199,9 @@ class _KeeperWelcome extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
-        border:
-            isDark ? Border.all(color: Colors.white.withOpacity(0.06)) : null,
+        border: isDark
+            ? Border.all(color: Colors.white.withOpacity(0.06))
+            : null,
         boxShadow: [
           BoxShadow(
             color: VentlyColors.berryMagenta.withOpacity(isDark ? 0.18 : 0.12),
@@ -253,7 +254,7 @@ class _KeeperWelcome extends StatelessWidget {
                   // This was a "CONTROL CENTER" eyebrow, a 23pt "Your tribe, at
                   // a glance" and "Everything you need to keep it safe and
                   // thriving." — three lines telling a keeper what screen they
-                  // are on, above the top bar that already says "Plug Studio /
+                  // are on, above the top bar that already says "Keeper Studio /
                   // Manage your tribe. Protect your safe space." and above a
                   // "Creator Studio" section whose own tagline said almost the
                   // same sentence again. The last line also ran underneath the
@@ -305,7 +306,6 @@ class _KeeperWelcome extends StatelessWidget {
       ),
     );
   }
-
 }
 
 /// Persistent Plugz ownership action, kept above metrics and activity cards.
@@ -386,9 +386,7 @@ class _HeroCallout extends StatelessWidget {
       // Opaque in light mode. At 0.72 the decorative orb behind the panel bled
       // through the card and sat under the action button, which read as a
       // rendering fault rather than as depth.
-      color: context.isDark
-          ? Colors.white.withOpacity(0.07)
-          : Colors.white,
+      color: context.isDark ? Colors.white.withOpacity(0.07) : Colors.white,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
@@ -427,8 +425,11 @@ class _HeroCallout extends StatelessWidget {
                     gradient: VentlyGradients.brand,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.arrow_forward_rounded,
-                      size: 16, color: Colors.white),
+                  child: const Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
               ],
             ],
@@ -466,8 +467,11 @@ class _TopBar extends StatelessWidget {
                   color: context.glass(0.7),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.menu_rounded,
-                    color: VentlyColors.berryMagenta, size: 22),
+                child: const Icon(
+                  Icons.menu_rounded,
+                  color: VentlyColors.berryMagenta,
+                  size: 22,
+                ),
               ),
             ),
           ),
@@ -479,7 +483,7 @@ class _TopBar extends StatelessWidget {
                 const Row(
                   children: [
                     Text(
-                      'Plug Studio',
+                      'Keeper Studio',
                       style: TextStyle(
                         color: VentlyColors.berryMagenta,
                         fontWeight: FontWeight.w900,
@@ -513,8 +517,11 @@ class _TopBar extends StatelessWidget {
                 ? const CircleAvatar(
                     radius: 18,
                     backgroundColor: Color(0xFFFFDCE8),
-                    child: Icon(Icons.person,
-                        color: VentlyColors.berryMagenta, size: 18),
+                    child: Icon(
+                      Icons.person,
+                      color: VentlyColors.berryMagenta,
+                      size: 18,
+                    ),
                   )
                 : ProfileAvatar(
                     avatarSeed: me!.avatarSeed,
@@ -584,8 +591,11 @@ class _CommandStrip extends ConsumerWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.insights_rounded,
-                  size: 17, color: VentlyColors.berryMagenta),
+              const Icon(
+                Icons.insights_rounded,
+                size: 17,
+                color: VentlyColors.berryMagenta,
+              ),
               const SizedBox(width: 6),
               Text(
                 'Tribe overview',
@@ -598,17 +608,20 @@ class _CommandStrip extends ConsumerWidget {
               const Spacer(),
               TextButton(
                 style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   minimumSize: Size.zero,
                 ),
                 onPressed: () {
                   ref.read(keeperMemberViewProvider.notifier).state = true;
                   context.go('/feed');
                 },
-                child: const Text('Member feed',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                child: const Text(
+                  'Member feed',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                ),
               ),
             ],
           ),
@@ -712,7 +725,8 @@ class _OverviewCard extends StatelessWidget {
             : Colors.white.withOpacity(0.72),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-            color: Colors.white.withOpacity(context.isDark ? 0.08 : 0.7)),
+          color: Colors.white.withOpacity(context.isDark ? 0.08 : 0.7),
+        ),
         boxShadow: [
           BoxShadow(
             color: context.isDark
@@ -824,7 +838,9 @@ class _PriorityQueue extends StatelessWidget {
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 8),
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: items[i].color.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(12),
@@ -892,9 +908,9 @@ class _QuickActionsRow extends ConsumerWidget {
               onTap: primary == null
                   ? null
                   : () => showKeeperPromptComposer(
-                        context,
-                        tribeId: primary.tribeId,
-                      ),
+                      context,
+                      tribeId: primary.tribeId,
+                    ),
             ),
             _QuickAction(
               icon: Icons.campaign_outlined,
@@ -932,18 +948,14 @@ class _QuickActionsRow extends ConsumerWidget {
               label: 'Invite',
               onTap: slug == null
                   ? null
-                  : () => context.push(
-                        '/tribe/$slug/manage/settings/members',
-                      ),
+                  : () => context.push('/tribe/$slug/manage/settings/members'),
             ),
             _QuickAction(
               icon: Icons.rule_rounded,
               label: 'Rules',
               onTap: slug == null
                   ? null
-                  : () => context.push(
-                        '/tribe/$slug/manage/settings/rules',
-                      ),
+                  : () => context.push('/tribe/$slug/manage/settings/rules'),
             ),
           ],
         ),
@@ -1055,8 +1067,9 @@ class _V2Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color:
-          context.isDark ? Theme.of(context).colorScheme.surface : Colors.white,
+      color: context.isDark
+          ? Theme.of(context).colorScheme.surface
+          : Colors.white,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
@@ -1126,7 +1139,9 @@ class _V2Tile extends StatelessWidget {
                 child: badge != null
                     ? Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 2),
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: accent,
                           borderRadius: BorderRadius.circular(99),
@@ -1147,8 +1162,11 @@ class _V2Tile extends StatelessWidget {
                           color: accent.withOpacity(0.10),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.arrow_outward_rounded,
-                            color: accent, size: 15),
+                        child: Icon(
+                          Icons.arrow_outward_rounded,
+                          color: accent,
+                          size: 15,
+                        ),
                       ),
               ),
             ],
@@ -1160,11 +1178,7 @@ class _V2Tile extends StatelessWidget {
 }
 
 class _QuickAction extends StatelessWidget {
-  const _QuickAction({
-    required this.icon,
-    required this.label,
-    this.onTap,
-  });
+  const _QuickAction({required this.icon, required this.label, this.onTap});
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
@@ -1208,8 +1222,11 @@ class _QuickAction extends StatelessWidget {
                       color: VentlyColors.berryMagenta.withOpacity(0.12),
                       shape: BoxShape.circle,
                     ),
-                    child:
-                        Icon(icon, color: VentlyColors.berryMagenta, size: 21),
+                    child: Icon(
+                      icon,
+                      color: VentlyColors.berryMagenta,
+                      size: 21,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -1229,10 +1246,6 @@ class _QuickAction extends StatelessWidget {
     );
   }
 }
-
-
-
-
 
 class _ContentHub extends StatelessWidget {
   const _ContentHub({required this.overview});
@@ -1331,8 +1344,10 @@ class _HubRow extends StatelessWidget {
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: color,
                   borderRadius: BorderRadius.circular(12),
@@ -1415,9 +1430,8 @@ class _TribeControlCard extends StatelessWidget {
                   icon: const Icon(Icons.open_in_new_rounded, size: 20),
                   color: VentlyColors.berryMagenta,
                   tooltip: 'Manage Tribe',
-                  onPressed: () => context.push(
-                    '/tribe/${tribe.slug}/manage/settings',
-                  ),
+                  onPressed: () =>
+                      context.push('/tribe/${tribe.slug}/manage/settings'),
                 ),
               ],
             ),
@@ -1437,9 +1451,8 @@ class _TribeControlCard extends StatelessWidget {
                 _ActionChip(
                   icon: Icons.dashboard_customize_outlined,
                   label: 'Manage Tribe',
-                  onTap: () => context.push(
-                    '/tribe/${tribe.slug}/manage/settings',
-                  ),
+                  onTap: () =>
+                      context.push('/tribe/${tribe.slug}/manage/settings'),
                 ),
                 _ActionChip(
                   icon: Icons.gavel_rounded,
@@ -1594,7 +1607,7 @@ class _KeeperDrawer extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Plug Studio',
+                            'Keeper Studio',
                             style: TextStyle(
                               color: context.ink,
                               fontWeight: FontWeight.w900,
@@ -1780,10 +1793,7 @@ class _DrawerTile extends StatelessWidget {
       leading: _DrawerIcon(icon),
       title: Text(
         label,
-        style: const TextStyle(
-          fontWeight: FontWeight.w800,
-          fontSize: 14,
-        ),
+        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
       ),
       onTap: onTap,
     );
@@ -1829,8 +1839,11 @@ class _EmptyKeeperState extends StatelessWidget {
         padding: const EdgeInsets.all(32),
         children: [
           const SizedBox(height: 48),
-          const Icon(Icons.diversity_3,
-              size: 56, color: VentlyColors.berryMagenta),
+          const Icon(
+            Icons.diversity_3,
+            size: 56,
+            color: VentlyColors.berryMagenta,
+          ),
           const SizedBox(height: 16),
           Text(
             'No tribes to manage yet',
@@ -1844,7 +1857,7 @@ class _EmptyKeeperState extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             me?.isPlug == true
-                ? 'As a Plug, create your first tribe to unlock the Control Center.'
+                ? 'As a Keeper, create your first tribe to unlock the Control Center.'
                 : 'When you create or inherit a tribe, your studio dashboard appears here.',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -1887,8 +1900,11 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline,
-                size: 40, color: VentlyColors.berryMagenta),
+            const Icon(
+              Icons.error_outline,
+              size: 40,
+              color: VentlyColors.berryMagenta,
+            ),
             const SizedBox(height: 12),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),

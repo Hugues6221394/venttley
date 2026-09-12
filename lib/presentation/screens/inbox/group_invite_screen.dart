@@ -389,9 +389,7 @@ class _GroupInviteScreenState extends ConsumerState<GroupInviteScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(),
-      body: VentlyPremiumBackground(
-        child: content,
-      ),
+      body: VentlyPremiumBackground(child: content),
     );
   }
 }
@@ -401,24 +399,24 @@ class _UnavailableInvite extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Center(
-        child: Padding(
-          padding: EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.link_off_rounded, size: 48),
-              SizedBox(height: 14),
-              Text(
-                'Invite unavailable',
-                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
-              ),
-              SizedBox(height: 6),
-              Text(
-                'This link may have expired or been reset by the group owner.',
-                textAlign: TextAlign.center,
-              ),
-            ],
+    child: Padding(
+      padding: EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.link_off_rounded, size: 48),
+          SizedBox(height: 14),
+          Text(
+            'Invite unavailable',
+            style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
           ),
-        ),
-      );
+          SizedBox(height: 6),
+          Text(
+            'This link may have expired or been reset by the group owner.',
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    ),
+  );
 }

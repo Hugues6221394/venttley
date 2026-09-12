@@ -71,16 +71,20 @@ class KeeperModerationCenterScreen extends ConsumerWidget {
                 onPressed: () =>
                     context.push('/tribe/${tribe.slug}/manage/moderation'),
                 icon: const Icon(Icons.rule_rounded, size: 18),
-                label: const Text('Rules & keyword filters',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                label: const Text(
+                  'Rules & keyword filters',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
               ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: () =>
                     context.push('/tribe/${tribe.slug}/manage/reports'),
                 icon: const Icon(Icons.inbox_rounded, size: 18),
-                label: const Text('Full reports queue',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                label: const Text(
+                  'Full reports queue',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
               ),
             ],
             const SizedBox(height: 20),
@@ -175,8 +179,10 @@ class _ReportTile extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: VentlyColors.dangerRed.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(99),

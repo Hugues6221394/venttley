@@ -17,8 +17,9 @@ import '../../core/logger.dart';
 /// accepts rows — the dispatcher is just paused. UI can surface "we'll
 /// email you" copy or not based on the flag.
 abstract class EmailService {
-  static final EmailService instance =
-      _SupabaseQueueEmailService(Supabase.instance.client);
+  static final EmailService instance = _SupabaseQueueEmailService(
+    Supabase.instance.client,
+  );
 
   /// Queue a transactional email. [template] is one of the keys baked
   /// into the dispatcher (welcome / verify / security_alert / digest…).
@@ -41,16 +42,20 @@ class _SupabaseQueueEmailService implements EmailService {
     Map<String, Object?> variables = const {},
   }) async {
     try {
-      await _client.rpc('queue_email', params: {
-        'p_template':   template,
-        'p_to_user_id': toUserId,
-        'p_variables':  variables,
-      });
-      log.info('email.queued',
-          props: {'template': template, 'to_user_id': toUserId});
+      await _client.rpc(
+        'queue_email',
+        params: {
+          'p_template': template,
+          'p_to_user_id': toUserId,
+          'p_variables': variables,
+        },
+      );
+      log.info(
+        'email.queued',
+        props: {'template': template, 'to_user_id': toUserId},
+      );
     } catch (e) {
-      log.warn('email.queue_failed',
-          props: {'template': template}, error: e);
+      log.warn('email.queue_failed', props: {'template': template}, error: e);
     }
   }
 }

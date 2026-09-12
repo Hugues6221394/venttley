@@ -22,7 +22,7 @@ class PlugDashboardScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('Plug dashboard'),
+        title: const Text('Keeper dashboard'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -71,7 +71,7 @@ class _PlugGreeting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = me?.anonymousPseudonym ?? 'Plug';
+    final name = me?.anonymousPseudonym ?? 'Keeper';
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
@@ -113,8 +113,7 @@ class _SummaryStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalMembers =
-        tribes.fold<int>(0, (s, t) => s + t.memberCount);
+    final totalMembers = tribes.fold<int>(0, (s, t) => s + t.memberCount);
     final premiumCount = tribes.where((t) => t.isPremium).length;
     return Row(
       children: [
@@ -209,14 +208,16 @@ class _TribeManageCard extends ConsumerWidget {
             children: [
               CircleAvatar(
                 radius: 22,
-                backgroundColor:
-                    VentlyColors.berryMagenta.withOpacity(0.12),
+                backgroundColor: VentlyColors.berryMagenta.withOpacity(0.12),
                 backgroundImage: tribe.avatarUrl != null
                     ? NetworkImage(tribe.avatarUrl!)
                     : null,
                 child: tribe.avatarUrl == null
-                    ? const Icon(Icons.diversity_3,
-                        color: VentlyColors.berryMagenta, size: 22)
+                    ? const Icon(
+                        Icons.diversity_3,
+                        color: VentlyColors.berryMagenta,
+                        size: 22,
+                      )
                     : null,
               ),
               const SizedBox(width: 12),
@@ -240,9 +241,11 @@ class _TribeManageCard extends ConsumerWidget {
                         ),
                         if (tribe.isPremium) ...[
                           const SizedBox(width: 6),
-                          const Icon(Icons.workspace_premium_rounded,
-                              size: 14,
-                              color: VentlyColors.berryMagenta),
+                          const Icon(
+                            Icons.workspace_premium_rounded,
+                            size: 14,
+                            color: VentlyColors.berryMagenta,
+                          ),
                         ],
                       ],
                     ),
@@ -286,14 +289,12 @@ class _TribeManageCard extends ConsumerWidget {
               _ManageChip(
                 icon: Icons.help_outline_rounded,
                 label: 'Question of the day',
-                onTap: () =>
-                    context.push('/tribe/${tribe.slug}/manage'),
+                onTap: () => context.push('/tribe/${tribe.slug}/manage'),
               ),
               _ManageChip(
                 icon: Icons.settings_outlined,
                 label: 'Open full manage',
-                onTap: () =>
-                    context.push('/tribe/${tribe.slug}/manage'),
+                onTap: () => context.push('/tribe/${tribe.slug}/manage'),
               ),
             ],
           ),
@@ -302,8 +303,7 @@ class _TribeManageCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _openRulesEditor(
-      BuildContext context, WidgetRef ref) async {
+  Future<void> _openRulesEditor(BuildContext context, WidgetRef ref) async {
     final controller = TextEditingController(text: tribe.rules ?? '');
     final saved = await showDialog<String?>(
       context: context,
@@ -324,8 +324,9 @@ class _TribeManageCard extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
             child: const Text('Save rules'),
@@ -335,39 +336,42 @@ class _TribeManageCard extends ConsumerWidget {
     );
     if (saved == null) return;
     try {
-      final ok = await ref.read(repositoryProvider).updateTribeManagement(
-            tribeId: tribe.tribeId,
-            rules: saved,
-          );
+      final ok = await ref
+          .read(repositoryProvider)
+          .updateTribeManagement(tribeId: tribe.tribeId, rules: saved);
       if (ok) {
         ref.invalidate(tribesIKeepProvider);
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Rules saved')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Rules saved')));
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Couldn\'t save: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Couldn\'t save: $e')));
       }
     }
   }
 
-  Future<void> _togglePremium(
-      BuildContext context, WidgetRef ref) async {
+  Future<void> _togglePremium(BuildContext context, WidgetRef ref) async {
     final next = !tribe.isPremium;
     final yes = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(next ? 'Turn premium ON?' : 'Turn premium OFF?'),
-        content: Text(next
-            ? 'Premium tribes can gate access. Billing wiring will follow — for now this just flips the badge and unlocks the keeper-only features list.'
-            : 'Members keep their access. The premium badge disappears.'),
+        content: Text(
+          next
+              ? 'Premium tribes can gate access. Billing wiring will follow — for now this just flips the badge and unlocks the keeper-only features list.'
+              : 'Members keep their access. The premium badge disappears.',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(next ? 'Turn ON' : 'Turn OFF'),
@@ -377,23 +381,22 @@ class _TribeManageCard extends ConsumerWidget {
     );
     if (yes != true) return;
     try {
-      final ok = await ref.read(repositoryProvider).updateTribeManagement(
-            tribeId: tribe.tribeId,
-            isPremium: next,
-          );
+      final ok = await ref
+          .read(repositoryProvider)
+          .updateTribeManagement(tribeId: tribe.tribeId, isPremium: next);
       if (ok) {
         ref.invalidate(tribesIKeepProvider);
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Couldn\'t toggle: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Couldn\'t toggle: $e')));
       }
     }
   }
 
-  Future<void> _openBrandingSheet(
-      BuildContext context, WidgetRef ref) async {
+  Future<void> _openBrandingSheet(BuildContext context, WidgetRef ref) async {
     final nameCtl = TextEditingController(text: tribe.name);
     final avatarCtl = TextEditingController(text: tribe.avatarUrl ?? '');
     final saved = await showDialog<bool>(
@@ -425,16 +428,16 @@ class _TribeManageCard extends ConsumerWidget {
               const SizedBox(height: 6),
               const Text(
                 'Direct upload from device is coming next; paste a hosted URL for now.',
-                style:
-                    TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
               ),
             ],
           ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Save'),
@@ -444,7 +447,9 @@ class _TribeManageCard extends ConsumerWidget {
     );
     if (saved != true) return;
     try {
-      final ok = await ref.read(repositoryProvider).updateTribeManagement(
+      final ok = await ref
+          .read(repositoryProvider)
+          .updateTribeManagement(
             tribeId: tribe.tribeId,
             name: nameCtl.text.trim().isEmpty ? null : nameCtl.text.trim(),
             avatarUrl: avatarCtl.text.trim().isEmpty
@@ -456,8 +461,9 @@ class _TribeManageCard extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Couldn\'t save: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Couldn\'t save: $e')));
       }
     }
   }
@@ -478,8 +484,7 @@ class _ManageChip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: VentlyColors.berryMagenta.withOpacity(0.08),
           borderRadius: BorderRadius.circular(20),
@@ -514,8 +519,11 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.diversity_3,
-                size: 48, color: VentlyColors.berryMagenta),
+            const Icon(
+              Icons.diversity_3,
+              size: 48,
+              color: VentlyColors.berryMagenta,
+            ),
             const SizedBox(height: 12),
             Text(
               'No tribes to manage yet',

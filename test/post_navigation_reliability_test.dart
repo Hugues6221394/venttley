@@ -7,6 +7,15 @@ import 'package:vently_app/core/providers.dart';
 import 'package:vently_app/data/repositories/vently_repository.dart';
 import 'package:vently_app/domain/entities/entities.dart';
 
+class _StaticFeedPostsNotifier extends FeedPostsNotifier {
+  _StaticFeedPostsNotifier(this._posts);
+
+  final List<Post> _posts;
+
+  @override
+  Future<List<Post>> build() async => _posts;
+}
+
 void main() {
   test('post detail falls back to a post already visible in the feed',
       () async {
@@ -28,7 +37,7 @@ void main() {
           VentlyRepository(forceMock: true),
         ),
         feedPostsProvider.overrideWith(
-          (_) => Stream.value([visiblePost]),
+          () => _StaticFeedPostsNotifier([visiblePost]),
         ),
       ],
     );

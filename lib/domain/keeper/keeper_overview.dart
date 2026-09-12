@@ -5,18 +5,14 @@ class KeeperOverview {
   final List<Tribe> tribes;
   final Map<String, TribeStudioStats?> statsByTribeId;
 
-  const KeeperOverview({
-    required this.tribes,
-    required this.statsByTribeId,
-  });
+  const KeeperOverview({required this.tribes, required this.statsByTribeId});
 
   factory KeeperOverview.empty() =>
       const KeeperOverview(tribes: [], statsByTribeId: {});
 
   int get tribeCount => tribes.length;
 
-  int get totalMembers =>
-      tribes.fold(0, (sum, t) => sum + t.memberCount);
+  int get totalMembers => tribes.fold(0, (sum, t) => sum + t.memberCount);
 
   int get totalOpenReports => statsByTribeId.values
       .whereType<TribeStudioStats>()
@@ -39,9 +35,8 @@ class KeeperOverview {
       .fold(0, (sum, s) => sum + s.scheduledPrompts);
 
   /// Recent posts likely still needing keeper replies (proxy from studio stats).
-  int get totalUnansweredPosts => statsByTribeId.values
-      .whereType<TribeStudioStats>()
-      .fold(0, (sum, s) {
+  int get totalUnansweredPosts =>
+      statsByTribeId.values.whereType<TribeStudioStats>().fold(0, (sum, s) {
         if (s.posts24h <= 0) return sum;
         if (s.comments7d >= s.posts7d) return sum;
         return sum + s.posts24h;

@@ -44,8 +44,10 @@ abstract class FeatureFlagsService {
 
   /// Identify the current user so server-side targeting can scope
   /// rollouts (e.g. percentage rollouts, country buckets).
-  Future<void> identify(String userId,
-      {Map<String, Object?> traits = const {}});
+  Future<void> identify(
+    String userId, {
+    Map<String, Object?> traits = const {},
+  });
 
   /// Returns the boolean value of [key]. Falls back to [defaults] when
   /// unknown / network unreachable.
@@ -61,8 +63,10 @@ abstract class FeatureFlagsService {
 
 class _LocalFlagsService implements FeatureFlagsService {
   @override
-  Future<void> identify(String userId,
-      {Map<String, Object?> traits = const {}}) async {}
+  Future<void> identify(
+    String userId, {
+    Map<String, Object?> traits = const {},
+  }) async {}
 
   @override
   Future<bool> boolFlag(String key) async {
@@ -91,8 +95,10 @@ class _PostHogFlagsService implements FeatureFlagsService {
   static const _cacheTtl = Duration(minutes: 5);
 
   @override
-  Future<void> identify(String userId,
-      {Map<String, Object?> traits = const {}}) async {
+  Future<void> identify(
+    String userId, {
+    Map<String, Object?> traits = const {},
+  }) async {
     _distinctId = userId;
     await refresh();
   }
@@ -129,10 +135,7 @@ class _PostHogFlagsService implements FeatureFlagsService {
       final res = await http.post(
         Uri.parse('$host/decide/?v=3'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'api_key': apiKey,
-          'distinct_id': _distinctId,
-        }),
+        body: jsonEncode({'api_key': apiKey, 'distinct_id': _distinctId}),
       );
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body) as Map<String, Object?>;

@@ -43,7 +43,7 @@ class _TribeMembersManagementScreenState
           child: Padding(
             padding: EdgeInsets.all(28),
             child: Text(
-              'Only the current Plug can manage Tribe members.',
+              'Only the current Keeper can manage Tribe members.',
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.w700),
             ),

@@ -76,7 +76,12 @@ class FadeSlideIn extends StatelessWidget {
     return child
         .animate(delay: VentlyMotion.stagger * index)
         .fadeIn(duration: VentlyMotion.base, curve: VentlyMotion.enter)
-        .moveY(begin: 14, end: 0, duration: VentlyMotion.base, curve: VentlyMotion.enter);
+        .moveY(
+          begin: 14,
+          end: 0,
+          duration: VentlyMotion.base,
+          curve: VentlyMotion.enter,
+        );
   }
 }
 
@@ -89,28 +94,29 @@ class GlowOrb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sphere = Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: VentlyGradients.orb,
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFE05C93).withOpacity(0.45),
-            blurRadius: size * 0.35,
-            offset: Offset(0, size * 0.12),
-          ),
-        ],
-      ),
-    )
-        .animate(onPlay: (c) => c.repeat(reverse: true))
-        .scale(
-          begin: const Offset(1, 1),
-          end: const Offset(1.05, 1.05),
-          duration: 2400.ms,
-          curve: Curves.easeInOut,
-        );
+    final sphere =
+        Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: VentlyGradients.orb,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFE05C93).withOpacity(0.45),
+                    blurRadius: size * 0.35,
+                    offset: Offset(0, size * 0.12),
+                  ),
+                ],
+              ),
+            )
+            .animate(onPlay: (c) => c.repeat(reverse: true))
+            .scale(
+              begin: const Offset(1, 1),
+              end: const Offset(1.05, 1.05),
+              duration: 2400.ms,
+              curve: Curves.easeInOut,
+            );
 
     return ExcludeSemantics(
       child: SizedBox(
@@ -124,26 +130,38 @@ class GlowOrb extends StatelessWidget {
             Positioned(
               top: size * 0.24,
               left: size * 0.26,
-              child: Icon(Icons.auto_awesome_rounded,
-                      color: Colors.white, size: size * 0.30)
-                  .animate(onPlay: (c) => c.repeat(reverse: true))
-                  .fade(begin: 0.55, end: 1, duration: 1600.ms),
+              child:
+                  Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Colors.white,
+                        size: size * 0.30,
+                      )
+                      .animate(onPlay: (c) => c.repeat(reverse: true))
+                      .fade(begin: 0.55, end: 1, duration: 1600.ms),
             ),
             Positioned(
               top: size * 0.06,
               right: size * 0.10,
-              child: Icon(Icons.auto_awesome,
-                      color: Colors.white.withOpacity(0.9), size: size * 0.16)
-                  .animate(onPlay: (c) => c.repeat(reverse: true))
-                  .fade(begin: 1, end: 0.4, duration: 2000.ms),
+              child:
+                  Icon(
+                        Icons.auto_awesome,
+                        color: Colors.white.withOpacity(0.9),
+                        size: size * 0.16,
+                      )
+                      .animate(onPlay: (c) => c.repeat(reverse: true))
+                      .fade(begin: 1, end: 0.4, duration: 2000.ms),
             ),
             Positioned(
               bottom: size * 0.04,
               left: size * 0.02,
-              child: Icon(Icons.star_rounded,
-                      color: Colors.white.withOpacity(0.85), size: size * 0.13)
-                  .animate(onPlay: (c) => c.repeat(reverse: true))
-                  .fade(begin: 0.3, end: 1, duration: 1800.ms),
+              child:
+                  Icon(
+                        Icons.star_rounded,
+                        color: Colors.white.withOpacity(0.85),
+                        size: size * 0.13,
+                      )
+                      .animate(onPlay: (c) => c.repeat(reverse: true))
+                      .fade(begin: 0.3, end: 1, duration: 1800.ms),
             ),
           ],
         ),

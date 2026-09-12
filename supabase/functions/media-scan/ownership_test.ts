@@ -1,3 +1,4 @@
+import { looksLikeSupportedImage } from "./image_magic.ts";
 import { isOwnedStoragePath, ownedPathFromPublicUrl } from "./ownership.ts";
 
 function assertEquals(actual: unknown, expected: unknown): void {
@@ -14,6 +15,13 @@ Deno.test("media paths are bound to the authenticated owner", () => {
     isOwnedStoragePath("user-1/../user-2/image.jpg", "user-1"),
     false,
   );
+});
+
+Deno.test("image magic bytes reject a renamed executable", () => {
+  const jpeg = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const exe = new Uint8Array([0x4D, 0x5A, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  assertEquals(looksLikeSupportedImage(jpeg), true);
+  assertEquals(looksLikeSupportedImage(exe), false);
 });
 
 Deno.test("only this project's canonical public media URL is accepted", () => {

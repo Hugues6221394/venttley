@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/user_friendly_errors.dart';
 import '../repositories/vently_repository.dart';
 import '../../domain/entities/entities.dart';
 import 'pending_media_store.dart';
@@ -393,9 +394,18 @@ class OutboxService extends ChangeNotifier {
         } catch (error) {
           operation.attempts += 1;
           operation.lastError = '$error';
-          operation.nextRetryAt = _now().add(
-            retryDelayForAttempt(operation.attempts),
-          );
+          if (UserFriendlyErrors.isPermanent(error)) {
+            // A block (or any other policy refusal) will still be a refusal
+            // on the next attempt. Retrying it just keeps the "queued" badge
+            // up and, if they later unblock, can fire an old message they
+            // already watched fail.
+            operation.failedAt = now;
+            operation.nextRetryAt = null;
+          } else {
+            operation.nextRetryAt = _now().add(
+              retryDelayForAttempt(operation.attempts),
+            );
+          }
           await _storage.write(
             _storageKey(operation.id),
             jsonEncode(operation.toJson()),

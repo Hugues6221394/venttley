@@ -37,10 +37,7 @@ Future<void> showKeeperContentStudioSheet(
 
   switch (action) {
     case KeeperContentStudioAction.prompt:
-      await showKeeperPromptComposer(
-        context,
-        tribeId: tribe.tribeId,
-      );
+      await showKeeperPromptComposer(context, tribeId: tribe.tribeId);
       return;
     case KeeperContentStudioAction.poll:
       ref.read(composeTargetTribeProvider.notifier).state = tribe;
@@ -58,9 +55,7 @@ Future<void> showKeeperContentStudioSheet(
       );
       return;
     case KeeperContentStudioAction.pinPost:
-      context.push(
-        '/tribe/${tribe.slug}/manage/settings/content?action=pin',
-      );
+      context.push('/tribe/${tribe.slug}/manage/settings/content?action=pin');
       return;
     case KeeperContentStudioAction.schedule:
       await showKeeperPromptComposer(
@@ -75,9 +70,7 @@ Future<void> showKeeperContentStudioSheet(
       );
       return;
     case KeeperContentStudioAction.newSpace:
-      context.push(
-        '/tribe/${tribe.slug}/manage/settings/spaces?create=true',
-      );
+      context.push('/tribe/${tribe.slug}/manage/settings/spaces?create=true');
       return;
     case KeeperContentStudioAction.rules:
       context.push('/tribe/${tribe.slug}/manage/settings/rules');
@@ -155,10 +148,8 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                     icon: Icons.poll_rounded,
                     label: 'Poll',
                     enabled: slug != null,
-                    onTap: () => Navigator.pop(
-                      context,
-                      KeeperContentStudioAction.poll,
-                    ),
+                    onTap: () =>
+                        Navigator.pop(context, KeeperContentStudioAction.poll),
                   ),
                   _StudioChip(
                     icon: Icons.campaign_outlined,
@@ -209,10 +200,8 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                     icon: Icons.rule_rounded,
                     label: 'Rules',
                     enabled: slug != null,
-                    onTap: () => Navigator.pop(
-                      context,
-                      KeeperContentStudioAction.rules,
-                    ),
+                    onTap: () =>
+                        Navigator.pop(context, KeeperContentStudioAction.rules),
                   ),
                 ],
               ),

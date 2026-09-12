@@ -10,6 +10,7 @@ import '../../domain/keeper/keeper_mode.dart';
 import '../../domain/keeper/keeper_studio_v2.dart';
 import '../../domain/tribe/tribe_chat_hub.dart';
 import '../../domain/tribe/tribe_management.dart';
+import '../models/feed_page.dart';
 import '../services/analytics_service.dart';
 import '../services/cache_service.dart';
 import '../services/identity_service.dart';
@@ -120,6 +121,9 @@ class VentlyRepository implements MusicProvider {
         password: password,
         avatarSeed: avatarSeed,
         birthYear: birthDate.year,
+        // The picker already asked for the whole date; sending only the year
+        // is what left the age gate with a question the app couldn't answer.
+        birthMonth: birthDate.month,
         safetyTier: tier,
         recoveryBlob: sealed.blob,
         recoverySalt: sealed.salt,
@@ -192,6 +196,7 @@ class VentlyRepository implements MusicProvider {
       username: username,
       avatarSeed: avatarSeed,
       birthYear: birthDate.year,
+      birthMonth: birthDate.month,
       safetyTier: tier,
       recoveryBlob: sealed.blob,
       recoverySalt: sealed.salt,
@@ -404,10 +409,76 @@ class VentlyRepository implements MusicProvider {
   }
 
   /// Attach / change a real recovery email (Supabase emails a confirm link).
-  Future<void> setRecoveryEmail(String email) async {
+  /// Nominate a recovery email. Returns the masked form the server echoes back.
+  Future<String?> setRecoveryEmail(String email) async {
+    final live = _live;
+    if (live == null) return null;
+    return live.setRecoveryEmail(email);
+  }
+
+  Future<bool> confirmRecoveryEmail(String code) async {
+    final live = _live;
+    if (live == null) return false;
+    return live.confirmRecoveryEmail(code);
+  }
+
+  Future<void> clearRecoveryEmail() async {
     final live = _live;
     if (live == null) return;
-    await live.setRecoveryEmail(email);
+    await live.clearRecoveryEmail();
+  }
+
+  Future<bool> cancelRecoveryEmailChange() async {
+    final live = _live;
+    if (live == null) return false;
+    return live.cancelRecoveryEmailChange();
+  }
+
+  Future<void> requestPasswordReset(String identifier) async {
+    final live = _live;
+    if (live == null) return;
+    await live.requestPasswordReset(identifier);
+  }
+
+  Future<String?> confirmPasswordReset({
+    required String identifier,
+    required String code,
+    required String newPassword,
+  }) async {
+    final live = _live;
+    if (live == null) return 'You appear to be offline.';
+    return live.confirmPasswordReset(
+      identifier: identifier,
+      code: code,
+      newPassword: newPassword,
+    );
+  }
+
+  Future<String?> setRecoveryPhone(String phone) async {
+    final live = _live;
+    if (live == null) return null;
+    return live.setRecoveryPhone(phone);
+  }
+
+  Future<bool> confirmRecoveryPhone() async {
+    final live = _live;
+    if (live == null) return false;
+    return live.confirmRecoveryPhone();
+  }
+
+  Future<void> clearRecoveryPhone() async {
+    final live = _live;
+    if (live == null) return;
+    await live.clearRecoveryPhone();
+  }
+
+  /// Offline this reports nothing configured rather than inventing a verified
+  /// method — a security screen that overstates protection is worse than one
+  /// that admits it cannot tell.
+  Future<RecoveryMethods> myRecoveryMethods() async {
+    final live = _live;
+    if (live == null) return const RecoveryMethods();
+    return live.myRecoveryMethods();
   }
 
   /// Sign out of every device (revokes all refresh tokens).
@@ -549,6 +620,12 @@ class VentlyRepository implements MusicProvider {
     }
   }
 
+  Stream<void> get feedInvalidationStream {
+    final live = _live;
+    if (live != null) return live.feedInvalidationStream;
+    return _mock.postsStream.map((_) {});
+  }
+
   // ===================== Posts / Feed =====================
   Stream<List<Post>> watchFeed({
     String? category,
@@ -560,20 +637,24 @@ class VentlyRepository implements MusicProvider {
     final live = _live;
     if (live != null) {
       final controller = StreamController<List<Post>>();
-      late StreamSubscription<List<Post>> sub;
+      late StreamSubscription<void> sub;
       Future<void> emit() async {
-        controller.add(
-          await live.feed(
-            category: category,
-            mood: mood,
-            tribeSlug: tribeSlug,
-            locationBucket: locationBucket,
-            sort: sort,
-          ),
-        );
+        try {
+          controller.add(
+            await live.feed(
+              category: category,
+              mood: mood,
+              tribeSlug: tribeSlug,
+              locationBucket: locationBucket,
+              sort: sort,
+            ),
+          );
+        } catch (error, stackTrace) {
+          controller.addError(error, stackTrace);
+        }
       }
 
-      sub = live.postsStream.listen((_) => emit());
+      sub = live.feedInvalidationStream.listen((_) => emit());
       controller.onListen = emit;
       controller.onCancel = () => sub.cancel();
       return controller.stream;
@@ -614,6 +695,7 @@ class VentlyRepository implements MusicProvider {
     String sort = 'fresh',
     int limit = 30,
     int offset = 0,
+    FeedCursor? cursor,
   }) {
     final live = _live;
     if (live != null) {
@@ -625,6 +707,7 @@ class VentlyRepository implements MusicProvider {
         sort: sort,
         limit: limit,
         offset: offset,
+        cursor: cursor,
       );
     }
     return Future.value(
@@ -638,6 +721,41 @@ class VentlyRepository implements MusicProvider {
         offset: offset,
       ),
     );
+  }
+
+  Future<FeedPage> feedPage({
+    String? category,
+    String? mood,
+    String? tribeSlug,
+    String? locationBucket,
+    String sort = 'fresh',
+    int limit = 30,
+    int offset = 0,
+    FeedCursor? cursor,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.feedPage(
+        category: category,
+        mood: mood,
+        tribeSlug: tribeSlug,
+        locationBucket: locationBucket,
+        sort: sort,
+        limit: limit,
+        offset: offset,
+        cursor: cursor,
+      );
+    }
+    final posts = _mock.feed(
+      category: category,
+      mood: mood,
+      tribeSlug: tribeSlug,
+      locationBucket: locationBucket,
+      sort: sort,
+      limit: limit,
+      offset: offset,
+    );
+    return FeedPage(posts: posts);
   }
 
   Future<List<Post>> friendStories({int limit = 24}) async {
@@ -1030,6 +1148,18 @@ class VentlyRepository implements MusicProvider {
     return Future.value(true);
   }
 
+  Future<String?> activeStoryForUser(String userId) {
+    final live = _live;
+    if (live == null) return Future.value(null);
+    return live.activeStoryForUser(userId);
+  }
+
+  Future<List<StoryViewerUser>> storyViewers(String postId) {
+    final live = _live;
+    if (live != null) return live.storyViewers(postId);
+    return Future.value(const []);
+  }
+
   Future<List<StoryReactionUser>> storyReactions(String postId) {
     final live = _live;
     if (live != null) return live.storyReactions(postId);
@@ -1274,6 +1404,16 @@ class VentlyRepository implements MusicProvider {
       );
     }
     return live.tribeCreationEligibility();
+  }
+
+  /// The signed-in keeper's agreement for this Tribe, or null if none exists.
+  ///
+  /// Null in mock mode too: there is no agreement to show for a Tribe that was
+  /// never really created.
+  Future<KeeperAttestation?> myKeeperAttestation(String tribeId) {
+    final live = _live;
+    if (live == null) return Future.value(null);
+    return live.myKeeperAttestation(tribeId);
   }
 
   Future<TribeCreationEligibility> setMyBirthMonth(int month) {
@@ -2439,11 +2579,83 @@ class VentlyRepository implements MusicProvider {
 
   Future<TribeManagementOverview> replaceTribeRules(
     String tribeId,
-    List<TribeRuleItem> rules,
+    List<TribeRuleItem> rules, {
+    String? changeNote,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.replaceTribeRules(tribeId, rules, changeNote: changeNote);
+    }
+    return Future.value(_mock.replaceTribeRules(tribeId, rules));
+  }
+
+  /// Words that make a password guessable however it is decorated.
+  ///
+  /// Empty on failure rather than throwing: a wordlist that cannot be fetched
+  /// must not stop somebody creating an account. The length and character
+  /// rules still apply, and the server enforces those regardless.
+  Future<Set<String>> weakPasswordBases() async {
+    final live = _live;
+    if (live == null) return const <String>{};
+    try {
+      return await live.weakPasswordBases();
+    } catch (_) {
+      return const <String>{};
+    }
+  }
+
+  /// What the signed-in account may do in this Tribe.
+  ///
+  /// Offline the answer is empty rather than permissive. A mock that granted
+  /// everything would show a management surface that the server would refuse,
+  /// which is a worse lie than showing nothing.
+  /// Make sure this session's coarse country is on record before anything
+  /// reads it. Offline this is a no-op rather than a wait.
+  Future<void> ensureCountryCaptured() async {
+    final live = _live;
+    if (live == null) return;
+    await live.ensureCountryCaptured();
+  }
+
+  Future<List<String>> myTribePermissions(String tribeId) {
+    final live = _live;
+    if (live != null) return live.myTribePermissions(tribeId);
+    return Future.value(const <String>[]);
+  }
+
+  Future<TribePermissionGrants> tribePermissionGrants(String tribeId) {
+    final live = _live;
+    if (live != null) return live.tribePermissionGrants(tribeId);
+    return Future.value(const TribePermissionGrants());
+  }
+
+  Future<List<String>> setTribeMemberPermissions(
+    String tribeId,
+    String userId,
+    List<String> permissions,
   ) {
     final live = _live;
-    if (live != null) return live.replaceTribeRules(tribeId, rules);
-    return Future.value(_mock.replaceTribeRules(tribeId, rules));
+    if (live != null) {
+      return live.setTribeMemberPermissions(tribeId, userId, permissions);
+    }
+    return Future.value(permissions);
+  }
+
+  /// Whether the signed-in member is being asked to read a newer rule set.
+  ///
+  /// Offline this always answers "nothing to read": inventing a rules change
+  /// against mock data would put a notice in front of someone that no Keeper
+  /// ever published.
+  Future<TribeRulesStatus> myTribeRulesStatus(String tribeId) {
+    final live = _live;
+    if (live != null) return live.myTribeRulesStatus(tribeId);
+    return Future.value(const TribeRulesStatus());
+  }
+
+  Future<int> acknowledgeTribeRules(String tribeId, int version) {
+    final live = _live;
+    if (live != null) return live.acknowledgeTribeRules(tribeId, version);
+    return Future.value(version);
   }
 
   Future<List<TribeJoinRequest>> tribeJoinRequests(String tribeId) {
@@ -2533,6 +2745,27 @@ class VentlyRepository implements MusicProvider {
       _mock.respondTribeTransfer(transferId, accept: accept);
     }
     _cache.invalidate(prefix: 'tribes:');
+  }
+
+  /// Immediate, irreversible deletion.
+  ///
+  /// Re-authenticates first, exactly like scheduling does. If anything this
+  /// path deserves it more: scheduling leaves 30 days to change your mind and
+  /// a 'cancel_delete' action to do it with, and this leaves nothing.
+  Future<int> deleteTribeNow({
+    required String tribeId,
+    required String confirmedName,
+    String? password,
+  }) async {
+    await reauthenticate(password ?? '');
+    final live = _live;
+    if (live == null) return 0;
+    final affected = await live.deleteTribeNow(
+      tribeId: tribeId,
+      confirmedName: confirmedName,
+    );
+    _cache.invalidate(prefix: 'tribes:');
+    return affected;
   }
 
   Future<TribeManagementOverview> setTribeLifecycle({
@@ -2805,6 +3038,38 @@ class VentlyRepository implements MusicProvider {
   // ===================== Tribes =====================
   /// Tribe lists are stable enough to cache for a minute per query —
   /// the directory screen swipes through several categories quickly.
+  /// Deliberately NOT cached, unlike [tribes].
+  ///
+  /// The whole point is that consecutive calls return different things — the
+  /// server subtracts a penalty for what it has already shown this person. A
+  /// cache would hand back the previous list and reintroduce exactly the frozen
+  /// rail this replaces.
+  Future<List<Tribe>> recommendedTribes({int limit = 10}) async {
+    final live = _live;
+    if (live == null) {
+      final all = await tribes();
+      return all.take(limit).toList();
+    }
+    return live.recommendedTribes(limit: limit);
+  }
+
+  /// Uncached, like [recommendedTribes], and for the same reason: consecutive
+  /// calls are supposed to differ.
+  Future<List<Whisper>> whispersForMe({int limit = 24}) async {
+    final live = _live;
+    if (live == null) return listWhispers(limit: limit);
+    return live.whispersForMe(limit: limit);
+  }
+
+  Future<void> noteDiscoveryImpressions({
+    required String kind,
+    required List<String> ids,
+  }) async {
+    final live = _live;
+    if (live == null) return;
+    await live.noteDiscoveryImpressions(kind: kind, ids: ids);
+  }
+
   Future<List<Tribe>> tribes({String? category, String? search}) {
     final key = 'tribes:${category ?? ''}:${search ?? ''}';
     return _cache.getOrLoad(key, () async {
@@ -2979,6 +3244,12 @@ class VentlyRepository implements MusicProvider {
     return Future.value(_mock.tribeBySlug(slug));
   }
 
+  Future<List<TribeCategory>> tribeCategories() {
+    final live = _live;
+    if (live == null) return Future.value(const []);
+    return live.tribeCategories();
+  }
+
   Future<Tribe> createTribe({
     required String name,
     required String category,
@@ -2989,20 +3260,42 @@ class VentlyRepository implements MusicProvider {
     String? welcomeMessage,
     TribeGovernanceSettings settings = const TribeGovernanceSettings(),
     List<TribeRuleItem> rules = const [],
+    required String idempotencyKey,
+    required bool keeperAttested,
+    required int attestationVersion,
   }) {
     final live = _live;
     if (live != null) {
-      return live.createTribe(
-        name: name,
-        category: category,
-        description: description,
-        isPrivate: isPrivate,
-        tags: tags,
-        visibility: visibility,
-        welcomeMessage: welcomeMessage,
-        settings: settings,
-        rules: rules,
-      );
+      return live
+          .createTribe(
+            name: name,
+            category: category,
+            description: description,
+            isPrivate: isPrivate,
+            tags: tags,
+            visibility: visibility,
+            welcomeMessage: welcomeMessage,
+            settings: settings,
+            rules: rules,
+            idempotencyKey: idempotencyKey,
+            keeperAttested: keeperAttested,
+            attestationVersion: attestationVersion,
+          )
+          .then((tribe) {
+            // Drop the cached directory.
+            //
+            // tribes() caches under a 'tribes:<category>:<search>' key with a
+            // one-minute TTL, and creation never cleared it. Pull-to-refresh
+            // invalidates the Riverpod provider, which re-calls tribes(), which
+            // returns the same cached list — so a brand new Tribe was absent
+            // from search and the directory no matter how many times anyone
+            // refreshed, and only a full app restart showed it.
+            //
+            // setTribeLifecycle already does exactly this, which is why
+            // DELETING a Tribe updated immediately while creating one did not.
+            _cache.invalidate(prefix: 'tribes:');
+            return tribe;
+          });
     }
     return Future.value(
       _mock.createTribe(
@@ -3312,6 +3605,111 @@ class VentlyRepository implements MusicProvider {
     return Future.value();
   }
 
+  // ---- Devices, sessions, and the security ledger -------------------------
+
+  /// Bind this installation to the current session. Idempotent per session.
+  Future<DeviceRegistration?> registerDeviceSession({
+    required String deviceId,
+    String? deviceName,
+    String deviceType = 'unknown',
+    String? osName,
+    String? osVersion,
+    String? appVersion,
+  }) {
+    final live = _live;
+    if (live == null) return Future.value();
+    return live.registerDeviceSession(
+      deviceId: deviceId,
+      deviceName: deviceName,
+      deviceType: deviceType,
+      osName: osName,
+      osVersion: osVersion,
+      appVersion: appVersion,
+    );
+  }
+
+  Future<List<DeviceSession>> myDeviceSessions() {
+    final live = _live;
+    if (live != null) return live.myDeviceSessions();
+    return Future.value(const <DeviceSession>[]);
+  }
+
+  Future<bool> revokeDeviceSession(String deviceSessionId) {
+    final live = _live;
+    if (live != null) return live.revokeDeviceSession(deviceSessionId);
+    return Future.value(false);
+  }
+
+  Future<int> revokeOtherDeviceSessions() {
+    final live = _live;
+    if (live != null) return live.revokeOtherDeviceSessions();
+    return Future.value(0);
+  }
+
+  /// False means this session was revoked elsewhere and the app should sign
+  /// out. The mock backend has no sessions to revoke, so it answers true.
+  Future<bool> touchDeviceSession() {
+    final live = _live;
+    if (live != null) return live.touchDeviceSession();
+    return Future.value(true);
+  }
+
+  Future<bool> trustDevice(String deviceRowId) {
+    final live = _live;
+    if (live != null) return live.trustDevice(deviceRowId);
+    return Future.value(false);
+  }
+
+  Future<int> blockDevice(String deviceRowId) {
+    final live = _live;
+    if (live != null) return live.blockDevice(deviceRowId);
+    return Future.value(0);
+  }
+
+  Future<List<SecurityEvent>> mySecurityEvents({
+    int limit = 30,
+    DateTime? before,
+  }) {
+    final live = _live;
+    if (live != null)
+      return live.mySecurityEvents(limit: limit, before: before);
+    return Future.value(const <SecurityEvent>[]);
+  }
+
+  Future<void> logSecurityEvent(String kind, {Map<String, dynamic>? context}) {
+    final live = _live;
+    if (live != null) return live.logSecurityEvent(kind, context: context);
+    return Future.value();
+  }
+
+  Future<void> recordFailedLogin(String identifier) {
+    final live = _live;
+    if (live != null) return live.recordFailedLogin(identifier);
+    return Future.value();
+  }
+
+  /// Flagged sign-ins still awaiting a "was this you?" answer.
+  Future<List<SecurityAlert>> myUnresolvedSecurityAlerts() {
+    final live = _live;
+    if (live != null) return live.myUnresolvedSecurityAlerts();
+    return Future.value(const <SecurityAlert>[]);
+  }
+
+  /// True trusts the device; false blocks it and ends its sessions.
+  Future<bool> resolveSuspiciousLogin({
+    required String deviceSessionId,
+    required bool wasMe,
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.resolveSuspiciousLogin(
+        deviceSessionId: deviceSessionId,
+        wasMe: wasMe,
+      );
+    }
+    return Future.value(false);
+  }
+
   /// Peer presence tier: online | recent | offline | hidden.
   Future<({String state, DateTime? lastSeen})> peerPresence(String userId) {
     final live = _live;
@@ -3514,6 +3912,21 @@ class VentlyRepository implements MusicProvider {
       return live.verifyMfa(factorId: factorId, code: code);
     }
     return Future.value();
+  }
+
+  /// Factor still waiting on a TOTP code, or null. Mock never challenges.
+  Future<String?> pendingMfaFactorId() {
+    final live = _live;
+    if (live != null) return live.pendingMfaFactorId();
+    return Future.value(null);
+  }
+
+  /// When this account last rotated its password. Null = never since the
+  /// column landed. Used by the Security Center checkup, not by restore.
+  Future<DateTime?> myPasswordChangedAt() {
+    final live = _live;
+    if (live != null) return live.myPasswordChangedAt();
+    return Future.value(null);
   }
 
   // ─── Phase 2 (migration 0051) ──────────────────────────────────────

@@ -51,9 +51,13 @@ Future<String?> showReportReasonSheet(
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(title,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 18)),
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                  ),
+                ),
               ),
               const SizedBox(height: 6),
               Padding(
@@ -61,10 +65,9 @@ Future<String?> showReportReasonSheet(
                 child: Text(
                   subtitle,
                   style: TextStyle(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withOpacity(0.7),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.7),
                     fontSize: 12,
                     height: 1.4,
                   ),

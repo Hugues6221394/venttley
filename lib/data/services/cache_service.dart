@@ -11,8 +11,7 @@ class CacheService {
   CacheService({this.maxEntries = 128});
   final int maxEntries;
 
-  final LinkedHashMap<String, _Entry> _store =
-      LinkedHashMap<String, _Entry>();
+  final LinkedHashMap<String, _Entry> _store = LinkedHashMap<String, _Entry>();
   final Map<String, Future<dynamic>> _inflight = {};
 
   /// Get-or-load: returns the cached value when fresh, otherwise calls

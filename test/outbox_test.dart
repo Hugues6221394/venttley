@@ -290,6 +290,38 @@ void main() {
     expect(service.pending, isEmpty);
   });
 
+  test('a policy refusal is failed immediately rather than retried', () async {
+    final storage = MemorySensitiveStore();
+    var executions = 0;
+    final service = await OutboxService.openWithStore(
+      storage,
+      executor: (operation) async {
+        executions += 1;
+        throw Exception('blocked_by_user');
+      },
+    );
+    addTearDown(service.dispose);
+
+    await service.enqueue(
+      OutboxKind.dm,
+      {'roomId': 'room-1', 'plaintext': 'after the falling-out'},
+      operationId: 'blocked-send',
+    );
+    await service.flush();
+
+    expect(executions, 1);
+    expect(service.pending, isEmpty);
+    expect(service.failed.single.id, 'blocked-send');
+    expect(service.failed.single.lastError, contains('blocked_by_user'));
+
+    await service.flush();
+    expect(
+      executions,
+      1,
+      reason: 'a refused send must not keep knocking on the same door',
+    );
+  });
+
   test('malformed operation payloads are rejected instead of crashing', () {
     expect(OutboxOp.fromJson({'id': 'bad'}), isNull);
     expect(

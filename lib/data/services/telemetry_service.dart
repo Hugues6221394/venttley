@@ -32,11 +32,7 @@ class TelemetryService {
     try {
       await Supabase.instance.client.rpc(
         'record_event',
-        params: {
-          'p_name': name,
-          'p_severity': severity,
-          'p_props': scrubbed,
-        },
+        params: {'p_name': name, 'p_severity': severity, 'p_props': scrubbed},
       );
     } catch (_) {
       // Telemetry failures are silent — we already breadcrumbed locally.
@@ -57,10 +53,7 @@ class TelemetryService {
     }
     await event(
       name ?? 'unhandled_error',
-      props: {
-        'error': scrubbedError.toString(),
-        ...context,
-      },
+      props: {'error': scrubbedError.toString(), ...context},
       severity: 'error',
     );
   }

@@ -96,8 +96,11 @@ class _WhispersSpotlightBanner extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.trending_up_rounded,
-                            size: 13, color: Colors.white.withOpacity(0.85)),
+                        Icon(
+                          Icons.trending_up_rounded,
+                          size: 13,
+                          color: Colors.white.withOpacity(0.85),
+                        ),
                         const SizedBox(width: 5),
                         Expanded(
                           child: Text(
@@ -137,7 +140,9 @@ class _WhispersSpotlightBanner extends StatelessWidget {
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.18),
                         borderRadius: BorderRadius.circular(20),
@@ -160,8 +165,11 @@ class _WhispersSpotlightBanner extends StatelessWidget {
                             ),
                           ),
                           SizedBox(width: 6),
-                          Icon(Icons.arrow_forward_rounded,
-                              size: 14, color: Colors.white),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 14,
+                            color: Colors.white,
+                          ),
                         ],
                       ),
                     ),
@@ -181,7 +189,9 @@ class _WhispersSpotlightBanner extends StatelessWidget {
                         right: 0,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.20),
                             borderRadius: BorderRadius.circular(14),
@@ -192,8 +202,11 @@ class _WhispersSpotlightBanner extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.graphic_eq_rounded,
-                                  size: 12, color: Colors.white),
+                              const Icon(
+                                Icons.graphic_eq_rounded,
+                                size: 12,
+                                color: Colors.white,
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 PostCard.compactNumber(totalPlays),
@@ -218,8 +231,11 @@ class _WhispersSpotlightBanner extends StatelessWidget {
                           width: 1.4,
                         ),
                       ),
-                      child: const Icon(Icons.play_arrow_rounded,
-                          color: Colors.white, size: 34),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 34,
+                      ),
                     ),
                     for (var i = 0; i < faces.length; i++)
                       Positioned(

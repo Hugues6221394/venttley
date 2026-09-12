@@ -63,8 +63,10 @@ class KeeperInsightsScreen extends ConsumerWidget {
             GlassCard(
               child: Row(
                 children: [
-                  const Icon(Icons.autorenew_rounded,
-                      color: VentlyColors.berryMagenta),
+                  const Icon(
+                    Icons.autorenew_rounded,
+                    color: VentlyColors.berryMagenta,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -115,7 +117,10 @@ class KeeperInsightsScreen extends ConsumerWidget {
               ...data.insights.map((i) => _InsightTile(insight: i)),
             const SizedBox(height: 16),
             if (tribeId != null)
-              _ExportButton(tribeId: tribeId, tribeName: tribe?.name ?? 'Tribe'),
+              _ExportButton(
+                tribeId: tribeId,
+                tribeName: tribe?.name ?? 'Tribe',
+              ),
           ],
         ),
       ),
@@ -149,8 +154,8 @@ class _ScoreCard extends StatelessWidget {
     final color = value >= 80
         ? const Color(0xFF3D9B6A)
         : value >= 50
-            ? const Color(0xFFD97706)
-            : VentlyColors.berryMagenta;
+        ? const Color(0xFFD97706)
+        : VentlyColors.berryMagenta;
     return GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,10 +238,7 @@ class _InsightTile extends ConsumerWidget {
           children: [
             Text(
               insight.title,
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                color: color,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w900, color: color),
             ),
             const SizedBox(height: 6),
             Text(
@@ -315,16 +317,14 @@ class _ExportButtonState extends ConsumerState<_ExportButton> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '${widget.tribeName} report copied to clipboard.',
-          ),
+          content: Text('${widget.tribeName} report copied to clipboard.'),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -341,8 +341,10 @@ class _ExportButtonState extends ConsumerState<_ExportButton> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.download_rounded, size: 18),
-      label: const Text('Export studio report',
-          style: TextStyle(fontWeight: FontWeight.w900)),
+      label: const Text(
+        'Export studio report',
+        style: TextStyle(fontWeight: FontWeight.w900),
+      ),
     );
   }
 }

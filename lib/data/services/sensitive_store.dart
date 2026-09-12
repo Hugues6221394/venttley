@@ -13,7 +13,7 @@ abstract interface class SensitiveStore {
 
 class DeviceSensitiveStore implements SensitiveStore {
   DeviceSensitiveStore({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
 

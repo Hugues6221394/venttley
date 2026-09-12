@@ -22,11 +22,23 @@ import 'data/services/notifications_service.dart';
 import 'data/services/telemetry_service.dart';
 import 'presentation/router/app_router.dart';
 import 'presentation/theme/app_theme.dart';
+import 'presentation/widgets/friendly_error_screen.dart';
 import 'presentation/widgets/notification_foreground_listener.dart';
 import 'presentation/widgets/vently_premium_background.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Before anything else that could fail.
+  //
+  // Without this, any widget that throws during build shows Flutter's red
+  // screen with a stack trace — which is what a person actually saw when
+  // opening a profile from a story. On an app used by people in distress,
+  // including thirteen-year-olds, that is not a developer inconvenience: it
+  // looks like they broke something, on the one platform promising them they
+  // are safe. Every widget failure now renders FriendlyErrorScreen instead,
+  // and the error still reaches the logger and Sentry.
+  installErrorHandling();
   VentlyConfig.validateBackendConfiguration();
 
   // Firebase background handlers must be registered before runApp. Preparing
@@ -222,7 +234,15 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   /// app is foregrounded so peers see Online / Active recently (0114).
   Timer? _presenceTimer;
   StreamSubscription<Uri>? _appLinkSubscription;
+  StreamSubscription<AuthState>? _authSubscription;
   String? _pendingDeepLinkPath;
+
+  /// Throttles the unanswered-alert poll. Resume fires on every task-switch,
+  /// and a security question re-asked every time you glance at another app is
+  /// a question that stops being read.
+  DateTime? _lastSecurityCheck;
+
+  static const String _securityCheckRoute = '/security-check';
 
   void _handleAppLink(Uri uri) {
     final path = groupInvitePathFromUri(uri);
@@ -294,6 +314,135 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       // temporary clock skew must never become uncaught app exceptions.
       Logger.instance.warn('presence.heartbeat_failed');
     }
+    await _verifyDeviceSessionSafely();
+  }
+
+  /// Notice a session that was revoked from another device.
+  ///
+  /// Deleting the GoTrue session stops the refresh token, but the access token
+  /// already in memory stays valid until it expires — up to an hour. Riding the
+  /// existing 60s presence heartbeat closes that gap: "sign this device out"
+  /// takes effect within a minute instead of within an hour.
+  ///
+  /// Only an explicit false signs out. A network error must never eject
+  /// someone from their own account.
+  Future<void> _verifyDeviceSessionSafely() async {
+    if (ref.read(sessionProvider) == null) return;
+    bool alive;
+    try {
+      alive = await ref.read(repositoryProvider).touchDeviceSession();
+    } catch (_) {
+      Logger.instance.warn('security.session_check_failed');
+      return;
+    }
+    if (alive || !mounted || ref.read(sessionProvider) == null) return;
+
+    Logger.instance.info('security.session_revoked_remotely');
+    _stopPresenceHeartbeat();
+    try {
+      await ref.read(sessionProvider.notifier).logout();
+    } catch (_) {
+      Logger.instance.warn('security.revoked_signout_failed');
+    }
+  }
+
+  /// Bind this installation to the session that just started.
+  ///
+  /// Runs on sign-in and on every cold start, because a session can outlive the
+  /// app process and would otherwise never appear in the user's device list.
+  Future<void> _registerDeviceSafely(String userId) async {
+    try {
+      final identity = await ref.read(deviceIdentityServiceProvider).read();
+      if (!mounted || ref.read(sessionProvider)?.userId != userId) return;
+
+      // Resolve the country first: register_device_session reads it off the
+      // user row, so registering before it lands means the new-device event —
+      // the one most worth getting right — carries no location at all. Bounded,
+      // because a slow edge call must not hold up sign-in; if it times out we
+      // register without a country exactly as before.
+      try {
+        await ref
+            .read(repositoryProvider)
+            .ensureCountryCaptured()
+            .timeout(const Duration(seconds: 3));
+      } catch (_) {
+        // Country is a risk signal, not a gate. Carry on without it.
+      }
+      if (!mounted || ref.read(sessionProvider)?.userId != userId) return;
+
+      final registration = await ref
+          .read(repositoryProvider)
+          .registerDeviceSession(
+            deviceId: identity.deviceId,
+            deviceName: identity.deviceName,
+            deviceType: identity.deviceType,
+            osName: identity.osName,
+            osVersion: identity.osVersion,
+            appVersion: identity.appVersion,
+          );
+
+      if (registration == null || !mounted) return;
+      if (ref.read(sessionProvider)?.userId != userId) return;
+
+      // The user previously told us this device was not them. Honour that
+      // now rather than waiting for the next heartbeat.
+      if (registration.isBlocked) {
+        Logger.instance.info('security.blocked_device_signed_out');
+        _stopPresenceHeartbeat();
+        await ref.read(sessionProvider.notifier).logout();
+        return;
+      }
+
+      // The server scored this sign-in high enough to want an answer. Ask now,
+      // while the user still remembers whether they just did something unusual.
+      if (registration.needsConfirmation) {
+        Logger.instance.info('security.login_challenge_raised');
+        _openSecurityCheck();
+      }
+    } catch (_) {
+      // Never block sign-in on this. A device that fails to register is
+      // invisible in the session list, which is a worse list — not a worse
+      // login.
+      Logger.instance.warn('security.device_register_failed');
+    }
+  }
+
+  /// Catch up on prompts raised while the app was closed.
+  ///
+  /// The sign-in worth asking about is usually the one the user was not
+  /// present for, so registration alone is not enough — that path only fires
+  /// for the session being opened right now.
+  Future<void> _checkSecurityAlertsSafely() async {
+    if (ref.read(sessionProvider) == null) return;
+    final now = DateTime.now();
+    final last = _lastSecurityCheck;
+    if (last != null && now.difference(last) < const Duration(minutes: 30)) {
+      return;
+    }
+    _lastSecurityCheck = now;
+
+    try {
+      final alerts = await ref
+          .read(repositoryProvider)
+          .myUnresolvedSecurityAlerts();
+      if (alerts.isEmpty || !mounted) return;
+      if (ref.read(sessionProvider) == null) return;
+      _openSecurityCheck();
+    } catch (_) {
+      // A failed check must not surface as an error. The notification row and
+      // the email are the durable channels; this is the convenient one.
+      _lastSecurityCheck = null;
+      Logger.instance.warn('security.alert_check_failed');
+    }
+  }
+
+  /// Never stack the prompt on top of itself — a resume while the user is
+  /// already answering would push a second copy over the first.
+  void _openSecurityCheck() {
+    final router = ref.read(routerProvider);
+    final location = router.routerDelegate.currentConfiguration.uri.path;
+    if (location == _securityCheckRoute) return;
+    router.push(_securityCheckRoute);
   }
 
   void _stopPresenceHeartbeat() {
@@ -326,7 +475,10 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
     if (state == AppLifecycleState.resumed) {
       _startPresenceHeartbeat();
       final session = ref.read(sessionProvider);
-      if (session != null) unawaited(_startPushForSession(session.userId));
+      if (session != null) {
+        unawaited(_startPushForSession(session.userId));
+        unawaited(_checkSecurityAlertsSafely());
+      }
     } else if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
@@ -343,6 +495,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
   void dispose() {
     _stopPresenceHeartbeat();
     _appLinkSubscription?.cancel();
+    _authSubscription?.cancel();
     PushRegistrationService.instance.setNotificationOpenedHandler(null);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -360,6 +513,14 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
       onError: (Object error, StackTrace stack) =>
           Logger.instance.warn('app_link.invalid', error: error, stack: stack),
     );
+    if (!VentlyConfig.useMockBackend) {
+      _authSubscription = Supabase.instance.client.auth.onAuthStateChange
+          .listen((data) {
+            if (data.event == AuthChangeEvent.signedIn) {
+              unawaited(_restoreSessionSafely());
+            }
+          });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _restoreSessionSafely();
       AnalyticsService.instance.track(Events.appOpened);
@@ -406,11 +567,15 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
         handlePendingNotificationNavigation(ref);
         _flushPendingDeepLink();
         unawaited(_startPushForSession(next.userId));
+        unawaited(_registerDeviceSafely(next.userId));
         ref.invalidate(tribeChatInboxProvider);
         _startPresenceHeartbeat();
       } else {
         unawaited(PushRegistrationService.instance.detachSession());
         _stopPresenceHeartbeat();
+        // The next account to sign in on this handset gets its own check
+        // rather than inheriting this one's throttle window.
+        _lastSecurityCheck = null;
       }
     });
     ref.listen(pendingNotificationPayloadProvider, (prev, next) {

@@ -32,7 +32,8 @@ Future<void> maybeSurfaceChatCrisis({
   }
   if (!moderation.surfaceCrisisHelpline) return;
 
-  final level = moderation.categories.contains(HazardCategory.selfHarm) &&
+  final level =
+      moderation.categories.contains(HazardCategory.selfHarm) &&
           moderation.reasons.any((r) => r.contains('care about you'))
       ? 'high'
       : 'elevated';
@@ -64,14 +65,16 @@ class _CrisisSupportSheet extends ConsumerWidget {
     // remains available when the network catalogue cannot load.
     final live = ref.watch(crisisResourcesProvider).valueOrNull;
     final fallback = kCrisisResources
-        .map((r) => CrisisHelpline(
-              resourceId: r.label,
-              region: 'global',
-              label: r.label,
-              reach: r.reach,
-              hours: '',
-              sortOrder: 0,
-            ))
+        .map(
+          (r) => CrisisHelpline(
+            resourceId: r.label,
+            region: 'global',
+            label: r.label,
+            reach: r.reach,
+            hours: '',
+            sortOrder: 0,
+          ),
+        )
         .toList();
     final resources = (live == null || live.isEmpty) ? fallback : live;
 
@@ -100,8 +103,11 @@ class _CrisisSupportSheet extends ConsumerWidget {
             ),
             Row(
               children: [
-                const Icon(Icons.favorite_rounded,
-                    color: VentlyColors.berryMagenta, size: 22),
+                const Icon(
+                  Icons.favorite_rounded,
+                  color: VentlyColors.berryMagenta,
+                  size: 22,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -133,8 +139,10 @@ class _CrisisSupportSheet extends ConsumerWidget {
               alignment: Alignment.centerRight,
               child: TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Close',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                child: const Text(
+                  'Close',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
               ),
             ),
           ],
@@ -160,35 +168,50 @@ class _HelplineTile extends StatelessWidget {
           onTap: () {
             // Copy, never auto-dial.
             Clipboard.setData(
-                ClipboardData(text: resource.url ?? resource.reach));
+              ClipboardData(text: resource.url ?? resource.reach),
+            );
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                  content: Text('Copied: ${resource.url ?? resource.reach}')),
+                content: Text('Copied: ${resource.url ?? resource.reach}'),
+              ),
             );
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                Icon(resource.url == null ? Icons.phone : Icons.public,
-                    size: 18, color: VentlyColors.berryMagenta),
+                Icon(
+                  resource.url == null ? Icons.phone : Icons.public,
+                  size: 18,
+                  color: VentlyColors.berryMagenta,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(resource.label,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w800, fontSize: 13.5)),
-                      Text(resource.reach,
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: context.ink.withOpacity(0.7))),
+                      Text(
+                        resource.label,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                      Text(
+                        resource.reach,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.ink.withOpacity(0.7),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const Icon(Icons.copy_rounded,
-                    size: 15, color: VentlyColors.softMauve),
+                const Icon(
+                  Icons.copy_rounded,
+                  size: 15,
+                  color: VentlyColors.softMauve,
+                ),
               ],
             ),
           ),

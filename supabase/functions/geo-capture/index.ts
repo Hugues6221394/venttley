@@ -31,11 +31,52 @@ function isoCountry(v: string | null): string | null {
   return /^[A-Z]{2}$/.test(c) ? c : null;
 }
 
+// Country headers, in order of trust. Which of these exists depends entirely
+// on what sits in front of the function, and live testing showed this
+// deployment sets NONE of the original two — geo-capture answered
+// {"ok":true,"country":null} for every real user, so users.last_country stayed
+// empty and the risk engine's new-country signal could never fire.
+//
+// Listing the candidates costs nothing and means the function starts working
+// the moment an edge that sets one of them is in front of it. COUNTRY_HEADER
+// lets an operator name a header explicitly without another deploy.
+const COUNTRY_HEADERS = [
+  "cf-ipcountry", // Cloudflare
+  "x-vercel-ip-country", // Vercel
+  "x-nf-client-connection-country", // Netlify
+  "fly-client-country", // Fly.io
+  "x-appengine-country", // Google
+  "x-geo-country",
+  "x-country-code",
+  "x-client-country",
+];
+
 function resolveCountry(req: Request): string | null {
-  return (
-    isoCountry(req.headers.get("cf-ipcountry")) ??
-      isoCountry(req.headers.get("x-vercel-ip-country"))
-  );
+  const named = Deno.env.get("COUNTRY_HEADER");
+  if (named) {
+    const v = isoCountry(req.headers.get(named));
+    if (v) return v;
+  }
+  for (const h of COUNTRY_HEADERS) {
+    const v = isoCountry(req.headers.get(h));
+    if (v) return v;
+  }
+  return null;
+}
+
+// Which country-ish headers this deployment actually provides, by NAME only.
+// Values are never returned: a header value can be an IP, and this function
+// exists precisely so IPs are not handled. Without this the only way to learn
+// what the edge supplies is to guess and redeploy.
+function presentCountryHeaders(req: Request): string[] {
+  const seen: string[] = [];
+  for (const [name] of req.headers) {
+    const n = name.toLowerCase();
+    if (n.includes("country") || n.includes("geo") || n.includes("ipcountry")) {
+      seen.push(n);
+    }
+  }
+  return seen.sort();
 }
 
 Deno.serve(async (req) => {
@@ -69,11 +110,20 @@ Deno.serve(async (req) => {
   }
 
   const country = resolveCountry(req);
+  const debug = new URL(req.url).searchParams.get("debug") === "headers";
+
   if (!country) {
-    // Nothing to record — not an error, just no signal this session.
-    return new Response(JSON.stringify({ ok: true, country: null }), {
-      headers,
-    });
+    // Nothing to record — not an error, just no signal this session. When
+    // asked, say which country headers the edge did supply so the gap can be
+    // diagnosed without another deploy.
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        country: null,
+        ...(debug ? { country_headers_present: presentCountryHeaders(req) } : {}),
+      }),
+      { headers },
+    );
   }
 
   const sb = adminClient();

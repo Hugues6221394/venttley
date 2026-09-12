@@ -58,8 +58,7 @@ class _KpiTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (item.icon != null)
-            Icon(item.icon, size: 14, color: accent),
+          if (item.icon != null) Icon(item.icon, size: 14, color: accent),
           if (item.icon != null) const SizedBox(height: 4),
           Text(
             item.value,

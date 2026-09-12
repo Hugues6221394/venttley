@@ -207,6 +207,22 @@ class VentStory {
   final int? musicDurationMs;
   final double? musicVolume;
 
+  /// The image safety verdict, carried through from the post.
+  ///
+  /// This used to be dropped in [VentStory.fromPost], which meant the story
+  /// viewer had no idea whether an image had been scanned and rendered every
+  /// one of them unveiled — including 'pending' and 'sensitive'. The feed has
+  /// veiled on this since 0087; stories bypassed it entirely, on the most
+  /// casual posting surface in the app.
+  final String mediaStatus;
+
+  bool get hasImage => imageUrl != null && imageUrl!.isNotEmpty;
+
+  /// Same rule as Post.mediaNeedsVeil, deliberately identical: an unscanned
+  /// image and a sensitive one are both hidden behind a tap.
+  bool get mediaNeedsVeil =>
+      hasImage && (mediaStatus == 'pending' || mediaStatus == 'sensitive');
+
   const VentStory({
     required this.postId,
     required this.authorPseudonym,
@@ -231,6 +247,9 @@ class VentStory {
     this.musicStartMs,
     this.musicDurationMs,
     this.musicVolume,
+    // Defaults to the safe reading, not the convenient one: if a caller
+    // forgets to pass it, the image is veiled rather than shown.
+    this.mediaStatus = 'pending',
   });
 
   factory VentStory.fromPost(Post post, {DateTime? now}) {
@@ -258,6 +277,7 @@ class VentStory {
       musicStartMs: post.musicStartMs,
       musicDurationMs: post.musicDurationMs,
       musicVolume: post.musicVolume,
+      mediaStatus: post.mediaStatus,
     );
   }
 

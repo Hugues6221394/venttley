@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
+import 'tribe_helpers_screen.dart' show myTribePermissionsProvider;
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
@@ -33,7 +34,19 @@ class TribeSettingsScreen extends ConsumerWidget {
             : const Center(child: Text('Tribe not found')),
       );
     }
-    if (me == null || tribe.keeperId != me.userId) {
+    final isKeeper = me != null && tribe.keeperId == me.userId;
+    // Helpers reach this screen too. It is the hub the Manage button opens, so
+    // gating the whole page on ownership meant a Keeper could grant someone a
+    // job and leave them staring at a locked door. Each tile below is gated on
+    // the capability it actually needs instead.
+    final permissions = isKeeper
+        ? const <String>[]
+        : (ref.watch(myTribePermissionsProvider(tribe.tribeId)).valueOrNull ??
+              const <String>[]);
+    bool can(String permission) => isKeeper || permissions.contains(permission);
+    final canOpen = isKeeper || permissions.isNotEmpty;
+
+    if (me == null || !canOpen) {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(title: const Text('Manage Tribe')),
@@ -41,7 +54,8 @@ class TribeSettingsScreen extends ConsumerWidget {
           child: Padding(
             padding: EdgeInsets.all(28),
             child: Text(
-              'Only the current Plug can change ownership and Tribe settings.',
+              'Only the Keeper, and the helpers they choose, can manage this '
+              'Tribe.',
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
@@ -83,50 +97,66 @@ class TribeSettingsScreen extends ConsumerWidget {
                     child: _Section(
                       title: 'Community administration',
                       children: [
-                        _ManagementTile(
-                          icon: Icons.palette_outlined,
-                          title: 'Edit identity',
-                          subtitle:
-                              'Name, images, description, tags and welcome',
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/identity',
+                        if (can('manage_settings'))
+                          _ManagementTile(
+                            icon: Icons.palette_outlined,
+                            title: 'Edit identity',
+                            subtitle:
+                                'Name, images, description, tags and welcome',
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/identity',
+                            ),
                           ),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.tune_rounded,
-                          title: 'Access and permissions',
-                          subtitle: 'Visibility, approvals, posting and safety',
-                          onTap: () =>
-                              _showAdvancedSettings(context, ref, overview),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.rule_rounded,
-                          title: 'Tribe rules',
-                          subtitle:
-                              '${overview.rules.length} structured rule${overview.rules.length == 1 ? '' : 's'}',
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/rules',
+                        if (can('manage_settings'))
+                          _ManagementTile(
+                            icon: Icons.tune_rounded,
+                            title: 'Access and permissions',
+                            subtitle:
+                                'Visibility, approvals, posting and safety',
+                            onTap: () =>
+                                _showAdvancedSettings(context, ref, overview),
                           ),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.groups_2_outlined,
-                          title: 'Members and requests',
-                          subtitle:
-                              '${overview.memberCount} members · ${overview.pendingJoinRequests} waiting',
-                          badge: overview.pendingJoinRequests,
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/members',
+                        if (can('manage_rules'))
+                          _ManagementTile(
+                            icon: Icons.rule_rounded,
+                            title: 'Tribe rules',
+                            subtitle:
+                                '${overview.rules.length} structured rule${overview.rules.length == 1 ? '' : 's'}',
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/rules',
+                            ),
                           ),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.view_quilt_outlined,
-                          title: 'Spaces',
-                          subtitle:
-                              '${overview.spaceCount} active space${overview.spaceCount == 1 ? '' : 's'}',
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/spaces',
+                        if (can('manage_members'))
+                          _ManagementTile(
+                            icon: Icons.groups_2_outlined,
+                            title: 'Members and requests',
+                            subtitle:
+                                '${overview.memberCount} members · ${overview.pendingJoinRequests} waiting',
+                            badge: overview.pendingJoinRequests,
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/members',
+                            ),
                           ),
-                        ),
+                        if (isKeeper)
+                          _ManagementTile(
+                            icon: Icons.handshake_outlined,
+                            title: 'Helpers',
+                            subtitle:
+                                'Give someone one job without giving them everything',
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/helpers',
+                            ),
+                          ),
+                        if (can('manage_spaces'))
+                          _ManagementTile(
+                            icon: Icons.view_quilt_outlined,
+                            title: 'Spaces',
+                            subtitle:
+                                '${overview.spaceCount} active space${overview.spaceCount == 1 ? '' : 's'}',
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/spaces',
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -134,56 +164,74 @@ class TribeSettingsScreen extends ConsumerWidget {
                     child: _Section(
                       title: 'Safety and growth',
                       children: [
-                        _ManagementTile(
-                          icon: Icons.dynamic_feed_outlined,
-                          title: 'Content and approvals',
-                          subtitle:
-                              'Review, pin, feature, move, lock and archive vents',
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/content',
+                        if (can('manage_content'))
+                          _ManagementTile(
+                            icon: Icons.dynamic_feed_outlined,
+                            title: 'Content and approvals',
+                            subtitle:
+                                'Review, pin, feature, move, lock and archive vents',
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/content',
+                            ),
                           ),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.shield_outlined,
-                          title: 'Moderation center',
-                          subtitle:
-                              '${overview.openReports} open report${overview.openReports == 1 ? '' : 's'}',
-                          badge: overview.openReports,
-                          onTap: () =>
-                              context.push('/tribe/$slug/manage/moderation'),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.insights_outlined,
-                          title: 'Analytics and export',
-                          subtitle: 'Growth, engagement, content and reports',
-                          onTap: () => context.push('/keeper/insights'),
-                        ),
-                        _ManagementTile(
-                          icon: Icons.history_rounded,
-                          title: 'Audit history',
-                          subtitle:
-                              'Every sensitive owner and moderator action',
-                          onTap: () => context.push(
-                            '/tribe/$slug/manage/settings/audit',
+                        if (can('handle_reports'))
+                          _ManagementTile(
+                            icon: Icons.shield_outlined,
+                            title: 'Moderation center',
+                            subtitle:
+                                '${overview.openReports} open report${overview.openReports == 1 ? '' : 's'}',
+                            badge: overview.openReports,
+                            onTap: () =>
+                                context.push('/tribe/$slug/manage/moderation'),
                           ),
-                        ),
+                        if (isKeeper)
+                          _ManagementTile(
+                            icon: Icons.insights_outlined,
+                            title: 'Analytics and export',
+                            subtitle: 'Growth, engagement, content and reports',
+                            onTap: () => context.push('/keeper/insights'),
+                          ),
+                        if (can('view_audit'))
+                          _ManagementTile(
+                            icon: Icons.history_rounded,
+                            title: 'Audit history',
+                            subtitle:
+                                'Every sensitive owner and moderator action',
+                            onTap: () => context.push(
+                              '/tribe/$slug/manage/settings/audit',
+                            ),
+                          ),
                       ],
                     ),
                   ),
-                  SliverToBoxAdapter(
-                    child: _LifecycleSection(
-                      overview: overview,
-                      onAction: (action) => _performLifecycleAction(
-                        context,
-                        ref,
-                        overview,
-                        action,
-                      ),
-                      onTransfer: () =>
-                          _showTransferSheet(context, ref, overview),
-                      onDelete: () => _showDeleteDialog(context, ref, overview),
+                  // Above the lifecycle section rather than below it: the last
+                  // thing on this screen should stay Delete Tribe, and a
+                  // receipt tucked under the destructive actions is a receipt
+                  // nobody scrolls to.
+                  if (isKeeper)
+                    SliverToBoxAdapter(
+                      child: KeeperAgreementRecord(tribeId: tribe.tribeId),
                     ),
-                  ),
+                  // Owner only, and deliberately not delegable: pausing,
+                  // archiving, transferring and deleting are the actions that
+                  // end a community. A helper should not see them, let alone
+                  // reach them.
+                  if (isKeeper)
+                    SliverToBoxAdapter(
+                      child: _LifecycleSection(
+                        overview: overview,
+                        onAction: (action) => _performLifecycleAction(
+                          context,
+                          ref,
+                          overview,
+                          action,
+                        ),
+                        onTransfer: () =>
+                            _showTransferSheet(context, ref, overview),
+                        onDelete: () =>
+                            _showDeleteDialog(context, ref, overview),
+                      ),
+                    ),
                   // Clear the floating nav, not an arbitrary 40. HomeShell
                   // paints its pill over the branch, so at 40 the last row —
                   // Delete Tribe — sat at y~792 against a pill occupying
@@ -360,7 +408,71 @@ class TribeSettingsScreen extends ConsumerWidget {
           builder: (_) => _DeleteTribeDialog(overview: overview),
         );
     if (result == null || !context.mounted) return;
+
+    // Two ways to delete, asked after the name and password are already in
+    // hand so the choice is the last thing standing between intent and effect.
+    //
+    // Scheduling is offered first and worded as the safe one, because it is:
+    // 30 days and a cancel action. Immediate deletion exists because 30 days
+    // is the wrong answer for a tribe created by mistake, or one being used to
+    // harass somebody — waiting a month is not a neutral default there.
+    final immediate = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('When should it go?'),
+        content: const Text(
+          'Scheduling keeps the Tribe hidden for 30 days so you can still '
+          'restore it. Deleting now cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Schedule (30 days)'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: VentlyColors.dangerRed,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete now'),
+          ),
+        ],
+      ),
+    );
+    if (immediate == null || !context.mounted) return;
+
     try {
+      if (immediate) {
+        final affected = await ref
+            .read(repositoryProvider)
+            .deleteTribeNow(
+              tribeId: overview.tribeId,
+              confirmedName: result.name,
+              password: result.password,
+            );
+        ref.invalidate(tribeManagementProvider(overview.tribeId));
+        ref.invalidate(tribesIKeepProvider);
+        ref.invalidate(homeTribeRailProvider);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              affected == 0
+                  ? 'Tribe deleted.'
+                  : 'Tribe deleted. $affected post(s) were removed with it.',
+            ),
+          ),
+        );
+        // The settings screen belongs to a tribe that no longer exists, so
+        // staying on it would show a dead shell and any refresh would 404.
+        if (context.mounted) GoRouter.of(context).go('/tribes');
+        return;
+      }
+
       await ref
           .read(repositoryProvider)
           .setTribeLifecycle(
@@ -372,6 +484,7 @@ class TribeSettingsScreen extends ConsumerWidget {
           );
       ref.invalidate(tribeManagementProvider(overview.tribeId));
       ref.invalidate(tribesIKeepProvider);
+      ref.invalidate(homeTribeRailProvider);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -381,7 +494,7 @@ class TribeSettingsScreen extends ConsumerWidget {
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deletion was not scheduled: $error')),
+        SnackBar(content: Text('Deletion did not go through: $error')),
       );
     }
   }
@@ -629,6 +742,91 @@ class _Section extends StatelessWidget {
   }
 }
 
+/// The Keeper agreement, read back.
+///
+/// Passive on purpose — there is nothing to tap and nothing to change. A
+/// consent you can edit from the screen that displays it is not a record, and
+/// the server makes that structural anyway: tribe_keeper_attestations is
+/// deny-all and has no update path at all.
+///
+/// Keeper-only, because it is the keeper's own agreement and
+/// my_keeper_attestation returns rows for the calling account only. A helper
+/// or moderator viewing this screen sees nothing here rather than an empty
+/// card about somebody else's consent.
+class KeeperAgreementRecord extends ConsumerWidget {
+  const KeeperAgreementRecord({super.key, required this.tribeId});
+
+  final String tribeId;
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(myKeeperAttestationProvider(tribeId));
+
+    // While loading, and on error, this shows nothing at all.
+    //
+    // Deliberate: a record of consent that renders a skeleton or an error box
+    // is worse than absent, because both read as "something is wrong with your
+    // agreement". Nothing here is load-bearing — the agreement is enforced and
+    // stored server-side whatever this card does — so the honest failure mode
+    // for a passive receipt is silence.
+    final attestation = async.valueOrNull;
+    if (attestation == null) return const SizedBox.shrink();
+
+    final at = attestation.attestedAt.toLocal();
+    final date = '${at.day} ${_months[at.month - 1]} ${at.year}';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+      child: GlassCard(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.verified_user_outlined,
+              size: 18,
+              color: VentlyColors.berryMagenta,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Keeper agreement',
+                    style: TextStyle(
+                      color: context.ink,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'You confirmed you are 18 or over and accepted '
+                    'responsibility for this Tribe on $date.',
+                    style: TextStyle(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.75),
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ManagementTile extends StatelessWidget {
   const _ManagementTile({
     required this.icon,
@@ -671,9 +869,42 @@ class _ManagementTile extends StatelessWidget {
           fontSize: 11,
         ),
       ),
+      // This badge blanked the entire screen whenever it showed.
+      //
+      // A Container given an `alignment` wraps its child in an Align, and an
+      // Align with no widthFactor expands to the biggest size its constraints
+      // allow. ListTile lays `trailing` out with LOOSE constraints — 0 to the
+      // full tile width — so the badge grew to the whole tile, and ListTile
+      // threw during performLayout:
+      //
+      //   Trailing widget consumes the entire tile width (including
+      //   ListTile.contentPadding).
+      //
+      // A throw inside performLayout leaves the subtree unlaid-out, which
+      // cascaded into "RenderBox was not laid out" seventeen levels up, then a
+      // null check on a null value, then '!semantics.parentDataDirty' firing
+      // in a loop for as long as the screen was open. What the keeper saw was
+      // a blank white page.
+      //
+      // The cruelty of it is the trigger: `badge` is pendingJoinRequests and
+      // openReports, so Manage Tribe worked fine until there was something to
+      // manage, and broke the moment a report or a join request arrived. Every
+      // Tribe with a quiet inbox looked healthy. Reproduced exactly that way —
+      // one Tribe with 1 open report blank, another with 0 fine.
+      //
+      // Both axes are bounded, because Align expands on both. Bounding only
+      // the width stopped the crash and left a badge stretched to the full
+      // height of the tile — a tall rectangle instead of a pill. Caught by
+      // looking at the pixels; the layout assertion only complains about
+      // width, so nothing would have reported the shape.
       trailing: badge > 0
           ? Container(
-              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+              constraints: const BoxConstraints(
+                minWidth: 24,
+                maxWidth: 46,
+                minHeight: 24,
+                maxHeight: 24,
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 6),
               alignment: Alignment.center,
               decoration: BoxDecoration(
@@ -681,7 +912,12 @@ class _ManagementTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                '$badge',
+                // Capped so the label cannot outgrow the box either. A keeper
+                // with 300 waiting requests needs to know it is a lot, not the
+                // exact figure, and the exact figure is on the screen this
+                // tile opens.
+                badge > 99 ? '99+' : '$badge',
+                maxLines: 1,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 10,
@@ -927,7 +1163,7 @@ class _AdvancedSettingsSheetState extends State<_AdvancedSettingsSheet> {
                     choices: const {
                       'All members': 'members',
                       'Moderators': 'mods',
-                      'Plug only': 'keeper',
+                      'Keeper only': 'keeper',
                     },
                     onChanged: (next) => setState(
                       () => value = value.copyWith(postingPermission: next),
@@ -1197,14 +1433,22 @@ class _DeleteTribeDialogState extends State<_DeleteTribeDialog> {
         color: VentlyColors.dangerRed,
         size: 34,
       ),
-      title: const Text('Schedule Tribe deletion'),
+      // Neutral, because the timing is not decided yet.
+      //
+      // This said "Schedule Tribe deletion" and its button said "Schedule
+      // deletion", and then the very next dialog asks whether to schedule or
+      // delete now. Committing to one answer and then asking is how somebody
+      // taps through believing they have 30 days and finds the Tribe gone.
+      title: const Text('Delete Tribe'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               '${widget.overview.memberCount} members and ${widget.overview.postCount} posts are affected. '
-              'The Tribe becomes unavailable now and is permanently removed after 30 days unless restored.',
+              'The Tribe becomes unavailable straight away. You will choose '
+              'next whether it is removed after 30 days — restorable until '
+              'then — or immediately.',
             ),
             const SizedBox(height: 14),
             TextField(
@@ -1262,7 +1506,7 @@ class _DeleteTribeDialogState extends State<_DeleteTribeDialog> {
                   reason: reason.text.trim(),
                 ))
               : null,
-          child: const Text('Schedule deletion'),
+          child: const Text('Continue'),
         ),
       ],
     );

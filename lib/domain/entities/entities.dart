@@ -230,6 +230,34 @@ class StoryReactionUser {
   });
 }
 
+/// Somebody who watched a story, and what they left behind if anything.
+///
+/// Distinct from [StoryReactionUser]: reacting is a far higher bar than
+/// watching, so the reaction list was always a small subset. The activity
+/// sheet showed that subset plus a bare "N unique views" count, which told an
+/// author how many people watched but never which ones.
+class StoryViewerUser {
+  final String userId;
+  final String pseudonym;
+  final String avatarSeed;
+  final String? profilePhotoUrl;
+  final bool isVerified;
+  final DateTime viewedAt;
+
+  /// Null when they watched without reacting, which is most people.
+  final String? reactionType;
+
+  const StoryViewerUser({
+    required this.userId,
+    required this.pseudonym,
+    required this.avatarSeed,
+    required this.isVerified,
+    required this.viewedAt,
+    this.profilePhotoUrl,
+    this.reactionType,
+  });
+}
+
 class PlugProfile {
   final String plugId;
   final String displayName;
@@ -249,7 +277,7 @@ class PlugProfile {
 }
 
 /// Hybrid Tribe — both a community (members join, posts belong to it) and a
-/// creator ecosystem (a keeper moderates it; keeper may be a verified Plug).
+/// creator ecosystem (a keeper moderates it; keeper may be a verified Keeper).
 /// Mirrors `public.tribe_directory` from migration 0005.
 class Tribe {
   final String tribeId;
@@ -280,7 +308,7 @@ class Tribe {
   final String? spotlightNote;
   final DateTime? spotlightSetAt;
 
-  // Plug dashboard additions (migration 0049)
+  // Keeper dashboard additions (migration 0049)
   final String? rules;
   final bool isPremium;
 
@@ -680,7 +708,7 @@ class Post {
     this.myReaction,
     this.savedByMe = false,
     this.crisisLevel,
-    this.mediaStatus = 'clean',
+    this.mediaStatus = 'pending',
   }) : _authorDisplayName = authorDisplayName;
 
   String get authorDisplayName {
@@ -1468,7 +1496,7 @@ class PlugPrompt {
   final String promptText;
   final int answersCount;
 
-  /// Member author (migration 0069). Null for Plug/Keeper "question of the day"
+  /// Member author (migration 0069). Null for Keeper/Keeper "question of the day"
   /// prompts. When it matches the signed-in user the question is theirs to
   /// edit or delete.
   final String? authorId;
@@ -1831,7 +1859,7 @@ class Whisper {
     this.savedByMe = false,
     this.reactionCounts = const {},
     this.myReaction,
-    this.mediaStatus = 'clean',
+    this.mediaStatus = 'pending',
     this.musicTrackId,
     this.musicPreviewUrl,
     this.musicTitle,
@@ -2691,6 +2719,29 @@ class OnlineFriend {
   }
 }
 
+/// A keeper's record of accepting responsibility for a Tribe.
+///
+/// Written once, at creation, by create_managed_tribe_idempotent, and read
+/// back through my_keeper_attestation. The table itself is deny-all, so this
+/// only ever describes the signed-in account's own agreement.
+class KeeperAttestation {
+  const KeeperAttestation({
+    required this.version,
+    required this.ageStatus,
+    required this.attestedAt,
+  });
+
+  /// Which wording of the agreement was on screen when they ticked it, so the
+  /// question "what did they actually agree to" survives the text changing.
+  final int version;
+
+  /// What the server independently believed about their age at that moment —
+  /// not what the person claimed. Recorded alongside because a birth year can
+  /// be corrected later and this has to keep saying what was true then.
+  final String ageStatus;
+
+  final DateTime attestedAt;
+}
 
 /// Whether an account may create a Tribe, as decided by the server.
 class TribeCreationEligibility {
@@ -2706,4 +2757,364 @@ class TribeCreationEligibility {
 
   bool get canCreate => status == 'adult';
   bool get needsBirthMonth => status == 'month_required';
+}
+
+/// One place the account is currently signed in.
+class DeviceSession {
+  const DeviceSession({
+    required this.deviceSessionId,
+    required this.deviceRowId,
+    required this.deviceType,
+    required this.isCurrent,
+    required this.isTrusted,
+    required this.riskScore,
+    required this.startedAt,
+    required this.lastSeenAt,
+    this.deviceName,
+    this.osName,
+    this.osVersion,
+    this.appVersion,
+    this.country,
+  });
+
+  final String deviceSessionId;
+  final String deviceRowId;
+  final String? deviceName;
+  final String deviceType;
+  final String? osName;
+  final String? osVersion;
+  final String? appVersion;
+
+  /// ISO-3166 alpha-2, resolved at the CDN edge. Country granularity only —
+  /// the UI must never present this as a precise location.
+  final String? country;
+
+  final bool isCurrent;
+  final bool isTrusted;
+  final int riskScore;
+  final DateTime startedAt;
+  final DateTime lastSeenAt;
+
+  /// What to print on the row. Falls back through model, then OS, then a
+  /// generic label, so there is always something readable.
+  String get label {
+    final name = deviceName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    final os = osName?.trim();
+    if (os != null && os.isNotEmpty) return '$os device';
+    return 'Unknown device';
+  }
+
+  String get platformSummary {
+    final parts = <String>[
+      if (osName != null && osName!.trim().isNotEmpty) osName!.trim(),
+      if (osVersion != null && osVersion!.trim().isNotEmpty) osVersion!.trim(),
+    ];
+    return parts.join(' ');
+  }
+
+  factory DeviceSession.fromJson(Map<String, dynamic> json) => DeviceSession(
+    deviceSessionId: '${json['device_session_id']}',
+    deviceRowId: '${json['device_row_id']}',
+    deviceName: json['device_name'] as String?,
+    deviceType: (json['device_type'] as String?) ?? 'unknown',
+    osName: json['os_name'] as String?,
+    osVersion: json['os_version'] as String?,
+    appVersion: json['app_version'] as String?,
+    country: json['country'] as String?,
+    isCurrent: json['is_current'] == true,
+    isTrusted: json['is_trusted'] == true,
+    riskScore: (json['risk_score'] as num?)?.toInt() ?? 0,
+    startedAt:
+        DateTime.tryParse('${json['started_at']}') ?? DateTime.now().toUtc(),
+    lastSeenAt:
+        DateTime.tryParse('${json['last_seen_at']}') ?? DateTime.now().toUtc(),
+  );
+}
+
+/// One entry in the account's security history.
+class SecurityEvent {
+  const SecurityEvent({
+    required this.eventId,
+    required this.kind,
+    required this.severity,
+    required this.createdAt,
+    this.deviceName,
+    this.context = const <String, dynamic>{},
+  });
+
+  final String eventId;
+
+  /// Server-side enum. Unknown values are rendered generically rather than
+  /// dropped — a client that has not shipped yet must not hide history.
+  final String kind;
+
+  /// 'info' | 'warning' | 'critical'.
+  final String severity;
+
+  final String? deviceName;
+  final Map<String, dynamic> context;
+  final DateTime createdAt;
+
+  bool get isCritical => severity == 'critical';
+
+  String get title => switch (kind) {
+    'login' => 'Signed in',
+    'login_new_device' => 'New device signed in',
+    'login_blocked_device' => 'Blocked device tried to sign in',
+    'suspicious_login' => 'Unusual sign-in',
+    'suspicious_login_confirmed' => 'Sign-in confirmed as you',
+    'suspicious_login_rejected' => 'Sign-in reported as not you',
+    'password_changed' => 'Password changed',
+    'two_factor_enabled' => 'Two-factor authentication turned on',
+    'two_factor_disabled' => 'Two-factor authentication turned off',
+    'recovery_email_changed' => 'Recovery email updated',
+    'recovery_phrase_rotated' => 'Recovery phrase regenerated',
+    'device_trusted' => 'Device trusted',
+    'device_revoked' => 'Device signed out',
+    'device_blocked' => 'Device blocked',
+    'sessions_revoked_all' => 'Signed out of other devices',
+    _ => 'Security activity',
+  };
+
+  factory SecurityEvent.fromJson(Map<String, dynamic> json) => SecurityEvent(
+    eventId: '${json['event_id']}',
+    kind: (json['kind'] as String?) ?? 'unknown',
+    severity: (json['severity'] as String?) ?? 'info',
+    deviceName: json['device_name'] as String?,
+    context:
+        (json['context'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+    createdAt:
+        DateTime.tryParse('${json['created_at']}') ?? DateTime.now().toUtc(),
+  );
+}
+
+/// Outcome of registering this installation with the server after sign-in.
+class DeviceRegistration {
+  const DeviceRegistration({
+    required this.deviceRowId,
+    required this.isNewDevice,
+    required this.isBlocked,
+    required this.riskScore,
+    this.deviceSessionId,
+    this.needsConfirmation = false,
+  });
+
+  final String deviceRowId;
+  final String? deviceSessionId;
+  final bool isNewDevice;
+
+  /// The user previously rejected this device. The client must sign itself out.
+  final bool isBlocked;
+
+  /// Server-scored, 0–200. Informational here; act on [needsConfirmation]
+  /// rather than comparing this against a threshold the client invented.
+  final int riskScore;
+
+  /// The server wants an explicit "was this you?" answer before it treats this
+  /// session as normal.
+  final bool needsConfirmation;
+
+  factory DeviceRegistration.fromJson(Map<String, dynamic> json) =>
+      DeviceRegistration(
+        deviceRowId: '${json['device_row_id']}',
+        deviceSessionId: json['device_session_id'] == null
+            ? null
+            : '${json['device_session_id']}',
+        isNewDevice: json['is_new_device'] == true,
+        isBlocked: json['is_blocked'] == true,
+        riskScore: (json['risk_score'] as num?)?.toInt() ?? 0,
+        needsConfirmation: json['needs_confirmation'] == true,
+      );
+}
+
+/// A flagged sign-in the account has not yet adjudicated.
+///
+/// Mirrors my_unresolved_security_alerts(). The prompt built from this is the
+/// only place in the app that asks the user to make a security decision, so it
+/// carries enough context to make that decision answerable: what device, from
+/// where, and why we thought it was odd.
+class SecurityAlert {
+  const SecurityAlert({
+    required this.deviceSessionId,
+    required this.deviceRowId,
+    required this.deviceType,
+    required this.riskScore,
+    required this.isCurrent,
+    required this.startedAt,
+    this.deviceName,
+    this.osName,
+    this.country,
+    this.signals = const <String, dynamic>{},
+  });
+
+  final String deviceSessionId;
+  final String deviceRowId;
+  final String? deviceName;
+  final String deviceType;
+  final String? osName;
+
+  /// ISO-3166 alpha-2, country granularity only.
+  final String? country;
+
+  final int riskScore;
+
+  /// Which weights fired, as recorded by the server. Rendered as plain English
+  /// by [reasons]; unknown keys are dropped rather than shown raw.
+  final Map<String, dynamic> signals;
+
+  /// True when the flagged session is the one asking. Rare but real: a user can
+  /// be prompted about the device in their hand after travelling.
+  final bool isCurrent;
+
+  final DateTime startedAt;
+
+  String get label {
+    final name = deviceName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    final os = osName?.trim();
+    if (os != null && os.isNotEmpty) return '$os device';
+    return 'Unknown device';
+  }
+
+  /// Why this sign-in was flagged, in words the user can act on. An alert that
+  /// only says "unusual" gives someone no way to tell a holiday from a theft.
+  List<String> get reasons {
+    final out = <String>[];
+    if (signals['new_device'] == true) {
+      out.add('First time we\'ve seen this device');
+    }
+    final where = signals['new_country'];
+    if (where is String && where.trim().isNotEmpty) {
+      out.add('New location for your account ($where)');
+    }
+    final failures = signals['recent_failures'];
+    if (failures is num && failures > 0) {
+      out.add('$failures failed sign-in attempts beforehand');
+    }
+    if (signals['dormant_since'] != null) {
+      out.add('Your account had been quiet for a while');
+    }
+    return out;
+  }
+
+  factory SecurityAlert.fromJson(Map<String, dynamic> json) => SecurityAlert(
+    deviceSessionId: '${json['device_session_id']}',
+    deviceRowId: '${json['device_row_id']}',
+    deviceName: json['device_name'] as String?,
+    deviceType: (json['device_type'] as String?) ?? 'unknown',
+    osName: json['os_name'] as String?,
+    country: json['country'] as String?,
+    riskScore: (json['risk_score'] as num?)?.toInt() ?? 0,
+    signals:
+        (json['risk_signals'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{},
+    isCurrent: json['is_current'] == true,
+    startedAt:
+        DateTime.tryParse('${json['started_at']}') ?? DateTime.now().toUtc(),
+  );
+}
+
+/// One entry in the Tribe category taxonomy.
+///
+/// Key and label come from the database; the icon does not. An icon is a
+/// Flutter symbol, and storing a widget reference in a table only moves the
+/// coupling somewhere harder to find — so the client maps key to icon and
+/// falls back to a neutral one for a key it has not seen. That is what lets a
+/// category added server-side appear without an app release.
+class TribeCategory {
+  const TribeCategory({required this.key, required this.label});
+
+  final String key;
+  final String label;
+}
+
+/// One recovery method as the server chooses to describe it.
+///
+/// [masked] is all the client ever gets — never the full address. It is already
+/// known to whoever typed it, and returning it would turn a stolen session into
+/// a way of harvesting the owner's real email or phone number.
+class RecoveryMethod {
+  /// The real address or number, as the owner typed it.
+  ///
+  /// Only ever populated for the account making the request —
+  /// my_recovery_methods is SECURITY DEFINER over a single row keyed on
+  /// auth.uid(). It exists because "do***@gmail.com" cannot answer the one
+  /// question the recovery screen is for: which inbox should I go and open?
+  final String? address;
+  final String? masked;
+  final bool verified;
+  final bool pending;
+
+  /// A different address the owner asked to switch to, not yet proven.
+  ///
+  /// Non-null means a change is half-finished. [address] is still the one that
+  /// can actually recover the account — the two are separate on purpose, so a
+  /// change that is never confirmed cannot cost somebody their way back in.
+  final String? pendingAddress;
+  final DateTime? codeExpiresAt;
+  final DateTime? addedAt;
+
+  const RecoveryMethod({
+    this.address,
+    this.masked,
+    this.verified = false,
+    this.pending = false,
+    this.pendingAddress,
+    this.codeExpiresAt,
+    this.addedAt,
+  });
+
+  /// Nothing nominated yet.
+  ///
+  /// Keyed on [masked] rather than [address] so an older server that does not
+  /// return the full value yet still reports "something is configured" instead
+  /// of silently telling somebody they have no recovery method.
+  bool get isEmpty => masked == null && address == null;
+
+  /// What to show the owner: the real value when the server sends it, falling
+  /// back to the masked form so a stale server degrades to the old display
+  /// rather than to a blank.
+  String? get display => address ?? masked;
+
+  factory RecoveryMethod.fromJson(Map<String, dynamic> json) => RecoveryMethod(
+        address: json['address'] as String?,
+        masked: json['masked'] as String?,
+        pendingAddress: json['pending_address'] as String?,
+        // Absent means not verified. The safe reading of a missing key for
+        // anything security-shaped is the one that grants nothing.
+        verified: json['verified'] == true,
+        pending: json['pending'] == true,
+        codeExpiresAt: json['code_expires_at'] == null
+            ? null
+            : DateTime.tryParse(json['code_expires_at'] as String)?.toLocal(),
+        addedAt: json['added_at'] == null
+            ? null
+            : DateTime.tryParse(json['added_at'] as String)?.toLocal(),
+      );
+}
+
+/// The recovery section of the Security Centre.
+class RecoveryMethods {
+  final RecoveryMethod email;
+  final RecoveryMethod phone;
+
+  const RecoveryMethods({
+    this.email = const RecoveryMethod(),
+    this.phone = const RecoveryMethod(),
+  });
+
+  factory RecoveryMethods.fromJson(Map<String, dynamic> json) =>
+      RecoveryMethods(
+        email: RecoveryMethod.fromJson(
+          Map<String, dynamic>.from((json['email'] as Map?) ?? const {}),
+        ),
+        phone: RecoveryMethod.fromJson(
+          Map<String, dynamic>.from((json['phone'] as Map?) ?? const {}),
+        ),
+      );
+
+  /// How many recovery routes actually work. Drives the security score, so it
+  /// counts verified only — a pending address recovers nothing.
+  int get verifiedCount => (email.verified ? 1 : 0) + (phone.verified ? 1 : 0);
 }

@@ -24,6 +24,9 @@ class LottieFeedback extends StatelessWidget {
   static bool get enabled => false; // flips true when `lottie` is wired in
 
   @override
-  Widget build(BuildContext context) =>
-      SizedBox(width: size, height: size, child: Center(child: fallback));
+  Widget build(BuildContext context) => SizedBox(
+    width: size,
+    height: size,
+    child: Center(child: fallback),
+  );
 }

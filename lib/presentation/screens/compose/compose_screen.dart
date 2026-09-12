@@ -122,7 +122,21 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
 
   @override
   void dispose() {
-    unawaited(_musicPlayback.stop());
+    // Stopped after this frame, not inside dispose().
+    //
+    // MusicPlaybackController is a ChangeNotifier behind a provider, so stop()
+    // ends in notifyListeners(). dispose() runs while Flutter is unmounting
+    // elements, which is still inside the build phase, and Riverpod refuses a
+    // provider write there: "Tried to modify a provider while the widget tree
+    // was building." Two exceptions were thrown every time the story viewer
+    // closed.
+    //
+    // The controller is captured in a local because `this` is being torn down;
+    // the callback must not reach back into the State.
+    final playback = _musicPlayback;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(playback.stop());
+    });
     _draftSaver?.dispose();
     _controller.dispose();
     _pollQ.dispose();

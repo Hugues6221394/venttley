@@ -22,7 +22,9 @@ class SectionHeader extends StatelessWidget {
       padding: padding,
       child: Row(
         children: [
-          Expanded(child: Text(title, style: VentlyTokens.sectionTitle(context))),
+          Expanded(
+            child: Text(title, style: VentlyTokens.sectionTitle(context)),
+          ),
           if (trailingLabel != null && onTrailing != null)
             TextButton(
               onPressed: onTrailing,
@@ -31,8 +33,10 @@ class SectionHeader extends StatelessWidget {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text(trailingLabel!,
-                  style: const TextStyle(fontWeight: FontWeight.w900)),
+              child: Text(
+                trailingLabel!,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
             ),
         ],
       ),

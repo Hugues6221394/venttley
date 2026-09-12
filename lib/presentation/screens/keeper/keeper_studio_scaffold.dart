@@ -84,8 +84,11 @@ class _NoTribeState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.diversity_3,
-                size: 48, color: VentlyColors.berryMagenta),
+            const Icon(
+              Icons.diversity_3,
+              size: 48,
+              color: VentlyColors.berryMagenta,
+            ),
             const SizedBox(height: 12),
             Text(
               'Create a tribe first',
@@ -99,9 +102,7 @@ class _NoTribeState extends StatelessWidget {
             Text(
               'Creator Studio tools unlock once you keep at least one tribe.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: context.ink.withOpacity(0.65),
-              ),
+              style: TextStyle(color: context.ink.withOpacity(0.65)),
             ),
           ],
         ),

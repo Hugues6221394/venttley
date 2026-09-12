@@ -53,18 +53,18 @@ class NotificationsService {
   /// Asks the user for permission on iOS (no-op on Android < 13). Safe
   /// to call repeatedly.
   Future<bool> requestPermissions() async {
-    final ios = _plugin.resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    final iosOk = await ios?.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-        ) ??
+    final ios = _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    final iosOk =
+        await ios?.requestPermissions(alert: true, badge: true, sound: true) ??
         true;
-    final androidOk =
-        await android?.requestNotificationsPermission() ?? true;
+    final androidOk = await android?.requestNotificationsPermission() ?? true;
     return iosOk && androidOk;
   }
 

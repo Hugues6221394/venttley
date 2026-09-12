@@ -39,7 +39,11 @@ class VentlyEmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: compact ? 28 : 36, color: VentlyColors.berryMagenta),
+            Icon(
+              icon,
+              size: compact ? 28 : 36,
+              color: VentlyColors.berryMagenta,
+            ),
             SizedBox(height: compact ? VentlyTokens.s8 : VentlyTokens.s12),
             Text(
               title,
@@ -67,12 +71,20 @@ class VentlyEmptyState extends StatelessWidget {
                 onPressed: onAction,
                 style: FilledButton.styleFrom(
                   backgroundColor: VentlyColors.berryMagenta,
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
+                  ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(VentlyTokens.radiusChip),
+                    borderRadius: BorderRadius.circular(
+                      VentlyTokens.radiusChip,
+                    ),
                   ),
                 ),
-                child: Text(actionLabel!, style: const TextStyle(fontWeight: FontWeight.w900)),
+                child: Text(
+                  actionLabel!,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
               ),
             ],
           ],

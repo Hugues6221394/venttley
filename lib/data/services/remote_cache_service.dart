@@ -23,8 +23,8 @@ class RemoteCacheService {
   bool get _enabled => VentlyConfig.isUpstashEnabled;
   String get _baseUrl => VentlyConfig.upstashRedisRestUrl;
   Map<String, String> get _headers => {
-        'Authorization': 'Bearer ${VentlyConfig.upstashRedisRestToken}',
-      };
+    'Authorization': 'Bearer ${VentlyConfig.upstashRedisRestToken}',
+  };
 
   /// Get-or-load with a remote tier. The remote miss path also writes
   /// through to the local tier so subsequent reads hit the fast path.
@@ -38,7 +38,8 @@ class RemoteCacheService {
     // L1
     final localHit = await _local.getOrLoad<T?>(
       'mem:$key',
-      () async => null, // never populate from this call — we want a fresh L2 read
+      () async =>
+          null, // never populate from this call — we want a fresh L2 read
       ttl: ttl,
     );
     if (localHit != null) return localHit;
@@ -81,9 +82,12 @@ class RemoteCacheService {
         final body = jsonDecode(res.body) as Map<String, Object?>;
         final n = (body['result'] as num?)?.toInt() ?? 0;
         if (ttl != null) {
-          unawaited(http.post(
+          unawaited(
+            http.post(
               Uri.parse('$_baseUrl/expire/$key/${ttl.inSeconds}'),
-              headers: _headers));
+              headers: _headers,
+            ),
+          );
         }
         return n;
       }
@@ -98,20 +102,27 @@ class RemoteCacheService {
     if (_enabled) {
       try {
         await http.post(Uri.parse('$_baseUrl/del/$key'), headers: _headers);
-      } catch (_) {/* best-effort */}
+      } catch (_) {
+        /* best-effort */
+      }
     }
   }
 
   Future<String?> _getRemote(String key) async {
-    final res =
-        await http.get(Uri.parse('$_baseUrl/get/$key'), headers: _headers);
+    final res = await http.get(
+      Uri.parse('$_baseUrl/get/$key'),
+      headers: _headers,
+    );
     if (res.statusCode != 200) return null;
     final body = jsonDecode(res.body) as Map<String, Object?>;
     return body['result'] as String?;
   }
 
-  Future<void> _setRemote(String key, String value,
-      {required Duration ttl}) async {
+  Future<void> _setRemote(
+    String key,
+    String value, {
+    required Duration ttl,
+  }) async {
     try {
       await http.post(
         Uri.parse('$_baseUrl/set/$key/$value/ex/${ttl.inSeconds}'),

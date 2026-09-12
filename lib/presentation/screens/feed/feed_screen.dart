@@ -44,12 +44,11 @@ class FeedScreen extends ConsumerWidget {
     final topicStatsAsync = ref.watch(trendingTopicStatsProvider);
     final discoveryPosts = ref.watch(homeDiscoveryPostsProvider).valueOrNull;
     final filter = ref.watch(feedFilterProvider);
+    // Per-user and rotating, not tribe_directory ordered by member_count.
+    // That old query was the reason two different accounts saw the same six
+    // tribes and a refresh changed nothing.
     final tribes =
-        ref
-            .watch(tribesProvider(const TribeQuery()))
-            .valueOrNull
-            ?.take(6)
-            .toList() ??
+        ref.watch(homeTribeRailProvider).valueOrNull?.take(6).toList() ??
         const <Tribe>[];
     final me = ref.watch(sessionProvider);
     final dataSaver = ref.watch(dataSaverProvider);
@@ -67,6 +66,7 @@ class FeedScreen extends ConsumerWidget {
               feedAnimationRegistry.reset();
               ref.invalidate(feedPostsProvider);
               ref.invalidate(tribesProvider);
+              ref.invalidate(homeTribeRailProvider);
               ref.invalidate(homeDiscoveryPostsProvider);
               ref.invalidate(trendingTopicStatsProvider);
               ref.invalidate(friendStoryPostsProvider);
@@ -115,7 +115,15 @@ class FeedScreen extends ConsumerWidget {
                 final stories = showingCommunityStories
                     ? communityStories
                     : friendStories;
-                return CustomScrollView(
+                return NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    final metrics = notification.metrics;
+                    if (metrics.pixels >= metrics.maxScrollExtent - 700) {
+                      ref.read(feedPostsProvider.notifier).loadMore();
+                    }
+                    return false;
+                  },
+                  child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   // Pre-build offscreen items so fast flings never show a
                   // blank gap on mid-tier devices. Data Saver prefetches
@@ -272,6 +280,7 @@ class FeedScreen extends ConsumerWidget {
                       child: SizedBox(height: HomeShell.navClearance),
                     ),
                   ],
+                  ),
                 );
               },
             ),
@@ -382,11 +391,7 @@ class _VentlyFeedTopBar extends ConsumerWidget {
   void _showHomeMenu(BuildContext context, WidgetRef ref) {
     // (icon, label, route, isBranch) — branch routes switch the shell tab
     // via go(); the rest push on top.
-    final isKeeper = ref.read(sessionProvider)?.userRole == 'plug';
     final links = <(IconData, String, String, bool)>[
-      // Plugz get a shortcut back to their Studio (the /feed shell branch).
-      if (isKeeper)
-        (Icons.dashboard_customize_rounded, 'Plug Studio', '/feed', true),
       (Icons.explore_outlined, 'Discover', '/discover', false),
       (Icons.diversity_3_outlined, 'Tribes', '/tribes', false),
       (Icons.graphic_eq_rounded, 'Whispers', '/whispers', true),
@@ -405,11 +410,41 @@ class _VentlyFeedTopBar extends ConsumerWidget {
     showGlassSheet(
       context,
       isScrollControlled: true,
-      builder: (sheetCtx) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+      builder: (sheetCtx) => Consumer(
+        builder: (sheetCtx, ref, _) {
+          // "Am I a keeper" is a fact about tribe ownership, not a role string.
+          //
+          // This used to be `userRole == 'plug'`, which is the legacy role and
+          // is not set on somebody who simply created a tribe. A user keeping
+          // "Night Owls Verify" saw the Studio as their shell tab — because the
+          // shell asks isKeeperProvider — and yet had no menu item to get back
+          // to it after switching to member view. Two places answering the same
+          // question differently, one of them from a stale field.
+          //
+          // Watched rather than read: _showStudio returns early in member view
+          // without watching isKeeperProvider, so the provider can be disposed
+          // by the time this sheet opens. A read would come back null, fall
+          // through to the old answer, and reproduce the bug exactly.
+          final isKeeper =
+              ref.watch(isKeeperProvider).valueOrNull ??
+              (ref.watch(sessionProvider)?.isPlug ?? false);
+
+          final entries = <(IconData, String, String, bool)>[
+            if (isKeeper)
+              (
+                Icons.dashboard_customize_rounded,
+                'Keeper Studio',
+                '/feed',
+                true,
+              ),
+            ...links,
+          ];
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
           const SheetGrabber(),
-          for (final (icon, label, route, isBranch) in links)
+          for (final (icon, label, route, isBranch) in entries)
             ListTile(
               dense: true,
               leading: Container(
@@ -437,7 +472,7 @@ class _VentlyFeedTopBar extends ConsumerWidget {
                 Navigator.of(sheetCtx).pop();
                 // Returning to the Studio must exit "member view" first, or the
                 // /feed branch just re-renders the member feed.
-                if (label == 'Plug Studio') {
+                if (label == 'Keeper Studio') {
                   ref.read(keeperMemberViewProvider.notifier).state = false;
                 }
                 if (isBranch) {
@@ -499,7 +534,9 @@ class _VentlyFeedTopBar extends ConsumerWidget {
               if (context.mounted) context.go('/onboarding');
             },
           ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

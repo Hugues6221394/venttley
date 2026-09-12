@@ -21,8 +21,7 @@ class SpaceHomeScreen extends ConsumerStatefulWidget {
   final String spaceId;
 
   @override
-  ConsumerState<SpaceHomeScreen> createState() =>
-      _SpaceHomeScreenState();
+  ConsumerState<SpaceHomeScreen> createState() => _SpaceHomeScreenState();
 }
 
 class _SpaceHomeScreenState extends ConsumerState<SpaceHomeScreen> {
@@ -46,9 +45,9 @@ class _SpaceHomeScreenState extends ConsumerState<SpaceHomeScreen> {
         body: const Center(child: Text('Space not found')),
       );
     }
-    final postsAsync = ref.watch(spacePostsProvider(
-      SpaceFeedQuery(spaceId: widget.spaceId, sort: _sort),
-    ));
+    final postsAsync = ref.watch(
+      spacePostsProvider(SpaceFeedQuery(spaceId: widget.spaceId, sort: _sort)),
+    );
     final posts = postsAsync.valueOrNull ?? const <Post>[];
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -59,8 +58,9 @@ class _SpaceHomeScreenState extends ConsumerState<SpaceHomeScreen> {
             tooltip: 'Search this Space',
             icon: const Icon(Icons.search),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Space search is coming next.')));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Space search is coming next.')),
+              );
             },
           ),
         ],
@@ -68,8 +68,11 @@ class _SpaceHomeScreenState extends ConsumerState<SpaceHomeScreen> {
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(spaceByIdProvider(widget.spaceId));
-          ref.invalidate(spacePostsProvider(
-              SpaceFeedQuery(spaceId: widget.spaceId, sort: _sort)));
+          ref.invalidate(
+            spacePostsProvider(
+              SpaceFeedQuery(spaceId: widget.spaceId, sort: _sort),
+            ),
+          );
         },
         child: ListView(
           padding: const EdgeInsets.only(bottom: 24),
@@ -78,8 +81,9 @@ class _SpaceHomeScreenState extends ConsumerState<SpaceHomeScreen> {
             _AISummaryTile(space: space),
             _StartVentButton(space: space),
             _SortStrip(
-                value: _sort,
-                onChanged: (v) => setState(() => _sort = v)),
+              value: _sort,
+              onChanged: (v) => setState(() => _sort = v),
+            ),
             if (postsAsync.isLoading && posts.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(32),
@@ -88,14 +92,18 @@ class _SpaceHomeScreenState extends ConsumerState<SpaceHomeScreen> {
             else if (posts.isEmpty)
               const _EmptyVents()
             else
-              ...posts.map((p) => Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    child: PostCard(
-                      post: p,
-                      onTap: () => context.push('/post/${p.postId}'),
-                    ),
-                  )),
+              ...posts.map(
+                (p) => Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  child: PostCard(
+                    post: p,
+                    onTap: () => context.push('/post/${p.postId}'),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -161,12 +169,10 @@ class _SpaceHeader extends StatelessWidget {
                 ),
               ),
             ),
-          if (space.weeklyTheme != null &&
-              space.weeklyTheme!.isNotEmpty) ...[
+          if (space.weeklyTheme != null && space.weeklyTheme!.isNotEmpty) ...[
             const SizedBox(height: 10),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
@@ -194,17 +200,17 @@ class _SpaceHeader extends StatelessWidget {
           Row(
             children: [
               _HeaderStat(
-                  label: 'vents',
-                  value: PostCard.compactNumber(space.ventCount)),
+                label: 'vents',
+                value: PostCard.compactNumber(space.ventCount),
+              ),
               const SizedBox(width: 14),
               _HeaderStat(
-                  label: 'today',
-                  value: PostCard.compactNumber(space.ventsToday)),
+                label: 'today',
+                value: PostCard.compactNumber(space.ventsToday),
+              ),
               const SizedBox(width: 14),
               if (space.lastVentAt != null)
-                _HeaderStat(
-                    label: 'last',
-                    value: _agoShort(space.lastVentAt!)),
+                _HeaderStat(label: 'last', value: _agoShort(space.lastVentAt!)),
             ],
           ),
         ],
@@ -229,19 +235,23 @@ class _HeaderStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(value,
-            style: TextStyle(
-              color: context.ink,
-              fontWeight: FontWeight.w900,
-              fontSize: 14,
-            )),
+        Text(
+          value,
+          style: TextStyle(
+            color: context.ink,
+            fontWeight: FontWeight.w900,
+            fontSize: 14,
+          ),
+        ),
         const SizedBox(width: 4),
-        Text(label,
-            style: TextStyle(
-              color: context.ink.withOpacity(0.55),
-              fontWeight: FontWeight.w700,
-              fontSize: 11,
-            )),
+        Text(
+          label,
+          style: TextStyle(
+            color: context.ink.withOpacity(0.55),
+            fontWeight: FontWeight.w700,
+            fontSize: 11,
+          ),
+        ),
       ],
     );
   }
@@ -270,8 +280,7 @@ class _AISummaryTile extends ConsumerWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border:
-            Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
+        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -284,8 +293,11 @@ class _AISummaryTile extends ConsumerWidget {
                   color: VentlyColors.berryMagenta.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.auto_awesome,
-                    size: 16, color: VentlyColors.berryMagenta),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  size: 16,
+                  color: VentlyColors.berryMagenta,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -301,7 +313,9 @@ class _AISummaryTile extends ConsumerWidget {
               if (summary != null && summary.isFresh)
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: VentlyColors.berryMagenta.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(10),
@@ -339,7 +353,9 @@ class _AISummaryTile extends ConsumerWidget {
                 for (final t in summary.topTopics)
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: VentlyColors.softMauve.withOpacity(0.22),
                       borderRadius: BorderRadius.circular(10),
@@ -372,12 +388,16 @@ class _AISummaryTile extends ConsumerWidget {
                   color: const Color(0xFFFFF1F6),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                      color: VentlyColors.berryMagenta.withOpacity(0.25)),
+                    color: VentlyColors.berryMagenta.withOpacity(0.25),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.tips_and_updates_outlined,
-                        size: 14, color: VentlyColors.berryMagenta),
+                    const Icon(
+                      Icons.tips_and_updates_outlined,
+                      size: 14,
+                      color: VentlyColors.berryMagenta,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -391,8 +411,11 @@ class _AISummaryTile extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    const Icon(Icons.add_circle,
-                        size: 16, color: VentlyColors.berryMagenta),
+                    const Icon(
+                      Icons.add_circle,
+                      size: 16,
+                      color: VentlyColors.berryMagenta,
+                    ),
                   ],
                 ),
               ),
@@ -449,7 +472,7 @@ class _SortStrip extends StatelessWidget {
       ('trending', 'Trending'),
       ('helpful', 'Most Helpful'),
       ('unanswered', 'Unanswered'),
-      ('keeper', 'Plug Picks'),
+      ('keeper', 'Keeper Picks'),
     ];
     return SizedBox(
       height: 40,
@@ -465,12 +488,9 @@ class _SortStrip extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             onTap: () => onChanged(k),
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: active
-                    ? VentlyColors.berryMagenta
-                    : Colors.white,
+                color: active ? VentlyColors.berryMagenta : Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: active
@@ -482,9 +502,7 @@ class _SortStrip extends StatelessWidget {
               child: Text(
                 label,
                 style: TextStyle(
-                  color: active
-                      ? Colors.white
-                      : context.ink,
+                  color: active ? Colors.white : context.ink,
                   fontWeight: FontWeight.w800,
                   fontSize: 12,
                 ),
@@ -506,15 +524,15 @@ class _EmptyVents extends StatelessWidget {
       child: Center(
         child: Column(
           children: [
-            const Icon(Icons.forum_outlined,
-                size: 44, color: VentlyColors.softMauve),
+            const Icon(
+              Icons.forum_outlined,
+              size: 44,
+              color: VentlyColors.softMauve,
+            ),
             const SizedBox(height: 8),
             Text(
               'No vents here yet.',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                color: context.ink,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w900, color: context.ink),
             ),
             const SizedBox(height: 4),
             Text(

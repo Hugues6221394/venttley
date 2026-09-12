@@ -9,7 +9,10 @@ Future<void> showRecoveryPhraseDialog(
   BuildContext context,
   WidgetRef ref,
 ) async {
-  final phrase = await ref.read(repositoryProvider).identity.savedRecoveryPhrase();
+  final phrase = await ref
+      .read(repositoryProvider)
+      .identity
+      .savedRecoveryPhrase();
   if (!context.mounted) return;
   if (phrase == null || phrase.isEmpty) {
     await showDialog<void>(
@@ -31,7 +34,8 @@ Future<void> showRecoveryPhraseDialog(
     );
     return;
   }
-  final confirmed = await showDialog<bool>(
+  final confirmed =
+      await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Show recovery phrase?'),
@@ -68,14 +72,15 @@ Future<void> showRecoveryPhraseDialog(
             children: [
               for (var i = 0; i < words.length; i++)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Theme.of(ctx).colorScheme.primary.withOpacity(0.10),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color:
-                          Theme.of(ctx).colorScheme.primary.withOpacity(0.3),
+                      color: Theme.of(ctx).colorScheme.primary.withOpacity(0.3),
                     ),
                   ),
                   child: Text(

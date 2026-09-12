@@ -713,7 +713,7 @@ class MockBackend {
       orElse: () => throw StateError('Tribe not found'),
     );
     if (_me?.userId != tribe.keeperId) {
-      throw StateError('Only the Plug can manage this Tribe');
+      throw StateError('Only the Keeper can manage this Tribe');
     }
     final settings = TribeGovernanceSettings.fromJson(tribe.managementSettings);
     return TribeManagementOverview(
@@ -770,7 +770,7 @@ class MockBackend {
     if (i == -1) throw StateError('Tribe not found');
     final current = _tribes[i];
     if (_me?.userId != current.keeperId) {
-      throw StateError('Only the Plug can manage this Tribe');
+      throw StateError('Only the Keeper can manage this Tribe');
     }
     _tribes[i] = current.copyWith(
       name: name,
@@ -1483,14 +1483,14 @@ class MockBackend {
     ),
     BadgeDefinition(
       key: 'keeper',
-      label: 'Plug',
+      label: 'Keeper',
       description: 'Started your own Tribe.',
       icon: '🌿',
       tier: 'silver',
     ),
     BadgeDefinition(
       key: 'whisper_keeper',
-      label: 'Whisper Plug',
+      label: 'Whisper Keeper',
       description: 'Posted ten Whispers.',
       icon: '🌒',
       tier: 'bronze',
@@ -3298,7 +3298,7 @@ class MockBackend {
     final patrick = PlugProfile(
       plugId: _uuid.v4(),
       displayName: '@PatrickO',
-      bio: 'Community Plug | Kigali. Holding space for big feelings.',
+      bio: 'Community Keeper | Kigali. Holding space for big feelings.',
       locationLabel: 'Kigali, Rwanda',
       tribeCount: 750000,
       avatarSeed: 'plum-orb-0001',
