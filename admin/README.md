@@ -32,6 +32,9 @@ secrets, authentication keys, or unrelated personal data.
 | `/verification` | Approve or deny verification requests | super admin only |
 | `/roles` | View the staff matrix and assign or remove staff roles | super admin only |
 | `/sessions` | Inspect recent Supabase Auth sessions, IP addresses, and devices | super admin only |
+| `/appeals` | Review member appeals against enforcement decisions, with independent second review enforced in the database | super admin, admin, moderator |
+| `/search` | One search box across users, posts, Tribes, cases, and reports; every search is audited | super admin, admin, moderator, support |
+| `/slo` | Queue age, time to first action and resolution, appeal reversal rate, and pipeline health | super admin, admin, analyst, read-only auditor |
 | `/analytics` | Acquisition, activity, engagement, retention, geography, and report trends | super admin, admin, analyst, read-only auditor |
 | `/ops` | Moderation-cache, media-scan, abuse-control, volume, and estimated-cost snapshots | super admin, admin, analyst, read-only auditor |
 | `/audit` | Filter and export the append-only privileged-action ledger | super admin, admin, read-only auditor |
@@ -664,8 +667,8 @@ The next super-admin developer should work in this order.
   and the audit row. Submitting a `content_removed` decision through the
   rendered form resolved the case, actually soft-deleted the post, and closed
   both reports that fed it.
-- ~~Add member appeals and independent second review~~ **Database done; console
-  not yet wired.** Migration `20261007090000_enforcement_notices_and_appeals.sql`.
+- ~~Add member appeals and independent second review~~ **Done — database and
+  console.** Migration `20261007090000_enforcement_notices_and_appeals.sql`.
 
   **This item could not be built in the order the list gives it.** Appeals are
   P0 and "member-visible enforcement notices" is P1, but not one enforcement
@@ -711,6 +714,18 @@ The next super-admin developer should work in this order.
 
   Covered by `supabase/tests/database/0024_appeals_and_enforcement_notices.test.sql`
   (16 assertions).
+
+  **Verified end to end against a running stack**, member surface included. A
+  member posted and a second member reported it through the same paths the
+  Flutter client uses; the trigger opened the case with no staff involvement.
+  A decision soft-deleted the post and delivered a `moderation_action` notice
+  carrying the policy code and `appealable: true`. An unrelated member was
+  refused the appeal, a duplicate was refused, and the deciding admin was
+  refused for independence. A second reviewer overturned it, which restored
+  the post and sent a second notice. Reading as the member afterwards showed
+  both notices, the restored post, and their own appeal with the reviewer's
+  note — and `moderation_cases`, `moderation_case_events` and `reports` all
+  refused them outright.
 
   **The console has an appeals queue** at `/appeals` (moderator and above,
   matching `admin_appeal_queue`'s own gate — `support` is excluded rather than
