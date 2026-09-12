@@ -929,8 +929,8 @@ The next super-admin developer should work in this order.
   `supabase/postgres` container — a faithful new Supabase project — and the
   result diffed against the development database.
 
-  **The chain applies cleanly: 240 of 240, zero failures**, given two
-  prerequisites that are not in the SQL and must be arranged first:
+  **The chain applies cleanly given three prerequisites** that are not in the
+  SQL and must be arranged first:
 
   1. `pg_cron` must be available. It is cluster-wide and lives only in the
      `postgres` database; several migrations `CREATE EXTENSION` it and abort
@@ -938,7 +938,31 @@ The next super-admin developer should work in this order.
      migrations that never see the tables those files would have made.
   2. The vault secret `account_purge_cron_secret` must exist **before**
      `20260915090000_email_dispatch_watchdog.sql`. That migration refuses
-     deliberately and says so; it is the one hard stop in the chain.
+     deliberately and says so.
+  3. **`extensions` must be on the connection's `search_path`.** This one was
+     learned the hard way, in production. `0001_init_schema.sql` runs
+     `CREATE EXTENSION IF NOT EXISTS "uuid-ossp"` unqualified and then uses
+     `uuid_generate_v4()` unqualified. On a real Supabase project the
+     extension is **pre-installed in the `extensions` schema**, so the CREATE
+     is a no-op and the function call fails with
+     `function uuid_generate_v4() does not exist`. The fix applied to
+     production was:
+
+     ```sql
+     ALTER DATABASE postgres SET search_path TO "$user", public, extensions;
+     ```
+
+  **The replay that said "240/240" did not prove prerequisite 3, and claiming
+  it did took production down.** The probe was built from a bare
+  `supabase/postgres` container, which ships with *no* pre-installed
+  extensions — so there `CREATE EXTENSION` really did create `uuid-ossp`, in
+  `public`, and the unqualified call resolved. The probe was missing exactly
+  the condition that mattered. It had already papered over `pg_cron` and
+  `storage` gaps in the same way, which should have been read as "this
+  environment is not faithful" rather than "these are incidental".
+
+  A verification environment that differs from the target in the dimension
+  being verified is not a weaker test — it is a false one.
 
   A database built only from the chain then passes **611 of 612** contract
   assertions. The single failure is an artifact of the probe stripping

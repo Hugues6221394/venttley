@@ -64,6 +64,14 @@ enabled = true
 schema_paths = []
 
 [db.seed]
+# DANGER: these run on `supabase db reset --linked`, i.e. against PRODUCTION.
+# test_accounts.sql creates tester_admin as a super_admin with a password
+# hardcoded in this repository, and investor_demo.sql writes four more
+# credentialed accounts straight into auth.users. That is acceptable only
+# while the project is pre-launch and deliberately carrying test data. Before
+# launch: wipe those accounts and either remove them from sql_paths or set
+# enabled = false, so a reset can never re-plant a known-password super admin.
+#
 # If enabled, seeds the database after migrations during a db reset.
 enabled = true
 # Specifies an ordered list of seed files to load during db reset.
