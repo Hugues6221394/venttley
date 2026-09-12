@@ -924,6 +924,58 @@ The next super-admin developer should work in this order.
 - Add dead-letter visibility and replay for broadcasts, scans, and moderation
   jobs. Validate idempotency under timeout, duplicate delivery, and worker
   restart.
+- **Deploying this chain: what a fresh project needs, and what it used to get
+  wrong.** All 240 migrations were replayed into a pristine
+  `supabase/postgres` container — a faithful new Supabase project — and the
+  result diffed against the development database.
+
+  **The chain applies cleanly: 240 of 240, zero failures**, given two
+  prerequisites that are not in the SQL and must be arranged first:
+
+  1. `pg_cron` must be available. It is cluster-wide and lives only in the
+     `postgres` database; several migrations `CREATE EXTENSION` it and abort
+     the whole file if it cannot be created, which cascades into later
+     migrations that never see the tables those files would have made.
+  2. The vault secret `account_purge_cron_secret` must exist **before**
+     `20260915090000_email_dispatch_watchdog.sql`. That migration refuses
+     deliberately and says so; it is the one hard stop in the chain.
+
+  A database built only from the chain then passes **611 of 612** contract
+  assertions. The single failure is an artifact of the probe stripping
+  `storage.objects` grants that the real storage service provides.
+
+  **The replay also found that a fresh deploy was materially more permissive
+  than the database we develop and test against** — 243 table privileges and
+  23 function grants that development did not have, with development holding
+  nothing extra in return. Production would have been built from the chain, so
+  production would have been the loose one, and no test we run could have seen
+  it. Acting as `anon` — the key that ships inside the mobile app —
+  `admin_metrics_24h` (total users, 24h/7d growth, comment and Tribe counts),
+  `admin_signups_hourly` and `admin_region_distribution` were all readable.
+  Views carry no RLS, so the row-level work protecting the underlying tables
+  did nothing for them. Seventeen `admin_*` functions were also EXECUTE-able
+  by `anon`; all refused, since they resolve the actor from `auth.uid()`,
+  which is NULL anonymously.
+
+  Cause: Supabase grants `anon`/`authenticated` full DML on new tables and
+  EXECUTE on new functions by default privilege, and the three migrations that
+  touch those defaults never closed it. `20260728135525` is the near miss — it
+  revokes EXECUTE **from PUBLIC**, which does not remove an explicit default
+  grant held by `anon`, so every function created after it stayed
+  anon-executable. Its own filename says
+  `revoke_anonymous_security_definer_execution`.
+
+  Fixed by `20261019090000_fresh_deploy_grant_parity.sql`, which corrects the
+  defaults and explicitly revokes the accumulated grants. The revoke list is
+  generated from the replay-versus-development diff rather than hand-written,
+  and can only tighten: development held no grant the fresh build lacked. A
+  rebuilt fresh project now matches development exactly — 558 table grants,
+  zero excess, zero missing, and no `admin_*` reachable by `anon`.
+
+  **The development database had hardening that no migration produces**, which
+  is worth keeping in mind on its own: it arrived by some path outside the
+  chain, so the database we reason about was not the database our migrations
+  describe. That is now true again.
 - Add tested backups, point-in-time recovery, evidence restore drills, and an
   incident runbook with kill switches and rollback ownership.
 
