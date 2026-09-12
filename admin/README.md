@@ -974,8 +974,57 @@ The next super-admin developer should work in this order.
   The `audit()` helper in `lib/audit.ts` is removed. It called `admin_log`
   directly, so it had been failing too — and it had no callers left, every
   privileged write now auditing inside its own RPC transaction.
-- Add staff RLS policy matrices per table: anonymous, normal, suspended staff,
-  each staff role, super admin, and service role.
+- ~~Add staff RLS policy matrices per table: anonymous, normal, suspended
+  staff, each staff role, super admin, and service role.~~ **Done** —
+  `supabase/tests/database/0032_staff_rls_policy_matrix.test.sql` (21
+  assertions), with the defect it found fixed in
+  `20261018090000_staff_authorization_requires_active_account.sql`.
+
+  **Suspending a staff account took nothing away.** `public.is_staff()`
+  checked `user_role` and nothing else, and 65 functions derive their authority
+  from it. Thirteen RLS policies re-implemented the same check inline and none
+  of them looked at account state either. Demonstrated rather than reasoned
+  about: with a test account set to `admin` / `suspended`, a plain
+  `GET /rest/v1/audit_log` returned the privileged ledger, `admin_global_search`
+  kept returning accounts, and every `is_staff`-gated RPC kept answering.
+  Suspension was a label on a row. The safe, reversible, obvious move an
+  operator would reach for first was the one that did nothing — only changing
+  the role or deleting the account actually removed power.
+
+  `is_staff` now requires `account_status = 'active'` and no `deactivated_at`
+  (`'restricted'` is a sanction too). `account_status` is COALESCEd to
+  `'active'` because the column is nullable with that default, and reading
+  NULL as inactive would lock out every staff row predating the column.
+
+  The thirteen policies now **delegate** to `is_staff` rather than restating
+  it — thirteen private copies is how the check went missing in the first
+  place. Each call is wrapped in a scalar subselect so the planner evaluates
+  it once as an InitPlan; `posts`, `posts_comments` and `tribes` are hot-path
+  reads and `is_staff` carries `SET search_path`, which makes it non-inlinable.
+
+  My first inventory of inline checks was **wrong** and the matrix caught that
+  too: I grepped for the literal `user_role = 'super_admin'` shape, which
+  missed `admin_global_search` (reads the role into a variable, compares the
+  variable) and `admin_hot_feed_health` (`user_role IN (...)` inside an
+  EXISTS). The right question was "which functions mention `user_role` and
+  never call `is_staff`". Both are fixed.
+
+  The test acts as the **real** database roles (`SET LOCAL ROLE authenticated`
+  plus a JWT claim) rather than checking predicates as `postgres`, under which
+  RLS is bypassed and every assertion would pass while proving nothing. It was
+  verified by reverting the predicate: 6 of the 21 fail without the fix.
+- **Still checking `user_role` inline:** `public.queue_email`, which decides
+  whether a caller may queue mail addressed to someone else. Left out of the
+  authorization change above deliberately — different subsystem, different
+  blast radius — but it is status-blind for the same reason and should move to
+  `is_staff`.
+- **The console still gates on role alone.** `proxy.ts` and the dashboard
+  layout check `isStaffRole(user_role)`; the layout selects only
+  `anonymous_pseudonym, user_role`. A suspended staff member can therefore
+  still sign in and load the shell, even though every query and RPC behind it
+  now returns nothing. The database is the boundary that matters and it holds,
+  but the console should refuse the session rather than render an empty
+  console.
 - Add adversarial tests for forged IDs/roles, stale forms, cross-route Server
   Action calls, unknown routes, duplicate submissions, large inputs, regex
   abuse, CSV injection, and pagination races.
