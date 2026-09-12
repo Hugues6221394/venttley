@@ -22,7 +22,7 @@ secrets, authentication keys, or unrelated personal data.
 | --- | --- | --- |
 | `/overview` | Platform counts, recent safety signals, reports, regions, and privileged activity | all staff roles |
 | `/safety` | Severity-ordered post, Whisper, Tribe-chat, DM, and self-harm safety queue with 15/60-minute UI targets | super admin, admin, moderator, support |
-| `/csam` | Quarantined child-safety incident ledger and resolution/report-reference recording | super admin only |
+| `/csam` | Quarantined child-safety incident ledger and resolution/report-reference recording; evidence withheld until a reveal with a stated reason, recorded in a separate append-only access ledger | super admin only |
 | `/moderation` | Pending/resolved reports, post previews, post removal, account suspension, shadow ban, escalating suspension ladder, bulk dismissal, and crisis review | super admin, admin, moderator |
 | `/automod` | Create, enable, disable, and remove dynamic keyword rules consumed by the client and server write guard | super admin, admin, moderator |
 | `/media` | Review classifier-blocked, sensitive, and pending post/Whisper images; approve or block | super admin, admin, moderator |
@@ -768,10 +768,63 @@ The next super-admin developer should work in this order.
   Still open from the original item: retention/expiry policy for held evidence
   (a hold currently has no end date), and cleanup jobs other than account
   deletion have not been audited for the same hazard.
-- Access to CSAM and highly sensitive evidence must be separately logged and
-  tightly scoped. Partly addressed for private-message bodies — see the DM
-  evidence entry above — but CSAM evidence access itself is still not
-  separately logged.
+- ~~Access to CSAM and highly sensitive evidence must be separately logged and
+  tightly scoped.~~ **Done** — `20261017090000_csam_evidence_access_logging.sql`.
+  Private-message bodies were covered by the DM evidence entry above; this is
+  the other half.
+
+  **The queue had never shown a single incident.** `csam_incidents` carries an
+  RLS policy admitting `super_admin` and no grant to `authenticated`, and
+  Postgres checks the table privilege before the policy — so the page's query
+  always failed with 42501 and the policy was dead code. The page discarded
+  the error by destructuring only `data`, so it rendered its empty state:
+  *"No incidents — nothing has been auto-detected."* The most legally
+  consequential screen in the console reported all-clear because it could not
+  read. Nobody could tell "nothing pending" from "this screen is broken".
+
+  The fix is deliberately **not** `GRANT SELECT ... TO authenticated`, which
+  would have restored the page and kept the behaviour this item exists to end:
+  every page load silently reading every incident's content reference, author
+  identity and classifier labels with nothing written down. The table stays
+  unreadable. Two functions replace it — `admin_csam_queue` lists work without
+  disclosing evidence, `admin_read_csam_evidence` discloses it and says so.
+
+  **Where the line falls.** The queue returns kind, status, timestamps, the
+  staff note and report reference, and withholds `content_ref`, `media_url`,
+  `author_id` and `labels` — `content_ref` is the post id, so holding it is one
+  query from the material, and `author_id` names a person against an
+  allegation a classifier has not confirmed. The queue therefore does **not**
+  require AAL2 and the evidence read does: knowing eleven incidents are
+  waiting discloses nothing, and `admin_resolve_csam_incident` already
+  required step-up, so an operator without it can see the backlog and act on
+  none of it.
+
+  **A separate, append-only ledger.** `csam_evidence_access` records actor,
+  role, stated reason, which fields were disclosed and when. Both it and
+  `audit_log` are written, on purpose: `/audit` admits `admin` and
+  `read_only_auditor`, neither of which may see a CSAM incident, and a
+  mandated-reporting posture needs an access record it can review, export and
+  retain on its own terms. A blank reason is refused — the review reads that
+  text. It carries no foreign keys, matching `audit_log`, because an
+  append-only guard refuses the UPDATE that `ON DELETE SET NULL` performs, so
+  an FK would make looking at an incident permanently block account deletion.
+
+  **`media_url` is returned and recorded as disclosed, but never rendered as
+  an image.** Whether this material may be reviewed in a browser at all is a
+  question for counsel and trained specialists — it belongs with the two CSAM
+  items below, not settled by default in a template.
+
+  While here: `20261006090000` already refused to delete an account with an
+  incident in `detected` or `reported` — that gap was closed. What it did not
+  do was explain itself; it raised a bare `legal_hold_active`, so a super
+  admin was told no and given nothing to act on. It now names the incident and
+  its status and points at `/csam`.
+
+  Covered by `supabase/tests/database/0031_csam_evidence_access.test.sql`
+  (17 assertions), and exercised through the running console: the queue
+  renders with the evidence withheld, a reveal with a typed reason returns it
+  and writes one ledger row, a too-short reason writes none, and none of the
+  evidence values appear anywhere in the page HTML until asked for.
 - Validate CSAM reporting channels, retention, jurisdiction, and response
   clocks with qualified counsel and trained specialists. UI copy is not legal
   compliance, and classifier output is not a final determination.
