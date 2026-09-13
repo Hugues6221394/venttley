@@ -28,21 +28,33 @@ UPDATE public.users
    SET created_at = NOW() - INTERVAL '2 days'
  WHERE user_id::TEXT LIKE '81000000-0000-4000-8000-%';
 
+-- The fixture used `category_name` and `created_by`; the table has `category`
+-- and `keeper_id`. Those columns have not existed for a long time, so this
+-- INSERT aborted the transaction at line 37 and every assertion below it was
+-- skipped. pgTAP reported no failures because it reported nothing at all —
+-- the file ran ZERO of its assertions while appearing to pass.
 INSERT INTO public.tribes (
-  tribe_id, name, slug, description, category_name, created_by, created_at
+  tribe_id, name, slug, description, category, keeper_id, created_at
 ) VALUES (
   '82000000-0000-4000-8000-000000000001',
   'Keyset Tribe', 'keyset-tribe', 'feed keyset test tribe', 'confessions',
   '81000000-0000-4000-8000-000000000001', NOW() - INTERVAL '1 day'
 );
 
+-- Both users join, because the feed assertions depend on ...0001 being able
+-- to see a tribe post authored by ...0002.
 INSERT INTO public.tribe_members (tribe_id, user_id, role, joined_at)
-VALUES (
-  '82000000-0000-4000-8000-000000000001',
-  '81000000-0000-4000-8000-000000000001',
-  'member',
-  NOW() - INTERVAL '1 day'
-);
+VALUES
+  ('82000000-0000-4000-8000-000000000001',
+   '81000000-0000-4000-8000-000000000001', 'member', NOW() - INTERVAL '1 day'),
+  ('82000000-0000-4000-8000-000000000001',
+   '81000000-0000-4000-8000-000000000002', 'member', NOW() - INTERVAL '1 day');
+
+-- guard_tribe_content_write authorises against `(SELECT auth.uid())`, not the
+-- row's author_id, so a fixture inserting as postgres can never satisfy it —
+-- there is no JWT. Seeded with triggers off, matching 0026/0031/0032. The
+-- guard itself is covered by 0003 and 20260716175655.
+SET session_replication_role = replica;
 
 INSERT INTO public.posts (
   post_id, author_id, category_name, content, post_mood, tribe_id, created_at
@@ -66,6 +78,8 @@ INSERT INTO public.posts (
     '82000000-0000-4000-8000-000000000001',
     NOW() - INTERVAL '1 hour'
   );
+
+SET session_replication_role = origin;
 
 SET LOCAL role authenticated;
 SET LOCAL request.jwt.claim.sub = '81000000-0000-4000-8000-000000000001';
