@@ -1,5 +1,8 @@
 import '../../core/constants.dart';
 
+/// Which function files an appeal against a decision.
+enum AppealRoute { moderationCase, account, verification }
+
 /// Where an appeal stands, from the member's side.
 enum AppealStatus {
   /// Nothing filed. Whether one *can* be filed is [EnforcementNotice.canAppeal].
@@ -44,7 +47,9 @@ class EnforcementNotice {
     required this.action,
     required this.decidedAt,
     required this.appealable,
+    this.notificationId,
     this.caseId,
+    this.verificationRequestId,
     this.policyCode,
     this.reason,
     this.appealId,
@@ -54,6 +59,11 @@ class EnforcementNotice {
     this.appealedAt,
   });
 
+  /// The notice row itself. For an account-level action this is what an appeal
+  /// is filed against, because there is no case and no request — the notice is
+  /// the decision as far as the member is concerned.
+  final String? notificationId;
+
   /// Null for decisions taken outside a moderation case.
   ///
   /// `notify_enforcement` is called with no case for account-level actions
@@ -62,6 +72,11 @@ class EnforcementNotice {
   /// key entirely. Those notices are real and must be shown; they simply have
   /// nothing `submit_appeal` can be pointed at. See [needsOffAppRoute].
   final String? caseId;
+
+  /// Set for verification decisions. Carried by the notice since
+  /// 20261022090000; notices written before that have none and fall back to
+  /// the off-app route.
+  final String? verificationRequestId;
 
   /// What was done, in the database's own vocabulary.
   ///
@@ -120,25 +135,39 @@ class EnforcementNotice {
   /// is final, not having filed. An [AppealStatus.open] appeal is barred by the
   /// unique index rather than by finality; withdraw it first.
   ///
-  /// Requires a [caseId]: `submit_appeal` takes a case, and there is no
-  /// equivalent for account-level or verification decisions.
+  /// Requires a route: a case for `submit_appeal`, a request for
+  /// `submit_verification_appeal`, or the notice itself for
+  /// `submit_account_appeal`.
   bool get canAppeal =>
       appealable &&
-      caseId != null &&
+      appealRoute != null &&
       withinAppealWindow &&
       (appealStatus == AppealStatus.none ||
           appealStatus == AppealStatus.withdrawn);
 
+  /// Which function files an appeal against this decision.
+  ///
+  /// Three, because three kinds of decision exist and each reverses
+  /// differently: a case appeal restores the content and writes to the case
+  /// history, an account appeal reinstates the account, and a verification
+  /// appeal puts the application back in the queue rather than granting the
+  /// badge. Routing them through one function would have to guess.
+  AppealRoute? get appealRoute {
+    if (caseId != null) return AppealRoute.moderationCase;
+    if (verificationRequestId != null) return AppealRoute.verification;
+    if (notificationId != null) return AppealRoute.account;
+    return null;
+  }
+
   /// True when the member was told they may appeal and the app has no way to
   /// file one.
   ///
-  /// A real gap, not a display quirk. A suspension or a ban is sent with
-  /// `p_appealable => true` and no case id, and `moderation_appeals` keys on a
-  /// case or a verification request — so the most consequential decision the
-  /// platform can take is the one with no in-app route to contest it. Until
-  /// that is closed, the screen names a channel rather than leaving someone to
-  /// conclude there is none.
-  bool get needsOffAppRoute => appealable && caseId == null;
+  /// 20261022090000 closed this for account-level and verification decisions,
+  /// which had none. What is left are notices written before that migration:
+  /// a verification refusal from the old workflow carries no request id, and
+  /// nothing can recover it from the payload. Those name a channel rather than
+  /// leaving someone to conclude there is no recourse.
+  bool get needsOffAppRoute => appealable && appealRoute == null;
 
   /// A human label for what was done.
   String get actionLabel => switch (action) {
@@ -185,14 +214,17 @@ class EnforcementNotice {
   /// notice carrying the wrong date is worse than one that is absent, because
   /// the date is what the appeal window is counted from.
   static EnforcementNotice? fromNotificationPayload(
-    Map<String, dynamic> payload,
-  ) {
+    Map<String, dynamic> payload, {
+    String? notificationId,
+  }) {
     final decidedAt = DateTime.tryParse(
       (payload['decided_at'] as String?) ?? '',
     );
     if (decidedAt == null) return null;
     return EnforcementNotice(
+      notificationId: notificationId,
       caseId: payload['case_id'] as String?,
+      verificationRequestId: payload['verification_request_id'] as String?,
       action: (payload['action'] as String?) ?? 'moderation_action',
       decidedAt: decidedAt.toLocal(),
       appealable: payload['appealable'] == true,
@@ -208,7 +240,13 @@ class EnforcementNotice {
     String? reviewNote,
     DateTime? appealedAt,
   }) => EnforcementNotice(
+    // Every field that decides the appeal route has to survive the copy. When
+    // notificationId did not, a suspension with any appeal history lost its
+    // route and the card offered an email address instead of the button —
+    // visible only once an appeal existed, which no unit test constructed.
+    notificationId: notificationId,
     caseId: caseId,
+    verificationRequestId: verificationRequestId,
     action: action,
     decidedAt: decidedAt,
     appealable: appealable,

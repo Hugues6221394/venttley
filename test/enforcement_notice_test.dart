@@ -37,8 +37,10 @@ EnforcementNotice _notice({
   AppealStatus status = AppealStatus.none,
   Duration age = const Duration(days: 1),
   String? caseId = '20000000-0000-4000-8000-000000000001',
+  String? notificationId,
 }) => EnforcementNotice(
   caseId: caseId,
+  notificationId: notificationId,
   action: 'case_content_removed',
   decidedAt: DateTime.now().subtract(age),
   appealable: appealable,
@@ -74,10 +76,20 @@ void main() {
       expect(_notice(age: const Duration(days: 31)).canAppeal, isFalse);
     });
 
-    test('an account-level decision has no case to appeal against', () {
-      // A suspension is sent with appealable: true and no case id, and
-      // submit_appeal takes a case. Offering the button would produce a
-      // refusal the member can do nothing with.
+    test('an account-level decision is appealed through its notice', () {
+      // No case, so submit_appeal cannot take it. submit_account_appeal keys
+      // on the notice the member received, which is the decision as far as
+      // they are concerned and carries the date the window runs from.
+      final notice = _notice(caseId: null, notificationId: 'notice-1');
+      expect(notice.appealRoute, AppealRoute.account);
+      expect(notice.canAppeal, isTrue);
+      expect(notice.needsOffAppRoute, isFalse);
+    });
+
+    test('a notice from before the account route existed has none', () {
+      // Payloads written before 20261022090000 carry neither a case nor a
+      // notice reference this client can use. They are shown, and the card
+      // names a channel instead.
       expect(_notice(caseId: null).canAppeal, isFalse);
       expect(_notice(caseId: null).needsOffAppRoute, isTrue);
     });
@@ -180,8 +192,44 @@ void main() {
       expect(notice, isNotNull);
       expect(notice!.caseId, isNull);
       expect(notice.actionLabel, 'Account suspended');
+      // Parsed without a notification id here, which is the pre-migration
+      // shape; the backend supplies one from the row it read.
       expect(notice.canAppeal, isFalse);
       expect(notice.needsOffAppRoute, isTrue);
+    });
+
+    test('the notice id makes an account decision appealable', () {
+      final notice = EnforcementNotice.fromNotificationPayload(
+        {
+          'action': 'account_suspended',
+          'appealable': true,
+          'decided_at': DateTime.now()
+              .toUtc()
+              .subtract(const Duration(days: 1))
+              .toIso8601String(),
+        },
+        notificationId: 'notice-1',
+      );
+      expect(notice!.appealRoute, AppealRoute.account);
+      expect(notice.canAppeal, isTrue);
+    });
+
+    test('a verification decision carries its request id', () {
+      final notice = EnforcementNotice.fromNotificationPayload(
+        {
+          'action': 'verification_denied',
+          'verification_request_id': '30000000-0000-4000-8000-000000000001',
+          'appealable': true,
+          'decided_at': DateTime.now()
+              .toUtc()
+              .subtract(const Duration(days: 1))
+              .toIso8601String(),
+        },
+        notificationId: 'notice-2',
+      );
+      // The request wins over the notice: overturning reopens the application,
+      // which the account route cannot do.
+      expect(notice!.appealRoute, AppealRoute.verification);
     });
 
     test('a row with no date is skipped rather than dated with now', () {
@@ -231,6 +279,35 @@ void main() {
         'decided_at': '2026-09-01T10:00:00Z',
       });
       expect(notice!.actionLabel, 'Moderation decision');
+    });
+  });
+
+  group('copying a notice keeps its route', () {
+    // withAppeal is applied to every notice that has one, so a field dropped
+    // here is invisible until an appeal exists — and then the card silently
+    // stops offering the button. The integration test caught exactly this.
+    test('an account notice keeps its notification id', () {
+      final copied = _notice(caseId: null, notificationId: 'notice-1')
+          .withAppeal(appealId: 'a1', status: AppealStatus.withdrawn);
+      expect(copied.appealRoute, AppealRoute.account);
+      expect(copied.canAppeal, isTrue,
+          reason: 'withdrawing does not spend the appeal');
+    });
+
+    test('a verification notice keeps its request id', () {
+      final copied = EnforcementNotice(
+        action: 'verification_denied',
+        decidedAt: DateTime.now().subtract(const Duration(days: 1)),
+        appealable: true,
+        verificationRequestId: 'request-1',
+      ).withAppeal(appealId: 'a1', status: AppealStatus.open);
+      expect(copied.appealRoute, AppealRoute.verification);
+    });
+
+    test('a case notice keeps its case id', () {
+      final copied = _notice()
+          .withAppeal(appealId: 'a1', status: AppealStatus.open);
+      expect(copied.appealRoute, AppealRoute.moderationCase);
     });
   });
 

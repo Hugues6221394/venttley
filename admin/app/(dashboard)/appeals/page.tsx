@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 type AppealRow = {
   appeal_id: string;
   case_id: string | null;
+  subject_kind: "case" | "account" | "verification";
   appellant_id: string;
   appellant_pseudonym: string | null;
   statement: string;
@@ -38,6 +39,21 @@ const DECISION_LABEL: Record<string, string> = {
   user_shadow_restricted: "Shadow restricted",
   escalated_external: "Escalated externally",
   no_action: "No action",
+  // Account-level actions have no case, so the queue reports the action the
+  // member was told about — which is the only description of the decision
+  // outside the audit log.
+  account_suspended: "Account suspended",
+  account_restricted: "Account restricted",
+  verification_denied: "Verification refused",
+};
+
+// Which kind of decision is being contested. It changes what overturning does,
+// so it is on the card rather than left to be inferred from a missing case
+// link.
+const SUBJECT_LABEL: Record<string, string> = {
+  case: "moderation case",
+  account: "account action",
+  verification: "verification",
 };
 
 // What overturning will actually undo, so the reviewer is told the consequence
@@ -48,6 +64,12 @@ const REVERSAL: Record<string, string> = {
   user_suspended: "Overturning lifts the suspension and reinstates the account.",
   user_banned: "Overturning lifts the ban and reinstates the account.",
   user_warned: "Overturning records the reversal; a warning cannot be unsent.",
+  account_suspended: "Overturning lifts the suspension and reinstates the account.",
+  account_restricted: "Overturning reinstates the account.",
+  // Deliberately not an approval: overturning says the refusal was wrong, not
+  // that the evidence has been accepted.
+  verification_denied:
+    "Overturning reopens the application for a fresh review. It does not grant the badge.",
 };
 
 const OUTCOMES = ["upheld", "overturned"] as const;
@@ -151,7 +173,10 @@ function AppealCard({
         <Badge tone={open ? "warn" : row.status === "overturned" ? "ok" : "neutral"}>
           {row.status}
         </Badge>
-        {row.target_type && (
+        <span className="pill bg-line text-ink-muted uppercase">
+          {SUBJECT_LABEL[row.subject_kind] ?? row.subject_kind}
+        </span>
+        {row.subject_kind === "case" && row.target_type && (
           <span className="pill bg-line text-ink-muted uppercase">
             {row.target_type}
           </span>

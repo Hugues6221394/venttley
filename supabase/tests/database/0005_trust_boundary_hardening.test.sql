@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(69);
+SELECT plan(70);
 
 SELECT has_table('public', 'push_delivery_outbox', 'durable push outbox exists');
 SELECT is(
@@ -383,6 +383,16 @@ INSERT INTO public.email_outbox (
   '81000000-0000-4000-8000-000000000001',
   'welcome', '{"pseudonym":"trust_a"}'::JSONB
 );
+-- Anything already queued would be claimed ahead of the fixture row, which is
+-- ordered last by created_at — so the assertions below would read a row this
+-- test never wrote. That made the outcome depend on how much sat in
+-- email_outbox, which is to say it only passed on an empty database. Nothing
+-- is deleted; the others are simply pushed out of the claim window, and the
+-- transaction rolls back regardless.
+UPDATE public.email_outbox
+   SET available_at = now() + interval '1 hour'
+ WHERE outbox_id <> '85000000-0000-4000-8000-000000000001';
+
 SET LOCAL ROLE service_role;
 CREATE TEMP TABLE claimed_push (
   delivery_id UUID,
@@ -391,12 +401,18 @@ CREATE TEMP TABLE claimed_push (
   event_kind TEXT,
   event_data JSONB
 ) ON COMMIT DROP;
+-- Columns mirror claim_email_deliveries' return type. A to_address column was
+-- added to that function by 20260910090000 and never added here, so the INSERT
+-- below failed on an arity mismatch, aborted the transaction, and took the
+-- remaining 25 assertions in this file with it — silently, because a plan that
+-- runs short reports as a count rather than as a failure anyone reads.
 CREATE TEMP TABLE claimed_email (
   outbox_id UUID,
   user_id UUID,
   template TEXT,
   variables JSONB,
-  attempts INT
+  attempts INT,
+  to_address TEXT
 ) ON COMMIT DROP;
 SELECT is(
   public.enqueue_push_event(
@@ -669,8 +685,20 @@ SELECT throws_ok(
     DELETE FROM public.users
      WHERE user_id = '81000000-0000-4000-8000-000000000002'
   $$,
-  'P0001', 'legal_hold_active',
+  'P0001', NULL,
   'a concurrent legal hold prevents destructive account purge'
+);
+-- Matched on the prefix, not the whole sentence. 20261017090000 made this
+-- message explain which incident is blocking the delete and where to resolve
+-- it, which is the point of the message and exactly the kind of improvement an
+-- equality assertion punishes.
+SELECT throws_like(
+  $$
+    DELETE FROM public.users
+     WHERE user_id = '81000000-0000-4000-8000-000000000002'
+  $$,
+  'legal_hold_active%',
+  'and says so with the code the caller keys on'
 );
 
 SELECT * FROM finish();

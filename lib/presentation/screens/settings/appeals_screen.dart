@@ -149,14 +149,11 @@ class _NoticeCardState extends ConsumerState<_NoticeCard> {
     );
     if (statement == null || !mounted) return;
 
-    final caseId = widget.notice.caseId;
-    if (caseId == null) return;
-
     setState(() => _busy = true);
     try {
       await ref
           .read(repositoryProvider)
-          .submitAppeal(caseId: caseId, statement: statement);
+          .submitAppeal(widget.notice, statement);
       ref.invalidate(myEnforcementHistoryProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

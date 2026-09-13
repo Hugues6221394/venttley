@@ -4350,15 +4350,15 @@ class VentlyRepository implements MusicProvider {
     return live.myEnforcementHistory();
   }
 
-  Future<String> submitAppeal({
-    required String caseId,
-    required String statement,
-  }) async {
+  Future<String> submitAppeal(
+    EnforcementNotice notice,
+    String statement,
+  ) async {
     final live = _live;
     if (live == null) {
       throw StateError('You need a connection to file an appeal.');
     }
-    return live.submitAppeal(caseId: caseId, statement: statement);
+    return live.submitAppeal(notice, statement);
   }
 
   Future<void> withdrawAppeal(String appealId) async {

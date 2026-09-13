@@ -104,16 +104,24 @@ void main() {
       return;
     }
 
-    final target = appealable.first;
+    // Prefer an account-level decision when one is available: it is the route
+    // that had no function behind it until 20261022090000, and the one most
+    // worth exercising against a real backend.
+    final target = appealable.firstWhere(
+      (n) => n.appealRoute == AppealRoute.account,
+      orElse: () => appealable.first,
+    );
     final appealId = await repo.submitAppeal(
-      caseId: target.caseId!,
-      statement: 'Integration test: filing against ${target.actionLabel}.',
+      target,
+      'Integration test: filing against ${target.actionLabel}.',
     );
     expect(appealId, isNotEmpty);
 
     // The read must now show it as open and carry the statement back.
     final after = await repo.myEnforcementHistory();
-    final updated = after.firstWhere((n) => n.caseId == target.caseId);
+    final updated = after.firstWhere(
+      (n) => n.notificationId == target.notificationId,
+    );
     expect(updated.appealStatus, AppealStatus.open);
     expect(updated.appealStatement, contains('Integration test'));
     expect(updated.canAppeal, isFalse, reason: 'one open appeal at a time');
@@ -123,7 +131,7 @@ void main() {
     await repo.withdrawAppeal(updated.appealId!);
     final afterWithdrawal = await repo.myEnforcementHistory();
     final reopened = afterWithdrawal.firstWhere(
-      (n) => n.caseId == target.caseId,
+      (n) => n.notificationId == target.notificationId,
     );
     expect(reopened.appealStatus, AppealStatus.withdrawn,
         reason: 'the newest appeal for this case is the withdrawn one');

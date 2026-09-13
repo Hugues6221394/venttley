@@ -35,22 +35,27 @@ class _FakeRepository extends VentlyRepository {
   /// Set to make submit_appeal fail the way the database does.
   String? refusal;
 
-  final List<({String caseId, String statement})> submitted = [];
+  final List<({AppealRoute? route, String? caseId, String statement})>
+      submitted = [];
   final List<String> withdrawn = [];
 
   @override
   Future<List<EnforcementNotice>> myEnforcementHistory() async => history;
 
   @override
-  Future<String> submitAppeal({
-    required String caseId,
-    required String statement,
-  }) async {
+  Future<String> submitAppeal(
+    EnforcementNotice notice,
+    String statement,
+  ) async {
     if (refusal != null) throw Exception(refusal);
-    submitted.add((caseId: caseId, statement: statement));
+    submitted.add((
+      route: notice.appealRoute,
+      caseId: notice.caseId,
+      statement: statement,
+    ));
     history = history
         .map(
-          (n) => n.caseId == caseId
+          (n) => n.caseId == notice.caseId
               ? n.withAppeal(
                   appealId: 'appeal-1',
                   status: AppealStatus.open,
@@ -70,6 +75,8 @@ class _FakeRepository extends VentlyRepository {
 
 EnforcementNotice _notice({
   String? caseId = 'case-1',
+  String? notificationId,
+  String? verificationRequestId,
   String action = 'case_content_removed',
   bool appealable = true,
   AppealStatus status = AppealStatus.none,
@@ -79,6 +86,8 @@ EnforcementNotice _notice({
   String? reviewNote,
 }) => EnforcementNotice(
   caseId: caseId,
+  notificationId: notificationId,
+  verificationRequestId: verificationRequestId,
   action: action,
   decidedAt: DateTime.now().subtract(age),
   appealable: appealable,
@@ -162,6 +171,7 @@ void main() {
 
     expect(repo.submitted, hasLength(1));
     expect(repo.submitted.single.caseId, 'case-1');
+    expect(repo.submitted.single.route, AppealRoute.moderationCase);
     expect(repo.submitted.single.statement, startsWith('The message was'));
   });
 
@@ -242,21 +252,72 @@ void main() {
     expect(find.textContaining('30-day window'), findsOneWidget);
   });
 
-  testWidgets('a suspension is shown, and names a channel it can be appealed to',
-      (tester) async {
-    // The gap this screen cannot close on its own: notify_enforcement sends
-    // account-level actions with appealable: true and no case id, and
-    // submit_appeal takes a case. Showing no button and saying nothing would
-    // leave a suspended member with the platform's word that they may appeal
-    // and no visible way to.
-    await _pump(tester, [
+  testWidgets('a suspension is appealed through submit_account_appeal', (
+    tester,
+  ) async {
+    // The decision with no case behind it. Until 20261022090000 there was no
+    // function that would accept one, and a suspended member had the
+    // platform's word that they could appeal and no way to.
+    final repo = await _pump(tester, [
       _notice(
         caseId: null,
+        notificationId: 'notice-1',
         action: 'account_suspended',
         reason: 'Suspended for seven days after a second finding.',
       ),
     ]);
     expect(find.text('Account suspended'), findsOneWidget);
+
+    await tester.tap(find.text('Appeal this decision'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      'I was not the one who started the exchange; please read it in order.',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Submit appeal'));
+    await tester.pumpAndSettle();
+
+    expect(repo.submitted.single.route, AppealRoute.account);
+  });
+
+  testWidgets('a verification refusal routes to its own function', (
+    tester,
+  ) async {
+    // Not the account route: overturning a verification appeal reopens the
+    // application rather than reinstating an account, so it cannot share one.
+    final repo = await _pump(tester, [
+      _notice(
+        caseId: null,
+        verificationRequestId: 'request-1',
+        action: 'verification_denied',
+        appealable: true,
+        reason: 'The links do not establish the claim.',
+      ),
+    ]);
+
+    await tester.tap(find.text('Appeal this decision'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      'The organisation page confirms the role and I can supply a letter.',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Submit appeal'));
+    await tester.pumpAndSettle();
+
+    expect(repo.submitted.single.route, AppealRoute.verification);
+  });
+
+  testWidgets('a notice written before the routes existed names a channel', (
+    tester,
+  ) async {
+    // A verification refusal from the old workflow carries no request id, and
+    // nothing can recover it from the payload. Saying nothing would leave
+    // someone hunting for a control that is not there.
+    await _pump(tester, [
+      _notice(caseId: null, action: 'verification_denied'),
+    ]);
     expect(find.text('Appeal this decision'), findsNothing);
     expect(find.textContaining('not from inside the app yet'), findsOneWidget);
   });

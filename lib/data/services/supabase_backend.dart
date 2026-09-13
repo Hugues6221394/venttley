@@ -8120,7 +8120,10 @@ class SupabaseBackend {
     final notices = <EnforcementNotice>[];
     for (final r in rows) {
       final payload = (r['payload'] as Map?)?.cast<String, dynamic>() ?? const {};
-      final notice = EnforcementNotice.fromNotificationPayload(payload);
+      final notice = EnforcementNotice.fromNotificationPayload(
+        payload,
+        notificationId: r['notification_id'] as String?,
+      );
       if (notice != null) notices.add(notice);
     }
     if (notices.isEmpty) return const [];
@@ -8134,15 +8137,21 @@ class SupabaseBackend {
         .eq('appellant_id', uid)
         .order('created_at', ascending: false);
 
-    final byCase = <String, Map<String, dynamic>>{};
+    // Keyed by whichever subject the appeal carries, so all three kinds find
+    // their way back to the notice they belong to.
+    final bySubject = <String, Map<String, dynamic>>{};
     for (final a in appeals) {
-      final caseId = a['case_id'] as String?;
-      if (caseId != null) byCase.putIfAbsent(caseId, () => a.cast<String, dynamic>());
+      final key = (a['case_id'] ??
+          a['verification_request_id'] ??
+          a['enforcement_notification_id']) as String?;
+      if (key != null) bySubject.putIfAbsent(key, () => a.cast<String, dynamic>());
     }
 
     return notices.map((notice) {
-      final caseId = notice.caseId;
-      final appeal = caseId == null ? null : byCase[caseId];
+      final key = notice.caseId ??
+          notice.verificationRequestId ??
+          notice.notificationId;
+      final appeal = key == null ? null : bySubject[key];
       if (appeal == null) return notice;
       return notice.withAppeal(
         appealId: appeal['appeal_id'] as String,
@@ -8156,17 +8165,35 @@ class SupabaseBackend {
     }).toList();
   }
 
-  /// File an appeal. The database owns the rules — subject only, one open
-  /// appeal per decision, within thirty days — and refuses with a message
-  /// naming the reason, which is surfaced to the member unchanged.
-  Future<String> submitAppeal({
-    required String caseId,
-    required String statement,
-  }) async {
-    final result = await _client.rpc(
-      'submit_appeal',
-      params: {'p_case': caseId, 'p_statement': statement},
-    );
+  /// File an appeal against a decision.
+  ///
+  /// Three functions, because three kinds of decision reverse differently and
+  /// each knows how to undo its own. The database owns the rules — subject
+  /// only, one open appeal per decision, within thirty days, already-heard is
+  /// final — and refuses with a message naming the reason, which is surfaced
+  /// to the member unchanged.
+  Future<String> submitAppeal(EnforcementNotice notice, String statement) async {
+    final result = switch (notice.appealRoute) {
+      AppealRoute.moderationCase => await _client.rpc(
+        'submit_appeal',
+        params: {'p_case': notice.caseId, 'p_statement': statement},
+      ),
+      AppealRoute.verification => await _client.rpc(
+        'submit_verification_appeal',
+        params: {
+          'p_request': notice.verificationRequestId,
+          'p_statement': statement,
+        },
+      ),
+      AppealRoute.account => await _client.rpc(
+        'submit_account_appeal',
+        params: {
+          'p_notification': notice.notificationId,
+          'p_statement': statement,
+        },
+      ),
+      null => throw StateError('This decision cannot be appealed in the app.'),
+    };
     return result as String;
   }
 
