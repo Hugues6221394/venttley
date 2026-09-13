@@ -7,6 +7,7 @@ import '../theme/colors.dart';
 import '../theme/motion.dart';
 import '../navigation/compose_navigation.dart';
 import 'keeper_prompt_composer_sheet.dart';
+import 'studio_tribe_selector.dart';
 
 enum KeeperContentStudioAction {
   prompt,
@@ -32,8 +33,13 @@ Future<void> showKeeperContentStudioSheet(
     builder: (ctx) => const _KeeperContentStudioSheet(),
   );
   if (action == null || !context.mounted) return;
-  final tribe = ref.read(primaryKeeperTribeProvider);
-  if (tribe == null) return;
+  // Resolved, not defaulted. This used to read the keeper's *largest*
+  // tribe, so a keeper of three could pick "Announcement" and have it
+  // published to a community they had not chosen and were not looking at.
+  // Under a set scope that scope wins; when it is ambiguous the keeper is
+  // asked, and dismissing the picker cancels rather than falling back.
+  final tribe = await resolveStudioTargetTribe(context, ref);
+  if (tribe == null || !context.mounted) return;
 
   switch (action) {
     case KeeperContentStudioAction.prompt:
@@ -83,7 +89,10 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tribe = ref.watch(primaryKeeperTribeProvider);
+    // Scoped, so the sheet's deep links point at the tribe the keeper is
+    // actually looking at. Null under All Tribes, which the slug guards
+    // already handle.
+    final tribe = ref.watch(studioSelectedTribeProvider);
     final slug = tribe?.slug;
 
     return DraggableScrollableSheet(

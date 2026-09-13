@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/providers.dart';
+import '../../../data/services/tribe_image_picker.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_chat_hub.dart';
 import '../../widgets/tribe/tribe_chat_poll_sheet.dart';
@@ -274,23 +274,32 @@ class _HeroSection extends ConsumerWidget {
   final bool canEditIdentity;
 
   Future<void> _pickAvatar(BuildContext context, WidgetRef ref) async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 88,
-    );
-    if (picked == null) return;
+    // The shared pipeline, so this third entry point to setting a Tribe
+    // avatar enforces the same crop, compression and magic-byte rules as the
+    // create and edit screens. It used to pick at 512px with no crop and
+    // guess the MIME type from `picked.mimeType`, which is the picker's
+    // opinion rather than the bytes'.
+    final PreparedTribeImage? prepared;
     try {
-      final bytes = await picked.readAsBytes();
-      final ext = picked.name.split('.').last;
+      prepared = await TribeImagePicker().pick(TribeImageKind.avatar);
+    } on TribeImageRejected catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+      return;
+    }
+    if (prepared == null) return;
+    try {
       final upload = await ref
           .read(repositoryProvider)
-          .uploadTribeAvatar(
+          .uploadTribeImage(
             tribeId: tribe.tribeId,
-            bytes: bytes,
-            extension: ext,
-            contentType: picked.mimeType ?? 'image/jpeg',
+            banner: false,
+            bytes: prepared.bytes,
+            extension: prepared.extension,
+            contentType: prepared.contentType,
           );
       await ref
           .read(repositoryProvider)

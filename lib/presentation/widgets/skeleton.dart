@@ -286,3 +286,122 @@ class ChatSkeleton extends StatelessWidget {
     );
   }
 }
+
+/// First paint for a Keeper Studio page.
+///
+/// Two score tiles over a stack of rows, which is the shape every Studio push
+/// screen settles into — Insights, Moderation, the Calendar and Co-mods all
+/// open with a pair of summary cards and then a list. Matching that geometry
+/// means the page does not jump when the data lands.
+///
+/// Replaces a centred `CircularProgressIndicator`, which on these screens sat
+/// in the middle of an otherwise empty page and gave no sense of what was
+/// coming. Shimmer reads as "this is nearly here"; a spinner reads as "wait".
+class StudioSkeleton extends StatelessWidget {
+  const StudioSkeleton({super.key, this.rows = 3, this.showTiles = true});
+
+  /// How many list rows to imply.
+  final int rows;
+
+  /// The summary pair at the top. Off for a page that opens straight into a
+  /// list.
+  final bool showTiles;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Surface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (showTiles) ...[
+            Row(
+              children: [
+                Expanded(child: _block(96)),
+                const SizedBox(width: 10),
+                Expanded(child: _block(96)),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+          for (var i = 0; i < rows; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _block(74),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _block(double height) => Container(
+    height: height,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+    ),
+  );
+}
+
+/// First paint for the Studio member roster: a KPI strip over member rows.
+class StudioMembersSkeleton extends StatelessWidget {
+  const StudioMembersSkeleton({super.key, this.rows = 6});
+  final int rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Surface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _StudioSkeletonBlock(height: 86),
+          const SizedBox(height: 12),
+          _StudioSkeletonBlock(height: 44),
+          const SizedBox(height: 14),
+          for (var i = 0; i < rows; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _bar(11, 150),
+                        const SizedBox(height: 7),
+                        _bar(9, 90),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _bar(24, 58),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StudioSkeletonBlock extends StatelessWidget {
+  const _StudioSkeletonBlock({required this.height});
+  final double height;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: height,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+    ),
+  );
+}

@@ -7,6 +7,7 @@ import '../../../core/providers.dart';
 import '../../../domain/keeper/keeper_studio_v2.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/skeleton.dart';
 import 'keeper_studio_scaffold.dart';
 
 /// Moderation Center — unified reports queue + safety shortcuts.
@@ -15,13 +16,16 @@ class KeeperModerationCenterScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tribe = ref.watch(primaryKeeperTribeProvider);
+    // Scoped, not "primary". This page describes one community, so
+    // under All Tribes the scaffold asks which one rather than
+    // answering for whichever tribe happens to be largest.
+    final tribe = ref.watch(studioSelectedTribeProvider);
     final tribeId = tribe?.tribeId;
     final queueAsync = tribeId == null
         ? const AsyncValue<KeeperModerationQueue>.loading()
         : ref.watch(keeperModerationQueueProvider(tribeId));
 
-    return KeeperStudioScaffold(
+    return KeeperStudioScaffold.perTribe(
       title: 'Moderation Center',
       subtitle: 'Reports, filters, and member safety',
       onRefresh: () async {
@@ -29,13 +33,8 @@ class KeeperModerationCenterScreen extends ConsumerWidget {
           ref.invalidate(keeperModerationQueueProvider(tribeId));
         }
       },
-      child: queueAsync.when(
-        loading: () => const Center(
-          child: Padding(
-            padding: EdgeInsets.all(32),
-            child: CircularProgressIndicator(color: VentlyColors.berryMagenta),
-          ),
-        ),
+      builder: (_) => queueAsync.when(
+        loading: () => const StudioSkeleton(rows: 4),
         error: (e, _) => Text('Could not load queue: $e'),
         data: (queue) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

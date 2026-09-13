@@ -104,7 +104,33 @@ break: the `_HeroAvatar` semantics label is asserted by a test, `navClearance`
 is the bottom-inset contract, and `flutter analyze` has passed while the CFE
 rejected the build — verify with `flutter build bundle --debug`.
 
-### Phase 3 + 9 — Keeper Studio multi-tribe · **real bug, root-caused**
+### Phase 3 + 9 — Keeper Studio multi-tribe · **DONE**
+
+Fixed by a scope layer (`studioTribeScopeProvider`, `studioSelectedTribeProvider`,
+`studioScopedTribesProvider`, `studioScopedOverviewProvider`) plus
+`KeeperOverview.scopedTo`. All eleven former `primaryKeeperTribeProvider`
+call sites are rewired, and a contract test fails if a Studio surface
+reaches for the single-tribe provider again.
+
+Pages that roll up (Home, Analytics, Members) render All Tribes; pages whose
+data describes one community (Insights, Moderation, Calendar, Co-mods) use
+`KeeperStudioScaffold.perTribe` and ask which tribe rather than answering for
+the largest. Studio *writes* go through `resolveStudioTargetTribe`, which
+asks when the target is ambiguous and cancels when dismissed — previously
+"Announcement" published to whichever tribe was biggest.
+
+Members (Phase 9) rebuilt: roll-up KPIs and a card per tribe under All
+Tribes; under one tribe a roster with search over handle *and* display name,
+All/Moderators/Pending/Banned filters, warnings and mutes on the row, and
+promote/demote/remove/ban/unban plus join-request approve/decline — with
+confirmation on the destructive ones. Migration `20261009090000` adds
+`members_active_24h`, `moderator_count`, `pending_requests` and
+`banned_count` to `tribe_studio_stats` so the KPI block comes from SQL.
+
+22 tests in `test/keeper_studio_multi_tribe_test.dart`.
+
+#### Original finding
+
 
 `lib/core/providers.dart:945`:
 
@@ -135,7 +161,49 @@ Per-tribe server authorization already exists and is granular:
 today; that is a DB invariant, not a UI one, and Phase 9's actions should route
 through it rather than re-deriving authority client-side.
 
-### Phase 4 + 5 — Verification · **thin end-to-end, needs widening**
+### Phase 4 + 5 — Verification · **DONE**
+
+`20261014090000_verification_workflow` widens 0109 without discarding it.
+Six stored states — pending / under_review / more_info / approved /
+rejected / revoked — plus `not_applied`, which stays the *absence* of a row
+rather than a row written for every account that never applied. `denied` is
+migrated to `rejected`.
+
+Two structural decisions carry the design:
+
+**Evidence is its own table.** `verification_evidence`, owner-or-staff RLS,
+no client INSERT. Not because `verification_requests` RLS is wrong today,
+but because the realistic failure is somebody later adding a column to a
+profile view or widening the requests table for Keepers — identity
+documents in that same row would travel with it. A test asserts no
+profile-facing SQL or profile screen touches it.
+
+**The decision ledger has no foreign keys.** `verification_review_events` is
+append-only and holds plain UUIDs with a denormalised actor handle, exactly
+as `audit_log` does. This is the mistake `20261010090000` and
+`20261011090000` were written to undo: an FK with ON DELETE SET NULL or
+CASCADE into an append-only table fires a cascade its own guard rejects, so
+the *referenced account* becomes undeletable. Verified: an account with an
+application, evidence and ledger rows still deletes; the evidence cascades
+away, the decision history is retained.
+
+Revoke takes a *user*, not a request, because a check can also come from
+0107's automatic reach sweep with no application behind it — and it sets
+`verification_override = 'manual_off'`, without which the sweep would
+silently re-verify an account a human deliberately un-verified. A reason is
+required.
+
+Client: `Settings → Verification` with the standing on the row itself, a
+four-field application form, and the more-information reply box. Admin
+console: status tabs, handle search, claim, ask-for-more, approve, reject,
+revoke, internal notes, and who holds or decided each case. Evidence is a
+*count* in the list — identity documents are opened one application at a
+time rather than rendered into a list response.
+
+28 pgTAP assertions (`0029_verification_workflow`) and 22 Flutter tests.
+
+#### Original finding
+
 
 It already works end to end, which the plan assumes it does not:
 
@@ -161,7 +229,37 @@ Sensitive evidence must land in a table the *public* profile path cannot read.
 `verification_requests` RLS is already self-or-staff; evidence columns should
 follow that, and must not be added to any `user_profile_*` view.
 
-### Phase 6 — Instant reactions · **backend done, client is the gap**
+### Phase 6 — Instant reactions · **DONE**
+
+The heart and the counter move on the frame of the tap. No schema change:
+`set_post_reaction` was already an idempotent desired-state RPC, so the
+whole fix was client-side.
+
+`ReactionOverrides.apply` derives the count delta from whatever the server
+currently reports rather than storing one. That makes it self-correcting —
+right before the server catches up, a no-op once it agrees (so a lingering
+override cannot double-count), and it preserves other people's reactions
+that land in the same window.
+
+`ReactionSendQueue` keeps one write in flight per Vent and coalesces rapid
+taps to the trailing intent — five taps are two round trips, not five, and
+concurrent writes to one row can never race. `ReactionController` writes the
+override before any await, rolls back on rejection, and ignores a superseded
+tap so an older failure cannot wipe a newer success.
+
+Wired at `post_card.dart` (tap and long-press picker) and `feed_screen.dart`.
+`_VentlyFeedPostCard` became a `ConsumerWidget` so only the tapped card
+rebuilds rather than the whole sliver.
+
+22 tests in `test/optimistic_reactions_test.dart`.
+
+Still open: `story_viewer_screen.dart:193` is left on the old path. It is a
+"send a reaction" flow with its own toast and no counter on screen, so there
+is no stale number to fix and converting it would change its semantics from
+send to toggle.
+
+#### Original finding
+
 
 The backend is already correct and idempotent — `set_post_reaction` is a
 desired-state RPC, and `docs/architecture.md` rule 7 makes it an invariant that
@@ -185,7 +283,25 @@ on tap and reconciled on server confirmation, rolled back on rejection —
 replacing `invalidate()` with a targeted patch. No schema change; the
 "idempotency, unique constraint, atomic counter" requirements are already met.
 
-### Phase 7 — Tribe member KPI · **cannot be root-caused from code; the DB is correct at head**
+### Phase 7 — Tribe member KPI · **membership states now defined in SQL**
+
+`20261009090000` writes the state definitions down and exposes them. Verified
+against seeded data: a tribe with three members (one keeper, one mod, one
+member last seen five days ago) and one pending request reads
+`member_count 3, members_active_24h 2, moderator_count 2, pending_requests 1,
+banned_count 0`, and `tribes.member_count` agrees with `COUNT(*)` — so the
+0096 self-healing trigger is intact.
+
+The finding that mattered: **"Members" and "Active members" are the same
+number in this schema**, because `tribe_members` has no status column. So the
+KPI block deliberately shows "Active today" (presence from `last_seen_at`,
+labelled "seen in 24h") rather than an "Active" that would duplicate the
+members count under a second label.
+
+Still open: the lifecycle pgTAP tests the phase asks for.
+
+#### Original finding
+
 
 The plan says do not patch the UI, and it is right, but the database-level
 investigation it asks for comes back clean at local head:
@@ -216,7 +332,58 @@ lifecycle and multi-tribe isolation through the real RPCs — which either prove
 the invariant or exposes the drift. That is the honest version of "investigate
 at the database level" given no reproducing data.
 
-### Phase 8 — Tribe media · **policy exists but is dead code**
+### Phase 8 — Tribe media · **DONE**
+
+**The storage policy was never broken. It was never deployed.**
+20260928090000 concluded it had "a failing clause I could not isolate from
+outside the database" and routed the client around it. Isolated from inside:
+as the keeper, on a migrated database, `INSERT INTO storage.objects … name =
+'tribes/<tribe>/probe.jpg'` succeeds — `can_manage_tribe` returns true and is
+granted to `authenticated`. The 403 came from a database with no such policy,
+correctly refusing: `0067` never called `record_migration`, and
+`20260928090000` is past the production boundary (`20260828201411`), so it has
+never run there. The reproduction was against production; the re-application
+that "did not help" was local.
+
+`20261016090000_tribe_media_stable_paths` makes the stable path a database
+invariant rather than a client convention: `private.is_tribe_image_path`
+restricts names to `tribes/<uuid>/avatar|banner[.ext]` with an image
+extension, so a replaced picture *cannot* be given a new name and the
+orphan-per-upload problem is structurally gone.
+
+Three findings while verifying it, each of which had silently broken the
+feature:
+
+* **A `private.` helper in a policy predicate needs EXECUTE granted.**
+  Revoking it — the reflex — makes the policy raise `permission denied for
+  function`, which a storage client surfaces as another opaque 403. Exactly
+  the symptom that was misdiagnosed for two sessions.
+* **A public bucket still needs a SELECT policy.** An upsert is an UPDATE,
+  and a row the caller cannot see is a row the UPDATE cannot find: replacing
+  an image reported `UPDATE 0` while the row existed.
+* **A stable path needs cache-busting.** The public URL no longer changes
+  when the image does, so without `?v=` the CDN keeps serving the old
+  picture and the change looks like it failed.
+
+The client prefers the stable path and falls back once to the legacy
+uid-prefixed path on a policy refusal — because that path is load-bearing on
+production until the backlog is applied, and losing a keeper's picture is
+worse. It logs `tribe.media_stable_path_refused` and is marked removable.
+
+`TribeImagePicker` replaces three inconsistent picker implementations with
+one pick → crop → compress → validate pipeline: locked 1:1 / 16:9 crops via
+`image_cropper`, magic-byte validation on the *cropped* bytes, and a
+content type derived from the bytes rather than guessed from a filename.
+Remove deletes the object as well as clearing the column.
+
+Native config verified by real builds, not just analysis: `flutter build
+apk --debug` and `flutter build ios --debug --no-codesign` both succeed with
+the `UCropActivity` declaration.
+
+18 pgTAP assertions (`0030_tribe_media_storage`) and 18 Flutter tests.
+
+#### Original finding
+
 
 `tribes.avatar_url` / `banner_url` exist, with an `update_tribe_profile` RPC
 gated on `can_manage_tribe`.

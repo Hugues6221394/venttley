@@ -3226,3 +3226,135 @@ class PolicyBundle {
     return PolicyBundle(terms: terms, privacy: privacy);
   }
 }
+
+/// Where the caller's verification application stands.
+///
+/// Six stored states plus `not_applied`, which is the absence of a request
+/// rather than a stored row. The client never invents one: the server decides,
+/// including whether reapplying is currently allowed, so the button and the
+/// RPC cannot disagree about eligibility.
+class VerificationState {
+  final String status;
+  final String? category;
+  final DateTime? appliedAt;
+  final DateTime? reviewedAt;
+
+  /// The reviewer's stated reason for a decision. Shown to the applicant.
+  ///
+  /// Never the internal note, and never the reviewer's identity — a decision
+  /// explained to the person it affects is right, naming the individual staff
+  /// member who made it is not.
+  final String? decisionReason;
+
+  /// What a reviewer asked for, when the state is `more_info`.
+  final String? infoRequest;
+
+  final bool canApply;
+
+  /// When a rejected or revoked applicant becomes eligible again.
+  final DateTime? reapplyAfter;
+
+  const VerificationState({
+    required this.status,
+    this.category,
+    this.appliedAt,
+    this.reviewedAt,
+    this.decisionReason,
+    this.infoRequest,
+    this.canApply = false,
+    this.reapplyAfter,
+  });
+
+  /// The safe default for a client that could not reach the server: nothing
+  /// claimed, nothing offered.
+  static const VerificationState unknown = VerificationState(
+    status: 'unknown',
+  );
+
+  bool get isVerified => status == 'approved';
+  bool get hasNeverApplied => status == 'not_applied';
+
+  /// Waiting on us rather than on the applicant.
+  bool get isOpen => status == 'pending' || status == 'under_review';
+
+  /// Waiting on the applicant.
+  bool get needsResponse => status == 'more_info';
+
+  bool get wasDeclined => status == 'rejected' || status == 'revoked';
+
+  factory VerificationState.fromJson(Map<String, dynamic> json) {
+    DateTime? at(String key) {
+      final raw = json[key] as String?;
+      return raw == null ? null : DateTime.tryParse(raw)?.toLocal();
+    }
+
+    return VerificationState(
+      status: (json['status'] as String?) ?? 'unknown',
+      category: json['category'] as String?,
+      appliedAt: at('applied_at'),
+      reviewedAt: at('reviewed_at'),
+      decisionReason: json['decision_reason'] as String?,
+      infoRequest: json['info_request'] as String?,
+      canApply: json['can_apply'] == true,
+      reapplyAfter: at('reapply_after'),
+    );
+  }
+}
+
+/// One piece of supporting material on a verification application.
+///
+/// Sensitive by definition, and stored in its own table for that reason. It is
+/// only ever fetched for the applicant themselves or for staff, and must never
+/// be attached to anything that renders a public profile.
+class VerificationEvidenceItem {
+  /// `identity` | `affiliation` | `credential` | `other`.
+  final String kind;
+  final String detail;
+
+  const VerificationEvidenceItem({required this.kind, required this.detail});
+
+  Map<String, dynamic> toJson() => {'kind': kind, 'detail': detail};
+}
+
+/// The categories a person can apply under. Mirrors the CHECK constraint on
+/// `verification_requests.category`; a value not in this list is refused by
+/// the database rather than silently stored.
+class VerificationCategories {
+  const VerificationCategories._();
+
+  static const List<({String key, String label, String blurb})> all = [
+    (
+      key: 'community_leader',
+      label: 'Community leader',
+      blurb: 'You keep or moderate a community people rely on.',
+    ),
+    (
+      key: 'health_professional',
+      label: 'Health professional',
+      blurb: 'You are a licensed clinician, therapist or counsellor.',
+    ),
+    (
+      key: 'creator',
+      label: 'Creator',
+      blurb: 'You publish work under this name elsewhere.',
+    ),
+    (
+      key: 'organisation',
+      label: 'Organisation',
+      blurb: 'This account represents a group or service.',
+    ),
+    (
+      key: 'public_figure',
+      label: 'Public figure',
+      blurb: 'You are known publicly and impersonation is a risk.',
+    ),
+    (key: 'other', label: 'Something else', blurb: 'Tell us in your own words.'),
+  ];
+
+  static String labelFor(String? key) {
+    for (final entry in all) {
+      if (entry.key == key) return entry.label;
+    }
+    return 'Verification';
+  }
+}

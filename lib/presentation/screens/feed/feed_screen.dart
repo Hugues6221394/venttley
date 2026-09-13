@@ -9,6 +9,7 @@ import '../../../animation/presets/modal_animations.dart';
 import '../../../animation/widgets/animated_like_button.dart';
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
+import '../../../data/services/reaction_controller.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/home/home_discovery.dart';
 import '../../theme/colors.dart';
@@ -237,28 +238,39 @@ class FeedScreen extends ConsumerWidget {
                                   '/post/${post.postId}',
                                   extra: post,
                                 ),
-                                onLike: () async {
-                                  try {
-                                    await ref
-                                        .read(repositoryProvider)
-                                        .react(
-                                          post.postId,
-                                          post.myReaction ?? 'hug',
+                                // Optimistic. `post.myReaction` alone was the
+                                // wrong input — it is the *server's* value, so
+                                // a second tap arriving before the refetch sent
+                                // the same reaction again instead of clearing
+                                // it. The adjusted value is what the user can
+                                // actually see.
+                                onLike: () {
+                                  final shown = reactionAdjusted(ref, post);
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
+                                  ref
+                                      .read(
+                                        reactionControllerProvider.notifier,
+                                      )
+                                      .toggle(
+                                        postId: post.postId,
+                                        reaction: 'hug',
+                                        currentReaction: shown.myReaction,
+                                      )
+                                      .then((outcome) {
+                                        if (outcome !=
+                                            ReactionResult.rolledBack) {
+                                          return;
+                                        }
+                                        messenger.showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'That reaction didn’t save.',
+                                            ),
+                                          ),
                                         );
-                                  } catch (e) {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Could not react: $e'),
-                                        ),
-                                      );
-                                    }
-                                    return;
-                                  }
-                                  ref.invalidate(feedPostsProvider);
-                                  ref.invalidate(postByIdProvider(post.postId));
+                                      });
                                 },
                                 onComment: () => context.push(
                                   '/post/${post.postId}',
@@ -1129,7 +1141,11 @@ class _FeedFiltersHeader extends SliverPersistentHeaderDelegate {
       old.filter.tribeSlug != filter.tribeSlug;
 }
 
-class _VentlyFeedPostCard extends StatelessWidget {
+/// A Consumer, not a StatelessWidget, specifically so the optimistic
+/// reaction read is scoped to one card. Adjusting the post at the
+/// itemBuilder instead would register the watch on the feed screen and
+/// rebuild the entire sliver on every tap.
+class _VentlyFeedPostCard extends ConsumerWidget {
   const _VentlyFeedPostCard({
     required this.post,
     required this.onTap,
@@ -1149,7 +1165,10 @@ class _VentlyFeedPostCard extends StatelessWidget {
   final VoidCallback onMessage;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The caller's unconfirmed reaction painted on, so the heart and the
+    // hug count move on the frame of the tap.
+    final shown = reactionAdjusted(ref, post);
     final hasPhoto = post.hasImage;
     final hasAudio = post.hasAudio;
     return Material(
@@ -1318,13 +1337,13 @@ class _VentlyFeedPostCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: AnimatedLikeButton(
-                      active: post.myReaction != null,
+                      active: shown.myReaction != null,
                       onTap: onLike,
                       size: 18,
                       activeColor: VentlyColors.berryMagenta,
                       inactiveColor: context.ink,
                       label: Text(
-                        '${PostCard.compactNumber(post.likesCount)} hugs',
+                        '${PostCard.compactNumber(shown.likesCount)} hugs',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: _metricStyle(context),

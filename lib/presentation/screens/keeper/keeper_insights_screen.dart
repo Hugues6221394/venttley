@@ -7,6 +7,7 @@ import '../../../core/providers.dart';
 import '../../../domain/keeper/keeper_studio_v2.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/skeleton.dart';
 import 'keeper_studio_scaffold.dart';
 
 /// AI Insights — heuristic growth, retention, mood, and safety signals.
@@ -15,13 +16,16 @@ class KeeperInsightsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tribe = ref.watch(primaryKeeperTribeProvider);
+    // Scoped, not "primary". This page describes one community, so
+    // under All Tribes the scaffold asks which one rather than
+    // answering for whichever tribe happens to be largest.
+    final tribe = ref.watch(studioSelectedTribeProvider);
     final tribeId = tribe?.tribeId;
     final insightsAsync = tribeId == null
         ? const AsyncValue<KeeperAiInsights>.loading()
         : ref.watch(keeperAiInsightsProvider(tribeId));
 
-    return KeeperStudioScaffold(
+    return KeeperStudioScaffold.perTribe(
       title: 'AI Insights',
       subtitle: 'Growth, retention, mood trends, and safety score',
       onRefresh: () async {
@@ -29,13 +33,8 @@ class KeeperInsightsScreen extends ConsumerWidget {
           ref.invalidate(keeperAiInsightsProvider(tribeId));
         }
       },
-      child: insightsAsync.when(
-        loading: () => const Center(
-          child: Padding(
-            padding: EdgeInsets.all(32),
-            child: CircularProgressIndicator(color: VentlyColors.berryMagenta),
-          ),
-        ),
+      builder: (_) => insightsAsync.when(
+        loading: () => const StudioSkeleton(rows: 3),
         error: (e, _) => Text('Could not load insights: $e'),
         data: (data) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

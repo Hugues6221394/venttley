@@ -7,6 +7,7 @@ import '../../../domain/keeper/keeper_studio_v2.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/skeleton.dart';
 import 'keeper_studio_scaffold.dart';
 
 /// Co-mod permissions grid — who can warn, kick, pin, and schedule.
@@ -15,13 +16,16 @@ class KeeperComodScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tribe = ref.watch(primaryKeeperTribeProvider);
+    // Scoped, not "primary". This page describes one community, so
+    // under All Tribes the scaffold asks which one rather than
+    // answering for whichever tribe happens to be largest.
+    final tribe = ref.watch(studioSelectedTribeProvider);
     final tribeId = tribe?.tribeId;
     final matrixAsync = tribeId == null
         ? const AsyncValue<KeeperComodMatrix>.loading()
         : ref.watch(keeperComodMatrixProvider(tribeId));
 
-    return KeeperStudioScaffold(
+    return KeeperStudioScaffold.perTribe(
       title: 'Co-mod permissions',
       subtitle: 'Keeper + moderator capability matrix',
       onRefresh: () async {
@@ -29,13 +33,8 @@ class KeeperComodScreen extends ConsumerWidget {
           ref.invalidate(keeperComodMatrixProvider(tribeId));
         }
       },
-      child: matrixAsync.when(
-        loading: () => const Center(
-          child: Padding(
-            padding: EdgeInsets.all(32),
-            child: CircularProgressIndicator(color: VentlyColors.berryMagenta),
-          ),
-        ),
+      builder: (_) => matrixAsync.when(
+        loading: () => const StudioSkeleton(rows: 3),
         error: (e, _) => Text('Could not load team: $e'),
         data: (matrix) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

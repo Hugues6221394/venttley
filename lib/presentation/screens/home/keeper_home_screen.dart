@@ -14,6 +14,8 @@ import '../../widgets/profile_avatar.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_notification_bell.dart';
+import '../../widgets/skeleton.dart';
+import '../../widgets/studio_tribe_selector.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../widgets/keeper_prompt_composer_sheet.dart';
 import '../../navigation/compose_navigation.dart';
@@ -35,7 +37,7 @@ class KeeperHomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(sessionProvider);
-    final overviewAsync = ref.watch(keeperOverviewProvider);
+    final overviewAsync = ref.watch(studioScopedOverviewProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -44,7 +46,10 @@ class KeeperHomeScreen extends ConsumerWidget {
         child: SafeArea(
           bottom: false,
           child: overviewAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const Padding(
+              padding: EdgeInsets.fromLTRB(20, 24, 20, 20),
+              child: StudioSkeleton(rows: 4),
+            ),
             error: (e, _) => VentlyErrorState(
               error: e,
               title: 'Studio unavailable',
@@ -64,6 +69,18 @@ class KeeperHomeScreen extends ConsumerWidget {
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
                     SliverToBoxAdapter(child: _TopBar(me: me)),
+                    // The Studio's scope, on its own line so it has room
+                    // to name a long tribe. Renders nothing for a keeper
+                    // with one tribe.
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(18, 10, 18, 0),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: StudioTribeSelector(),
+                        ),
+                      ),
+                    ),
                     SliverToBoxAdapter(
                       child: _KeeperWelcome(me: me, overview: overview),
                     ),
@@ -495,7 +512,7 @@ class _TopBar extends StatelessWidget {
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  'Manage your tribe. Protect your safe space.',
+                  'Manage your tribes. Protect your safe space.',
                   style: TextStyle(
                     color: context.ink,
                     fontWeight: FontWeight.w600,

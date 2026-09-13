@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/notification_prefs.dart';
 import '../../../core/providers.dart';
 import '../../../data/services/moderation_service.dart';
+import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/blocked_accounts_sheet.dart';
 import '../../widgets/profile_avatar.dart';
@@ -174,6 +175,30 @@ class SettingsScreen extends ConsumerWidget {
             subtitle: const Text('View your 12-word backup key'),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => showRecoveryPhraseDialog(context, ref),
+          ),
+          // Verification belongs in Settings, which is where the brief asks
+          // for it and where somebody actually looks. The profile pill stays
+          // as a second entry point.
+          Consumer(
+            builder: (context, ref, _) {
+              final state = ref.watch(myVerificationStateProvider).valueOrNull;
+              return ListTile(
+                leading: const Icon(
+                  Icons.verified_outlined,
+                  color: VentlyColors.berryMagenta,
+                ),
+                title: const Text(
+                  'Verification',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                // The standing is on the row itself, so somebody with an open
+                // application does not have to open the screen to learn that
+                // nothing has changed.
+                subtitle: Text(_verificationSubtitle(state)),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => context.push('/settings/verification'),
+              );
+            },
           ),
           if (me?.isPlug == true)
             ListTile(
@@ -706,5 +731,31 @@ class _SectionHeader extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+
+/// One line describing verification standing for the Settings row.
+///
+/// Deliberately says "checking" rather than "not verified" while the state is
+/// unknown: telling somebody who *is* verified that they are not, because a
+/// request had not landed yet, is the worse error.
+String _verificationSubtitle(VerificationState? state) {
+  if (state == null || state.status == 'unknown') return 'Checking…';
+  switch (state.status) {
+    case 'approved':
+      return 'Verified';
+    case 'pending':
+      return 'Application in the queue';
+    case 'under_review':
+      return 'Being reviewed';
+    case 'more_info':
+      return 'Needs your answer';
+    case 'rejected':
+      return 'Not approved';
+    case 'revoked':
+      return 'Removed';
+    default:
+      return 'Apply for the verified check';
   }
 }

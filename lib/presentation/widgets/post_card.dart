@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/constants.dart';
 import '../../core/providers.dart';
+import '../../data/services/reaction_controller.dart';
 import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
 import '../theme/vent_card_style.dart';
@@ -792,7 +793,11 @@ class _ReactionButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final muted = scheme.onSurface.withOpacity(0.6);
-    final r = post.myReaction;
+    // Read through the optimistic layer, so the glyph and the count reflect
+    // the tap on the frame it happened rather than after a round trip and a
+    // feed refetch. A no-op once the server has caught up.
+    final shown = reactionAdjusted(ref, post);
+    final r = shown.myReaction;
     final isMine = post.ownedBy(ref.watch(sessionProvider)?.userId);
     final color = r != null && !isMine ? scheme.primary : muted;
 
@@ -814,23 +819,38 @@ class _ReactionButton extends ConsumerWidget {
       child: GestureDetector(
         onLongPress: isMine ? null : () => _openPicker(context, ref),
         child: InkWell(
+          // No await before the UI moves, and no feed invalidation after.
+          //
+          // This used to `await react(...)` and then invalidate the whole
+          // feed, so the heart waited on a network round trip *and* a refetch
+          // of every visible Vent. The controller writes the override
+          // synchronously and reconciles in the background; the debounced
+          // invalidation inside reactExact brings the feed to server truth
+          // later, invisibly, because the override is a no-op by then.
           onTap: isMine
               ? null
-              : () async {
-                  try {
-                    await ref
-                        .read(repositoryProvider)
-                        .react(post.postId, r ?? 'hug');
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Could not react: $e')),
-                      );
-                    }
-                    return;
-                  }
-                  ref.invalidate(feedPostsProvider);
-                  ref.invalidate(postByIdProvider(post.postId));
+              : () {
+                  final controller = ref.read(
+                    reactionControllerProvider.notifier,
+                  );
+                  final messenger = ScaffoldMessenger.of(context);
+                  controller
+                      .toggle(
+                        postId: post.postId,
+                        reaction: 'hug',
+                        currentReaction: r,
+                      )
+                      .then((outcome) {
+                        // Only a rollback is worth interrupting for. A
+                        // confirmation is what the user already saw, and a
+                        // superseded tap is owned by the newer one.
+                        if (outcome != ReactionResult.rolledBack) return;
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('That reaction didn’t save.'),
+                          ),
+                        );
+                      });
                 },
           borderRadius: BorderRadius.circular(16),
           child: Row(
@@ -838,7 +858,7 @@ class _ReactionButton extends ConsumerWidget {
               glyph,
               const SizedBox(width: 4),
               Text(
-                PostCard.compactNumber(post.likesCount),
+                PostCard.compactNumber(shown.likesCount),
                 style: TextStyle(
                   color: color,
                   fontWeight: FontWeight.w600,
@@ -890,9 +910,19 @@ class _ReactionButton extends ConsumerWidget {
       },
     );
     if (picked == null) return;
-    await ref.read(repositoryProvider).react(post.postId, picked);
-    ref.invalidate(feedPostsProvider);
-    ref.invalidate(postByIdProvider(post.postId));
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    // setReaction, not toggle: the user chose a specific emotion from the
+    // picker, so picking the one already set must keep it rather than clear
+    // it. Optimistic and un-awaited, like the tap path.
+    final outcome = await ref
+        .read(reactionControllerProvider.notifier)
+        .setReaction(postId: post.postId, desired: picked);
+    if (outcome == ReactionResult.rolledBack) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('That reaction didn’t save.')),
+      );
+    }
   }
 }
 

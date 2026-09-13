@@ -43,6 +43,7 @@ import '../screens/profile/security_check_screen.dart';
 import '../screens/profile/security_screen.dart';
 import '../screens/profile/password_security_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/settings/verification_screen.dart';
 import '../screens/goals/goals_screen.dart';
 import '../screens/questions/questions_screen.dart';
 import '../screens/share/share_card_screen.dart';
@@ -205,6 +206,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding/consent',
         builder: (_, __) => const PolicyConsentScreen(),
+      ),
+      GoRoute(
+        path: '/settings/verification',
+        builder: (_, __) => const VerificationScreen(),
       ),
       GoRoute(
         path: '/legal/terms',

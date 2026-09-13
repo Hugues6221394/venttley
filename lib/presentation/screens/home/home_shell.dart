@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers.dart';
 import '../../theme/colors.dart';
 import '../../theme/motion.dart';
+import '../../widgets/studio_tribe_selector.dart';
 import '../../widgets/connection_banner.dart';
 import '../../widgets/keeper_content_studio_sheet.dart';
 import '../../widgets/premium_motion.dart';
@@ -142,14 +143,19 @@ class HomeShell extends ConsumerWidget {
             return;
           }
           if (tab.isTribeChat) {
-            final tribe = ref.read(primaryKeeperTribeProvider);
-            if (tribe != null) {
-              context.push('/tribe/${tribe.slug}/chat');
-            } else {
+            // Follows the Studio scope, and asks when it is ambiguous, rather
+            // than opening the largest tribe's chat. A keeper working in one
+            // tribe tapping Chat means *that* tribe's chat.
+            if ((ref.read(tribesIKeepProvider).valueOrNull ?? const []).isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Create a tribe first.')),
               );
+              return;
             }
+            resolveStudioTargetTribe(context, ref).then((tribe) {
+              if (tribe == null || !context.mounted) return;
+              context.push('/tribe/${tribe.slug}/chat');
+            });
             return;
           }
           if (tab.pushRoute != null) {

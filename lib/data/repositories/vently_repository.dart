@@ -1636,22 +1636,43 @@ class VentlyRepository implements MusicProvider {
     return Future.value();
   }
 
-  Future<({String path, String url})> uploadTribeAvatar({
+  /// Upload a Tribe's avatar or banner to its stable path.
+  ///
+  /// Renamed from `uploadTribeAvatar`, which was used for both images and so
+  /// said the wrong thing at half its call sites.
+  Future<({String path, String url})> uploadTribeImage({
     required String tribeId,
+    required bool banner,
     required List<int> bytes,
     required String extension,
     String contentType = 'image/jpeg',
   }) {
     final live = _live;
     if (live != null) {
-      return live.uploadTribeAvatar(
+      return live.uploadTribeImage(
         tribeId: tribeId,
+        banner: banner,
         bytes: bytes,
         extension: extension,
         contentType: contentType,
       );
     }
     return Future.value((path: 'mock/tribe.jpg', url: 'mock://tribe.jpg'));
+  }
+
+  /// Delete a Tribe's avatar or banner object.
+  ///
+  /// Offline this is a no-op rather than a throw: the caller clears the
+  /// column through the RPC in the same breath, and refusing to remove a
+  /// picture because the object delete could not be attempted would leave the
+  /// keeper unable to take an image down at all.
+  Future<void> removeTribeImage({
+    required String tribeId,
+    required bool banner,
+  }) {
+    final live = _live;
+    if (live == null) return Future.value();
+    return live.removeTribeImage(tribeId: tribeId, banner: banner);
   }
 
   Future<({String path, String url})> uploadTribeChatAudio({
@@ -2149,6 +2170,60 @@ class VentlyRepository implements MusicProvider {
     return Future.value('pending');
   }
 
+  /// The caller's full verification standing.
+  ///
+  /// [VerificationState.unknown] offline and on failure, which renders as
+  /// neither verified nor eligible. That is the honest default: offering an
+  /// Apply button whose RPC is unreachable, or implying a pending application
+  /// that may not exist, are both worse than saying nothing yet.
+  Future<VerificationState> myVerificationState() async {
+    final live = _live;
+    if (live == null) return VerificationState.unknown;
+    try {
+      return await live.myVerificationState();
+    } catch (e) {
+      // A database without 20261014090000 answers 404 here. Reported rather
+      // than silently swallowed, so an unapplied migration is diagnosable.
+      log.warn(
+        'verification.state_unavailable',
+        props: {'error': e.toString()},
+      );
+      return VerificationState.unknown;
+    }
+  }
+
+  /// Apply for the verified check with a structured application.
+  ///
+  /// No offline path: the outbox is for content the member wrote, and a
+  /// verification application queued locally would tell somebody they had
+  /// applied when no reviewer can see it.
+  Future<String> requestVerificationDetailed({
+    String? note,
+    String? category,
+    List<String> links = const [],
+    List<VerificationEvidenceItem> evidence = const [],
+  }) {
+    final live = _live;
+    if (live == null) {
+      throw StateError('You need a connection to apply.');
+    }
+    return live.requestVerificationDetailed(
+      note: note,
+      category: category,
+      links: links,
+      evidence: evidence,
+    );
+  }
+
+  /// Answer a reviewer's question on an open application.
+  Future<void> respondToVerificationRequest(String response) {
+    final live = _live;
+    if (live == null) {
+      throw StateError('You need a connection to reply.');
+    }
+    return live.respondToVerificationRequest(response);
+  }
+
   Future<String> myVerificationStatus() {
     final live = _live;
     if (live != null) return live.myVerificationStatus();
@@ -2372,6 +2447,31 @@ class VentlyRepository implements MusicProvider {
     final text = value.trim();
     if (text.length <= 280) return text;
     return '${text.substring(0, 277)}...';
+  }
+
+  /// Write an explicit desired reaction. `null` clears it.
+  ///
+  /// The optimistic path's only write. Unlike [react] it does not toggle
+  /// against a local cache — the UI has already decided, and passing the
+  /// intent through unchanged is what makes a fast double tap converge on
+  /// what the user last did rather than on what a stale map thought.
+  ///
+  /// Offline this throws instead of queueing. A reaction is not worth the
+  /// outbox: it is one idempotent desired-state write that the user can
+  /// simply make again, and a queued reaction that lands minutes later on a
+  /// Vent they have scrolled past is a worse outcome than being told now.
+  Future<String?> reactExact({
+    required String postId,
+    required String? reaction,
+  }) {
+    final live = _live;
+    if (live == null) {
+      throw StateError('You need a connection to react.');
+    }
+    return _trackSelfInteractionRejection(
+      'post',
+      () => live.reactExact(postId: postId, reaction: reaction),
+    );
   }
 
   /// Set / switch / clear the caller's emotional reaction on a post.

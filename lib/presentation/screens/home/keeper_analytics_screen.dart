@@ -7,6 +7,8 @@ import '../../../domain/entities/entities.dart';
 import '../../../domain/keeper/keeper_overview.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/skeleton.dart';
+import '../../widgets/studio_tribe_selector.dart';
 import '../../widgets/vently_premium_background.dart';
 import 'home_shell.dart';
 
@@ -16,15 +18,21 @@ class KeeperAnalyticsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final overviewAsync = ref.watch(keeperOverviewProvider);
-    final tribe = ref.watch(primaryKeeperTribeProvider);
+    // Scoped. Analytics rolls up meaningfully across tribes, so All Tribes
+    // is a real answer here rather than a chooser — but it has to be the
+    // *scoped* roll-up, not every tribe's numbers under one tribe's name.
+    final overviewAsync = ref.watch(studioScopedOverviewProvider);
+    final tribe = ref.watch(studioSelectedTribeProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: VentlyPremiumBackground(
         child: SafeArea(
           child: overviewAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const Padding(
+              padding: EdgeInsets.fromLTRB(20, 20, 20, 20),
+              child: StudioSkeleton(rows: 4),
+            ),
             error: (e, _) => Center(child: Text('Could not load: $e')),
             data: (overview) {
               final stats = tribe != null
@@ -57,17 +65,16 @@ class KeeperAnalyticsScreen extends ConsumerWidget {
                         fontSize: 24,
                       ),
                     ),
-                    if (tribe != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4, bottom: 16),
-                        child: Text(
-                          tribe.name,
-                          style: TextStyle(
-                            color: VentlyColors.berryMagenta.withOpacity(0.85),
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
+                    // Was a bare tribe name, which told a keeper of three
+                    // tribes what they were looking at but gave them no
+                    // way to look at anything else.
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8, bottom: 16),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: StudioTribeSelector(),
                       ),
+                    ),
                     _HeroMetric(
                       label: 'Community Health',
                       value: '$health%',

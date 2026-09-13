@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/user_friendly_errors.dart';
+import '../../../data/services/tribe_image_picker.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
@@ -31,7 +32,7 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
   final _tags = TextEditingController();
   final _welcome = TextEditingController();
   final _welcomeFocus = FocusNode();
-  final _picker = ImagePicker();
+  final _images = TribeImagePicker();
   String visibility = 'public';
   String? avatarUrl;
   String? bannerUrl;
@@ -124,6 +125,10 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
                 uploadingBanner: uploadingBanner,
                 onAvatar: () => _pickMedia(tribe.tribeId, banner: false),
                 onBanner: () => _pickMedia(tribe.tribeId, banner: true),
+                onRemoveAvatar: () =>
+                    _removeMedia(tribe.tribeId, banner: false),
+                onRemoveBanner: () =>
+                    _removeMedia(tribe.tribeId, banner: true),
               ),
               const SizedBox(height: 18),
               GlassCard(
@@ -282,13 +287,19 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
   }
 
   Future<void> _pickMedia(String tribeId, {required bool banner}) async {
-    final image = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 84,
-      maxWidth: banner ? 2048 : 1024,
-      maxHeight: banner ? 1152 : 1024,
-    );
-    if (image == null || !mounted) return;
+    final kind = banner ? TribeImageKind.banner : TribeImageKind.avatar;
+    final PreparedTribeImage? prepared;
+    try {
+      // Pick, crop and compress in one call. Every rule about size, aspect
+      // ratio and "is this actually an image" lives in TribeImagePicker, so
+      // this screen and the create screen cannot enforce different ones.
+      prepared = await _images.pick(kind);
+    } on TribeImageRejected catch (error) {
+      _toast(error.message);
+      return;
+    }
+    if (prepared == null || !mounted) return;
+
     setState(() {
       if (banner) {
         uploadingBanner = true;
@@ -297,20 +308,25 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
       }
     });
     try {
-      final bytes = await image.readAsBytes();
-      if (bytes.length > 8 * 1024 * 1024) {
-        throw const FormatException('Choose an image smaller than 8 MB.');
-      }
-      final extension = image.name.contains('.')
-          ? image.name.split('.').last.toLowerCase()
-          : 'jpg';
       final upload = await ref
           .read(repositoryProvider)
-          .uploadTribeAvatar(
+          .uploadTribeImage(
             tribeId: tribeId,
-            bytes: bytes,
-            extension: extension,
-            contentType: _contentType(extension),
+            banner: banner,
+            bytes: prepared.bytes,
+            extension: prepared.extension,
+            contentType: prepared.contentType,
+          );
+      // Persisted immediately rather than held until Save. The object is
+      // already written at the Tribe's stable path, so leaving the column
+      // unset would mean the file exists and nothing points at it — and the
+      // keeper would see the new picture locally but nobody else would.
+      await ref
+          .read(repositoryProvider)
+          .updateTribeConfiguration(
+            tribeId: tribeId,
+            avatarUrl: banner ? null : upload.url,
+            bannerUrl: banner ? upload.url : null,
           );
       if (!mounted) return;
       setState(() {
@@ -320,11 +336,15 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
           avatarUrl = upload.url;
         }
       });
+      _refreshTribeEverywhere(tribeId);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not upload image: $error')));
+      _toast(
+        UserFriendlyErrors.message(
+          error,
+          fallback: 'Could not upload that image.',
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -333,6 +353,105 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
         });
       }
     }
+  }
+
+  /// Take a picture down: delete the object *and* clear the column.
+  ///
+  /// Clearing the column alone would leave the file in a public bucket, still
+  /// served to anybody holding the URL. "Remove" has to mean removed.
+  Future<void> _removeMedia(String tribeId, {required bool banner}) async {
+    final kind = banner ? TribeImageKind.banner : TribeImageKind.avatar;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Remove this ${kind.label}?'),
+        content: Text(
+          'The ${kind.label} is deleted and the Tribe goes back to its '
+          'default look.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: VentlyColors.dangerRed,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      if (banner) {
+        uploadingBanner = true;
+      } else {
+        uploadingAvatar = true;
+      }
+    });
+    try {
+      await ref
+          .read(repositoryProvider)
+          .removeTribeImage(tribeId: tribeId, banner: banner);
+      // An empty string clears the column; null would mean "leave unchanged".
+      // That distinction is the RPC's, and getting it wrong here would look
+      // like Remove silently doing nothing.
+      await ref
+          .read(repositoryProvider)
+          .updateTribeConfiguration(
+            tribeId: tribeId,
+            avatarUrl: banner ? null : '',
+            bannerUrl: banner ? '' : null,
+          );
+      if (!mounted) return;
+      setState(() {
+        if (banner) {
+          bannerUrl = null;
+        } else {
+          avatarUrl = null;
+        }
+      });
+      _refreshTribeEverywhere(tribeId);
+      _toast('${kind.label[0].toUpperCase()}${kind.label.substring(1)} removed.');
+    } catch (error) {
+      if (!mounted) return;
+      _toast(
+        UserFriendlyErrors.message(
+          error,
+          fallback: 'Could not remove that image.',
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          uploadingAvatar = false;
+          uploadingBanner = false;
+        });
+      }
+    }
+  }
+
+  /// Every surface that renders this Tribe's images.
+  ///
+  /// The stable path means the URL only changes by its cache-busting version,
+  /// so a widget holding the old string keeps showing the old picture until
+  /// its provider is refreshed. "Refresh everywhere" is this list.
+  void _refreshTribeEverywhere(String tribeId) {
+    ref.invalidate(tribesProvider);
+    ref.invalidate(tribesIKeepProvider);
+    ref.invalidate(keeperOverviewProvider);
+    ref.invalidate(tribeManagementProvider(tribeId));
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _save(String tribeId) async {
@@ -390,12 +509,6 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
       .replaceAll('>', '&gt;')
       .trim();
 
-  static String _contentType(String extension) => switch (extension) {
-    'png' => 'image/png',
-    'webp' => 'image/webp',
-    'heic' || 'heif' => 'image/heic',
-    _ => 'image/jpeg',
-  };
 }
 
 class _MediaEditor extends StatelessWidget {
@@ -406,6 +519,8 @@ class _MediaEditor extends StatelessWidget {
     required this.uploadingBanner,
     required this.onAvatar,
     required this.onBanner,
+    required this.onRemoveAvatar,
+    required this.onRemoveBanner,
   });
   final String? avatarUrl;
   final String? bannerUrl;
@@ -413,6 +528,8 @@ class _MediaEditor extends StatelessWidget {
   final bool uploadingBanner;
   final VoidCallback onAvatar;
   final VoidCallback onBanner;
+  final VoidCallback onRemoveAvatar;
+  final VoidCallback onRemoveBanner;
 
   @override
   Widget build(BuildContext context) {
@@ -452,19 +569,49 @@ class _MediaEditor extends StatelessWidget {
                           child: _EditMediaButton(
                             loading: uploadingBanner,
                             icon: Icons.image_outlined,
-                            label: 'Change banner',
+                            label: bannerUrl?.isNotEmpty == true
+                                ? 'Change banner'
+                                : 'Add banner',
                           ),
                         ),
+                        // Only offered when there is something to remove.
+                        // A permanently visible Remove on an empty slot is a
+                        // control that does nothing.
+                        if (bannerUrl?.isNotEmpty == true)
+                          Positioned(
+                            top: 6,
+                            right: 6,
+                            child: _RemoveMediaButton(
+                              onTap: uploadingBanner ? null : onRemoveBanner,
+                              tooltip: 'Remove banner',
+                            ),
+                          ),
                       ],
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 54),
+              if (avatarUrl?.isNotEmpty == true)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: TextButton.icon(
+                    onPressed: uploadingAvatar ? null : onRemoveAvatar,
+                    icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                    label: const Text('Remove picture'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: VentlyColors.dangerRed,
+                      textStyle: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.only(bottom: 14),
                 child: Text(
-                  'Images are compressed before upload.',
+                  'Cropped and compressed on your device before upload.',
                   style: TextStyle(
                     color: context.ink.withOpacity(.52),
                     fontSize: 11,
@@ -611,6 +758,42 @@ class _SectionTitle extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+
+/// A small destructive overlay control for the banner.
+///
+/// Deliberately not a bare icon on the image: a dark scrim behind it keeps it
+/// legible over an arbitrary photo, which is the whole difficulty with
+/// controls that float on user-supplied images.
+class _RemoveMediaButton extends StatelessWidget {
+  const _RemoveMediaButton({required this.onTap, required this.tooltip});
+
+  final VoidCallback? onTap;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.black.withOpacity(0.45),
+        shape: const CircleBorder(),
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: const Padding(
+            padding: EdgeInsets.all(7),
+            child: Icon(
+              Icons.delete_outline_rounded,
+              size: 17,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

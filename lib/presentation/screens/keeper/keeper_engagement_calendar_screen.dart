@@ -6,6 +6,7 @@ import '../../../core/providers.dart';
 import '../../../domain/keeper/keeper_studio_v2.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/skeleton.dart';
 import '../../widgets/keeper_prompt_composer_sheet.dart';
 import 'keeper_studio_scaffold.dart';
 
@@ -15,13 +16,16 @@ class KeeperEngagementCalendarScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tribe = ref.watch(primaryKeeperTribeProvider);
+    // Scoped, not "primary". This page describes one community, so
+    // under All Tribes the scaffold asks which one rather than
+    // answering for whichever tribe happens to be largest.
+    final tribe = ref.watch(studioSelectedTribeProvider);
     final tribeId = tribe?.tribeId;
     final calAsync = tribeId == null
         ? const AsyncValue<KeeperEngagementCalendar>.loading()
         : ref.watch(keeperEngagementCalendarProvider(tribeId));
 
-    return KeeperStudioScaffold(
+    return KeeperStudioScaffold.perTribe(
       title: 'Engagement Calendar',
       subtitle: 'Schedule prompts that keep your tribe talking',
       onRefresh: () async {
@@ -29,13 +33,8 @@ class KeeperEngagementCalendarScreen extends ConsumerWidget {
           ref.invalidate(keeperEngagementCalendarProvider(tribeId));
         }
       },
-      child: calAsync.when(
-        loading: () => const Center(
-          child: Padding(
-            padding: EdgeInsets.all(32),
-            child: CircularProgressIndicator(color: VentlyColors.berryMagenta),
-          ),
-        ),
+      builder: (_) => calAsync.when(
+        loading: () => const StudioSkeleton(rows: 3),
         error: (e, _) => Text('Could not load calendar: $e'),
         data: (cal) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -3,11 +3,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/logger.dart';
 import '../../../core/providers.dart';
+import '../../../data/services/tribe_image_picker.dart';
 import '../../../core/tribe_category_labels.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/tribe/tribe_management.dart';
@@ -31,7 +31,7 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   final _customCategory = TextEditingController();
   final _tags = TextEditingController();
   final _welcome = TextEditingController();
-  final _picker = ImagePicker();
+  final _images = TribeImagePicker();
   String _category = 'interest_group';
 
   /// One key for this form, minted when the screen opens.
@@ -58,6 +58,11 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   Uint8List? _bannerBytes;
   String _avatarExtension = 'jpg';
   String _bannerExtension = 'jpg';
+  // Carried alongside the extension because TribeImagePicker derives both
+  // from the real bytes. Guessing the Content-Type from a filename is how
+  // a HEIC ends up declared as image/jpeg.
+  String _avatarContentType = 'image/jpeg';
+  String _bannerContentType = 'image/jpeg';
 
   /// Fallback only. The live list comes from public.tribe_categories via
   /// tribeCategoriesProvider; this is what shows when that table is not there
@@ -218,22 +223,24 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
         if (_avatarBytes != null) {
           final upload = await ref
               .read(repositoryProvider)
-              .uploadTribeAvatar(
+              .uploadTribeImage(
                 tribeId: tribe.tribeId,
+                banner: false,
                 bytes: _avatarBytes!,
                 extension: _avatarExtension,
-                contentType: _contentType(_avatarExtension),
+                contentType: _avatarContentType,
               );
           avatarUrl = upload.url;
         }
         if (_bannerBytes != null) {
           final upload = await ref
               .read(repositoryProvider)
-              .uploadTribeAvatar(
+              .uploadTribeImage(
                 tribeId: tribe.tribeId,
+                banner: true,
                 bytes: _bannerBytes!,
                 extension: _bannerExtension,
-                contentType: _contentType(_bannerExtension),
+                contentType: _bannerContentType,
               );
           bannerUrl = upload.url;
         }
@@ -333,39 +340,27 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
   }
 
   Future<void> _pickImage({required bool banner}) async {
+    final kind = banner ? TribeImageKind.banner : TribeImageKind.avatar;
     try {
-      final image = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 84,
-        maxWidth: banner ? 2048 : 1024,
-        maxHeight: banner ? 1152 : 1024,
-      );
-      if (image == null) return;
-      final bytes = await image.readAsBytes();
-      if (bytes.length > 8 * 1024 * 1024) {
-        _toast('Choose an image smaller than 8 MB.');
-        return;
-      }
-      final extension = image.name.contains('.')
-          ? image.name.split('.').last.toLowerCase()
-          : 'jpg';
-      if (!mounted) return;
+      // Same pipeline as the edit screen: pick, crop to the right ratio,
+      // compress, then verify the bytes really are an image. This screen used
+      // to do its own size check and no crop at all, so the two disagreed
+      // about what was acceptable.
+      final prepared = await _images.pick(kind);
+      if (prepared == null || !mounted) return;
       setState(() {
         if (banner) {
-          _bannerBytes = bytes;
-          _bannerExtension = extension;
+          _bannerBytes = prepared.bytes;
+          _bannerExtension = prepared.extension;
+          _bannerContentType = prepared.contentType;
         } else {
-          _avatarBytes = bytes;
-          _avatarExtension = extension;
+          _avatarBytes = prepared.bytes;
+          _avatarExtension = prepared.extension;
+          _avatarContentType = prepared.contentType;
         }
       });
-    } catch (error) {
-      _toast(
-        UserFriendlyErrors.message(
-          error,
-          fallback: "Couldn't open that image.",
-        ),
-      );
+    } on TribeImageRejected catch (error) {
+      _toast(error.message);
     }
   }
 
@@ -725,12 +720,6 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
       .toSet()
       .toList(growable: false);
 
-  static String _contentType(String extension) => switch (extension) {
-    'png' => 'image/png',
-    'webp' => 'image/webp',
-    'heic' || 'heif' => 'image/heic',
-    _ => 'image/jpeg',
-  };
 }
 
 class _CreationMedia extends StatelessWidget {

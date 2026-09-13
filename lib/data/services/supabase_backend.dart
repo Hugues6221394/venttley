@@ -3260,64 +3260,155 @@ class SupabaseBackend {
     );
   }
 
-  Future<({String path, String url})> uploadTribeAvatar({
+  /// The extensions the storage policy's path regex accepts.
+  ///
+  /// Kept in step with `private.is_tribe_image_path` deliberately: building a
+  /// path the policy will reject produces an opaque 403 that looks exactly
+  /// like an authorization failure, so an unsupported extension is normalised
+  /// here rather than discovered at the server.
+  static const _tribeImageExtensions = {
+    'jpg',
+    'jpeg',
+    'png',
+    'webp',
+    'heic',
+    'heif',
+    'gif',
+  };
+
+  /// Upload a Tribe's avatar or banner to its stable path.
+  ///
+  /// `post-media/tribes/<tribeId>/avatar|banner.<ext>` — one object per image
+  /// per Tribe, enforced by the storage policy from 20261016090000, so
+  /// replacing a picture overwrites its predecessor. The previous
+  /// implementation minted a fresh `Uuid().v4()` per upload and left every
+  /// earlier file behind with nothing referencing it.
+  ///
+  /// Returns a cache-busted URL. That matters *because* the path is stable:
+  /// the public URL no longer changes when the image does, so without a
+  /// version query the CDN and every cached widget would keep serving the old
+  /// picture and the change would look like it silently failed.
+  Future<({String path, String url})> uploadTribeImage({
     required String tribeId,
+    required bool banner,
     required List<int> bytes,
     required String extension,
     String contentType = 'image/jpeg',
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
-    final safeExt = extension
+
+    var safeExt = extension
         .replaceAll('.', '')
         .toLowerCase()
         .replaceAll(RegExp('[^a-z0-9]'), '');
-    // Under the uploader's own uid, not at tribes/<id>/….
-    //
-    // The tribes/ prefix relies on the "post media tribe manager insert"
-    // policy from 0067, which kept returning 403 "new row violates row-level
-    // security policy" even after that migration was re-applied — so every
-    // Tribe created with pictures got "its images could not be saved yet" and
-    // no picture. Reproduced twice, before and after re-applying the policy.
-    //
-    // The uid-prefixed path is covered by the bucket's original 0038 policy,
-    // which is demonstrably working: post images and story images go through
-    // it constantly, including one uploaded minutes before this was changed.
-    // Using the path that provably works beats continuing to debug a policy
-    // whose failing clause I could not isolate from outside the database.
-    //
-    // The tribe id stays in the path so an object is still traceable to its
-    // Tribe, and updateTribeConfiguration records the resulting URL either way.
-    final path =
-        '$uid/tribes/$tribeId/${const Uuid().v4()}.${safeExt.isEmpty ? 'jpg' : safeExt}';
-    await _client.storage
-        .from('post-media')
-        .uploadBinary(
-          path,
-          _imageUploadBytes(bytes),
-          // upsert: false, and that is the actual fix.
-          //
-          // This was upsert: true, which makes the storage client issue an
-          // upsert rather than a plain insert — and an upsert needs UPDATE
-          // permission on storage.objects. The post-media bucket has no UPDATE
-          // policy at all: 0038 defines "post media owner insert",
-          // "post media owner delete" and "post media public read", and
-          // nothing else. So every tribe image upload came back
-          // "403 new row violates row-level security policy" and every Tribe
-          // created with pictures got "its images could not be saved yet".
-          //
-          // It also explains why post and story images were always fine:
-          // uploadPostImage uses upsert: false and therefore only ever needs
-          // the INSERT policy, which exists.
-          //
-          // Nothing is lost by dropping it. The path above contains a fresh
-          // Uuid().v4() on every call, so there is never an existing object at
-          // that key to overwrite — the upsert could not have been doing
-          // anything except requiring a privilege the bucket does not grant.
-          fileOptions: FileOptions(contentType: contentType, upsert: false),
-        );
-    final url = _client.storage.from('post-media').getPublicUrl(path);
-    return (path: path, url: url);
+    if (!_tribeImageExtensions.contains(safeExt)) safeExt = 'jpg';
+
+    final kind = banner ? 'banner' : 'avatar';
+    final payload = _imageUploadBytes(bytes);
+    final stablePath = 'tribes/$tribeId/$kind.$safeExt';
+
+    try {
+      await _client.storage
+          .from('post-media')
+          .uploadBinary(
+            stablePath,
+            payload,
+            // upsert, because the key is fixed. This is what needs the
+            // policy's UPDATE arm — and its SELECT arm, since an upsert has
+            // to find the row it is replacing.
+            fileOptions: FileOptions(contentType: contentType, upsert: true),
+          );
+      return (path: stablePath, url: _bustedPublicUrl(stablePath));
+    } on StorageException catch (error) {
+      // The stable path is authorized by 20261016090000, which is well past
+      // the production migration boundary — production's last applied
+      // migration is 20260828201411. Until that backlog is applied the policy
+      // does not exist there and this upload is refused.
+      //
+      // So one fallback to the legacy uid-prefixed path, which the bucket's
+      // original 0038 owner rule has always permitted. It is a worse path —
+      // no stable key, an orphan per replacement, and authorization that only
+      // checks "is this your own prefix" rather than "do you manage this
+      // Tribe" — but silently losing a keeper's Tribe picture is worse still.
+      //
+      // Delete this branch, and `_legacyTribeImagePath`, once the migration
+      // backlog reaches production. The warning is how you find out it is
+      // still being used.
+      if (!_looksLikePolicyRefusal(error)) rethrow;
+      log.warn(
+        'tribe.media_stable_path_refused',
+        props: {
+          'tribe_id': tribeId,
+          'kind': kind,
+          'status': error.statusCode ?? '',
+          'hint':
+              'storage policy 20261016090000 is probably not applied here',
+        },
+      );
+      final legacy = _legacyTribeImagePath(uid, tribeId, safeExt);
+      await _client.storage
+          .from('post-media')
+          .uploadBinary(
+            legacy,
+            payload,
+            fileOptions: FileOptions(contentType: contentType, upsert: false),
+          );
+      return (path: legacy, url: _bustedPublicUrl(legacy));
+    }
+  }
+
+  /// Kept for the fallback above only. Not a path anything should choose.
+  String _legacyTribeImagePath(String uid, String tribeId, String safeExt) =>
+      '$uid/tribes/$tribeId/${const Uuid().v4()}.$safeExt';
+
+  /// A public URL with a version, so a replaced image is actually re-fetched.
+  String _bustedPublicUrl(String path) {
+    final base = _client.storage.from('post-media').getPublicUrl(path);
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    return base.contains('?') ? '$base&v=$stamp' : '$base?v=$stamp';
+  }
+
+  /// True when a storage error is RLS refusing the write rather than, say, a
+  /// network fault or an oversized payload — the two cases need different
+  /// handling and only the first is worth retrying elsewhere.
+  static bool _looksLikePolicyRefusal(StorageException error) {
+    final status = error.statusCode;
+    if (status == '403' || status == '401') return true;
+    final message = error.message.toLowerCase();
+    return message.contains('row-level security') ||
+        message.contains('unauthorized') ||
+        message.contains('violates');
+  }
+
+  /// Delete a Tribe's avatar or banner object.
+  ///
+  /// Removes the file as well as clearing the column, so a removed picture
+  /// stops being served instead of lingering unreferenced in a public bucket.
+  /// Tolerates a missing object: "remove the image" and "the image was
+  /// already gone" should both leave the Tribe without one.
+  Future<void> removeTribeImage({
+    required String tribeId,
+    required bool banner,
+  }) async {
+    if (_uid == null) throw StateError('Not signed in');
+    final kind = banner ? 'banner' : 'avatar';
+    final paths = [
+      for (final ext in _tribeImageExtensions) 'tribes/$tribeId/$kind.$ext',
+    ];
+    try {
+      // Every candidate extension in one call: the column holds a URL, not an
+      // extension, and the object could have been stored as any of them.
+      await _client.storage.from('post-media').remove(paths);
+    } on StorageException catch (error) {
+      // A refusal here must not block clearing the column — the visible
+      // outcome the keeper asked for is that the Tribe stops showing the
+      // picture.
+      log.warn(
+        'tribe.media_remove_failed',
+        props: {'tribe_id': tribeId, 'kind': kind, 'error': error.message},
+      );
+    }
   }
 
   Future<({String path, String url})> uploadTribeChatAudio({
@@ -3587,6 +3678,58 @@ class SupabaseBackend {
       params: {'p_note': note},
     );
     return res as String;
+  }
+
+  /// The caller's full verification standing (20261014090000).
+  ///
+  /// Preferred over [myVerificationStatus], which returns a bare string and
+  /// cannot say whether reapplying is allowed or what a reviewer asked for.
+  /// Eligibility is computed server-side and returned here so the Apply button
+  /// and the RPC cannot disagree.
+  Future<VerificationState> myVerificationState() async {
+    final rows = await _client.rpc('my_verification_state');
+    final list = rows as List? ?? const [];
+    if (list.isEmpty) {
+      // No row means no session. Not "never applied" — that case returns a
+      // row saying so — and claiming either would be a guess.
+      return VerificationState.unknown;
+    }
+    return VerificationState.fromJson(
+      Map<String, dynamic>.from(list.first as Map),
+    );
+  }
+
+  /// Apply for the verified check, with a structured application.
+  ///
+  /// Evidence is passed as JSON and written by the RPC: no client role holds
+  /// INSERT on `verification_evidence`, so this is the only way in and its
+  /// validation cannot be skipped.
+  Future<String> requestVerificationDetailed({
+    String? note,
+    String? category,
+    List<String> links = const [],
+    List<VerificationEvidenceItem> evidence = const [],
+  }) async {
+    final res = await _client.rpc(
+      'request_verification',
+      params: {
+        'p_note': note,
+        'p_category': category,
+        'p_links': links,
+        'p_evidence': evidence.isEmpty
+            ? null
+            : [for (final item in evidence) item.toJson()],
+      },
+    );
+    return res as String;
+  }
+
+  /// Answer a reviewer's question, returning the application to the queue.
+  Future<void> respondToVerificationRequest(String response) async {
+    await _client.rpc(
+      'respond_to_verification_request',
+      params: {'p_response': response},
+    );
   }
 
   /// Caller's verification standing: 'verified' | 'pending' | 'denied' | 'none'.
@@ -3987,6 +4130,38 @@ class SupabaseBackend {
   }
 
   Future<void> toggleLike(String postId) async => react(postId, 'hug');
+
+  /// Write an explicit desired reaction, without toggling against local state.
+  ///
+  /// [react] decides what to send by consulting `_myReactions`, an in-memory
+  /// map. That is the wrong input for the optimistic path: the UI has already
+  /// moved, so the intent is known, and re-deriving it from a cache that the
+  /// UI is deliberately ahead of would send the opposite value on a fast
+  /// double tap.
+  ///
+  /// Throws rather than returning null when unauthenticated, so the caller
+  /// rolls back and can say why instead of silently reverting.
+  Future<String?> reactExact({
+    required String postId,
+    required String? reaction,
+  }) async {
+    if (_uid == null) throw StateError('Not signed in');
+    final result = await _client.rpc(
+      'set_post_reaction',
+      params: {'p_post_id': postId, 'p_reaction': reaction},
+    );
+    final settled = result as String?;
+    if (settled == null) {
+      _myReactions.remove(postId);
+    } else {
+      _myReactions[postId] = settled;
+    }
+    // Debounced, not immediate. This is what eventually brings the feed to
+    // server truth; the override in ReactionOverrides is a no-op by the time
+    // it lands, so the refresh is invisible rather than a visible flip.
+    _scheduleFeedInvalidation();
+    return settled;
+  }
 
   /// Returns the resulting reaction (`null` when the user toggled it off).
   Future<String?> react(String postId, String reaction) async {

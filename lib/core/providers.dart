@@ -21,7 +21,9 @@ import '../domain/home/home_discovery.dart';
 import '../domain/tribe/tribe_chat_hub.dart';
 import '../domain/tribe/tribe_management.dart';
 import '../domain/tribe/tribe_recommendations.dart';
+import '../data/services/reaction_controller.dart';
 import '../domain/keeper/keeper_overview.dart';
+import '../domain/reactions/reaction_overrides.dart';
 import '../domain/keeper/keeper_mode.dart';
 import '../domain/keeper/keeper_studio_v2.dart';
 import 'analytics_events.dart';
@@ -906,6 +908,17 @@ final tribeJoinRequestsProvider = FutureProvider.autoDispose
           ref.watch(repositoryProvider).tribeJoinRequests(tribeId),
     );
 
+/// Bans on one tribe — former members blocked from rejoining.
+///
+/// Raw rows: `tribe_bans` has no client entity, and the Members page needs
+/// only the user id, the reason and when. RLS restricts this to keepers and
+/// mods of that tribe.
+final tribeBansProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, tribeId) async =>
+          ref.watch(repositoryProvider).tribeBans(tribeId),
+    );
+
 final tribeAuditLogProvider = FutureProvider.autoDispose
     .family<List<TribeAuditEvent>, String>(
       (ref, tribeId) async =>
@@ -1205,6 +1218,41 @@ final myVerificationStatusProvider = FutureProvider.autoDispose<String>((ref) {
   ref.watch(sessionProvider);
   return ref.watch(repositoryProvider).myVerificationStatus();
 });
+
+/// The caller's full verification standing (20261014090000).
+///
+/// Supersedes [myVerificationStatusProvider] for anything that needs more than
+/// "is this person verified" — the Settings screen, the application form and
+/// the more-information prompt all read this.
+final myVerificationStateProvider =
+    FutureProvider.autoDispose<VerificationState>((ref) {
+      ref.watch(sessionProvider);
+      return ref.watch(repositoryProvider).myVerificationState();
+    });
+
+// ----------------------------------------------------------------------
+// Optimistic reactions
+// ----------------------------------------------------------------------
+
+/// Reactions the user has expressed that the server has not confirmed yet.
+///
+/// Not autoDispose, and global rather than per-screen: a reaction given in the
+/// feed has to still be showing when the same Vent is opened in the detail
+/// screen or a story viewer a moment later. An autoDispose controller would
+/// drop the override as soon as the feed was popped, and the heart would
+/// appear to un-press.
+final reactionControllerProvider =
+    StateNotifierProvider<ReactionController, ReactionOverrides>(
+      (ref) => ReactionController(ref.watch(repositoryProvider)),
+    );
+
+/// A Vent with the caller's unconfirmed reaction painted on.
+///
+/// Every surface that renders a reaction reads through this, so the feed, the
+/// detail screen and the story viewer cannot disagree about what the user
+/// just tapped. It is a no-op once the server has caught up.
+Post reactionAdjusted(WidgetRef ref, Post post) =>
+    ref.watch(reactionControllerProvider).apply(post);
 
 // ----------------------------------------------------------------------
 // Policy consent (migration 20261008090000)
