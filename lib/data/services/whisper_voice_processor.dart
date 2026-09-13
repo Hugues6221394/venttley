@@ -49,6 +49,14 @@ class WhisperVoiceProcessor {
     }
   }
 
+  /// The FFmpeg chain applied for [filter], or null when there is none
+  /// (`'none'`, or an unknown key).
+  ///
+  /// Exposed so the table itself can be asserted. Soft once shipped as EQ and
+  /// compression with no pitch shift at all — a disguise that did not disguise
+  /// anything — and that is checkable without audio hardware or a device.
+  static String? chainFor(String filter) => _filters[filter];
+
   static String _quote(String path) => "'${path.replaceAll("'", "'\\''")}'";
 
   static Future<void> _deleteIfPresent(File file) async {
@@ -64,13 +72,28 @@ class WhisperVoiceProcessor {
         'highpass=f=120,lowpass=f=3400,asetrate=44100*0.86,'
         'aresample=44100,atempo=1.1627907,'
         'acompressor=threshold=-18dB:ratio=4:attack=20:release=250',
+    // Soft used to be EQ and compression only — no asetrate, so no pitch
+    // movement whatsoever. Gentle filtering does not disguise a voice, and it
+    // was reported, correctly, as sounding identical to Original. It now
+    // lifts a little over a semitone: enough to shift the register without
+    // tipping into a cartoon.
     'soft':
-        'highpass=f=90,lowpass=f=4800,'
+        'asetrate=44100*1.09,aresample=44100,atempo=0.9174312,'
+        'highpass=f=90,lowpass=f=5200,'
         'acompressor=threshold=-20dB:ratio=2.5:attack=20:release=300,'
-        'volume=0.92',
+        'volume=0.94',
     'deep_voice':
         'asetrate=44100*0.78,aresample=44100,atempo=1.2820513,'
         'lowpass=f=3800',
+    // The counterpart to Deep, and the reason it exists: every other disguise
+    // moves pitch down or not at all, so a voice that already sits high had
+    // nothing that actually concealed it. Up roughly four and a half
+    // semitones. The lowpass keeps a raised voice from turning sibilant, which
+    // is what makes an upward shift sound cheap.
+    'high_voice':
+        'asetrate=44100*1.32,aresample=44100,atempo=0.7575758,'
+        'highpass=f=110,lowpass=f=6200,'
+        'acompressor=threshold=-18dB:ratio=3:attack=15:release=220',
     'robot':
         'highpass=f=180,lowpass=f=4200,'
         'acrusher=bits=6:mix=0.65,'

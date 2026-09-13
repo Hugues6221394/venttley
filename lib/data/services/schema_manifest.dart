@@ -90,4 +90,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261018090000': 'staff_authorization_requires_active_account',
   '20261019090000': 'fresh_deploy_grant_parity',
   '20261020090000': 'consent_gates_content_writes',
+  '20261021090000': 'whisper_high_voice_filter',
 };

@@ -2062,6 +2062,9 @@ class WhisperVoiceFilters {
     'none',
     'anonymous',
     'soft',
+    // Next to Deep on purpose. The pair is what makes an upward shift
+    // discoverable; on its own in a row of chips it reads as decoration.
+    'high_voice',
     'deep_voice',
     'robot',
     'echo',
@@ -2077,6 +2080,8 @@ class WhisperVoiceFilters {
         return 'Anonymous';
       case 'soft':
         return 'Soft';
+      case 'high_voice':
+        return 'High';
       case 'deep_voice':
         return 'Deep';
       case 'robot':
