@@ -117,6 +117,15 @@ INSERT INTO auth.users (
     now(), now()
   );
 
+-- Consent is a precondition for every guarded content write
+-- (20261020090000_consent_gates_content_writes). A fixture user who can post
+-- is, in reality, a user who accepted at signup — so record it the way signup
+-- does rather than leaving the fixture in a state no real account occupies.
+INSERT INTO public.policy_acceptances (user_id, kind, version)
+SELECT u.user_id, c.kind, c.version
+  FROM public.users u, public.current_policies() c
+ON CONFLICT DO NOTHING;
+
 INSERT INTO public.posts (
   post_id, author_id, category_name, content, post_mood, is_story, story_audience
 ) VALUES

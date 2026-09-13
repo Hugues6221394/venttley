@@ -151,7 +151,20 @@ SELECT t.tribe_id, u.user_id, 'mod'
    AND u.anonymous_pseudonym = 'tester_comod'
 ON CONFLICT (tribe_id, user_id) DO UPDATE SET role = 'mod';
 
--- 7) Print the resulting accounts so the seed output is self-documenting.
+-- 7) Record policy acceptance, because 20261020090000 makes it a precondition
+--    for every content write. A real person holding these credentials would
+--    have accepted at signup; leaving the seed unaccepted would put the test
+--    accounts in a state no real account occupies, and every one of them would
+--    be refused the moment it tried to post.
+INSERT INTO public.policy_acceptances (user_id, kind, version)
+SELECT u.user_id, c.kind, c.version
+  FROM public.users u
+  CROSS JOIN public.current_policies() c
+ WHERE u.anonymous_pseudonym IN ('tester_user','tester_keeper','tester_admin',
+                                 'tester_verified','tester_keeper2','tester_comod')
+ON CONFLICT DO NOTHING;
+
+-- 8) Print the resulting accounts so the seed output is self-documenting.
 SELECT
     u.anonymous_pseudonym AS username,
     'TestPass123!'        AS password,

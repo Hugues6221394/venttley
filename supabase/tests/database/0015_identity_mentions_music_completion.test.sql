@@ -95,6 +95,15 @@ SELECT lives_ok(
     )$$,
   'mention fixtures create through the canonical auth trigger'
 );
+
+-- Consent is a precondition for every guarded content write
+-- (20261020090000_consent_gates_content_writes). A fixture user who can post
+-- is, in reality, a user who accepted at signup — so record it the way signup
+-- does rather than leaving the fixture in a state no real account occupies.
+INSERT INTO public.policy_acceptances (user_id, kind, version)
+SELECT u.user_id, c.kind, c.version
+  FROM public.users u, public.current_policies() c
+ON CONFLICT DO NOTHING;
 SELECT lives_ok(
   $$UPDATE public.users SET display_name = CASE user_id
       WHEN 'b9100000-0000-4000-8000-000000000001'::uuid THEN 'First Voice'
