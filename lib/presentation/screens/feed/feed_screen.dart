@@ -234,10 +234,7 @@ class FeedScreen extends ConsumerWidget {
                               child: _VentlyFeedPostCard(
                                 post: post,
                                 dataSaver: dataSaver,
-                                onTap: () => context.push(
-                                  '/post/${post.postId}',
-                                  extra: post,
-                                ),
+                                onTap: () => _pushPostOnce(context, post),
                                 // Optimistic. `post.myReaction` alone was the
                                 // wrong input — it is the *server's* value, so
                                 // a second tap arriving before the refetch sent
@@ -1145,6 +1142,31 @@ class _FeedFiltersHeader extends SliverPersistentHeaderDelegate {
 /// reaction read is scoped to one card. Adjusting the post at the
 /// itemBuilder instead would register the watch on the feed screen and
 /// rebuild the entire sliver on every tap.
+
+/// Opens a Vent's thread, ignoring a repeat of the same push in quick
+/// succession.
+///
+/// This is what stops a double-click pushing the detail route twice. It used
+/// to be done with `onDoubleTap` on the card, which worked but put a
+/// DoubleTapGestureRecognizer in the arena for every tap on the card — so the
+/// like button could not resolve until the double-tap timer expired and the
+/// heart moved a third of a second after the thumb. Guarding the navigation
+/// instead keeps taps instant.
+String? _lastPushedPostId;
+DateTime? _lastPushedAt;
+
+void _pushPostOnce(BuildContext context, Post post) {
+  final now = DateTime.now();
+  if (_lastPushedPostId == post.postId &&
+      _lastPushedAt != null &&
+      now.difference(_lastPushedAt!) < const Duration(milliseconds: 700)) {
+    return;
+  }
+  _lastPushedPostId = post.postId;
+  _lastPushedAt = now;
+  context.push('/post/${post.postId}', extra: post);
+}
+
 class _VentlyFeedPostCard extends ConsumerWidget {
   const _VentlyFeedPostCard({
     required this.post,
@@ -1175,9 +1197,15 @@ class _VentlyFeedPostCard extends ConsumerWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        // Also handle double-tap so a quick double-click opens the thread
-        // exactly once (with only onTap, a double-tap pushed it twice).
-        onDoubleTap: onTap,
+        // No onDoubleTap here, deliberately. It used to be set to onTap so a
+        // quick double-click opened the thread exactly once — but a
+        // DoubleTapGestureRecognizer on the card keeps the gesture arena open
+        // for EVERY tap inside it, including the heart. The optimistic
+        // reaction then landed ~300ms after the thumb, which reads as a dead
+        // button and was reported as "liking doesn't work".
+        //
+        // The double-push it was preventing is handled by _pushPostOnce
+        // below, which is a navigation concern and does not touch gestures.
         borderRadius: BorderRadius.circular(20),
         child: Container(
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
