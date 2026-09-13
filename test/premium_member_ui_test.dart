@@ -13,6 +13,7 @@ import 'package:vently_app/presentation/screens/friends/friends_screen.dart';
 import 'package:vently_app/presentation/screens/home/home_shell.dart';
 import 'package:vently_app/presentation/screens/inbox/inbox_screen.dart';
 import 'package:vently_app/presentation/screens/notifications/notifications_screen.dart';
+import 'package:vently_app/presentation/widgets/notification_category_bar.dart';
 import 'package:vently_app/presentation/screens/whispers/whispers_screen.dart';
 import 'package:vently_app/presentation/router/app_router.dart';
 import 'package:vently_app/presentation/theme/app_theme.dart';
@@ -97,13 +98,23 @@ void main() {
     );
 
     expect(find.text('Notifications'), findsOneWidget);
+
+    // The seven Activity tabs. "All" and "Unread" used to be the only two
+    // choices and were mutually exclusive, which made "unread Mentions"
+    // unaskable. Unread is now an independent toggle beside the tabs.
+    // Only the tabs that fit are asserted here: the row is a lazy ListView, so
+    // the later ones genuinely are not built on a compact phone until it
+    // scrolls. That the full set exists and partitions every kind is covered
+    // by notification_category_test.dart, which does not need a viewport.
+    expect(find.byType(NotificationCategoryBar), findsOneWidget);
     expect(find.text('All'), findsOneWidget);
-    // The unread count moved out of the label and into a badge when the stock
-    // SegmentedButton was replaced with Venttly pills, so "Unread  2" as one
-    // string no longer exists. Both halves are still asserted — the filter and
-    // the count it carries — which is what this line was ever about.
-    expect(find.text('Unread'), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
+    expect(find.text('Mentions'), findsOneWidget);
+    expect(find.text('Reactions'), findsOneWidget);
+
+    expect(find.text('Unread only'), findsOneWidget);
+    // The count now lives in per-tab badges plus a total, so it is no longer a
+    // single bare "2" anywhere on screen.
+    expect(find.text('2 unread'), findsOneWidget);
     expect(find.text('Today'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await expectLater(

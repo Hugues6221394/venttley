@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../../animation/core/motion_tokens.dart';
+import '../../../core/vently_haptics.dart';
+import '../../../domain/notifications/notification_category.dart';
+import '../../widgets/notification_category_bar.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/notification_routing.dart';
@@ -13,8 +18,6 @@ import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/vently_premium_background.dart';
-
-enum _ActivityFilter { all, unread }
 
 /// A compact, grouped activity feed backed by the realtime notifications
 /// stream. Read state and routing remain server-owned; the local filter only
@@ -30,7 +33,11 @@ class NotificationsScreen extends ConsumerStatefulWidget {
 }
 
 class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
-  _ActivityFilter _filter = _ActivityFilter.all;
+  /// Which tab is showing. Orthogonal to [_unreadOnly] on purpose: "unread"
+  /// answers a different question from "what kind", and folding them into one
+  /// list of pills made it impossible to ask for unread Mentions.
+  NotificationCategory _category = NotificationCategory.all;
+  bool _unreadOnly = false;
   bool _markingAllRead = false;
 
   Future<void> _refresh() async {
@@ -68,9 +75,19 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     final invites =
         ref.watch(myInvitesProvider).valueOrNull ?? const <TribeInvite>[];
     final unread = items.where((item) => !item.isRead).length;
-    final visibleItems = _filter == _ActivityFilter.unread
-        ? items.where((item) => !item.isRead).toList()
-        : items;
+    final visibleItems = items
+        .where((item) => _category.matches(item.kind))
+        .where((item) => !_unreadOnly || !item.isRead)
+        .toList();
+
+    // Per-tab unread counts, so the row summarises where the attention is
+    // owed rather than making someone open each tab to find out.
+    final unreadByCategory = <NotificationCategory, int>{
+      for (final category in NotificationCategory.tabs)
+        category: items
+            .where((item) => !item.isRead && category.matches(item.kind))
+            .length,
+    };
     final hasAnyActivity = items.isNotEmpty || invites.isNotEmpty;
 
     return Scaffold(
@@ -120,6 +137,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             visibleItems: visibleItems,
             invites: invites,
             unread: unread,
+            unreadByCategory: unreadByCategory,
             hasAnyActivity: hasAnyActivity,
           ),
         ),
@@ -133,6 +151,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     required List<NotificationItem> visibleItems,
     required List<TribeInvite> invites,
     required int unread,
+    required Map<NotificationCategory, int> unreadByCategory,
     required bool hasAnyActivity,
   }) {
     if (async.isLoading && items.isEmpty) {
@@ -159,10 +178,15 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(0, 8, 0, 124),
       children: [
-        _ActivityFilterBar(
-          value: _filter,
+        NotificationCategoryBar(
+          value: _category,
+          unreadByCategory: unreadByCategory,
+          onChanged: (value) => setState(() => _category = value),
+        ),
+        _UnreadToggle(
+          value: _unreadOnly,
           unread: unread,
-          onChanged: (value) => setState(() => _filter = value),
+          onChanged: (value) => setState(() => _unreadOnly = value),
         ),
         if (invites.isNotEmpty) ...[
           const _SectionHeader(label: 'Tribe invitations'),
@@ -185,35 +209,94 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 /// above a list of Venttly cards. The feed's category rail and the inbox's
 /// All/Active/Requests row are both pills, so this is what "consistent with the
 /// app" actually looks like here.
-class _ActivityFilterBar extends StatelessWidget {
-  const _ActivityFilterBar({
+/// "Unread only", as a switch rather than a tab.
+///
+/// It used to be one of two pills beside "All", which made the two questions
+/// mutually exclusive: you could ask for unread, or for a kind, never for
+/// unread Mentions. Keeping it separate is what makes the seven tabs useful.
+class _UnreadToggle extends StatelessWidget {
+  const _UnreadToggle({
     required this.value,
     required this.unread,
     required this.onChanged,
   });
 
-  final _ActivityFilter value;
+  final bool value;
   final int unread;
-  final ValueChanged<_ActivityFilter> onChanged;
+  final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
+    // Nothing unread: the control would only ever empty the screen.
+    if (unread == 0 && !value) return const SizedBox(height: 8);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 2),
       child: Row(
         children: [
-          _FilterPill(
-            label: 'All',
-            selected: value == _ActivityFilter.all,
-            onTap: () => onChanged(_ActivityFilter.all),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              VentlyHaptics.selection();
+              onChanged(!value);
+            },
+            child: AnimatedContainer(
+              duration: MotionTokens.feedback.duration,
+              curve: MotionTokens.feedback.curve,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: value
+                    ? VentlyColors.roseTint
+                    : (dark ? Colors.white10 : Colors.transparent),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: value
+                      ? VentlyColors.berryMagenta.withOpacity(0.45)
+                      : (dark ? Colors.white24 : VentlyColors.softMauve),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedSwitcher(
+                    duration: MotionTokens.feedback.duration,
+                    child: Icon(
+                      value
+                          ? Icons.mark_email_unread_rounded
+                          : Icons.mark_email_read_outlined,
+                      key: ValueKey(value),
+                      size: 14,
+                      color: value
+                          ? VentlyColors.berryMagenta
+                          : (dark ? Colors.white60 : VentlyColors.deepBurgundy),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Unread only',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: value
+                          ? VentlyColors.berryMagenta
+                          : (dark ? Colors.white70 : VentlyColors.deepBurgundy),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(width: 8),
-          _FilterPill(
-            label: 'Unread',
-            count: unread,
-            selected: value == _ActivityFilter.unread,
-            onTap: () => onChanged(_ActivityFilter.unread),
-          ),
+          const Spacer(),
+          if (unread > 0)
+            Text(
+              '$unread unread',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: dark ? Colors.white54 : Colors.black45,
+              ),
+            ),
         ],
       ),
     );

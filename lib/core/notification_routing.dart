@@ -61,12 +61,31 @@ class NotificationPayload {
         return whisperId == null ? null : 'whisper:$whisperId';
       case 'friend_request':
         return friends();
+      case 'new_follower':
+        final followerId =
+            (payload['actor_id'] ?? payload['follower_id']) as String?;
+        return followerId == null ? friends() : user(followerId);
+      case 'message_accepted':
+        final acceptedRoom = payload['room_id'] as String?;
+        return acceptedRoom == null ? inbox() : chat(acceptedRoom);
       case 'friend_accepted':
         final friendId = payload['friend_id'] as String?;
         return friendId == null ? friends() : user(friendId);
       case 'message_request':
         final roomId = payload['room_id'] as String?;
         return roomId == null ? null : chat(roomId);
+      // The platform talking to you. None of these has a destination richer
+      // than the row itself yet: a broadcast has no target, and a moderation
+      // decision has nowhere to go because there is no member-facing appeal
+      // screen — submit_appeal exists in the database and is tested, but
+      // nothing in the app calls it. Returning the Activity screen keeps the
+      // tap from doing nothing at all, and is honest about there being no
+      // deeper page. When the appeal screen lands, moderation_action should
+      // point at it.
+      case 'moderation_action':
+      case 'admin_broadcast':
+      case 'system':
+        return notifications();
       // Security rows carry no user-controlled identifier, so they route to a
       // fixed screen rather than being reconstructed from the payload.
       case 'security_suspicious_login':
