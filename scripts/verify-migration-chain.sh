@@ -45,6 +45,28 @@ trap 'rm -rf "$WORK"' EXIT
 say() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 die() { printf '\033[31mFAIL: %s\033[0m\n' "$1" >&2; exit 1; }
 
+# ---------------------------------------------------------------------------
+# Nothing uncommitted may be deployed
+#
+# A migration that is applied to production but untracked in git is drift with
+# a delay on it: edit the file afterwards and production silently stops
+# matching the repository, with nothing able to detect the divergence. That is
+# how production ended up with a schema running ahead of its own ledger, and
+# nobody could say by how much.
+#
+# This runs first, before the container even starts, because it is the cheapest
+# check here and the most expensive one to skip.
+# ---------------------------------------------------------------------------
+
+say "checking every migration is committed"
+DIRTY=$(git status --porcelain -- supabase/migrations 2>/dev/null)
+if [ -n "$DIRTY" ]; then
+  printf '%s\n' "$DIRTY" | sed 's/^/  /'
+  die "migration files are untracked or modified — commit them before deploying what they describe"
+fi
+printf '  ok    all %s migration files are tracked and clean\n' \
+  "$(ls supabase/migrations/*.sql | wc -l | tr -d ' ')"
+
 say "starting a clean probe on :$PORT ($IMAGE)"
 docker rm -f "$NAME" >/dev/null 2>&1
 docker run -d --name "$NAME" -e POSTGRES_PASSWORD=postgres -p "${PORT}:5432" "$IMAGE" >/dev/null \

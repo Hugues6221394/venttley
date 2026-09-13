@@ -952,6 +952,37 @@ The next super-admin developer should work in this order.
      ALTER DATABASE postgres SET search_path TO "$user", public, extensions;
      ```
 
+  **Deploy procedure.** Do not push by hand; the steps below exist because
+  each one failed at least once on 2026-09-13.
+
+  ```
+  ./scripts/verify-migration-chain.sh     # gate + faithful replay + contracts
+  supabase migration list --linked        # confirm what will actually apply
+  supabase db dump --linked -f schema.sql            # and --data-only,
+  supabase db dump --linked --schema auth -f auth.sql  # --schema auth --data-only,
+                                                       # --role-only
+  supabase db push                        # never --yes for production
+  ```
+
+  The verify script refuses to run if any migration file is untracked or
+  modified. A migration applied to production but uncommitted is drift with a
+  delay on it: edit it afterwards and production silently stops matching the
+  repository, with nothing able to detect the divergence. That is precisely
+  how production came to be running a schema ahead of its own ledger with
+  nobody able to say by how much.
+
+  **`supabase db dump` does not back up authentication.** The default command
+  emits zero `auth` references — no schema, no rows. Restoring it gives you
+  every profile and nobody able to log in. A complete backup needs four dumps:
+  the default, `--data-only`, `--schema auth`, and `--schema auth --data-only`,
+  plus `--role-only`. Verified by restoring into a clean container: 9/9 auth
+  accounts, 33/33 profiles, 61/61 posts, 4/4 DMs.
+
+  **Direct database connections are IPv6-only on the free tier.**
+  `db.<ref>.supabase.co` has no A record, so `psql` fails with "could not
+  translate host name". Use the Session pooler host and the
+  `postgres.<project-ref>` username, or run SQL from the dashboard editor.
+
   **The replay that said "240/240" did not prove prerequisite 3, and claiming
   it did took production down.** The probe was built from a bare
   `supabase/postgres` container, which ships with *no* pre-installed
