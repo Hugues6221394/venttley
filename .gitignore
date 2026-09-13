@@ -64,3 +64,11 @@ exif-backfill-backup/
 # Node dependencies for the load-test harness. Reinstall with `npm ci` in
 # loadtest/ — package-lock.json is committed, the 8.9MB tree is not.
 node_modules/
+
+# Database dumps. These contain real member content — posts, DMs, auth rows.
+# A production backup briefly sat in this directory untracked and one `git add
+# -A` from being published. Never again by accident.
+venttly-prod-backup-*/
+*-prod-backup-*/
+*.dump
+supabase/**/prodbackup/
