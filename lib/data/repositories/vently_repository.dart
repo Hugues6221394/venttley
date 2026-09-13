@@ -16,6 +16,7 @@ import '../services/analytics_service.dart';
 import '../services/cache_service.dart';
 import '../services/identity_service.dart';
 import '../services/mock_backend.dart';
+import '../../domain/moderation/enforcement_notice.dart';
 import '../services/supabase_backend.dart';
 import '../services/telemetry_service.dart';
 
@@ -4339,6 +4340,35 @@ class VentlyRepository implements MusicProvider {
   }
 
   // ===================== Notifications =====================
+  /// The member's own enforcement decisions and any appeal against them.
+  ///
+  /// Offline or in mock mode this is empty rather than fabricated: an
+  /// invented moderation history is the last thing to show someone.
+  Future<List<EnforcementNotice>> myEnforcementHistory() async {
+    final live = _live;
+    if (live == null) return const [];
+    return live.myEnforcementHistory();
+  }
+
+  Future<String> submitAppeal({
+    required String caseId,
+    required String statement,
+  }) async {
+    final live = _live;
+    if (live == null) {
+      throw StateError('You need a connection to file an appeal.');
+    }
+    return live.submitAppeal(caseId: caseId, statement: statement);
+  }
+
+  Future<void> withdrawAppeal(String appealId) async {
+    final live = _live;
+    if (live == null) {
+      throw StateError('You need a connection to withdraw an appeal.');
+    }
+    return live.withdrawAppeal(appealId);
+  }
+
   Future<List<NotificationItem>> notifications() {
     final live = _live;
     if (live != null) return live.notifications();

@@ -42,6 +42,7 @@ import '../screens/profile/profile_stat_detail_screen.dart';
 import '../screens/profile/security_check_screen.dart';
 import '../screens/profile/security_screen.dart';
 import '../screens/profile/password_security_screen.dart';
+import '../screens/settings/appeals_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/settings/verification_screen.dart';
 import '../screens/goals/goals_screen.dart';
@@ -210,6 +211,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/verification',
         builder: (_, __) => const VerificationScreen(),
+      ),
+      GoRoute(
+        path: '/settings/appeals',
+        builder: (_, __) => const AppealsScreen(),
       ),
       GoRoute(
         path: '/legal/terms',

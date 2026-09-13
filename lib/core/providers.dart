@@ -17,6 +17,7 @@ import '../data/services/music_playback_service.dart';
 import '../data/services/push_registration_service.dart';
 import '../data/services/whisper_player.dart';
 import '../domain/entities/entities.dart';
+import '../domain/moderation/enforcement_notice.dart';
 import '../domain/home/home_discovery.dart';
 import '../domain/tribe/tribe_chat_hub.dart';
 import '../domain/tribe/tribe_management.dart';
@@ -1446,6 +1447,16 @@ final myWhispersProvider = FutureProvider.autoDispose<List<Whisper>>((
 /// Note the missing `ref.watch(whispersFeedProvider)`: watching it made this
 /// rail rebuild whenever the Whispers screen's feed changed, which would
 /// re-fetch and re-record impressions for a rail nobody was looking at.
+/// The signed-in member's enforcement history, with appeal state.
+///
+/// Watches the session so signing in re-reads, and so one account never shows
+/// another's moderation record.
+final myEnforcementHistoryProvider =
+    FutureProvider.autoDispose<List<EnforcementNotice>>((ref) async {
+      ref.watch(sessionProvider);
+      return ref.watch(repositoryProvider).myEnforcementHistory();
+    });
+
 /// How many Whispers the database holds for this caller.
 ///
 /// Separate from [popularWhispersProvider] on purpose: that one loads at most

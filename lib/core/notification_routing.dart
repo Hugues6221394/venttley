@@ -74,15 +74,12 @@ class NotificationPayload {
       case 'message_request':
         final roomId = payload['room_id'] as String?;
         return roomId == null ? null : chat(roomId);
-      // The platform talking to you. None of these has a destination richer
-      // than the row itself yet: a broadcast has no target, and a moderation
-      // decision has nowhere to go because there is no member-facing appeal
-      // screen — submit_appeal exists in the database and is tested, but
-      // nothing in the app calls it. Returning the Activity screen keeps the
-      // tap from doing nothing at all, and is honest about there being no
-      // deeper page. When the appeal screen lands, moderation_action should
-      // point at it.
+      // A moderation decision now has somewhere to go: the screen that shows
+      // what was decided and lets the member contest it.
       case 'moderation_action':
+        return '/settings/appeals';
+      // A broadcast has no target of its own, so the tap lands back on the
+      // row it came from rather than doing nothing at all.
       case 'admin_broadcast':
       case 'system':
         return notifications();

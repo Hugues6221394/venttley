@@ -173,6 +173,19 @@ class VentlyConfig {
     defaultValue: '',
   );
 
+  /// Where an appeal goes when the app cannot file it.
+  ///
+  /// `submit_appeal` takes a moderation case, and account-level decisions —
+  /// suspensions, bans, reinstatements — are sent with no case id, so the most
+  /// consequential action the platform takes is the one with no in-app route
+  /// to contest it. Naming an address is not a fix; it is the honest interim
+  /// while `moderation_appeals` still keys on a case or a verification
+  /// request.
+  static const String appealsEmail = String.fromEnvironment(
+    'APPEALS_EMAIL',
+    defaultValue: 'hello@venttly.app',
+  );
+
   /// Resend — transactional email. Wired through the email-dispatcher
   /// edge function, never called from the client (so the API key stays
   /// server-side). The flag below tells the client whether to surface

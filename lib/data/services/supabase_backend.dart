@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../domain/moderation/enforcement_notice.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants.dart';
@@ -8091,6 +8093,85 @@ class SupabaseBackend {
     controller.onListen = emit;
     controller.onCancel = () => channel?.unsubscribe();
     return controller.stream;
+  }
+
+  /// The member's own enforcement history, with any appeal against each
+  /// decision.
+  ///
+  /// Two reads the member is already entitled to: their `moderation_action`
+  /// notifications (what they were told when the decision was taken) and their
+  /// own `moderation_appeals` rows (the outcome and the reviewer's note). They
+  /// are joined here rather than in a view, because `moderation_cases` must
+  /// stay unreadable to members — it holds the reporter's identity, the
+  /// evidence snapshot and the internal case history, none of which the
+  /// subject of a decision is owed.
+  Future<List<EnforcementNotice>> myEnforcementHistory() async {
+    final uid = _uid;
+    if (uid == null) return const [];
+
+    final rows = await _client
+        .from('notifications')
+        .select()
+        .eq('user_id', uid)
+        .eq('kind', 'moderation_action')
+        .order('created_at', ascending: false)
+        .limit(50);
+
+    final notices = <EnforcementNotice>[];
+    for (final r in rows) {
+      final payload = (r['payload'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final notice = EnforcementNotice.fromNotificationPayload(payload);
+      if (notice != null) notices.add(notice);
+    }
+    if (notices.isEmpty) return const [];
+
+    // Newest first, and only the newest is kept per case: withdrawing does not
+    // spend the appeal, so one decision can accumulate several rows and the
+    // member's current standing is the most recent of them.
+    final appeals = await _client
+        .from('moderation_appeals')
+        .select()
+        .eq('appellant_id', uid)
+        .order('created_at', ascending: false);
+
+    final byCase = <String, Map<String, dynamic>>{};
+    for (final a in appeals) {
+      final caseId = a['case_id'] as String?;
+      if (caseId != null) byCase.putIfAbsent(caseId, () => a.cast<String, dynamic>());
+    }
+
+    return notices.map((notice) {
+      final caseId = notice.caseId;
+      final appeal = caseId == null ? null : byCase[caseId];
+      if (appeal == null) return notice;
+      return notice.withAppeal(
+        appealId: appeal['appeal_id'] as String,
+        status: AppealStatus.parse(appeal['status'] as String?),
+        statement: appeal['statement'] as String?,
+        reviewNote: appeal['review_note'] as String?,
+        appealedAt: DateTime.tryParse(
+          (appeal['created_at'] as String?) ?? '',
+        )?.toLocal(),
+      );
+    }).toList();
+  }
+
+  /// File an appeal. The database owns the rules — subject only, one open
+  /// appeal per decision, within thirty days — and refuses with a message
+  /// naming the reason, which is surfaced to the member unchanged.
+  Future<String> submitAppeal({
+    required String caseId,
+    required String statement,
+  }) async {
+    final result = await _client.rpc(
+      'submit_appeal',
+      params: {'p_case': caseId, 'p_statement': statement},
+    );
+    return result as String;
+  }
+
+  Future<void> withdrawAppeal(String appealId) async {
+    await _client.rpc('withdraw_appeal', params: {'p_appeal': appealId});
   }
 
   Future<List<NotificationItem>> notifications() async {

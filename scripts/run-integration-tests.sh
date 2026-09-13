@@ -71,6 +71,24 @@ else
     --dart-define=SUPABASE_ANON_KEY="$KEY" || RC=1
 fi
 
+say "appeals end to end (live local stack)"
+# No realtime dependency here, so it is gated only on the stack answering.
+if [ -z "$KEY" ]; then
+  fail "  skipped: no anon key. Run: supabase start"
+  RC=1
+elif ! curl -s -o /dev/null --max-time 5 "$URL/rest/v1/" -H "apikey: $KEY"; then
+  fail "  skipped: $URL is not answering. Run: supabase start"
+  RC=1
+else
+  # Passes with a clean record too, but says so rather than reporting a green
+  # run that never reached the write path. To exercise that path there has to
+  # be an appealable decision against tester_user.
+  flutter test integration_test/appeals_flow_test.dart \
+    -d "$SIM" --no-pub \
+    --dart-define=SUPABASE_URL="$URL" \
+    --dart-define=SUPABASE_ANON_KEY="$KEY" || RC=1
+fi
+
 say "done"
 [ "$RC" -eq 0 ] && echo "  all integration tests passed" || fail "  some integration tests failed or were skipped"
 exit "$RC"

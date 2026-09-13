@@ -12,6 +12,7 @@ import '../../../core/notification_prefs.dart';
 import '../../../core/providers.dart';
 import '../../../data/services/moderation_service.dart';
 import '../../../domain/entities/entities.dart';
+import '../../../domain/moderation/enforcement_notice.dart';
 import '../../theme/colors.dart';
 import '../../widgets/blocked_accounts_sheet.dart';
 import '../../widgets/profile_avatar.dart';
@@ -197,6 +198,45 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: Text(_verificationSubtitle(state)),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => context.push('/settings/verification'),
+              );
+            },
+          ),
+          // Always shown, not only when there is something on the record.
+          // Someone who wants to check that nothing has been decided about
+          // them should be able to, and a row that appears only after you are
+          // actioned is a row nobody knows to look for.
+          Consumer(
+            builder: (context, ref, _) {
+              final notices =
+                  ref.watch(myEnforcementHistoryProvider).valueOrNull;
+              final open = notices
+                      ?.where((n) => n.appealStatus == AppealStatus.open)
+                      .length ??
+                  0;
+              final actionable =
+                  notices?.where((n) => n.canAppeal).length ?? 0;
+              return ListTile(
+                leading: const Icon(
+                  Icons.gavel_rounded,
+                  color: VentlyColors.berryMagenta,
+                ),
+                title: const Text(
+                  'Decisions & appeals',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  switch ((notices, open, actionable)) {
+                    (null, _, _) => 'Moderation decisions about your account',
+                    (final n, _, _) when n!.isEmpty => 'Nothing on your record',
+                    (_, final o, _) when o > 0 =>
+                      '$o appeal${o == 1 ? "" : "s"} under review',
+                    (_, _, final a) when a > 0 =>
+                      '$a decision${a == 1 ? "" : "s"} you can still appeal',
+                    _ => 'Your moderation history',
+                  },
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => context.push('/settings/appeals'),
               );
             },
           ),
