@@ -93,4 +93,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261021090000': 'whisper_high_voice_filter',
   '20261022090000': 'account_and_verification_appeals',
   '20261023090000': 'restore_whisper_listens_read',
+  '20261024090000': 'recommended_tribes_full_row',
 };
