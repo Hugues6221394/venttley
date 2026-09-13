@@ -61,14 +61,19 @@ class PopularWhispersRail extends ConsumerWidget {
 
 /// Deep-rose gradient card: "Popular right now / Whispers / Tap in. Listen
 /// quietly." with a play button, listener avatars, and a live plays badge.
-class _WhispersSpotlightBanner extends StatelessWidget {
+class _WhispersSpotlightBanner extends ConsumerWidget {
   const _WhispersSpotlightBanner({required this.whispers});
 
   final List<Whisper> whispers;
 
   @override
-  Widget build(BuildContext context) {
-    final totalPlays = whispers.fold<int>(0, (sum, w) => sum + w.playsCount);
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The badge counts Whispers, not plays. It used to sum playsCount across
+    // the loaded rail, which with seeded demo rows rendered as "473" beside
+    // three Whispers — a number that looked invented and barely moved when one
+    // was published. The count comes from the database so it is the real
+    // total, not the size of whatever this rail happened to load.
+    final totalWhispers = ref.watch(whisperTotalProvider).valueOrNull;
     final faces = whispers.take(4).toList();
 
     return FadeSlideIn(
@@ -183,7 +188,7 @@ class _WhispersSpotlightBanner extends StatelessWidget {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    if (totalPlays > 0)
+                    if (totalWhispers != null && totalWhispers > 0)
                       Positioned(
                         top: 0,
                         right: 0,
@@ -209,7 +214,7 @@ class _WhispersSpotlightBanner extends StatelessWidget {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                PostCard.compactNumber(totalPlays),
+                                PostCard.compactNumber(totalWhispers),
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 11,

@@ -5869,6 +5869,23 @@ class SupabaseBackend {
   ///
   /// Falls back to the old path if the RPC is not deployed: an empty rail on a
   /// support platform reads as abandonment, which is worse than a stale one.
+  /// How many Whispers exist, as the database counts them.
+  ///
+  /// The rail used to badge the *sum of play counts* across the handful of
+  /// Whispers it had loaded. With seeded demo rows carrying inflated plays
+  /// that rendered as "473" beside three Whispers, looked invented, and barely
+  /// moved when one was published — which is how it was reported.
+  ///
+  /// A HEAD request with an exact count: no rows cross the wire, and RLS
+  /// applies, so this is the number of Whispers the caller may actually see
+  /// rather than a global total they have no business knowing.
+  Future<int> whisperTotal() async {
+    return _client
+        .from('whispers')
+        .count(CountOption.exact)
+        .isFilter('deleted_at', null);
+  }
+
   Future<List<Whisper>> whispersForMe({int limit = 24}) async {
     try {
       final rows =

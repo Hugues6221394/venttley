@@ -3213,6 +3213,16 @@ class VentlyRepository implements MusicProvider {
 
   /// Uncached, like [recommendedTribes], and for the same reason: consecutive
   /// calls are supposed to differ.
+  /// Total Whispers visible to the caller, counted by the database.
+  ///
+  /// Offline or in mock mode this falls back to what is already loaded, which
+  /// is honest about being a local number rather than inventing a global one.
+  Future<int> whisperTotal() async {
+    final live = _live;
+    if (live == null) return (await listWhispers(limit: 200)).length;
+    return live.whisperTotal();
+  }
+
   Future<List<Whisper>> whispersForMe({int limit = 24}) async {
     final live = _live;
     if (live == null) return listWhispers(limit: limit);

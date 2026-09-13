@@ -1446,6 +1446,17 @@ final myWhispersProvider = FutureProvider.autoDispose<List<Whisper>>((
 /// Note the missing `ref.watch(whispersFeedProvider)`: watching it made this
 /// rail rebuild whenever the Whispers screen's feed changed, which would
 /// re-fetch and re-record impressions for a rail nobody was looking at.
+/// How many Whispers the database holds for this caller.
+///
+/// Separate from [popularWhispersProvider] on purpose: that one loads at most
+/// 24 rows for the rail, so counting it would report "24" forever once the
+/// library grew. The badge needs the real total, and only the database knows
+/// it.
+final whisperTotalProvider = FutureProvider.autoDispose<int>((ref) async {
+  ref.watch(sessionProvider);
+  return ref.watch(repositoryProvider).whisperTotal();
+});
+
 final popularWhispersProvider = FutureProvider.autoDispose<List<Whisper>>((
   ref,
 ) async {
