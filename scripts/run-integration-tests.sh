@@ -28,6 +28,7 @@ set -uo pipefail
 say()  { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 fail() { printf '\033[31m%s\033[0m\n' "$1" >&2; }
 
+BOOTED=$(xcrun simctl list devices booted | grep -c Booted || true)
 SIM=${SIM:-$(xcrun simctl list devices booted \
   | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' | head -1)}
 if [ -z "$SIM" ]; then
@@ -35,7 +36,15 @@ if [ -z "$SIM" ]; then
   fail "  xcrun simctl boot <device-id> && open -a Simulator"
   exit 1
 fi
-echo "simulator: $SIM"
+# Named, not just a UDID. With more than one simulator booted the choice is
+# arbitrary, and a result attributed to the wrong device is worse than no
+# result — "it passed on the simulator" has to mean a specific one.
+SIM_NAME=$(xcrun simctl list devices booted | grep "$SIM" | sed -E 's/^ *//; s/ *\(.*//')
+echo "simulator: ${SIM_NAME:-unknown} ($SIM)"
+if [ "${BOOTED:-1}" -gt 1 ]; then
+  echo "  note: $BOOTED simulators are booted; this run uses the one above."
+  echo "        Pick another with: SIM=<device-id> $0"
+fi
 
 RC=0
 
@@ -71,6 +80,20 @@ else
     --dart-define=SUPABASE_ANON_KEY="$KEY" || RC=1
 fi
 
+say "like button on a real device (live local stack)"
+if [ -z "$KEY" ]; then
+  fail "  skipped: no anon key. Run: supabase start"
+  RC=1
+elif ! curl -s -o /dev/null --max-time 5 "$URL/rest/v1/" -H "apikey: $KEY"; then
+  fail "  skipped: $URL is not answering. Run: supabase start"
+  RC=1
+else
+  flutter test integration_test/like_button_test.dart \
+    -d "$SIM" --no-pub \
+    --dart-define=SUPABASE_URL="$URL" \
+    --dart-define=SUPABASE_ANON_KEY="$KEY" || RC=1
+fi
+
 say "appeals end to end (live local stack)"
 # No realtime dependency here, so it is gated only on the stack answering.
 if [ -z "$KEY" ]; then
@@ -87,6 +110,24 @@ else
     -d "$SIM" --no-pub \
     --dart-define=SUPABASE_URL="$URL" \
     --dart-define=SUPABASE_ANON_KEY="$KEY" || RC=1
+fi
+
+say "coverage"
+# The failure this script was written to prevent, one level up: a file lands in
+# integration_test/ and nothing runs it, so it passes review and then never
+# executes again. like_button_test.dart sat unrun for exactly that reason.
+# Every file has to be named above, with the flags it needs — there is no
+# generic invocation that works for all of them, which is the whole problem.
+MISSING=""
+for f in integration_test/*.dart; do
+  grep -q "$(basename "$f")" "$0" || MISSING="$MISSING $(basename "$f")"
+done
+if [ -n "$MISSING" ]; then
+  fail "  these integration tests are not run by this script:$MISSING"
+  fail "  add them above with the dart-defines they need, or they will never run"
+  RC=1
+else
+  echo "  every file in integration_test/ is run by this script"
 fi
 
 say "done"

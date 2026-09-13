@@ -10,6 +10,14 @@
 // They pass because they pump a bare Consumer, never the card a thumb actually
 // hits. This test taps the real thing.
 //
+// It is also destructive to its own precondition, which is why it passed once
+// and then failed on every run afterwards. personal_feed excludes posts you
+// have already liked — "you have seen it and acted on it" — so each run
+// removed one more Vent from this account's feed until there was nothing left
+// to scroll to and the test died on an empty CustomScrollView finder, several
+// steps away from the cause. The likes it creates are therefore undone at the
+// end, and the feed is checked for depth before the tap rather than after.
+//
 //   flutter test integration_test/like_button_test.dart -d <sim> \
 //     --dart-define=SUPABASE_URL=http://127.0.0.1:54321 \
 //     --dart-define=SUPABASE_ANON_KEY=<local anon key>
@@ -28,6 +36,12 @@ import 'package:vently_app/presentation/theme/app_theme.dart';
 const _url = String.fromEnvironment('SUPABASE_URL');
 const _anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
+Future<Set<String>> _likedPostIds(SupabaseClient client, String uid) async {
+  final rows =
+      await client.from('post_likes').select('post_id').eq('user_id', uid);
+  return {for (final r in rows) r['post_id'] as String};
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -36,9 +50,55 @@ void main() {
         reason: 'pass --dart-define=SUPABASE_URL and SUPABASE_ANON_KEY');
 
     await Supabase.initialize(url: _url, anonKey: _anonKey, debug: false);
-    await Supabase.instance.client.auth.signInWithPassword(
+    final client = Supabase.instance.client;
+    await client.auth.signInWithPassword(
       email: 'tester_user@id.venttly.app',
       password: 'TestPass123!',
+    );
+    final uid = client.auth.currentUser!.id;
+
+    // Undo whatever this run likes, so the next run has the same feed. Runs
+    // even when the test fails part-way, which is the case that drained it.
+    final likedBefore = await _likedPostIds(client, uid);
+    addTearDown(() async {
+      // Polled, not sampled once. The tap is optimistic — the UI updates
+      // immediately and the write lands afterwards — so reading the table the
+      // instant the test body ends finds nothing to undo, the like arrives a
+      // moment later, and the feed loses a post per run anyway. That is
+      // exactly what happened: three "cleaned up" runs left three likes.
+      var mine = <String>{};
+      for (var i = 0; i < 20 && mine.isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        mine = (await _likedPostIds(client, uid)).difference(likedBefore);
+      }
+      for (final postId in mine) {
+        // Undone the way the app undoes it. A direct DELETE fails with 42501:
+        // members hold SELECT on post_likes and nothing more, and unliking
+        // goes through this SECURITY DEFINER function. Reaching past it in a
+        // teardown failed the test it was meant to make repeatable.
+        await client.rpc(
+          'set_post_reaction',
+          params: {'p_post_id': postId, 'p_reaction': null},
+        );
+      }
+      final left = (await _likedPostIds(client, uid)).difference(likedBefore);
+      if (left.isNotEmpty) {
+        // Said out loud rather than left for the next run to trip over.
+        // ignore: avoid_print
+        print('WARNING: could not undo ${left.length} like(s); the feed will '
+            'be shorter next run: $left');
+      }
+    });
+
+    // Said out loud before the tap. An empty feed is not a like-button bug,
+    // and letting it surface as one costs an hour every time.
+    final feed = await client.rpc('personal_feed', params: {}) as List<dynamic>;
+    expect(
+      feed,
+      isNotEmpty,
+      reason: 'personal_feed returned nothing for tester_user, so there is no '
+          'card to tap. Seed a Vent from another account, or unlike what this '
+          'account has already liked — personal_feed hides both.',
     );
 
     final router = GoRouter(

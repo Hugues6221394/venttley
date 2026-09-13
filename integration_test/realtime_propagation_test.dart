@@ -65,7 +65,18 @@ void main() {
     // Letters only. A UUID's digit runs read as a phone number to
     // private.server_text_safety, which refuses the write with
     // content_blocked_privacy — correctly, and nothing to do with realtime.
-    final suffix = const Uuid().v4().replaceAll(RegExp('[^a-z]'), '');
+    //
+    // Mapped rather than filtered. Stripping non-letters left only the a–f of
+    // the hex, which is 12 characters on average but occasionally fewer than
+    // the 10 this takes — one run in some tens died on a RangeError that read
+    // like a realtime failure and was a dice roll. Every hex digit now becomes
+    // a letter, so the length is always 32.
+    final suffix = const Uuid()
+        .v4()
+        .replaceAll('-', '')
+        .split('')
+        .map((c) => String.fromCharCode(97 + int.parse(c, radix: 16)))
+        .join();
     final marker = 'realtime probe ${suffix.substring(0, 10)}';
     final delivered = Completer<Map<String, dynamic>>();
 
