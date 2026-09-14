@@ -74,7 +74,7 @@ SELECT is(
 );
 
 SELECT set_config('request.jwt.claims',
-  '{"sub":"ddd10000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"ddd10000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal2"}', true);
 
 SELECT is(
   (SELECT count(*)::int

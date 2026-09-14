@@ -66,7 +66,7 @@ SELECT is(
 
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"9999aaaa-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"9999aaaa-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}', true);
 
 SELECT ok(
   (SELECT bool_and(evidence::text NOT LIKE '%dm-body-sentinel%')
@@ -99,7 +99,7 @@ SELECT is(
 -- ---------------------------------------------------------------------------
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"9999aaaa-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"9999aaaa-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}', true);
 
 SELECT lives_ok(
   format($$SELECT public.admin_decide_case(%L,'content_removed','POL-1','removing')$$, :'susp_case'),

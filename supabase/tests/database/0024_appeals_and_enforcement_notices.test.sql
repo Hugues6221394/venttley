@@ -43,7 +43,7 @@ SELECT case_id AS shadow_case FROM public.moderation_cases
 -- ---------------------------------------------------------------------------
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"ccc10000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"ccc10000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}', true);
 SELECT public.admin_decide_case(:'post_case','content_removed','POL-1',
   'Your post targeted another member.');
 SELECT public.admin_decide_case(:'shadow_case','user_shadow_restricted','POL-2',
@@ -130,7 +130,7 @@ RESET role;
 -- ---------------------------------------------------------------------------
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"ccc10000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"ccc10000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}', true);
 SELECT throws_ok(
   format($$SELECT public.admin_decide_appeal(%L,'upheld','my call stands')$$, :'ap'),
   'P0001', NULL,
@@ -145,7 +145,7 @@ SELECT throws_ok(
 
 -- A different moderator overturns it.
 SELECT set_config('request.jwt.claims',
-  '{"sub":"ccc10000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"ccc10000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal2"}', true);
 SELECT lives_ok(
   format($$SELECT public.admin_decide_appeal(%L,'overturned','Context shows a response, not an attack.')$$, :'ap'),
   'an independent moderator can decide the appeal'

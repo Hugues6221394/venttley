@@ -47,7 +47,7 @@ SET session_replication_role = origin;
 
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"ddd10000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"ddd10000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}', true);
 SELECT public.admin_suspend_user_ladder('ddd10000-0000-4000-8000-000000000003',
   'Repeated targeting after a warning.');
 RESET role;
@@ -146,7 +146,7 @@ SELECT ok(
 
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"ddd10000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"ddd10000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}', true);
 SELECT throws_like(
   format('SELECT public.admin_decide_appeal(%L, %L, %L)', :'acct_appeal', 'upheld',
          'I stand by my own decision.'),
@@ -177,7 +177,7 @@ SELECT is(
 
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"ddd10000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"ddd10000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal2"}', true);
 SELECT lives_ok(
   format('SELECT public.admin_decide_appeal(%L, %L, %L)', :'acct_appeal', 'overturned',
          'The order of messages does not support the finding.'),
@@ -226,7 +226,7 @@ VALUES ('ddd20000-0000-4000-8000-000000000001',
 
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"ddd10000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"ddd10000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}', true);
 SELECT public.admin_review_verification('ddd20000-0000-4000-8000-000000000001', false,
   'The links do not establish the claim.');
 RESET role;
@@ -272,7 +272,7 @@ SELECT appeal_id AS ver_appeal FROM public.moderation_appeals
 
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"ddd10000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"ddd10000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}', true);
 SELECT throws_like(
   format('SELECT public.admin_decide_appeal(%L, %L, %L)', :'ver_appeal', 'upheld', 'Still no.'),
   '%you took the decision being appealed%',
@@ -282,7 +282,7 @@ RESET role;
 
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"ddd10000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"ddd10000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal2"}', true);
 SELECT lives_ok(
   format('SELECT public.admin_decide_appeal(%L, %L, %L)', :'ver_appeal', 'overturned',
          'The evidence was not weighed; this deserves a fresh review.'),
@@ -310,7 +310,7 @@ SELECT ok(
 
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"ddd10000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"ddd10000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal2"}', true);
 
 SELECT results_eq(
   format($q$SELECT subject_kind FROM public.admin_appeal_queue(NULL, 100)

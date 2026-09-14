@@ -163,7 +163,7 @@ SELECT case_id AS dm_case_id FROM public.moderation_cases
 
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"aaaa0000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"aaaa0000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}', true);
 
 -- A decision that affects a member is the thing an appeal argues with, so it
 -- must carry a reason from the start rather than be reconstructed later.
@@ -195,7 +195,7 @@ SELECT is(
 -- ---------------------------------------------------------------------------
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
-  '{"sub":"aaaa0000-0000-4000-8000-000000000005","role":"authenticated","aal":"aal1"}', true);
+  '{"sub":"aaaa0000-0000-4000-8000-000000000005","role":"authenticated","aal":"aal2"}', true);
 
 SELECT throws_ok(
   format($$SELECT public.admin_decide_case(%L, 'no_action', NULL, 'support decision')$$,
