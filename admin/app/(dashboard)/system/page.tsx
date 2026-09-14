@@ -92,6 +92,46 @@ export default async function SystemHealthPage() {
             )
           }
         />
+        {/* Two separate questions: is the console only reachable through
+            Cloudflare, and does it know who is calling. Both are edge controls
+            the app cannot verify for itself beyond "the header arrived", so
+            they are reported rather than asserted. */}
+        <KV
+          label="Origin locked to Cloudflare"
+          value={
+            process.env.ADMIN_ORIGIN_SECRET ? (
+              <Badge tone="ok" icon={<Lock size={11} />}>
+                enforced
+              </Badge>
+            ) : (
+              <Badge tone="warn">
+                open — the .vercel.app origin bypasses every edge control
+              </Badge>
+            )
+          }
+        />
+        <KV
+          label="IP allowlist"
+          value={
+            process.env.ADMIN_IP_ALLOWLIST ? (
+              <Badge tone="ok">enforced</Badge>
+            ) : (
+              <Badge tone="warn">not set — any network may reach the login</Badge>
+            )
+          }
+        />
+        <KV
+          label="MFA required"
+          value={
+            process.env.ADMIN_REQUIRE_MFA === "true" ? (
+              <Badge tone="ok" icon={<Lock size={11} />}>
+                required
+              </Badge>
+            ) : (
+              <Badge tone="warn">not required</Badge>
+            )
+          }
+        />
         <KV
           label="Upstash Redis"
           value={

@@ -15,18 +15,67 @@ type CookieToSet = { name: string; value: string; options?: CookieOptions };
 //                       links a role can't use bounce to their landing page.
 // It also refreshes the Supabase session cookie on every request.
 
+/**
+ * The caller's real IP.
+ *
+ * CF-Connecting-IP first, and it is the only one of these an attacker cannot
+ * set: Cloudflare overwrites it on every proxied request, whereas
+ * X-Forwarded-For is client-supplied and merely appended to. Reading XFF's
+ * first entry — which this did — means anyone can name their own IP and walk
+ * straight through ADMIN_IP_ALLOWLIST.
+ *
+ * That only holds while requests actually arrive through Cloudflare, which is
+ * what the origin check below enforces. The two go together: trusting
+ * CF-Connecting-IP without locking the origin just moves the forgery one
+ * header along.
+ */
 function clientIp(req: NextRequest): string | null {
   return (
+    req.headers.get("cf-connecting-ip") ??
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     req.headers.get("x-real-ip") ??
     null
   );
 }
 
+/**
+ * Requests must arrive through Cloudflare, not straight at the origin.
+ *
+ * A Vercel deployment answers on its own *.vercel.app hostname as well as the
+ * custom domain. Anything in front of admin.venttly.com — Cloudflare Access,
+ * the WAF, the IP allowlist, CF-Connecting-IP itself — is simply absent on
+ * that hostname. Without this check, finding the origin URL bypasses every
+ * edge control at once, and origin URLs are not secret: they appear in
+ * certificate transparency logs.
+ *
+ * Cloudflare sets the header with a Transform Rule; ADMIN_ORIGIN_SECRET holds
+ * the same value here. Unset means unenforced, so local development and a
+ * first deploy before the rule exists still work — the deployment checklist
+ * covers turning it on, and /system reports whether it is.
+ */
+function fromCloudflare(req: NextRequest): boolean {
+  const expected = process.env.ADMIN_ORIGIN_SECRET?.trim();
+  if (!expected) return true;
+  const presented = req.headers.get("x-venttly-origin");
+  if (!presented || presented.length !== expected.length) return false;
+  // Constant-time-ish: compare every byte regardless of where they differ, so
+  // response timing does not leak a prefix of the secret.
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) {
+    diff |= expected.charCodeAt(i) ^ presented.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 1) IP allowlist — before anything else.
+  // 0) Reached through the front door, not around it.
+  if (!fromCloudflare(req)) {
+    return new NextResponse("Not found", { status: 404 });
+  }
+
+  // 1) IP allowlist.
   if (!ipAllowed(clientIp(req))) {
     return new NextResponse("Forbidden — this network is not permitted.", {
       status: 403,

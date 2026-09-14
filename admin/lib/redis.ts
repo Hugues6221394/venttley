@@ -174,6 +174,14 @@ export async function incrementCounter(
  * bucket so the limiter still works in dev where the IP is missing.
  */
 export function ipFrom(req: Request): string {
+  // CF-Connecting-IP first: Cloudflare overwrites it on every proxied request,
+  // so it is the one header here a caller cannot choose for themselves.
+  // X-Forwarded-For is client-supplied and appended to, which makes its first
+  // entry attacker-controlled — and this function keys the login and
+  // audit-export rate limits, so trusting it let one caller spend everybody
+  // else's budget, or none of their own.
+  const cf = req.headers.get("cf-connecting-ip");
+  if (cf) return cf.trim();
   const xf = req.headers.get("x-forwarded-for");
   if (xf) return xf.split(",")[0]!.trim();
   const real = req.headers.get("x-real-ip");
