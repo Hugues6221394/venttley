@@ -35,8 +35,8 @@ die()  { printf '\033[31m%s\033[0m\n' "$1" >&2; exit 1; }
 
 ENV_NAME="${1:-}"
 case "$ENV_NAME" in
-  staging)    SUPABASE_REF="rbtvilckwihzdpqgjvmz" ;;
-  production) SUPABASE_REF="gyeibgaqrmnepbnfbtzc" ;;
+  staging)    SUPABASE_REF="rbtvilckwihzdpqgjvmz"; PROJECT="venttly-admin-staging" ;;
+  production) SUPABASE_REF="gyeibgaqrmnepbnfbtzc"; PROJECT="venttly-admin-prod" ;;
   *) die "Usage: $0 staging|production" ;;
 esac
 
@@ -47,24 +47,18 @@ command -v npx >/dev/null || die "npx not found"
 npx vercel whoami >/dev/null 2>&1 || die \
   "Not logged in to Vercel. Run:  npx vercel login  (then: npx vercel link)"
 
-[ -d .vercel ] || die \
-  "No .vercel directory — this repo is not linked to a Vercel project yet.
-   Run:  npx vercel link
-   Create a SEPARATE project per environment; one project cannot hold two
-   databases."
 
 TOKEN_FILE="$HOME/.supabase/access-token"
 [ -f "$TOKEN_FILE" ] || die "No Supabase access token at $TOKEN_FILE. Run: supabase login"
 
-LINKED=$(python3 -c "import json;print(json.load(open('.vercel/project.json'))['projectId'])" 2>/dev/null || echo "?")
+# Named explicitly rather than inherited from whatever this directory is linked
+# to. The two projects differ only in which database they point at, so a wrong
+# link writes production's service-role key onto staging, or the reverse, and
+# nothing about the result looks wrong.
 say "target"
 echo "  environment      : $ENV_NAME"
+echo "  vercel project   : $PROJECT"
 echo "  supabase project : $SUPABASE_REF"
-echo "  vercel project   : $LINKED"
-echo
-printf "Is that the right Vercel project for %s? [y/N] " "$ENV_NAME"
-read -r reply
-[ "$reply" = "y" ] || die "Stopped. Run 'npx vercel link' to point at the right project."
 
 # --- secrets that only you can supply ---------------------------------------
 
@@ -114,7 +108,7 @@ SUPABASE_URL="https://${SUPABASE_REF}.supabase.co"
 set_var() { # name, value
   local sensitivity="--sensitive"
   case "$1" in NEXT_PUBLIC_*) sensitivity="--no-sensitive" ;; esac
-  npx vercel env add "$1" production \
+  npx vercel env add "$1" production --project "$PROJECT" \
     --value "$2" --force --non-interactive $sensitivity >/dev/null 2>&1 \
     || die "Failed to set $1"
   echo "  set $1"
@@ -124,7 +118,7 @@ set_var() { # name, value
 # not evidence that anything was stored.
 verify_vars() {
   local listed missing=""
-  listed=$(npx vercel env ls production 2>/dev/null)
+  listed=$(npx vercel env ls production --project "$PROJECT" 2>/dev/null)
   for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY \
               SUPABASE_SERVICE_ROLE_KEY UPSTASH_REDIS_REST_URL \
               UPSTASH_REDIS_REST_TOKEN ADMIN_REQUIRE_MFA \
