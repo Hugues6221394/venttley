@@ -153,20 +153,62 @@ Preview deployments are disabled in `vercel.json` on purpose: every preview
 would need the service-role key to function at all, on a URL outside every
 control above.
 
-The safe version of the same idea is a second Supabase project as a staging
-database — there is already one in the account (`Hugues6221394's Project`,
-eu-central-1, currently paused) — with a separate Vercel project pointed at it
-and its own Access policy. Preview URLs then carry a staging key, and a mistake
-costs test data instead of the audit log.
+The safe version of the same idea already exists.
+
+**`Venttly Staging`** — project ref `rbtvilckwihzdpqgjvmz`, eu-central-1, free
+tier. The full migration chain applied to it from empty in one pass, and the
+pgTAP suite passes against it: 790 assertions, zero failures. That is the
+staging run README.md asks for under "Before deploying", and it had never been
+done — production was rebuilt from the chain, which proves the chain replays,
+not that it applies forward to a new database.
+
+Seeded with `supabase/seed/test_accounts.sql`: six accounts including
+`tester_admin` (super_admin) and `tester_keeper` (plug), three tribes. Password
+for all of them is in that file — they are development accounts and must never
+exist on production.
+
+Set it up as its own Vercel project:
+
+```
+npx vercel link                       # create a SEPARATE project, e.g. venttly-admin-staging
+./scripts/setup-vercel.sh staging
+npx vercel --prod
+```
+
+It needs its **own** Upstash database. Sharing one with production means
+staging logins spend production's rate-limit budget against the same keys, and
+the limiter fails closed — so the failure mode is operators locked out of the
+real console by test traffic.
+
+Give it its own Cloudflare Access policy too. `staging-admin.venttly.com` with
+the same allow-list is fine; what matters is that it is not open, because it
+holds a service-role key for a database that will accumulate realistic-looking
+test data.
+
+The database password generated when the project was created is at
+`~/venttly-staging-db-password.txt` (mode 600, outside the repo). Move it to a
+password manager and delete the file.
+
+Connect to it directly with the session pooler — the free tier has no IPv4
+address for `db.<ref>.supabase.co`, so a direct connection fails to resolve:
+
+```
+postgresql://postgres.rbtvilckwihzdpqgjvmz:<password>@aws-0-eu-central-1.pooler.supabase.com:5432/postgres
+```
+
+Push migrations to it with `--db-url` rather than `supabase link`, which would
+repoint the repo at staging and leave the next `db push` aimed at the wrong
+database:
+
+```
+supabase db push --db-url "<the pooler url above>"
+```
 
 ## What this does not cover
 
 From the checklist in README.md, still outstanding and not made true by
-deploying:
+deploying (the staging pgTAP run is now done — see above):
 
-- Migrations applied to an isolated staging project and pgTAP run there
-  (production has been rebuilt from the chain and verified, which is not the
-  same thing)
 - Role/route/RPC combinations tested adversarially — forged Server Action
   payloads, expired sessions, removed roles, AAL1 sessions
 - Audit durability, incident paging, rollback and restore rehearsed
