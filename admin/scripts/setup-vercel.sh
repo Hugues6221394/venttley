@@ -100,11 +100,41 @@ SUPABASE_URL="https://${SUPABASE_REF}.supabase.co"
 
 # --- set them ----------------------------------------------------------------
 
+# --value/--force/--non-interactive, not a pipe into stdin.
+#
+# Piping the value used to work and silently stopped: the CLI now inspects
+# NEXT_PUBLIC_* values, decides the anon key "looks like a credential", and
+# asks how to store it. A piped value answers the wrong question — the first
+# run set NEXT_PUBLIC_SUPABASE_URL to the CLI's own prompt payload and dropped
+# NEXT_PUBLIC_SUPABASE_ANON_KEY entirely, while printing "set" for both.
+#
+# Sensitivity is explicit rather than left to that heuristic. NEXT_PUBLIC_*
+# values are inlined into client JavaScript at build time — they are public by
+# definition and must stay readable, so Config. Everything else is a Secret.
 set_var() { # name, value
-  # Remove first so re-running is idempotent rather than erroring on conflict.
-  npx vercel env rm "$1" production --yes >/dev/null 2>&1 || true
-  printf '%s' "$2" | npx vercel env add "$1" production >/dev/null
+  local sensitivity="--sensitive"
+  case "$1" in NEXT_PUBLIC_*) sensitivity="--no-sensitive" ;; esac
+  npx vercel env add "$1" production \
+    --value "$2" --force --non-interactive $sensitivity >/dev/null 2>&1 \
+    || die "Failed to set $1"
   echo "  set $1"
+}
+
+# Every variable is read back afterwards, because "set" printed by a script is
+# not evidence that anything was stored.
+verify_vars() {
+  local listed missing=""
+  listed=$(npx vercel env ls production 2>/dev/null)
+  for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY \
+              SUPABASE_SERVICE_ROLE_KEY UPSTASH_REDIS_REST_URL \
+              UPSTASH_REDIS_REST_TOKEN ADMIN_REQUIRE_MFA; do
+    printf '%s' "$listed" | grep -q "^ $name " || missing="$missing $name"
+  done
+  if [ -n "$missing" ]; then
+    die "These did not reach Vercel:$missing
+   The console will fail at runtime in ways that look like Supabase outages."
+  fi
+  ok "  all six read back from Vercel"
 }
 
 say "setting environment variables (production scope)"
@@ -114,6 +144,9 @@ set_var SUPABASE_SERVICE_ROLE_KEY     "$SERVICE"
 set_var UPSTASH_REDIS_REST_URL        "$UPSTASH_URL"
 set_var UPSTASH_REDIS_REST_TOKEN      "$UPSTASH_TOKEN"
 set_var ADMIN_REQUIRE_MFA             "true"
+
+say "verifying"
+verify_vars
 
 # ADMIN_ORIGIN_SECRET is deliberately not set here. It has to match a
 # Cloudflare Transform Rule that does not exist yet, and setting it first
