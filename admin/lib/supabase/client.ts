@@ -11,7 +11,20 @@ export function createBrowserSupabase() {
   );
 }
 
-/** Mirrors lib/data/services/identity_service.dart#syntheticEmail. */
+const IDENTITY_DOMAIN = "@id.venttly.app";
+
+/**
+ * Mirrors lib/data/services/identity_service.dart#syntheticEmail.
+ *
+ * Tolerates the domain already being present. The field is labelled Username,
+ * but the address it builds is what everything else in the project displays —
+ * seeds, docs, the auth table — so typing the whole thing is the natural
+ * mistake, and appending blindly produced
+ * `tester_admin@id.venttly.app@id.venttly.app` and an "Invalid login
+ * credentials" that says nothing about why. It cost a debugging cycle on the
+ * first staging sign-in; the credentials were correct the whole time.
+ */
 export function syntheticEmail(username: string) {
-  return `${username.trim().toLowerCase()}@id.venttly.app`;
+  const handle = username.trim().toLowerCase();
+  return handle.endsWith(IDENTITY_DOMAIN) ? handle : `${handle}${IDENTITY_DOMAIN}`;
 }
