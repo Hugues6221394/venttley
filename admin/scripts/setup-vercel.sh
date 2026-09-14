@@ -127,14 +127,15 @@ verify_vars() {
   listed=$(npx vercel env ls production 2>/dev/null)
   for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY \
               SUPABASE_SERVICE_ROLE_KEY UPSTASH_REDIS_REST_URL \
-              UPSTASH_REDIS_REST_TOKEN ADMIN_REQUIRE_MFA; do
+              UPSTASH_REDIS_REST_TOKEN ADMIN_REQUIRE_MFA \
+              NEXT_PUBLIC_ADMIN_ENV; do
     printf '%s' "$listed" | grep -q "^ $name " || missing="$missing $name"
   done
   if [ -n "$missing" ]; then
     die "These did not reach Vercel:$missing
    The console will fail at runtime in ways that look like Supabase outages."
   fi
-  ok "  all six read back from Vercel"
+  ok "  all seven read back from Vercel"
 }
 
 say "setting environment variables (production scope)"
@@ -144,6 +145,9 @@ set_var SUPABASE_SERVICE_ROLE_KEY     "$SERVICE"
 set_var UPSTASH_REDIS_REST_URL        "$UPSTASH_URL"
 set_var UPSTASH_REDIS_REST_TOKEN      "$UPSTASH_TOKEN"
 set_var ADMIN_REQUIRE_MFA             "true"
+# Which system the chrome says you are on. Stated rather than guessed from the
+# project URL, which cannot distinguish a staging ref from a production one.
+set_var NEXT_PUBLIC_ADMIN_ENV         "$ENV_NAME"
 
 say "verifying"
 verify_vars

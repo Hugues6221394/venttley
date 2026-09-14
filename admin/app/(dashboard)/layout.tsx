@@ -94,10 +94,28 @@ export default async function DashboardLayout({
   );
 }
 
+/**
+ * Which system this console is pointed at.
+ *
+ * Stated, not inferred. This used to look for the substring "staging" in the
+ * Supabase URL — but project refs are random (`rbtvilckwihzdpqgjvmz`), so a
+ * staging project can never match and every remote deployment showed a green
+ * PRODUCTION badge. The badge exists to tell an operator which system they are
+ * about to suspend an account on, and it was wrong in exactly the case it
+ * exists for.
+ *
+ * Production remains the fallback when nothing says otherwise, and that
+ * asymmetry is deliberate: labelling production as staging invites someone to
+ * act carelessly on real members, while labelling staging as production only
+ * makes them careful about test data. If the badge must be wrong, it should be
+ * wrong in the direction that costs nothing.
+ */
 function resolveEnv(url?: string): "production" | "staging" | "local" {
+  const declared = process.env.NEXT_PUBLIC_ADMIN_ENV;
+  if (declared === "staging" || declared === "local") return declared;
+  if (declared === "production") return "production";
   if (!url) return "local";
   if (url.includes("localhost") || url.includes("127.0.0.1")) return "local";
-  if (url.includes("staging")) return "staging";
   return "production";
 }
 
