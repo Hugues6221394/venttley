@@ -87,7 +87,20 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  // 3) Role-based least-privilege.
+  // 3) Role-based least-privilege — an optimistic pre-filter, not the gate.
+  //
+  // Deliberately still role-only. This runs on every request including
+  // prefetches, and Next's own guidance is that the proxy must not carry
+  // authorization or do database work for that reason
+  // (01-getting-started/16-proxy.md, and 02-guides/authentication.md's
+  // "Optimistic checks with Proxy"). A first pass added the standing check
+  // here as well and doubled the round trips on every prefetched link to buy
+  // nothing: a suspended moderator turned away here would be turned away by
+  // the layout anyway, one navigation later, having read no data.
+  //
+  // The authoritative check — role *and* standing, asked of is_staff — lives
+  // where the data is: app/(dashboard)/layout.tsx, which gates every
+  // service-role read, and each app/api route. See lib/staff.ts.
   const { data: row } = await supabase
     .from("users")
     .select("user_role")

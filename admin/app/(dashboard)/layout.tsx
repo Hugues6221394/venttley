@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Sidebar from "@/components/sidebar";
 import Topbar from "@/components/topbar";
 import { createAdminClient, createSsrClient } from "@/lib/supabase/server";
-import { isStaffRole } from "@/lib/roles";
+import { activeStaffRole } from "@/lib/staff";
 
 export const dynamic = "force-dynamic";
 
@@ -26,9 +26,15 @@ export default async function DashboardLayout({
   if (error || !row) {
     return <NotAuthorized pseudonym={user.email ?? "unknown"} />;
   }
-  // Any staff role may enter; middleware (lib/roles) enforces which *sections*
-  // each role can actually open. Non-staff are turned away here.
-  if (!isStaffRole(row.user_role)) {
+
+  // Checked here as well as in the proxy, and deliberately not trusted from
+  // it. Everything below this line reads with the service-role client, which
+  // bypasses RLS entirely — so this is the only thing standing between a
+  // suspended moderator and the reports queue, the audit log and every session
+  // on the platform. A gate that exists once, in front, is a gate that is
+  // skipped the first time a route is added outside it.
+  const role = await activeStaffRole(supabase, user.id);
+  if (!role) {
     return <NotAuthorized pseudonym={row.anonymous_pseudonym} />;
   }
 
@@ -69,7 +75,7 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-screen flex bg-canvas">
       <Sidebar
-        role={row.user_role}
+        role={role}
         pendingReports={pendingReports ?? 0}
         openIncidents={crisis24h ?? 0}
         openSafety={typeof openSafety === "number" ? openSafety : 0}
@@ -78,7 +84,7 @@ export default async function DashboardLayout({
       <div className="flex flex-col flex-1 min-w-0">
         <Topbar
           pseudonym={row.anonymous_pseudonym}
-          role={row.user_role}
+          role={role}
           env={env}
           unread={(pendingReports ?? 0) + (crisis24h ?? 0)}
         />

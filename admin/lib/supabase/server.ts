@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
+import { activeStaffRole } from "@/lib/staff";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
@@ -54,14 +55,46 @@ function serviceRoleConfigured(): boolean {
 }
 
 /**
+ * Throws unless the caller is staff in good standing, right now.
+ *
+ * This is the console's data access layer check, and it lives here rather than
+ * in a layout for a reason Next is explicit about: "a layout does not control
+ * whether the rest of the route renders ... a layout that hides or swaps them
+ * does not stop them from running" (02-guides/authentication.md, "Layouts and
+ * auth checks"). The dashboard layout returning <NotAuthorized/> therefore
+ * never stopped the page beneath it from executing its own service-role reads
+ * — every page under (dashboard) renders concurrently with the layout that was
+ * supposed to be guarding it.
+ *
+ * So the guard moves to the thing being guarded. Every caller of
+ * createAdminClient is a dashboard page or the audit export, all of which
+ * require a staff session; there is no legitimate unauthenticated use, which
+ * is what makes enforcing it here safe rather than merely convenient.
+ */
+async function assertActiveStaff(): Promise<void> {
+  const ssr = await createSsrClient();
+  const {
+    data: { user },
+  } = await ssr.auth.getUser();
+  if (!user) throw new Error("admin client requested without a session");
+
+  const role = await activeStaffRole(ssr, user.id);
+  if (!role) {
+    // Deliberately terse. It surfaces through the error boundary, and the
+    // person who sees it is by definition not someone to hand details to.
+    throw new Error("Not authorized");
+  }
+}
+
+/**
  * Admin Supabase client.
  *
  * Returns the service-role client (bypasses RLS) when a real key is in
  * env, otherwise transparently falls back to the cookie-bound SSR client.
- * Either way, the admin pages only call this AFTER the layout has gated
- * the caller on user_role IN ('super_admin','admin'), and the staff-
- * bypass RLS policies (migration 0023) ensure the SSR client can read
- * the same admin views.
+ *
+ * Gated on the caller being staff in good standing — see assertActiveStaff
+ * above. Callers that need a narrower role than "staff" still check that
+ * themselves; this is the floor, not the whole answer.
  *
  * Why the fallback: dev onboarding shouldn't require pasting the most
  * privileged credential in the system into .env.local. With staff RLS
@@ -69,6 +102,8 @@ function serviceRoleConfigured(): boolean {
  * fast-path optimisation, not a hard dependency.
  */
 export async function createAdminClient() {
+  await assertActiveStaff();
+
   if (serviceRoleConfigured()) {
     return createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

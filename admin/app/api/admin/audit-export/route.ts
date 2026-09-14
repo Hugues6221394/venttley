@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient, createSsrClient } from "@/lib/supabase/server";
+import { activeStaffRole } from "@/lib/staff";
 import { createRateLimiter, ipFrom } from "@/lib/redis";
 
 /**
@@ -27,12 +28,15 @@ export async function GET(req: NextRequest) {
   } = await ssr.auth.getUser();
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
-  const { data: row } = await ssr
-    .from("users")
-    .select("user_role")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!row || !["super_admin", "admin", "read_only_auditor"].includes(row.user_role)) {
+  // Standing, not just role. Exporting the audit log is the single most
+  // sensitive read the console offers, and "was an admin last week" must not
+  // be enough to take a copy of it on the way out.
+  const role = await activeStaffRole(ssr, user.id, [
+    "super_admin",
+    "admin",
+    "read_only_auditor",
+  ]);
+  if (!role) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 
