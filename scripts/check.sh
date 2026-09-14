@@ -2,7 +2,7 @@
 #
 # Every layer, in one command.
 #
-#   ./scripts/check.sh              analyzer + unit + database + device
+#   ./scripts/check.sh              analyzer + unit + database + console + device
 #   ./scripts/check.sh --fast       skip the device pass
 #
 # WHY THIS EXISTS
@@ -14,6 +14,7 @@
 #   analyzer    types and dead code
 #   unit        test/ — logic and widgets against fakes
 #   database    supabase/tests/database — pgTAP, real roles, real RLS
+#   console     admin/ — types, route authorization, service-role gating
 #   device      integration_test/ — a real iOS build against a real stack
 #
 # The device pass is not a formality. Two bugs in the appeals work existed only
@@ -91,6 +92,20 @@ else
   done
   echo "  $TOTAL assertions across $(ls supabase/tests/database/*.test.sql | wc -l | tr -d ' ') files"
   record "database ($TOTAL assertions)" "$BAD"
+fi
+
+# ---------------------------------------------------------------------------
+say "console (admin)"
+# The console is half this product's Trust & Safety surface and was outside
+# every check here — including the day a suspended moderator turned out to
+# still be able to read the audit log. Its typecheck also runs check-routes and
+# check-service-role-gates, which are the two authorization invariants.
+if [ ! -d admin/node_modules ]; then
+  fail "  skipped: admin/node_modules is missing. Run: (cd admin && npm install)"
+  record "console" 1
+else
+  (cd admin && npm run --silent typecheck)
+  record "console" $?
 fi
 
 # ---------------------------------------------------------------------------
