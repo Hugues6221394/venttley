@@ -41,13 +41,14 @@ export default function LoginForm() {
   return (
     <form className="flex flex-col gap-3" onSubmit={onSubmit}>
       <label className="text-xs font-semibold text-burgundy/80">
-        Username
+        Username or staff email
         <input
           className="mt-1 w-full rounded-xl border border-mauve/50 bg-white px-3 py-2 text-sm focus:border-berry"
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           autoComplete="username"
+          placeholder="username or name@company.com"
           required
         />
       </label>

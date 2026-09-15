@@ -24,6 +24,17 @@ import {
   LifeBuoy,
   Sparkles,
   Scale,
+  Music2,
+  BriefcaseBusiness,
+  Siren,
+  BookOpenCheck,
+  UserRoundCog,
+  Database,
+  UserSearch,
+  ClipboardCheck,
+  FileLock2,
+  Eye,
+  RefreshCw,
 } from "./ui/icons";
 
 type Item = {
@@ -43,13 +54,24 @@ const groups: Group[] = [
     label: "Operate",
     items: [
       { href: "/overview",   label: "Control Center", icon: LayoutDashboard },
+      { href: "/queue-control", label: "Queue control", icon: ClipboardCheck },
       { href: "/safety",     label: "Safety & Crisis", icon: LifeBuoy },
       { href: "/csam",       label: "CSAM incidents", icon: AlertTriangle },
+      { href: "/youth-safety", label: "Youth safety", icon: ShieldCheck },
       { href: "/moderation", label: "Moderation",     icon: ShieldAlert },
+      { href: "/integrity", label: "Platform integrity", icon: UserSearch },
+      { href: "/feed-integrity", label: "Feed integrity", icon: LineChart },
+      { href: "/tribe-governance", label: "Tribe governance", icon: Users2 },
+      { href: "/moderation/policies", label: "Policy center", icon: BookOpenCheck },
+      { href: "/moderation/abuse", label: "Abuse intelligence", icon: UserSearch },
+      { href: "/moderation/quality", label: "Moderation quality", icon: ClipboardCheck },
       { href: "/appeals",    label: "Appeals",        icon: Scale },
       { href: "/automod",    label: "Automod rules",  icon: ShieldCheck },
+      { href: "/content",    label: "Content explorer", icon: Database },
       { href: "/media",      label: "Media safety",   icon: ImageIcon },
+      { href: "/music",      label: "Music catalog",  icon: Music2 },
       { href: "/broadcasts", label: "Broadcasts",     icon: Megaphone },
+      { href: "/delivery", label: "Delivery operations", icon: Megaphone },
     ],
   },
   {
@@ -58,8 +80,14 @@ const groups: Group[] = [
       { href: "/users",  label: "Users",  icon: Users },
       { href: "/tribes", label: "Tribes", icon: Users2 },
       { href: "/roles",  label: "Roles & permissions", icon: KeyRound },
+      { href: "/staff",  label: "Staff accounts", icon: UserRoundCog },
+      { href: "/staff/invitations", label: "Staff invitations", icon: KeyRound },
+      { href: "/staff/access-reviews", label: "Staff access reviews", icon: ClipboardCheck },
       { href: "/sessions", label: "Sessions & IPs", icon: Activity },
       { href: "/verification", label: "Verification queue", icon: Sparkles },
+      { href: "/privacy", label: "Privacy requests", icon: FileLock2 },
+      { href: "/evidence-access", label: "Evidence access", icon: Eye },
+      { href: "/data-governance", label: "Data governance", icon: Database },
     ],
   },
   {
@@ -70,12 +98,18 @@ const groups: Group[] = [
       { href: "/ops",       label: "Ops & cost", icon: TrendingUp },
       { href: "/audit",     label: "Audit log", icon: ScrollText },
       { href: "/system",    label: "System health", icon: Activity },
+      { href: "/jobs",      label: "Jobs & delivery", icon: BriefcaseBusiness },
+      { href: "/incidents", label: "Incident command", icon: Siren },
+      { href: "/releases", label: "Release readiness", icon: RefreshCw },
     ],
   },
   {
     label: "Control",
     items: [
       { href: "/flags",    label: "Feature flags", icon: Flag },
+      { href: "/approvals", label: "Sensitive approvals", icon: Scale },
+      { href: "/policy/versions", label: "Policy versions", icon: BookOpenCheck },
+      { href: "/emergency-access", label: "Emergency access", icon: Siren },
       { href: "/settings", label: "Settings",      icon: SettingsIcon },
     ],
   },
@@ -103,10 +137,15 @@ export default function Sidebar({
       items: g.items.filter((it) => canAccess(role, it.href)),
     }))
     .filter((g) => g.items.length > 0);
-  const isActive = (href: string) =>
-    href === "/overview"
-      ? pathname === "/" || pathname.startsWith("/overview")
-      : pathname.startsWith(href);
+  const activeHref = visibleGroups
+    .flatMap((group) => group.items)
+    .filter((item) =>
+      item.href === "/overview"
+        ? pathname === "/" || pathname.startsWith("/overview")
+        : pathname === item.href || pathname.startsWith(`${item.href}/`),
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+  const isActive = (href: string) => href === activeHref;
 
   return (
     <aside className="w-64 shrink-0 hidden md:flex flex-col bg-white border-r border-line">

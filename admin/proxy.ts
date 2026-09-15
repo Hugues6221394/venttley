@@ -108,7 +108,12 @@ export async function proxy(req: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Public paths: no auth required.
-  if (pathname === "/login" || pathname.startsWith("/api/auth")) {
+  if (
+    pathname === "/login" ||
+    pathname === "/invite" ||
+    pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/auth/confirm")
+  ) {
     return res;
   }
 

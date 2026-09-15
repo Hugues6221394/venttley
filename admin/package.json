@@ -9,9 +9,10 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "typecheck": "node scripts/check-routes.mjs && node scripts/check-service-role-gates.mjs && tsc --noEmit",
+    "typecheck": "node scripts/check-routes.mjs && node scripts/check-service-role-gates.mjs && node scripts/check-admin-operations.mjs && tsc --noEmit",
     "check:routes": "node scripts/check-routes.mjs",
-    "check:gates": "node scripts/check-service-role-gates.mjs"
+    "check:gates": "node scripts/check-service-role-gates.mjs",
+    "check:operations": "node scripts/check-admin-operations.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.1",

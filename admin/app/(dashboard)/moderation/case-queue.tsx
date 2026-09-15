@@ -156,6 +156,12 @@ function CaseCard({
           : " · unassigned"}
       </p>
 
+      <div className="mt-3">
+        <Link href={`/moderation/cases/${row.case_id}`} className="btn-ghost">
+          Open case dossier
+        </Link>
+      </div>
+
       {!resolved && (
         <div className="mt-4 flex flex-col gap-2 pt-4 border-t border-line">
           <div className="flex flex-wrap gap-2">
@@ -229,9 +235,9 @@ function CaseCard({
             </button>
           </form>
           <p className="text-[11px] text-ink-muted">
-            &ldquo;Warn member&rdquo; is recorded but not delivered — there is no
-            member-facing notice yet. Suspend, shadow-restrict, ban and remove
-            take effect immediately.
+            The member receives an enforcement notice for decisions that affect
+            them. Suspend, shadow-restrict, ban, and remove take effect in the
+            same database transaction as the recorded decision.
           </p>
         </div>
       )}

@@ -26,5 +26,10 @@ const IDENTITY_DOMAIN = "@id.venttly.app";
  */
 export function syntheticEmail(username: string) {
   const handle = username.trim().toLowerCase();
+  // Staff invited through the console authenticate with a real mailbox,
+  // while ordinary Venttly accounts keep the pseudonymous synthetic address.
+  // The post-login staff gate is authoritative, so accepting an email-shaped
+  // identifier here does not grant console access to ordinary email users.
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(handle)) return handle;
   return handle.endsWith(IDENTITY_DOMAIN) ? handle : `${handle}${IDENTITY_DOMAIN}`;
 }

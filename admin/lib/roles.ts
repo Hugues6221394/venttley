@@ -38,6 +38,12 @@ const SECTION_ROLES: Record<string, StaffRole[]> = {
   "/safety": ["super_admin", "admin", "moderator", "support"],
   "/csam": ["super_admin"],
   "/moderation": ["super_admin", "admin", "moderator"],
+  "/content": ["super_admin", "admin", "moderator"],
+  "/integrity": ["super_admin", "admin", "moderator"],
+  "/feed-integrity": ["super_admin", "admin"],
+  "/tribe-governance": ["super_admin", "admin", "moderator"],
+  "/youth-safety": ["super_admin", "admin"],
+  "/queue-control": ["super_admin", "admin", "moderator"],
   // Matches admin_appeal_queue's own is_staff gate. support is excluded
   // deliberately: it can triage the safety queue but cannot decide an appeal,
   // and a section that loads only to refuse every action is worse than a
@@ -45,6 +51,7 @@ const SECTION_ROLES: Record<string, StaffRole[]> = {
   "/appeals": ["super_admin", "admin", "moderator"],
   "/automod": ["super_admin", "admin", "moderator"],
   "/media": ["super_admin", "admin", "moderator"],
+  "/music": ["super_admin", "admin", "moderator"],
   "/users": ["super_admin", "admin", "moderator", "support"],
   "/tribes": ["super_admin", "admin", "moderator"],
   "/broadcasts": ["super_admin", "admin"],
@@ -58,9 +65,21 @@ const SECTION_ROLES: Record<string, StaffRole[]> = {
   "/system": ["super_admin", "admin"],
   "/flags": ["super_admin", "admin"],
   "/roles": ["super_admin"],
+  "/staff": ["super_admin"],
   "/sessions": ["super_admin"],
   "/verification": ["super_admin"],
   "/settings": ["super_admin", "admin"],
+  "/jobs": ["super_admin", "admin", "analyst", "read_only_auditor"],
+  "/delivery": ["super_admin", "admin", "analyst", "read_only_auditor"],
+  "/releases": ["super_admin", "admin", "analyst", "read_only_auditor"],
+  "/incidents": ["super_admin", "admin"],
+  "/privacy": ["super_admin", "admin"],
+  "/data-governance": ["super_admin", "admin", "read_only_auditor"],
+  "/policy": ["super_admin", "admin", "moderator"],
+  "/security": ["super_admin"],
+  "/emergency-access": ["super_admin"],
+  "/approvals": ["super_admin"],
+  "/evidence-access": ["super_admin"],
 };
 
 /** The section prefix a pathname belongs to (e.g. "/users/123" → "/users"). */

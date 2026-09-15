@@ -113,3 +113,15 @@ export function optTimestamp(fd: FormData, field: string): string | null {
   }
   return d.toISOString();
 }
+
+/** A real mailbox address for server-side administrative invitations. */
+export function emailAddress(fd: FormData, field: string): string {
+  const value = reqStr(fd, field, 320).toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) {
+    throw new InvalidInput(field, "must be a valid email address");
+  }
+  if (value.endsWith("@id.venttly.app")) {
+    throw new InvalidInput(field, "must be a real staff mailbox, not a member identity address");
+  }
+  return value;
+}

@@ -21,16 +21,30 @@ secrets, authentication keys, or unrelated personal data.
 | Route | Current capability | Roles admitted by `lib/roles.ts` |
 | --- | --- | --- |
 | `/overview` | Platform counts, recent safety signals, reports, regions, and privileged activity | all staff roles |
+| `/queue-control` | Unified counts for unassigned/breached moderation, appeals, CSAM, stale scanning, verification, privacy, and dead delivery work; unavailable sources remain unknown | super admin, admin, moderator |
 | `/safety` | Severity-ordered post, Whisper, Tribe-chat, DM, and self-harm safety queue with 15/60-minute UI targets | super admin, admin, moderator, support |
 | `/csam` | Quarantined child-safety incident ledger and resolution/report-reference recording; evidence withheld until a reveal with a stated reason, recorded in a separate append-only access ledger | super admin only |
+| `/youth-safety` | Conservative age-band counts and paginated unknown-age remediation queue without exposing birth years, contacts, locations, or content | super admin, admin |
 | `/moderation` | Pending/resolved reports, post previews, post removal, account suspension, shadow ban, escalating suspension ladder, bulk dismissal, and crisis review | super admin, admin, moderator |
+| `/integrity` | Bounded view of blocked-login pressure, active restrictions, repeat suspensions, and concentrated-report cases; signals are explicitly not treated as proof | super admin, admin, moderator |
+| `/feed-integrity` | Protected hot-feed cache state, rollout controls, media quarantine, crisis tagging, and open feed alerts; ranking quality and manipulation telemetry remain a backend gap | super admin, admin |
+| `/tribe-governance` | Bounded lifecycle, suspension, keeperless-community, and pending join-request queues without member notes or private content | super admin, admin, moderator |
+| `/moderation/cases/[caseId]` | Case dossier with preserved evidence hash, source reports, appeals, staff timeline, workflow state, assignment, and legal hold; sensitive DM bodies remain behind the separately logged reveal flow | super admin, admin, moderator |
+| `/moderation/policies` | Current automod coverage and policy codes observed in recent decisions; explicitly identifies the missing versioned-policy backend | super admin, admin, moderator |
+| `/moderation/abuse` | Shadow restrictions, posting cooldowns, request-quota pressure, and aggregate abuse signals without exposing raw device/IP data | super admin, admin, moderator |
+| `/moderation/quality` | Thirty-day moderator workload, response time, and appeal outcomes with sample-size caveats and no authored content | super admin, admin, moderator |
 | `/automod` | Create, enable, disable, and remove dynamic keyword rules consumed by the client and server write guard | super admin, admin, moderator |
+| `/content` | Paginated explorer for Vents, Stories, comments, and Whispers, including removed/quarantined state; destructive actions stay case-bound | super admin, admin, moderator |
 | `/media` | Review classifier-blocked, sensitive, and pending post/Whisper images; approve or block | super admin, admin, moderator |
+| `/music` | Rights-aware music catalog, provider metadata, preview presence, cache permission, active state, regional scope, and rights expiry; writes remain locked pending an audited catalog RPC | super admin, admin, moderator |
 | `/users` and `/users/[userId]` | Search and inspect pseudonymous accounts, content/activity, status, role, verification, sessions, and enforcement history; perform scoped account actions | super admin, admin, moderator, support at section level; individual RPCs apply stricter checks |
 | `/tribes` and `/tribes/[tribeId]` | Inspect communities and activity; feature, suspend, restore, transfer keeper, and manage members | super admin, admin, moderator at section level; mutation RPCs are generally super admin/admin |
 | `/broadcasts` | Create global/region/Tribe/role announcements with urgency, scheduling, expiry, and delivery counters | super admin, admin |
 | `/verification` | Approve or deny verification requests | super admin only |
 | `/roles` | View the staff matrix and assign or remove staff roles | super admin only |
+| `/staff` | Invite staff by real mailbox, grant/edit roles, suspend/reactivate, and remove staff authority while preserving the member account and audit actor | super admin only; every mutation also requires AAL2 |
+| `/staff/invitations` | Masked-mailbox reconciliation for role-bearing staff whose email, first sign-in, or one-time password setup is incomplete; not yet a canonical invitation ledger | super admin only |
+| `/staff/access-reviews` | Dormant, inactive, unconfirmed, and Auth-disabled staff review candidates without exposing mailboxes, factors, or session identifiers | super admin only |
 | `/sessions` | Inspect recent Supabase Auth sessions, IP addresses, and devices | super admin only |
 | `/appeals` | Review member appeals against enforcement decisions, with independent second review enforced in the database | super admin, admin, moderator |
 | `/search` | One search box across users, posts, Tribes, cases, and reports; every search is audited | super admin, admin, moderator, support |
@@ -39,12 +53,24 @@ secrets, authentication keys, or unrelated personal data.
 | `/ops` | Moderation-cache, media-scan, abuse-control, volume, and estimated-cost snapshots | super admin, admin, analyst, read-only auditor |
 | `/audit` | Filter and export the append-only privileged-action ledger | super admin, admin, read-only auditor |
 | `/system` | Environment and dependency health probes | super admin, admin |
+| `/jobs` | Push, email, and media-scan queue outcomes without recipient addresses, tokens, or payload contents | super admin, admin, analyst, read-only auditor |
+| `/delivery` | Push/email terminal outcomes, oldest waiting work, and broadcast counters; downstream receipt and safe replay remain backend gaps | super admin, admin, analyst, read-only auditor |
+| `/releases` | Migration ledger, feature rollouts, and unresolved alerts; scalable client-version adoption remains a backend aggregation gap | super admin, admin, analyst, read-only auditor |
+| `/incidents` | Cross-system incident-signal router for safety, CSAM, moderation SLA, delivery, scanning, and security pressure; not yet a full incident state machine | super admin, admin |
+| `/privacy` | Deletion requests and moderation legal holds without contact, recovery, device, or authored-content disclosure | super admin, admin |
+| `/privacy/requests/[userId]` | Per-account privacy dossier with request state, content/system counts, legal holds, and account-targeted audit metadata; fulfilment remains locked | super admin, admin |
+| `/data-governance` | Minimum-data technical inventory and current policy evidence; processor, retention, residency, and lineage registries remain missing | super admin, admin, read-only auditor |
+| `/policy/versions` | Effective, scheduled, superseded, and retired policy records without unsafe per-document acceptance queries or untrusted external links | super admin, admin, moderator |
+| `/security` | Login outcomes, warning/critical security events, and high-risk session summaries with sensitive context omitted | super admin only |
+| `/evidence-access` | Review of CSAM and private-case evidence disclosures: actor, role, reason, fields, and timestamp but never evidence values | super admin only |
+| `/approvals` | Honest inventory of irreversible actions that still lack two-person approval, plus recent high-impact audit metadata | super admin only |
+| `/emergency-access` | Critical incident context and direct routing to restricted evidence; intentionally does not create a permanent bypass or claim break-glass capability | super admin only |
 | `/flags` and `/settings` | Feature rollout/kill switches, maintenance mode, and configuration visibility | super admin, admin |
+| `/incidents/[incidentId]` | Drill-down for seven live safety, moderation, delivery, scanning, and security signal groups with immediate runbook guidance; signals are not represented as persistent incidents | super admin, admin |
 
-There is also a legacy `/notifications` page that writes one notification row
-per active user. It is not linked in the sidebar and is not present in the
-route-role map. Do not use or expose it in production; replace it with the
-audited, transactional `/broadcasts` path or remove it.
+The unsafe legacy `/notifications` page has been removed. Global communication
+belongs to `/broadcasts`; it still needs a real outbox/delivery consumer before
+an inserted broadcast can be described as delivered.
 
 The console does not make moderation automatic. The database ingress guards,
 rate limits, media scanning, and member reports reduce queue volume; a trained
@@ -117,25 +143,51 @@ admin/
 │   ├── (dashboard)/
 │   │   ├── layout.tsx          # staff shell and queue counters
 │   │   ├── overview/           # operational landing page
+│   │   ├── queue-control/      # cross-workflow backlog and SLA counts
 │   │   ├── safety/             # crisis and self-harm queue
 │   │   ├── csam/               # most restricted incident queue
+│   │   ├── youth-safety/       # unknown-age and minor-safety posture
 │   │   ├── moderation/         # reports and enforcement actions
+│   │   │   ├── cases/          # individual case dossiers
+│   │   │   ├── policies/       # current policy/automod coverage
+│   │   │   ├── abuse/          # server-recorded abuse controls
+│   │   │   └── quality/        # aggregate review quality/workload
 │   │   ├── automod/            # dynamic text rules
+│   │   ├── content/            # paginated cross-content explorer
+│   │   ├── integrity/          # manipulation and repeat-abuse signals
+│   │   ├── feed-integrity/     # ranking/cache controls and known evidence gaps
+│   │   ├── tribe-governance/   # lifecycle and stewardship exception queues
 │   │   ├── media/              # image safety review
+│   │   ├── music/              # licensed catalog/rights visibility
 │   │   ├── users/              # account list and detail/actions
 │   │   ├── tribes/             # community list and detail/actions
 │   │   ├── broadcasts/         # targeted platform messages
 │   │   ├── verification/       # verification decisions
 │   │   ├── roles/              # staff roles
+│   │   ├── staff/              # staff access lifecycle + invite reconciliation
+│   │   │   └── access-reviews/ # least-privilege review candidates
 │   │   ├── sessions/           # sensitive Auth session/IP data
+│   │   ├── privacy/            # erasure queue, request dossiers, legal holds
+│   │   ├── data-governance/    # sensitive-store and processor-boundary map
+│   │   ├── policy/             # policy-version ledger
+│   │   ├── evidence-access/    # restricted-evidence disclosure ledger
+│   │   ├── security/           # account/session risk signals
 │   │   ├── analytics/          # product and safety aggregates
 │   │   ├── ops/                # reliability/cost snapshots
+│   │   ├── jobs/               # delivery and media queue outcomes
+│   │   ├── delivery/           # channel outcomes and waiting-work visibility
+│   │   ├── releases/           # migration, rollout, and alert evidence
+│   │   ├── incidents/          # cross-system signals and live drill-downs
+│   │   ├── approvals/          # irreversible-action control posture
+│   │   ├── emergency-access/   # break-glass readiness, no bypass capability
 │   │   ├── audit/              # privileged activity ledger
 │   │   ├── system/             # dependency probes
 │   │   ├── flags/              # rollouts and kill switches
 │   │   └── settings/           # high-leverage configuration
 │   ├── api/admin/              # authenticated export/telemetry routes
 │   ├── api/auth/               # rate-limited login and logout routes
+│   ├── auth/confirm/            # invite-only token-hash verification
+│   ├── invite/                  # one-time password setup for invited staff
 │   ├── login/                  # username/password sign-in
 │   └── mfa/                    # TOTP enrolment and challenge
 ├── components/                 # shell and reusable accessible UI primitives
@@ -226,9 +278,10 @@ npm run build
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The login form accepts the
-Venttly username and converts it to the same synthetic Auth email used by the
-mobile app: `<username>@id.venttly.app`.
+Open [http://localhost:3000](http://localhost:3000). The login form accepts an
+ordinary Venttly username and converts it to the same synthetic Auth email used
+by the mobile app (`<username>@id.venttly.app`), or accepts the real mailbox of
+a staff account created through `/staff`.
 
 ## Environment variables
 
@@ -241,6 +294,7 @@ mobile app: `<username>@id.venttly.app`.
 | `UPSTASH_REDIS_REST_TOKEN` | optional | required before internet exposure | Server-only Upstash credential |
 | `ADMIN_IP_ALLOWLIST` | optional | required unless an equivalent private-access layer exists | Comma-separated exact IPs and IPv4 CIDRs; empty means allow all |
 | `ADMIN_REQUIRE_MFA` | `true` recommended | must be `true` | Forces TOTP enrollment and AAL2 challenge |
+| `ADMIN_INVITE_REDIRECT_URL` | local admin origin | required to invite staff | Absolute allowed HTTPS origin; the Invite user template appends `/auth/confirm` |
 | `GROQ_API_KEY` | not required | do not configure without a separate privacy/legal approval | Optional system-page connectivity probe; not the authoritative production moderation path |
 
 `SUPABASE_SERVICE_ROLE_KEY`, Redis tokens, and any future provider secret must
@@ -279,29 +333,94 @@ TOTP, and verify `/roles`, `/audit`, and `/sessions`. Every later role change
 must use `admin_set_user_role` through the console so the change is authorized
 and audited. Demo/test seeds must never be applied to production.
 
+## Managing staff after bootstrap
+
+Use `/staff` for every staff lifecycle change after the first trusted owner
+bootstrap. Do not create shared administrator credentials.
+
+The invitation flow is:
+
+1. An active super admin at AAL2 enters a real work mailbox, least-privilege
+   initial role, and required business reason.
+2. The server-only Supabase Auth Admin client creates the invitation and marks
+   it with one-time `app_metadata.staff_invite_pending`. The browser cannot set
+   this claim.
+3. `admin_set_user_role` grants the role using the acting super admin's session;
+   the RPC re-checks active staff status and AAL2, records the role change in
+   `audit_log`, and revokes stale target sessions.
+4. The email sends the token hash to `/auth/confirm`, which accepts only
+   `type=invite`, verifies it into an SSR cookie, and redirects to `/invite`.
+5. `/invite` accepts a new password only while the server-owned one-time flag
+   is present, consumes that flag, and continues to TOTP enrollment/challenge.
+
+In Supabase Dashboard → Authentication → Email Templates → Invite user, use a
+server-verifiable token-hash link (preserve your branded surrounding HTML):
+
+```html
+<a href="{{ .RedirectTo }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite">
+  Accept the Venttly staff invitation
+</a>
+```
+
+Set `ADMIN_INVITE_REDIRECT_URL` to the bare admin origin, for example
+`https://admin.venttly.com`, and add that exact origin to Auth's allowed redirect
+URLs. Configure production SMTP and disable provider link tracking; the default
+Supabase sender is rate-limited and best-effort. Email security scanners can
+consume single-use links, so test the actual corporate mail path before launch.
+
+“Remove from staff” is the safe delete operation for administrators: it changes
+the role to `normal`, revokes sessions, and preserves authored content and the
+actor ID required by the immutable audit trail. Permanent member/Auth erasure
+is a different privacy workflow and must not be used as routine staff
+offboarding. The UI prevents self-removal and protects the last active super
+admin, but a database-level last-super-admin invariant and two-person approval
+remain production-gate backend work.
+
+## Control surfaces awaiting backend contracts
+
+The console intentionally renders several launch-critical workflows before it
+offers their dangerous mutations. This is not unfinished UI; it prevents a page
+from becoming a second, unaudited authority beside PostgreSQL.
+
+| Surface | What can be operated now | Backend contract still required |
+| --- | --- | --- |
+| `/approvals` | Active-super-admin posture and high-impact audit review | Append-only request/approve/reject/expire model, independent actor constraint, row lock, one-time transactional execution |
+| `/integrity` | Enforcement, login-pressure, repeat-suspension, and concentrated-report triage | Privacy-reviewed pseudonymous clustering, bounded retention, explainability, appeals, and safe bulk enforcement |
+| `/incidents/[incidentId]` | Live signal records, accountable team, immediate runbook, owning-workflow links | Persistent incident ID, commander, timeline, acknowledgements, mitigations, communications, resolution, and postmortem |
+| `/privacy/requests/[userId]` | Request state, data-system counts, legal holds, and audit metadata | Verified requester, statutory deadline, processor fanout, idempotent erasure/export, approval, completion evidence |
+| `/evidence-access` | Dedicated CSAM ledger plus sensitive-case access audit | Anomaly alerts, access certification, expiring encrypted exports, and retention verification |
+| `/youth-safety` | Conservative age bands and unknown-age account queue | Audited age remediation, region/version policy, adult/minor interaction signals, and appeals |
+| `/queue-control` | Cross-workflow counts and direct queue routing | Staffing/skills model, assignment handoff, paging, shift coverage, and capacity forecasting |
+| `/staff/invitations` | Reconciliation of staff-role accounts with Auth state | Canonical invitation ledger, idempotency, resend/revoke, expiry, delivery outcomes, and orphan recovery |
+| `/staff/access-reviews` | Dormant/inactive access candidates reconciled with bounded Auth lookups | Review campaigns, entitlements, independent certification, exceptions, automatic expiry, revocation, and durable evidence |
+| `/emergency-access` | Critical records and routing to security, audit, and evidence ledgers | Hardware-backed MFA, two-person incident-bound grants, narrow scopes, short TTL, external alerts, automatic revocation, and post-use review |
+| `/delivery` | Venttly queue outcomes, oldest waiting work, and broadcast counters | Idempotent replay, dead-letter classes, queue-age SLO projection, provider receipts, pause/kill controls, and audited worker changes |
+| `/releases` | Applied migration records, feature controls, and open alerts; raw event scans are refused | Immutable artifact/release ledger, signatures, client-version aggregates, promotion approvals, test attestations, SLO gates, progressive rollout, and rehearsed rollback |
+| `/data-governance` | Minimum-data store map and effective policy evidence | Processor/subprocessor, purpose, legal basis, region, contract, transfer, retention/purge, lineage, owner, and change registries |
+| `/policy/versions` | Current/scheduled/retired version ledger | Draft-review-publish workflow, body hashes, two-person material-change approval, locale coverage, grace periods, and aggregate acceptance projection |
+| `/feed-integrity` | Hot-feed cache state, feed flags, indexed quarantine counts, and matched alerts | Privacy-safe exposure, diversity, freshness, safety, experiment, manipulation, and rollback telemetry |
+| `/tribe-governance` | Bounded lifecycle, suspension, stewardship, and join-request queues | Keeper/moderator tenure, attestations, rule adoption, response SLOs, appeals, safe transfer/deletion, and community-health aggregates |
+
+Do not enable a disabled operation by adding a Server Action that writes with
+the service-role key. Add an actor-bound RPC (or an Auth workflow with database
+authorization before and audit/session reconciliation after), test AAL and role
+matrices through PostgREST, then expose it in the page.
+
 ## Production deployment requirements
 
-> **Blocking, as of 2026-09-07: the linked production project is 45 migrations
-> behind.** Its last applied migration is `20260828201411`; local head is
-> `20261006090000`. That is roughly six weeks of schema change — device
-> sessions, login risk scoring, block enforcement, media quarantine, recovery
-> email/phone and password reset, tribe permissions and rules versioning,
-> personal feed, and only then the six admin/moderation migrations from this
-> branch. Check with `supabase migration list --linked` before assuming
-> anything about production's shape.
+> **Migration state verified 2026-09-15:** `supabase migration list --linked`
+> reported matching local and remote histories through local head
+> `20261025090000`. Migration identifiers are version labels and some are
+> intentionally future-dated; they do not prove when a change was deployed.
+> Re-run the command in the release pipeline and block deployment on any
+> mismatch—this snapshot is evidence for this verification only, not a
+> permanent claim about production state.
 >
-> **`supabase db push` would fail partway and leave production half-migrated.**
-> It applies 23 migrations, then raises on
-> `20260915090000_email_dispatch_watchdog`, which requires a Vault secret named
-> `account_purge_cron_secret` to already exist —
-> `20260916090000` and `20260918090000` need it too. Create it on the
-> production project *first* (see Local prerequisites for the statement), then
-> push.
->
-> `/moderation` now defaults to the case queue, so the console must not be
-> deployed ahead of at least `20261004090000` or its default view fails. Step 1
-> below — apply to an isolated staging project and run pgTAP — is the right
-> gate for a 45-migration catch-up on a live database, and has not been done.
+> `/moderation` depends on the case-management migrations beginning at
+> `20261004090000`, and the staff controls depend on the hardened admin RPCs and
+> AAL2 contracts. The synchronized ledger confirms those migrations are
+> recorded remotely; it does not replace staging behavior tests, restore
+> testing, or a production smoke test with each staff role.
 
 Before deploying:
 
