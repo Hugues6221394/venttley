@@ -192,7 +192,7 @@ class VentlyConfig {
   /// "we'll email you" copy.
   static const String resendFromAddress = String.fromEnvironment(
     'RESEND_FROM_ADDRESS',
-    defaultValue: 'hello@venttly.app',
+    defaultValue: 'no-reply@venttly.com',
   );
   static const bool resendEnabled = bool.fromEnvironment(
     'RESEND_ENABLED',
