@@ -19,14 +19,47 @@ step 7 confirms they work. Do them in this order.
 
 ## 1. Upstash first — it is a hard dependency
 
-Create a Redis database at <https://console.upstash.com>, region **eu-central-1
-(Frankfurt)**, to sit beside Supabase.
-
 Not optional. `lib/redis.ts` fails closed in production: with these unset,
 login and audit export refuse outright. A deploy without them is not a console
 with weaker rate limiting, it is a console nobody can sign in to.
 
-Keep `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
+**One database per environment.** Sharing means staging logins spend
+production's budget against the same keys — the limiters are keyed on IP and
+user id, and the prefixes (`login`, `audit_export`, …) are fixed in code, so
+two environments pointed at one database are counting the same counters.
+Because the limiter fails closed, the failure mode is operators locked out of
+the live console by test traffic.
+
+Create at <https://console.upstash.com> → **Create Database**:
+
+| Field | Value | Why |
+|---|---|---|
+| Name | `venttly-admin-prod` / `venttly-admin-staging` | Match the Vercel project names; three systems with three naming schemes is how the wrong key reaches the wrong place |
+| Primary region | **eu-central-1 (Frankfurt)** | Supabase is `eu-central-1` and Vercel is `fra1`. Every limited request pays a round trip here |
+| Type | **Regional** | Global replicates worldwide and costs more. A handful of operators in one region |
+| Eviction | **Enabled** | See below |
+| TLS | on (default) | |
+
+Eviction is the counterintuitive one. Normally you would leave it off for data
+you care about; here it is the opposite. If the database fills with eviction
+off, writes fail, the limiter errors, and because it fails closed *nobody can
+sign in*. With eviction on, stale rate-limit counters are dropped instead and
+login keeps working. These are throwaway counters — losing one resets somebody's
+attempt count and nothing else.
+
+Then copy `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` from the
+database's **REST API** section (there is usually a `.env` tab with both).
+
+### Which database belongs to which environment
+
+| Environment | Supabase project | Vercel project | Upstash |
+|---|---|---|---|
+| staging | `rbtvilckwihzdpqgjvmz` | `venttly-admin-staging` | `vast-tadpole-78776` |
+| production | `gyeibgaqrmnepbnfbtzc` | `venttly-admin-prod` | *(the new one)* |
+
+`setup-vercel.sh` fetches the Supabase keys itself from the project ref for the
+environment named on the command line, so those two columns cannot be crossed
+by a paste slip. Upstash is typed in by hand and is the one that can.
 
 ## 2. Vercel project
 
