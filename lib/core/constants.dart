@@ -183,7 +183,7 @@ class VentlyConfig {
   /// request.
   static const String appealsEmail = String.fromEnvironment(
     'APPEALS_EMAIL',
-    defaultValue: 'hello@venttly.app',
+    defaultValue: 'support@venttly.com',
   );
 
   /// Resend — transactional email. Wired through the email-dispatcher
