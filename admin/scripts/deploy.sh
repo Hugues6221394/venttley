@@ -70,12 +70,29 @@ fi
 say "typecheck"
 npm run --silent typecheck || die "typecheck failed — not deploying."
 
+# `npm run build` on its own is not a pre-flight check: this directory has no
+# .env.local, so the build fails prerendering /mfa on "Your project's URL and
+# API key are required" — a local absence, nothing to do with the deployment.
+# The first run of this script died there while all seven variables sat
+# correctly on Vercel.
+#
+# `vercel pull` fetches the target project's environment, `vercel build` builds
+# with it exactly as the platform would, and `--prebuilt` ships that same
+# output. So the thing tested is the thing deployed, rather than a local
+# approximation of it.
+#
+# pull writes .vercel/.env.*.local, which holds real secrets. .vercel is
+# gitignored; checked, because this runs inside a git worktree.
+say "fetching $PROJECT environment"
+npx vercel pull --yes --environment=production --project "$PROJECT" >/dev/null \
+  || die "could not pull the environment for $PROJECT."
+
 say "build"
-npm run --silent build >/dev/null || die "build failed — not deploying."
-ok "  built"
+npx vercel build --prod >/dev/null || die "build failed — not deploying."
+ok "  built with $ENV_NAME's environment"
 
 say "deploying to $PROJECT"
-npx vercel deploy --prod --yes --project "$PROJECT"
+npx vercel deploy --prebuilt --prod --yes --project "$PROJECT"
 
 say "after this"
 echo "  Open /settings → Environment and read the badge in the top right."
