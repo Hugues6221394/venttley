@@ -70,29 +70,29 @@ fi
 say "typecheck"
 npm run --silent typecheck || die "typecheck failed — not deploying."
 
-# `npm run build` on its own is not a pre-flight check: this directory has no
-# .env.local, so the build fails prerendering /mfa on "Your project's URL and
-# API key are required" — a local absence, nothing to do with the deployment.
-# The first run of this script died there while all seven variables sat
-# correctly on Vercel.
+# There is deliberately no local build step.
 #
-# `vercel pull` fetches the target project's environment, `vercel build` builds
-# with it exactly as the platform would, and `--prebuilt` ships that same
-# output. So the thing tested is the thing deployed, rather than a local
-# approximation of it.
+# Two attempts at one failed, and the second explains why none can work.
+# `npm run build` dies prerendering /mfa on "Your project's URL and API key are
+# required" — this worktree has no .env.local, a local absence with nothing to
+# say about the deployment. So the next attempt pulled the project's own
+# environment and ran `vercel build`: that failed too, on
 #
-# pull writes .vercel/.env.*.local, which holds real secrets. .vercel is
-# gitignored; checked, because this runs inside a git worktree.
-say "fetching $PROJECT environment"
-npx vercel pull --yes --environment=production --project "$PROJECT" >/dev/null \
-  || die "could not pull the environment for $PROJECT."
-
-say "build"
-npx vercel build --prod >/dev/null || die "build failed — not deploying."
-ok "  built with $ENV_NAME's environment"
+#   Upstash Redis client was passed an invalid URL. Received: "[SENSITIVE]"
+#
+# because `vercel pull` writes the literal string [SENSITIVE] for Secret-type
+# variables. Secrets are injected at runtime on the platform and at build time
+# on the platform, and are never handed to a local build. A local build
+# therefore cannot reproduce one that touches them, and pretending otherwise
+# would mean downgrading a credential to Config to satisfy a script.
+#
+# So the build happens where the secrets are. `vercel deploy` builds on the
+# platform and refuses to promote a deployment whose build failed, which is the
+# protection the local step was reaching for. typecheck above is the local gate,
+# and it is the one that works without secrets.
 
 say "deploying to $PROJECT"
-npx vercel deploy --prebuilt --prod --yes --project "$PROJECT"
+npx vercel deploy --prod --yes --project "$PROJECT"
 
 say "after this"
 echo "  Open /settings → Environment and read the badge in the top right."
