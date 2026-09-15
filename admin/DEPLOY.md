@@ -108,13 +108,37 @@ npx vercel --prod
 Confirm the `*.vercel.app` URL loads the login page. It is still open to the
 internet at this point — steps 5 and 6 are what close it.
 
-## 4. DNS
+## 4. DNS — grey cloud first, then orange
 
-Cloudflare → venttly.com → DNS → add `admin` as a CNAME to the Vercel target,
-**proxied** (orange cloud). Grey cloud would bypass everything below.
+Add the domain to the Vercel project first, so Vercel knows to route it:
 
-Add `admin.venttly.com` as a domain on the Vercel project so its certificate is
-issued.
+```
+npx vercel domains add admin.venttly.com venttly-admin-prod
+```
+
+`vercel domains inspect admin.venttly.com` then names the record it wants:
+**A `admin` → `76.76.21.21`**. It also offers to take over the nameservers —
+do not. That would move the whole zone off Cloudflare and take Access, the WAF
+and every other record with it.
+
+The order within this step is the part that catches people:
+
+1. Create the A record **DNS-only (grey cloud)**.
+2. Wait for Vercel to issue the certificate — `vercel domains inspect` stops
+   reporting a misconfiguration, usually under a minute.
+3. *Then* switch the record to **Proxied (orange cloud)**.
+4. SSL/TLS → overview → **Full (strict)**.
+
+Proxying before the certificate exists is the failure: Vercel's issuance check
+resolves the name, sees Cloudflare's addresses rather than its own, and cannot
+complete the challenge — so no certificate is issued, and with Full (strict)
+Cloudflare then refuses to talk to an origin whose certificate it cannot
+verify. The symptom is a 525 and nothing in either dashboard saying which of
+the two systems is unhappy.
+
+Flexible instead of Full (strict) appears to fix it and does not: it terminates
+TLS at Cloudflare and talks to Vercel over HTTP, which Vercel redirects back to
+HTTPS, and the two loop until the browser gives up.
 
 ## 5. Cloudflare Access — the front door
 
