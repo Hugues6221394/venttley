@@ -23,18 +23,28 @@ Not optional. `lib/redis.ts` fails closed in production: with these unset,
 login and audit export refuse outright. A deploy without them is not a console
 with weaker rate limiting, it is a console nobody can sign in to.
 
-**One database per environment.** Sharing means staging logins spend
-production's budget against the same keys — the limiters are keyed on IP and
-user id, and the prefixes (`login`, `audit_export`, …) are fixed in code, so
-two environments pointed at one database are counting the same counters.
-Because the limiter fails closed, the failure mode is operators locked out of
-the live console by test traffic.
+**One database, shared, with the keys namespaced.** Upstash's free tier allows
+a single database. That is fine: the hazard in sharing was never storage, it
+was that the limiter prefixes (`login`, `audit_export`, …) are fixed strings,
+so two environments against one database would count the *same* counters — a
+test run spending the live console's login budget, with the limiter failing
+closed on top, locking operators out over traffic that was never theirs.
+
+`lib/redis.ts` prefixes every limiter with `NEXT_PUBLIC_ADMIN_ENV`, so the keys
+are `staging:login:…` and `production:login:…` and cannot collide. Both Vercel
+projects take the same `UPSTASH_REDIS_REST_URL` and token.
+
+The remaining shared fate is the quota — 500K commands a month and 256 MB
+across both. At a handful of operators that is not close: roughly 90K a month
+is the realistic ceiling. If it ever matters, a payment method on Upstash buys
+a second database for cents; until then, paying to separate two namespaces that
+already cannot collide would be buying nothing.
 
 Create at <https://console.upstash.com> → **Create Database**:
 
 | Field | Value | Why |
 |---|---|---|
-| Name | `venttly-admin-prod` / `venttly-admin-staging` | Match the Vercel project names; three systems with three naming schemes is how the wrong key reaches the wrong place |
+| Name | `venttly-admin` | It serves both environments, so an environment suffix on the name would be a lie |
 | Primary region | **eu-central-1 (Frankfurt)** | Supabase is `eu-central-1` and Vercel is `fra1`. Every limited request pays a round trip here |
 | Type | **Regional** | Global replicates worldwide and costs more. A handful of operators in one region |
 | Eviction | **Enabled** | See below |
@@ -54,12 +64,13 @@ database's **REST API** section (there is usually a `.env` tab with both).
 
 | Environment | Supabase project | Vercel project | Upstash |
 |---|---|---|---|
-| staging | `rbtvilckwihzdpqgjvmz` | `venttly-admin-staging` | `vast-tadpole-78776` |
-| production | `gyeibgaqrmnepbnfbtzc` | `venttly-admin-prod` | *(the new one)* |
+| staging | `rbtvilckwihzdpqgjvmz` | `venttly-admin-staging` | `vast-tadpole-78776`, keys `staging:*` |
+| production | `gyeibgaqrmnepbnfbtzc` | `venttly-admin-prod` | the same database, keys `production:*` |
 
 `setup-vercel.sh` fetches the Supabase keys itself from the project ref for the
 environment named on the command line, so those two columns cannot be crossed
-by a paste slip. Upstash is typed in by hand and is the one that can.
+by a paste slip. Upstash is typed in by hand — and now the same values go to
+both, which removes the way that could go wrong.
 
 ## 2. Vercel project
 

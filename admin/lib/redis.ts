@@ -89,6 +89,16 @@ export function rateLimitingStatus(): {
  * Sliding-window rate limiter. When Redis isn't configured the behaviour is
  * decided by `whenUnconfigured` — see UnconfiguredPolicy above.
  */
+/**
+ * Which deployment these counters belong to.
+ *
+ * Declared, not inferred — the same variable the console's environment badge
+ * reads. Unset means "local", which is correct for a developer machine and
+ * harmless if it were ever wrong in a deployment: the worst case is a
+ * namespace nobody else writes to.
+ */
+const ENVIRONMENT = process.env.NEXT_PUBLIC_ADMIN_ENV ?? "local";
+
 export function createRateLimiter(
   prefix: string,
   limit: number,
@@ -136,7 +146,17 @@ export function createRateLimiter(
     redis,
     limiter: Ratelimit.slidingWindow(limit, `${windowSeconds} s`),
     analytics: true,
-    prefix,
+    // Namespaced by environment, because staging and production share one
+    // Redis. Upstash's free tier allows a single database, and the limiter
+    // keys are fixed strings — "login", "audit_export" — combined with an IP
+    // or a user id. Two environments against one database would therefore
+    // count the same counters: a test run spending the live console's login
+    // budget, and the limiter fails closed, so the symptom is operators locked
+    // out of production by traffic that was never theirs.
+    //
+    // Shared storage is fine; shared counters are not. This makes them
+    // separate without needing a second database.
+    prefix: `${ENVIRONMENT}:${prefix}`,
   });
   return {
     async limit(key: string) {
