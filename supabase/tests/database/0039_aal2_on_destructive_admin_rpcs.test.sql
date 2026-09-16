@@ -136,9 +136,9 @@ RESET role;
 SELECT is(
   (SELECT count(*)::int FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.prosrc ~ 'require_aal2'),
-  15,
-  'fifteen admin functions require a step-up: the original destructive set '
-  'plus impact snapshot generation and export'
+  26,
+  'twenty-six admin functions require a step-up: the original destructive set, '
+  'impact reporting, and operational governance mutations'
 );
 
 SELECT * FROM finish();

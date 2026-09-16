@@ -175,11 +175,15 @@ prioritized production gap—is in
 - User and Tribe investigation pages, targeted broadcasts, analytics, cost and
   health views, runtime feature flags/kill switches, and an append-only audit
   ledger.
-- Aggregate-only control pages for coordinated-harm signals, support workload,
-  legal readiness, crisis playbooks, recovery readiness, moderation workforce,
-  model operations, messaging, storage, regional compliance, transparency, and
-  experiment governance. Missing mutation contracts are visibly labelled as
-  gaps instead of being simulated in the browser.
+- Actor-bound operational workflows for support cases, legal-request approval,
+  versioned crisis playbooks, and independently verified recovery drills. Their
+  records live in the unexposed `private` schema; AAL2, role checks,
+  idempotency receipts, append-only evidence, and two-person controls are
+  enforced in PostgreSQL rather than trusted to the browser.
+- Aggregate-only control pages for coordinated-harm signals, moderation
+  workforce, model operations, messaging, storage, regional compliance,
+  transparency, and experiment governance. Missing provider/data contracts
+  remain visibly labelled as gaps instead of being simulated in the browser.
 - An Impact Center with a versioned KPI dictionary, source-specific geography,
   minimum-cohort suppression, data-quality status, immutable report snapshots,
   and audited CSV/XLSX/PDF/JSON export. Usage is not described as impact.
@@ -198,9 +202,10 @@ yet be described as ready for moderation at million-user scale. Most urgently:
 - Moderation needs unified cases/evidence across every content surface,
   assignment and persistent SLAs, appeals/second review, reporter-abuse and
   coordinated-abuse tooling, and safe legal-hold workflows.
-- Crisis and child-safety operations require qualified legal review,
-  jurisdiction-aware global playbooks, trained 24/7 ownership, paging, and
-  restore/incident drills. UI instructions are not evidence of compliance.
+- Crisis and child-safety operations still require qualified legal review,
+  trained 24/7 ownership, paging, localized playbook review, and executed
+  incident/restore drills. The new registers record accountable evidence; UI
+  instructions or a scheduled drill are not evidence that the drill occurred.
 - Admin browser E2E, complete pgTAP role matrices, sustained concurrent queue
   testing, and user-outcome observability remain release gates.
 

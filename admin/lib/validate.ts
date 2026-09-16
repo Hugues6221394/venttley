@@ -71,6 +71,23 @@ export function uuid(fd: FormData, field: string): string {
   return v;
 }
 
+/** An optional UUID. Empty becomes null; malformed identifiers never reach an RPC. */
+export function optUuid(fd: FormData, field: string): string | null {
+  const v = String(fd.get(field) ?? "").trim();
+  if (!v) return null;
+  if (!UUID_RE.test(v)) throw new InvalidInput(field, "must be a UUID");
+  return v;
+}
+
+/** A lowercase SHA-256 digest used for evidence references without storing evidence. */
+export function sha256(fd: FormData, field: string): string {
+  const v = reqStr(fd, field, 64).toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(v)) {
+    throw new InvalidInput(field, "must be a 64-character SHA-256 digest");
+  }
+  return v;
+}
+
 /**
  * A capped list of UUIDs, for bulk actions. The cap is the point: a bulk
  * endpoint that accepts an unbounded array lets one request do unbounded

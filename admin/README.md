@@ -69,10 +69,10 @@ secrets, authentication keys, or unrelated personal data.
 | `/emergency-access` | Critical incident context and direct routing to restricted evidence; intentionally does not create a permanent bypass or claim break-glass capability | super admin only |
 | `/flags` and `/settings` | Feature rollout/kill switches, maintenance mode, and configuration visibility | super admin, admin |
 | `/incidents/[incidentId]` | Drill-down for seven live safety, moderation, delivery, scanning, and security signal groups with immediate runbook guidance; signals are not represented as persistent incidents | super admin, admin |
-| `/support/cases` | Cross-workflow support workload across appeals, verification, deletion, and unresolved reports; source workflows remain authoritative | super admin, admin, support |
-| `/legal-requests` | Aggregate holds, privacy work, CSAM readiness, and evidence-access audit posture; no disclosure/export mutation | super admin only |
-| `/crisis/playbooks` | Cross-surface crisis-signal volume and published-resource readiness; signals are not diagnoses | super admin, admin, moderator, support |
-| `/recovery-readiness` | Recovery-method coverage and the explicit absence of automated restore-drill evidence | super admin, admin, read-only auditor |
+| `/support/cases` | Canonical metadata-only case queue with source binding, member binding, priority-derived SLA, assignment, status history, idempotent writes, and actor-bound audit | super admin, admin, support |
+| `/legal-requests` | Hashed-reference intake, jurisdiction/deadline register, independent super-admin approval, disclosure-manifest digest, and completion-receipt digest; it does not generate or transmit disclosure data | super admin, admin; decisions and fulfilment are super admin only |
+| `/crisis/playbooks` | Versioned regional procedures, immutable published content, independent publication, exact-hash staff acknowledgement, and publication history | super admin, admin, moderator, support; creation/publication are narrower |
+| `/recovery-readiness` | Recovery-drill schedule, measured RPO/RTO, integrity-check totals, evidence digest, and independent super-admin verification | super admin, admin; verification is super admin only |
 | `/model-operations` | Classifier/cache/version inventory with explicit evaluation, drift, bias, and rollback evidence gaps | super admin, admin, analyst, read-only auditor |
 | `/messaging-operations` | Push/email queue outcomes without recipients or payload content; provider receipt coverage remains explicit | super admin, admin, analyst, read-only auditor |
 | `/storage-operations` | Bucket/object estimates, media quarantine, and explicit byte-usage/orphan-cleanup gaps | super admin, admin, analyst, read-only auditor |
@@ -485,10 +485,10 @@ from becoming a second, unaudited authority beside PostgreSQL.
 | `/feed-integrity` | Hot-feed cache state, feed flags, indexed quarantine counts, and matched alerts | Privacy-safe exposure, diversity, freshness, safety, experiment, manipulation, and rollback telemetry |
 | `/tribe-governance` | Bounded lifecycle, suspension, stewardship, and join-request queues | Keeper/moderator tenure, attestations, rule adoption, response SLOs, appeals, safe transfer/deletion, and community-health aggregates |
 | `/moderation/campaigns` | Aggregate repeated-subject/report signals | Canonical campaign entity, evidence linkage, assignment, state transitions, audit, and appeals |
-| `/support/cases` | Aggregate workload and source-workflow routing | Unified support case, owner, SLA, correspondence, escalation, and idempotent state machine |
-| `/legal-requests` | Hold/privacy/evidence readiness | Counsel-approved requester verification, jurisdiction/deadline model, two-person disclosure, export expiry, and completion evidence |
-| `/crisis/playbooks` | Live signal volume and resource coverage | Versioned regional playbooks, acknowledgement, drills, trained 24/7 ownership, paging, and external escalation governance |
-| `/recovery-readiness` | Recovery-method coverage | Backup inventory, immutable drill records, measured RPO/RTO, integrity checks, and alerting |
+| `/support/cases` | Canonical case, owner, priority-derived SLA, assignment, append-only events, source binding, retry receipts, and audited state changes | Approved correspondence channel, escalation/paging policy, attachment quarantine, and member-visible support status |
+| `/legal-requests` | Hashed-reference intake, jurisdiction/deadline, two-person approval, manifest digest, and completion-receipt digest | Counsel policy, recipient-bound export generation, encrypted expiring delivery, data-minimization review, and verified recipient receipt |
+| `/crisis/playbooks` | Versioned regional playbooks, independent publication, immutable published text, and exact-hash acknowledgement | Drills, trained 24/7 ownership, paging, localization review, and external escalation governance |
+| `/recovery-readiness` | Immutable drill register, measured RPO/RTO, integrity totals, evidence digest, and independent verification | Automated backup inventory, evidence collector, scheduled restore execution, alerting, and provider-level restore sampling |
 | `/moderation/workforce` | Staff/queue aggregate posture | Privacy-safe roster, skills, shifts, workload caps, wellbeing safeguards, and coverage forecasting |
 | `/model-operations` | Cache/verdict/version inventory | Versioned evaluation corpus, precision/recall, subgroup error review, drift alerts, staged rollout, and rollback gates |
 | `/messaging-operations` | Internal queue outcomes | Provider receipts, user-visible SLOs, idempotent replay, dead-letter taxonomy, pause controls, and reconciliation |

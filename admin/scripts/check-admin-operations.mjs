@@ -115,10 +115,6 @@ for (const page of readOnlyPages) {
 
 const controlPlanePages = [
   "app/(dashboard)/moderation/campaigns/page.tsx",
-  "app/(dashboard)/support/cases/page.tsx",
-  "app/(dashboard)/legal-requests/page.tsx",
-  "app/(dashboard)/crisis/playbooks/page.tsx",
-  "app/(dashboard)/recovery-readiness/page.tsx",
   "app/(dashboard)/moderation/workforce/page.tsx",
   "app/(dashboard)/model-operations/page.tsx",
   "app/(dashboard)/messaging-operations/page.tsx",
@@ -132,6 +128,25 @@ for (const page of controlPlanePages) {
   expect(source.includes('export const dynamic = "force-dynamic"'), `${page} must never be statically cached`);
   expect(source.includes("ControlPlanePage"), `${page} must use the aggregate-only control-plane boundary`);
   expect(!/\.insert\s*\(|\.update\s*\(|\.delete\s*\(|\.upsert\s*\(/.test(source), `${page} must not grow a direct mutation`);
+}
+
+const operationalWorkflows = [
+  ["support/cases", ["admin_create_support_case", "admin_update_support_case"]],
+  ["legal-requests", ["admin_create_legal_request", "admin_decide_legal_request", "admin_mark_legal_request_fulfilled"]],
+  ["crisis/playbooks", ["admin_create_crisis_playbook", "admin_publish_crisis_playbook", "admin_ack_crisis_playbook"]],
+  ["recovery-readiness", ["admin_create_recovery_drill", "admin_complete_recovery_drill", "admin_verify_recovery_drill"]],
+];
+for (const [route, rpcNames] of operationalWorkflows) {
+  const page = read(`app/(dashboard)/${route}/page.tsx`);
+  const actions = read(`app/(dashboard)/${route}/actions.ts`);
+  expect(page.includes('export const dynamic = "force-dynamic"'), `${route} must never be statically cached`);
+  expect(page.includes('name="operation_id"'), `${route} must preserve a logical operation ID across transport retries`);
+  expect(actions.includes("requireOperationalActor"), `${route} actions must re-check active staff and rate-limit`);
+  expect(actions.includes('uuid(formData, "operation_id")'), `${route} actions must validate the retry key`);
+  expect(!/\.from\([^)]*\)\.(insert|update|delete|upsert)/.test(actions), `${route} writes must stay behind actor-bound RPCs`);
+  for (const rpcName of rpcNames) {
+    expect(actions.includes(`\"${rpcName}\"`), `${route} must invoke ${rpcName}`);
+  }
 }
 
 const impactExport = read("app/(dashboard)/impact/reports/[reportId]/export/route.ts");

@@ -110,6 +110,18 @@ if [[ "$snapshot_status" != "200" ]] || ! jq -e '.section == "experiments" and .
   exit 1
 fi
 
+support_queue_status="$(call_rpc admin_support_case_queue '{"p_limit":10}')"
+if [[ "$support_queue_status" != "200" ]] || ! jq -e 'type == "array"' "$rpc_body" >/dev/null; then
+  echo "An authenticated super admin could not read the canonical support-case RPC." >&2
+  exit 1
+fi
+
+support_mutation_status="$(call_rpc admin_create_support_case '{"p_operation":"1a440000-0000-4000-8000-000000000001","p_source_kind":"other","p_source_id":null,"p_member":null,"p_category":"technical","p_priority":"normal"}')"
+if [[ "$support_mutation_status" == "200" ]] || ! jq -e '.message | contains("aal2_required")' "$rpc_body" >/dev/null; then
+  echo "Operational mutation did not fail closed for an AAL1 PostgREST session." >&2
+  exit 1
+fi
+
 aal_status="$(call_rpc admin_generate_impact_report '{"p_report_kind":"monthly_impact","p_title":"AAL1 must fail","p_audience":"internal","p_window_start":"2026-08-01","p_window_end":"2026-08-31","p_country_source":"none","p_country_filter":null,"p_notes":"integration test"}')"
 if [[ "$aal_status" == "200" ]] || ! jq -e '.message | contains("aal2_required")' "$rpc_body" >/dev/null; then
   echo "Report generation did not fail closed for an AAL1 session." >&2
@@ -123,6 +135,11 @@ if [[ "$member_status" == "200" ]] || ! jq -e '.message | contains("not_authoriz
   echo "A demoted member retained impact-administration access." >&2
   exit 1
 fi
+member_support_status="$(call_rpc admin_support_case_queue '{"p_limit":10}')"
+if [[ "$member_support_status" == "200" ]] || ! jq -e '.message | contains("not_authorized")' "$rpc_body" >/dev/null; then
+  echo "A demoted member retained support-case access." >&2
+  exit 1
+fi
 
 anonymous_status="$(curl --silent --show-error --output "$rpc_body" --write-out '%{http_code}' \
   --request POST --header "apikey: ${anon_key}" --header 'Content-Type: application/json' \
@@ -132,4 +149,12 @@ if [[ "$anonymous_status" == "200" ]]; then
   exit 1
 fi
 
-echo "impact_admin_postgrest: authenticated staff allowed; AAL1 mutation, member, and anonymous callers denied."
+anonymous_support_status="$(curl --silent --show-error --output "$rpc_body" --write-out '%{http_code}' \
+  --request POST --header "apikey: ${anon_key}" --header 'Content-Type: application/json' \
+  --data '{"p_limit":10}' "${rest_url}/rpc/admin_support_case_queue")"
+if [[ "$anonymous_support_status" == "200" ]]; then
+  echo "Anonymous PostgREST access to support cases was not denied." >&2
+  exit 1
+fi
+
+echo "impact_admin_postgrest: impact and governance reads allowed; AAL1 mutation, member, and anonymous callers denied."
