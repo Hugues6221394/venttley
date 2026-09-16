@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
 
 import '../../core/constants.dart';
@@ -58,8 +59,9 @@ class _DefaultAnalytics implements AnalyticsService {
     String userId, {
     Map<String, Object?> traits = const {},
   }) async {
-    log.info('analytics.identify', props: {'user_id': userId, ...traits});
-    // TelemetryService stores user_id implicitly via the session.
+    // The first-party event RPC attributes rows from the authenticated session.
+    // Never copy the Auth UUID into an analytics payload or log line.
+    log.info('analytics.identify', props: traits);
   }
 
   @override
@@ -116,17 +118,26 @@ class _PostHogAnalytics implements AnalyticsService {
     String userId, {
     Map<String, Object?> traits = const {},
   }) async {
-    _distinctId = userId;
-    log.info('analytics.identify', props: {'user_id': userId});
-    final scrubbed = PiiScrubber.scrub(traits);
     try {
+      // Product analytics identity is intentionally separate from Supabase
+      // Auth ids and Venttly's public anonymous persona. The RPC returns only
+      // the caller's opaque analytics subject, creating it idempotently.
+      final value = await Supabase.instance.client.rpc('my_analytics_subject');
+      final subject = value?.toString();
+      if (subject == null || subject.isEmpty) {
+        _distinctId = null;
+        return;
+      }
+      _distinctId = subject;
+      log.info('analytics.identify', props: traits);
+      final scrubbed = PiiScrubber.scrub(traits);
       await http.post(
         _capture,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'api_key': apiKey,
           'event': r'$identify',
-          'distinct_id': userId,
+          'distinct_id': subject,
           r'$set': scrubbed,
           'timestamp': DateTime.now().toUtc().toIso8601String(),
         }),

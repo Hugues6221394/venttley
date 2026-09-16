@@ -33,26 +33,32 @@ const sectionTable = rolesSource.slice(
   rolesSource.indexOf("const SECTION_ROLES"),
 );
 const declared = new Set(
-  [...sectionTable.matchAll(/^\s*"(\/[a-z0-9-]+)":/gim)].map((m) => m[1]),
+  [...sectionTable.matchAll(/^\s*"(\/[a-z0-9-]+(?:\/[a-z0-9-]+)*)":/gim)].map((m) => m[1]),
 );
 
-// Route groups — "(dashboard)" — are URL-invisible, so only real directories
-// with a page.tsx count as sections.
-const routes = readdirSync(dashboardDir)
-  .filter((entry) => {
-    const full = join(dashboardDir, entry);
-    if (!statSync(full).isDirectory()) return false;
-    if (entry.startsWith("(") || entry.startsWith("[")) return false;
+// Walk the complete tree. The old one-level scan reported "all routes" while
+// silently missing /moderation/**, /staff/**, and now every Impact Center
+// subpage. Route groups are URL-invisible; dynamic segments remain in the
+// diagnostic path but inherit their nearest declared static prefix.
+function walk(dir, segments = []) {
+  const routes = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (!statSync(full).isDirectory()) continue;
+    const next = entry.startsWith("(") ? segments : [...segments, entry];
     try {
-      return statSync(join(full, "page.tsx")).isFile();
-    } catch {
-      return false;
-    }
-  })
-  .map((entry) => `/${entry}`);
+      if (statSync(join(full, "page.tsx")).isFile()) routes.push(`/${next.join("/")}`);
+    } catch {}
+    routes.push(...walk(full, next));
+  }
+  return routes;
+}
+const routes = walk(dashboardDir);
 
-const undeclared = routes.filter((r) => !declared.has(r));
-const phantom = [...declared].filter((d) => !routes.includes(d));
+const covers = (declaredPath, route) =>
+  route === declaredPath || route.startsWith(`${declaredPath}/`);
+const undeclared = routes.filter((route) => ![...declared].some((path) => covers(path,route)));
+const phantom = [...declared].filter((path) => !routes.some((route) => covers(path,route)));
 
 let failed = false;
 

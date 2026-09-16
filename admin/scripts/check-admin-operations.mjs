@@ -113,5 +113,46 @@ for (const page of readOnlyPages) {
   expect(!/\.insert\s*\(|\.update\s*\(|\.delete\s*\(|\.upsert\s*\(/.test(source), `${page} must remain read-only until an audited mutation contract exists`);
 }
 
+const controlPlanePages = [
+  "app/(dashboard)/moderation/campaigns/page.tsx",
+  "app/(dashboard)/support/cases/page.tsx",
+  "app/(dashboard)/legal-requests/page.tsx",
+  "app/(dashboard)/crisis/playbooks/page.tsx",
+  "app/(dashboard)/recovery-readiness/page.tsx",
+  "app/(dashboard)/moderation/workforce/page.tsx",
+  "app/(dashboard)/model-operations/page.tsx",
+  "app/(dashboard)/messaging-operations/page.tsx",
+  "app/(dashboard)/storage-operations/page.tsx",
+  "app/(dashboard)/regional-compliance/page.tsx",
+  "app/(dashboard)/transparency-reports/page.tsx",
+  "app/(dashboard)/experiments/page.tsx",
+];
+for (const page of controlPlanePages) {
+  const source = read(page);
+  expect(source.includes('export const dynamic = "force-dynamic"'), `${page} must never be statically cached`);
+  expect(source.includes("ControlPlanePage"), `${page} must use the aggregate-only control-plane boundary`);
+  expect(!/\.insert\s*\(|\.update\s*\(|\.delete\s*\(|\.upsert\s*\(/.test(source), `${page} must not grow a direct mutation`);
+}
+
+const impactExport = read("app/(dashboard)/impact/reports/[reportId]/export/route.ts");
+const impactActions = read("app/(dashboard)/impact/reports/actions.ts");
+const reportExport = read("lib/report-export.ts");
+expect(
+  impactExport.includes("activeStaffRole") &&
+    impactExport.includes("impact_report_export") &&
+    impactExport.includes("admin_log_impact_report_export"),
+  "impact exports must re-check active staff, rate-limit, and audit before returning a file",
+);
+expect(
+  impactActions.includes("activeStaffRole") &&
+    impactActions.includes('rpc<string>("admin_generate_impact_report"') &&
+    !/\.from\([^)]*\)\.(insert|update|delete|upsert)/.test(impactActions),
+  "impact report generation must stay behind the actor-bound audited RPC",
+);
+expect(
+  reportExport.includes('/^[=+\\-@]/') && reportExport.includes('t="inlineStr"'),
+  "CSV/XLSX exports must treat spreadsheet-looking strings as data, never formulas",
+);
+
 if (failed) process.exit(1);
 console.log("check:operations — staff invite and read-only control contracts hold.");

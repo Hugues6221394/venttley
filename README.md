@@ -175,6 +175,14 @@ prioritized production gap—is in
 - User and Tribe investigation pages, targeted broadcasts, analytics, cost and
   health views, runtime feature flags/kill switches, and an append-only audit
   ledger.
+- Aggregate-only control pages for coordinated-harm signals, support workload,
+  legal readiness, crisis playbooks, recovery readiness, moderation workforce,
+  model operations, messaging, storage, regional compliance, transparency, and
+  experiment governance. Missing mutation contracts are visibly labelled as
+  gaps instead of being simulated in the browser.
+- An Impact Center with a versioned KPI dictionary, source-specific geography,
+  minimum-cohort suppression, data-quality status, immutable report snapshots,
+  and audited CSV/XLSX/PDF/JSON export. Usage is not described as impact.
 - Supabase cookie authentication, optional IP allowlisting, TOTP/AAL2 flow,
   and optional shared Upstash rate limiting.
 
@@ -183,9 +191,6 @@ prioritized production gap—is in
 The console builds and is connected to real backend controls, but it must not
 yet be described as ready for moderation at million-user scale. Most urgently:
 
-- Route authorization must become fail-closed. An unknown section currently
-  falls through for any staff role, and a legacy `/notifications` fanout route
-  is not in the role matrix.
 - Remaining direct service-role writes must move behind actor-bound,
   transactional RPCs whose audit insert cannot fail independently.
 - Production must require MFA, restricted network access, distributed rate
@@ -202,6 +207,41 @@ yet be described as ready for moderation at million-user scale. Most urgently:
 These gaps are intentionally explicit so a developer assigned only to the
 Super Admin system can work from a truthful production backlog rather than
 assuming that page coverage equals operational readiness.
+
+## Impact, measurement, research, and reporting
+
+Venttly now has a privacy-minimized evidence layer; it is not a claim that the
+product has proved social or clinical impact. The system deliberately separates
+three identities:
+
+- the Supabase Auth identity used for account security;
+- the public pseudonymous persona used inside Venttly; and
+- a random analytics subject returned only to its signed-in owner by
+  `my_analytics_subject()`. Auth UUIDs, authored text, resource IDs, contact
+  details, IP addresses, device identifiers, and exact location are rejected
+  from the product-analytics property boundary.
+
+Nightly jobs derive content-free daily aggregates from canonical product tables
+into the private `impact_daily_metrics` fact table. Reports read that aggregate
+layer, never raw Vents, comments, Whispers, or messages. Small cohorts remain
+suppressed even for Super Admin, geography always carries its source
+(`declared_residence` or `technical_signal`), and technical country is never
+presented as residence, nationality, or citizenship.
+
+The implemented evidence ladder distinguishes platform measurement from
+self-report and longitudinal evidence. Optional Impact Program participation
+has its own versioned, append-only consent ledger, separate from Terms and the
+Privacy Policy. Phase 1 intentionally creates no individual wellbeing-response
+table: WHO-5 and similar instruments remain technically disabled until
+licensing, ethics, legal, cultural, safety, withdrawal, and adverse-event review
+are complete.
+
+Generated impact reports are immutable aggregate snapshots with a methodology
+version and SHA-256 checksum. Generation and every export require an active
+authorized staff session at AAL2 and create an audit record. CSV and XLSX output
+neutralizes spreadsheet formulas; all download responses are private/no-store.
+See [`admin/README.md`](admin/README.md) for roles, routes, operating rules, and
+the remaining evidence and rollout gates.
 
 ## Safety & compliance
 

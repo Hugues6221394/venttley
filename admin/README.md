@@ -33,6 +33,8 @@ secrets, authentication keys, or unrelated personal data.
 | `/moderation/policies` | Current automod coverage and policy codes observed in recent decisions; explicitly identifies the missing versioned-policy backend | super admin, admin, moderator |
 | `/moderation/abuse` | Shadow restrictions, posting cooldowns, request-quota pressure, and aggregate abuse signals without exposing raw device/IP data | super admin, admin, moderator |
 | `/moderation/quality` | Thirty-day moderator workload, response time, and appeal outcomes with sample-size caveats and no authored content | super admin, admin, moderator |
+| `/moderation/campaigns` | Aggregate repeated-subject and heavily-reported-target signals; explicitly not proof of coordination | super admin, admin, moderator |
+| `/moderation/workforce` | Aggregate staffing, unassigned cases, and breached-SLA posture without individual productivity ranking | super admin, admin |
 | `/automod` | Create, enable, disable, and remove dynamic keyword rules consumed by the client and server write guard | super admin, admin, moderator |
 | `/content` | Paginated explorer for Vents, Stories, comments, and Whispers, including removed/quarantined state; destructive actions stay case-bound | super admin, admin, moderator |
 | `/media` | Review classifier-blocked, sensitive, and pending post/Whisper images; approve or block | super admin, admin, moderator |
@@ -67,6 +69,17 @@ secrets, authentication keys, or unrelated personal data.
 | `/emergency-access` | Critical incident context and direct routing to restricted evidence; intentionally does not create a permanent bypass or claim break-glass capability | super admin only |
 | `/flags` and `/settings` | Feature rollout/kill switches, maintenance mode, and configuration visibility | super admin, admin |
 | `/incidents/[incidentId]` | Drill-down for seven live safety, moderation, delivery, scanning, and security signal groups with immediate runbook guidance; signals are not represented as persistent incidents | super admin, admin |
+| `/support/cases` | Cross-workflow support workload across appeals, verification, deletion, and unresolved reports; source workflows remain authoritative | super admin, admin, support |
+| `/legal-requests` | Aggregate holds, privacy work, CSAM readiness, and evidence-access audit posture; no disclosure/export mutation | super admin only |
+| `/crisis/playbooks` | Cross-surface crisis-signal volume and published-resource readiness; signals are not diagnoses | super admin, admin, moderator, support |
+| `/recovery-readiness` | Recovery-method coverage and the explicit absence of automated restore-drill evidence | super admin, admin, read-only auditor |
+| `/model-operations` | Classifier/cache/version inventory with explicit evaluation, drift, bias, and rollback evidence gaps | super admin, admin, analyst, read-only auditor |
+| `/messaging-operations` | Push/email queue outcomes without recipients or payload content; provider receipt coverage remains explicit | super admin, admin, analyst, read-only auditor |
+| `/storage-operations` | Bucket/object estimates, media quarantine, and explicit byte-usage/orphan-cleanup gaps | super admin, admin, analyst, read-only auditor |
+| `/regional-compliance` | Source-labelled geography, age cohort, and policy-receipt readiness without inferring residence from IP | super admin, admin, read-only auditor |
+| `/transparency-reports` | Moderation, appeal, and immutable aggregate-report evidence for accountable publication workflows | super admin, admin, analyst, read-only auditor |
+| `/experiments` | Feature-rollout inventory plus missing guardrail-linkage and automatic-stop controls | super admin, admin, analyst |
+| `/impact` and `/impact/*` | Reach, geography, demographics, engagement, community health, wellbeing governance, optional program design, safety, retention, research, immutable reports, data quality, and methodology | super admin, admin, analyst, read-only auditor |
 
 The unsafe legacy `/notifications` page has been removed. Global communication
 belongs to `/broadcasts`; it still needs a real outbox/delivery consumer before
@@ -75,6 +88,75 @@ an inserted broadcast can be described as delivered.
 The console does not make moderation automatic. The database ingress guards,
 rate limits, media scanning, and member reports reduce queue volume; a trained
 human is still responsible for contextual decisions, escalation, and appeals.
+
+## Impact Center architecture and operating contract
+
+The Impact Center is an evidence system, not a marketing dashboard. Its core
+rule is **usage is not impact**: reach and engagement can be reported as
+platform measurements, while feeling-heard, connection, wellbeing, and
+longitudinal outcomes remain unavailable until a reviewed protocol produces
+appropriate evidence.
+
+The routes are:
+
+| Route | Purpose |
+| --- | --- |
+| `/impact` | Theory of Change and evidence-level overview |
+| `/impact/reach` | new accounts and active person-days |
+| `/impact/geography` | declared-residence and technical-signal views kept separate |
+| `/impact/demographics` | age-band aggregates with minimum-cohort suppression |
+| `/impact/engagement` | Vents, comments, and reactions from canonical records |
+| `/impact/community-health` | responses, response time, unanswered expression, and participation without inferring sentiment |
+| `/impact/wellbeing` | governance-gated instruments; individual wellbeing collection is absent in phase 1 |
+| `/impact/program` | optional research identity and consent architecture |
+| `/impact/safety` | reports, crisis signals, and case-resolution measures without raw safety content |
+| `/impact/retention` | cohort retention with incomplete windows marked as warnings |
+| `/impact/research` | evidence ladder and research-readiness boundaries |
+| `/impact/reports` | AAL2-protected immutable report generation and audited export |
+| `/impact/data-quality` | taxonomy, freshness, timestamp, geography, and counter checks |
+| `/impact/methodology` | complete KPI dictionary, source, cadence, privacy class, owner, and version |
+
+The data flow is:
+
+```text
+canonical product tables
+  -> private.refresh_impact_daily(date)
+  -> private.refresh_impact_lookback(30)       # delayed responses/outcomes
+  -> private.impact_daily_metrics              # no authored content
+  -> role-checked admin_impact_* RPCs
+  -> server-rendered aggregate pages
+  -> immutable report snapshot + SHA-256 checksum
+  -> AAL2 + rate-limited + audited export
+```
+
+Important controls:
+
+- All fact, consent, analytics-identity, quality, and report tables live in the
+  unexposed `private` schema. `anon` and `authenticated` receive no table read.
+- Public RPCs derive the actor from `auth.uid()` and require an active staff
+  role. Report generation and export additionally require AAL2.
+- A minimum cohort is stored per metric; suppressed values stay `NULL` even to
+  Super Admin. Suppression propagates across multi-day report windows.
+- Daily unique actors are labelled **person-days** when summed. The UI does not
+  misrepresent them as cross-window unique people.
+- Country dimensions require an explicit source. Edge-derived country is a
+  coarse technical signal, not declared residence, nationality, or citizenship.
+- The Flutter analytics boundary obtains a random per-account analytics subject
+  through `my_analytics_subject()` and strips content and resource identifiers.
+- Impact Program consent is separate, purpose-specific, versioned, append-only,
+  and withdrawable by adding a new receipt rather than rewriting history.
+- Phase 1 contains no individual survey/wellbeing response table. Enabling one
+  requires DPIA, instrument/licensing, ethics, country, consent, withdrawal,
+  deletion, adverse-event, and minimum-cohort approval.
+- Reports are frozen aggregate records. Existing snapshots cannot be edited;
+  later methodology changes produce a new report and version.
+
+Primary implementation files are `lib/impact.ts`, `lib/report-export.ts`,
+`components/impact-*`, `app/(dashboard)/impact/`, migrations
+`20261026090000_impact_evidence_platform_phase1.sql` and
+`20261028090000_impact_reporting_runtime_hardening.sql`, and pgTAP tests
+`0040_impact_evidence_platform.test.sql` and
+`0042_impact_reporting_runtime_hardening.test.sql`.
 
 ## Staff roles
 
@@ -217,6 +299,8 @@ The database implementation remains in the repository root:
 | Auth sessions and IP visibility | `0106_admin_sessions_ip.sql` |
 | Verification requests | `0109_verification_requests.sql` |
 | Runtime feature flags | `0118_feature_flags.sql` and later hardening migrations |
+| Impact identities, taxonomy, KPI dictionary, consent, aggregates, reports | `20261026090000_impact_evidence_platform_phase1.sql`, hardened by `20261028090000_impact_reporting_runtime_hardening.sql` |
+| Aggregate-only control-plane snapshots for the twelve new operations pages | `20261027090000_admin_control_plane_observability.sql` |
 
 Always add or change database behavior through a migration. Never patch a live
 table or RPC manually after initial owner bootstrap.
@@ -400,6 +484,18 @@ from becoming a second, unaudited authority beside PostgreSQL.
 | `/policy/versions` | Current/scheduled/retired version ledger | Draft-review-publish workflow, body hashes, two-person material-change approval, locale coverage, grace periods, and aggregate acceptance projection |
 | `/feed-integrity` | Hot-feed cache state, feed flags, indexed quarantine counts, and matched alerts | Privacy-safe exposure, diversity, freshness, safety, experiment, manipulation, and rollback telemetry |
 | `/tribe-governance` | Bounded lifecycle, suspension, stewardship, and join-request queues | Keeper/moderator tenure, attestations, rule adoption, response SLOs, appeals, safe transfer/deletion, and community-health aggregates |
+| `/moderation/campaigns` | Aggregate repeated-subject/report signals | Canonical campaign entity, evidence linkage, assignment, state transitions, audit, and appeals |
+| `/support/cases` | Aggregate workload and source-workflow routing | Unified support case, owner, SLA, correspondence, escalation, and idempotent state machine |
+| `/legal-requests` | Hold/privacy/evidence readiness | Counsel-approved requester verification, jurisdiction/deadline model, two-person disclosure, export expiry, and completion evidence |
+| `/crisis/playbooks` | Live signal volume and resource coverage | Versioned regional playbooks, acknowledgement, drills, trained 24/7 ownership, paging, and external escalation governance |
+| `/recovery-readiness` | Recovery-method coverage | Backup inventory, immutable drill records, measured RPO/RTO, integrity checks, and alerting |
+| `/moderation/workforce` | Staff/queue aggregate posture | Privacy-safe roster, skills, shifts, workload caps, wellbeing safeguards, and coverage forecasting |
+| `/model-operations` | Cache/verdict/version inventory | Versioned evaluation corpus, precision/recall, subgroup error review, drift alerts, staged rollout, and rollback gates |
+| `/messaging-operations` | Internal queue outcomes | Provider receipts, user-visible SLOs, idempotent replay, dead-letter taxonomy, pause controls, and reconciliation |
+| `/storage-operations` | Inventory estimates and quarantine load | Byte/egress/cost telemetry, orphan reconciliation, lifecycle evidence, capacity forecasts, and restore sampling |
+| `/regional-compliance` | Source-labelled geography and policy posture | Reviewed country launch matrix, transfer/legal-basis register, current-residence consent where justified, and automated evidence checks |
+| `/transparency-reports` | Immutable internal aggregate evidence | Counsel/policy review, approval/publication lifecycle, locale support, corrections, and external archive |
+| `/experiments` | Rollout inventory and explicit gaps | Exposure ledger, hypotheses, consent/exclusion rules, guardrails, automatic stops, analysis plans, and reproducible results |
 
 Do not enable a disabled operation by adding a Server Action that writes with
 the service-role key. Add an actor-bound RPC (or an Auth workflow with database
@@ -1315,6 +1411,7 @@ npm run build
 cd ..
 supabase db reset --local --no-seed
 supabase test db supabase/tests/database --local
+bash supabase/tests/integration/impact_admin_postgrest.sh
 ```
 
 Record the exact command, commit SHA, database migration head, environment, and

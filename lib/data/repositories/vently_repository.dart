@@ -614,7 +614,7 @@ class VentlyRepository implements MusicProvider {
   Future<void> logout() async {
     await _identity.clearSession();
     _cache.clear();
-    unawaited(_telemetry.event('logout'));
+    unawaited(_telemetry.event(Events.logout));
     if (_live != null) {
       await _live.logout();
     } else {
@@ -3489,7 +3489,7 @@ class VentlyRepository implements MusicProvider {
 
   Future<void> joinTribe(String tribeId) async {
     _cache.invalidate(prefix: 'tribes:');
-    unawaited(_telemetry.event('tribe_join', props: {'tribe_id': tribeId}));
+    unawaited(_telemetry.event(Events.tribeJoined));
     final live = _live;
     if (live != null) return live.joinTribe(tribeId);
     _mock.joinTribe(tribeId);
@@ -3497,7 +3497,7 @@ class VentlyRepository implements MusicProvider {
 
   Future<void> leaveTribe(String tribeId) async {
     _cache.invalidate(prefix: 'tribes:');
-    unawaited(_telemetry.event('tribe_leave', props: {'tribe_id': tribeId}));
+    unawaited(_telemetry.event(Events.tribeLeft));
     final live = _live;
     if (live != null) return live.leaveTribe(tribeId);
     _mock.leaveTribe(tribeId);

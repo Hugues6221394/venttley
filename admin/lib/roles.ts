@@ -38,6 +38,8 @@ const SECTION_ROLES: Record<string, StaffRole[]> = {
   "/safety": ["super_admin", "admin", "moderator", "support"],
   "/csam": ["super_admin"],
   "/moderation": ["super_admin", "admin", "moderator"],
+  "/moderation/campaigns": ["super_admin", "admin", "moderator"],
+  "/moderation/workforce": ["super_admin"],
   "/content": ["super_admin", "admin", "moderator"],
   "/integrity": ["super_admin", "admin", "moderator"],
   "/feed-integrity": ["super_admin", "admin"],
@@ -71,10 +73,21 @@ const SECTION_ROLES: Record<string, StaffRole[]> = {
   "/settings": ["super_admin", "admin"],
   "/jobs": ["super_admin", "admin", "analyst", "read_only_auditor"],
   "/delivery": ["super_admin", "admin", "analyst", "read_only_auditor"],
+  "/messaging-operations": ["super_admin", "admin", "analyst"],
+  "/model-operations": ["super_admin", "admin", "analyst"],
+  "/storage-operations": ["super_admin", "admin"],
   "/releases": ["super_admin", "admin", "analyst", "read_only_auditor"],
   "/incidents": ["super_admin", "admin"],
   "/privacy": ["super_admin", "admin"],
   "/data-governance": ["super_admin", "admin", "read_only_auditor"],
+  "/support/cases": ["super_admin", "admin", "support"],
+  "/legal-requests": ["super_admin", "admin"],
+  "/crisis/playbooks": ["super_admin", "admin", "moderator", "support"],
+  "/recovery-readiness": ["super_admin", "admin"],
+  "/regional-compliance": ["super_admin", "admin", "analyst", "read_only_auditor"],
+  "/transparency-reports": ["super_admin", "admin", "analyst", "read_only_auditor"],
+  "/experiments": ["super_admin"],
+  "/impact": ["super_admin", "admin", "analyst", "read_only_auditor"],
   "/policy": ["super_admin", "admin", "moderator"],
   "/security": ["super_admin"],
   "/emergency-access": ["super_admin"],
@@ -84,7 +97,9 @@ const SECTION_ROLES: Record<string, StaffRole[]> = {
 
 /** The section prefix a pathname belongs to (e.g. "/users/123" → "/users"). */
 export function sectionOf(pathname: string): string | null {
-  const match = Object.keys(SECTION_ROLES).find(
+  // Longest prefix wins so a narrowly restricted nested control surface such
+  // as /moderation/workforce cannot inherit the broader /moderation role set.
+  const match = Object.keys(SECTION_ROLES).sort((a,b)=>b.length-a.length).find(
     (s) => pathname === s || pathname.startsWith(s + "/")
   );
   return match ?? null;

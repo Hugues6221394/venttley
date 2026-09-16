@@ -43,6 +43,7 @@ BEGIN;
 GRANT SELECT ON public.whisper_listens TO authenticated;
 
 DROP POLICY IF EXISTS "whisper listens readable" ON public.whisper_listens;
+DROP POLICY IF EXISTS "whisper listens are your own" ON public.whisper_listens;
 
 CREATE POLICY "whisper listens are your own"
     ON public.whisper_listens

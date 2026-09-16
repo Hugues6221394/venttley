@@ -35,6 +35,7 @@ import {
   FileLock2,
   Eye,
   RefreshCw,
+  Globe2,
 } from "./ui/icons";
 
 type Item = {
@@ -59,6 +60,7 @@ const groups: Group[] = [
       { href: "/csam",       label: "CSAM incidents", icon: AlertTriangle },
       { href: "/youth-safety", label: "Youth safety", icon: ShieldCheck },
       { href: "/moderation", label: "Moderation",     icon: ShieldAlert },
+      { href: "/moderation/campaigns", label: "Harm campaigns", icon: UserSearch },
       { href: "/integrity", label: "Platform integrity", icon: UserSearch },
       { href: "/feed-integrity", label: "Feed integrity", icon: LineChart },
       { href: "/tribe-governance", label: "Tribe governance", icon: Users2 },
@@ -72,6 +74,8 @@ const groups: Group[] = [
       { href: "/music",      label: "Music catalog",  icon: Music2 },
       { href: "/broadcasts", label: "Broadcasts",     icon: Megaphone },
       { href: "/delivery", label: "Delivery operations", icon: Megaphone },
+      { href: "/crisis/playbooks", label: "Crisis playbooks", icon: Siren },
+      { href: "/support/cases", label: "Support cases", icon: LifeBuoy },
     ],
   },
   {
@@ -88,12 +92,17 @@ const groups: Group[] = [
       { href: "/privacy", label: "Privacy requests", icon: FileLock2 },
       { href: "/evidence-access", label: "Evidence access", icon: Eye },
       { href: "/data-governance", label: "Data governance", icon: Database },
+      { href: "/legal-requests", label: "Legal requests", icon: Scale },
+      { href: "/recovery-readiness", label: "Recovery readiness", icon: RefreshCw },
+      { href: "/moderation/workforce", label: "Moderation workforce", icon: Users2 },
+      { href: "/regional-compliance", label: "Regional compliance", icon: Globe2 },
     ],
   },
   {
     label: "Insight",
     items: [
       { href: "/analytics", label: "Analytics", icon: LineChart },
+      { href: "/impact", label: "Impact Center", icon: Heart },
       { href: "/slo",       label: "Service levels", icon: LineChart },
       { href: "/ops",       label: "Ops & cost", icon: TrendingUp },
       { href: "/audit",     label: "Audit log", icon: ScrollText },
@@ -101,12 +110,17 @@ const groups: Group[] = [
       { href: "/jobs",      label: "Jobs & delivery", icon: BriefcaseBusiness },
       { href: "/incidents", label: "Incident command", icon: Siren },
       { href: "/releases", label: "Release readiness", icon: RefreshCw },
+      { href: "/model-operations", label: "Model operations", icon: Sparkles },
+      { href: "/messaging-operations", label: "Messaging operations", icon: Megaphone },
+      { href: "/storage-operations", label: "Storage operations", icon: Database },
+      { href: "/transparency-reports", label: "Transparency reports", icon: ScrollText },
     ],
   },
   {
     label: "Control",
     items: [
       { href: "/flags",    label: "Feature flags", icon: Flag },
+      { href: "/experiments", label: "Experiments", icon: LineChart },
       { href: "/approvals", label: "Sensitive approvals", icon: Scale },
       { href: "/policy/versions", label: "Policy versions", icon: BookOpenCheck },
       { href: "/emergency-access", label: "Emergency access", icon: Siren },
