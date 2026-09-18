@@ -425,14 +425,28 @@ export default async function UserDetailPage({
           <Card title="Edit profile" hint="Overwrites the user's public fields. Audited.">
             <form action={editProfile} className="flex flex-col gap-3">
               <input type="hidden" name="user_id" value={user.user_id} />
+              {/* Shown, never sent. `users_identity_guard` raises
+                  username_changes_disabled on any UPDATE that changes
+                  anonymous_pseudonym, so an editable box here could only ever
+                  fail — and it failed as an opaque React #441, because the
+                  action lets the database error escape into the Server
+                  Components render. Same class of bug as the "banned" /
+                  "shadow_banned" options removed from the status dropdown
+                  above: a control the database will always refuse. Handles are
+                  permanent by design; changing one is how impersonation and
+                  reputation-shedding start. */}
               <div className="flex flex-col gap-1">
                 <label className="h-eyebrow">Pseudonym</label>
                 <input
                   type="text"
-                  name="pseudonym"
-                  defaultValue={user.anonymous_pseudonym}
-                  className="input"
+                  value={user.anonymous_pseudonym}
+                  className="input opacity-60 cursor-not-allowed"
+                  readOnly
+                  disabled
                 />
+                <p className="text-xs text-burgundy/60">
+                  Permanent. Handles cannot be changed after the account exists.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="flex flex-col gap-1">

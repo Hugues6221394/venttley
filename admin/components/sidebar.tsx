@@ -172,7 +172,12 @@ export default function Sidebar({
         </div>
         <div className="leading-tight">
           <p className="text-[15px] font-extrabold text-burgundy">Venttly</p>
-          <p className="h-eyebrow">Super Admin</p>
+          {/* The operator's own role, not a fixed wordmark. This read
+              "Super Admin" for everyone, so a moderator's sidebar overstated
+              their authority while the topbar correctly showed MODERATOR. On a
+              console where knowing exactly what you may do is the point, the
+              chrome should not disagree with itself. */}
+          <p className="h-eyebrow">{(role ?? "staff").replace(/_/g, " ")}</p>
         </div>
       </Link>
 
