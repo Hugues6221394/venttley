@@ -1,6 +1,5 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { rpc } from "@/lib/audit";
@@ -11,7 +10,13 @@ import {
   createRequiredAuthAdminClient,
   createSsrClient,
 } from "@/lib/supabase/server";
-import { emailAddress, enumOf, reqStr, uuid } from "@/lib/validate";
+import {
+  emailAddress,
+  enumOf,
+  pseudonym,
+  reqStr,
+  uuid,
+} from "@/lib/validate";
 
 const ASSIGNABLE_STAFF_ROLES = [
   "super_admin",
@@ -53,6 +58,7 @@ function resultCode(error: unknown): string {
   if (message.includes("mfa") || message.includes("aal2")) return "mfa_required";
   if (message.includes("not_authorized") || message.includes("forbidden")) return "forbidden";
   if (message.includes("already") || message.includes("registered") || message.includes("exists")) return "already_exists";
+  if (message.includes("handle_taken")) return "handle_taken";
   if (message.includes("last_super_admin")) return "last_super_admin";
   if (message.includes("self_change")) return "self_change";
   if (message.includes("email") || message.includes("required") || message.includes("must be")) return "invalid_input";
@@ -99,7 +105,28 @@ export async function inviteStaff(formData: FormData) {
     // the most powerful role in the system.
     const role = enumOf(formData, "role", INVITABLE_STAFF_ROLES);
     const reason = reqStr(formData, "reason", 500);
-    const pseudonym = `staff_${randomBytes(8).toString("hex")}`;
+    // Chosen by the inviter, not generated. This used to be
+    // `staff_${randomBytes(8).toString("hex")}`, which is permanent the moment
+    // the row exists — guard_user_identity refuses every later change — so a
+    // staff member was stuck forever with a name nobody could read, and the
+    // audit log recorded their actions under it. The handle is still a
+    // pseudonym: it names a role, not a person.
+    const handle = pseudonym(formData, "pseudonym");
+
+    // The unique index on lower(anonymous_pseudonym) is the real guarantee;
+    // this lookup only buys a usable error. Without it a collision surfaces as
+    // a Postgres uniqueness violation *after* inviteUserByEmail has already
+    // created the Auth account and sent the mail, leaving a half-built account
+    // and an invitation nobody can accept.
+    const admin = await createAdminClient();
+    const { data: existing, error: lookupError } = await admin
+      .from("users")
+      .select("user_id")
+      .eq("username_normalized", handle.toLowerCase())
+      .maybeSingle();
+    if (lookupError) throw new Error("handle_lookup_failed");
+    if (existing) throw new Error("handle_taken");
+
     const redirectTo = process.env.ADMIN_INVITE_REDIRECT_URL?.trim();
     if (!redirectTo) throw new Error("invite_redirect_required");
     const parsed = new URL(redirectTo);
@@ -114,7 +141,7 @@ export async function inviteStaff(formData: FormData) {
     const { data, error } = await authAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo,
       data: {
-        pseudonym,
+        pseudonym: handle,
         avatar_seed: "rose-orb-0001",
       },
     });

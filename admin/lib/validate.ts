@@ -142,3 +142,29 @@ export function emailAddress(fd: FormData, field: string): string {
   }
   return value;
 }
+
+/**
+ * A handle, validated exactly as `private.guard_user_identity` validates it:
+ * 3–24 characters of [A-Za-z0-9_].
+ *
+ * Worth getting right here rather than letting the trigger do it, because this
+ * is the only moment the value can be chosen at all. The same trigger raises
+ * username_changes_disabled on any later UPDATE, so a handle is permanent from
+ * the instant the row exists — and for an invitation the row is created by the
+ * same call that sends the email. A value rejected at the database would mean
+ * an invitation already in someone's inbox for an account that failed to
+ * finish being built.
+ */
+export function pseudonym(fd: FormData, field: string): string {
+  const value = reqStr(fd, field, 24);
+  if (value.length < 3) {
+    throw new InvalidInput(field, "must be at least 3 characters");
+  }
+  if (!/^[A-Za-z0-9_]+$/.test(value)) {
+    throw new InvalidInput(
+      field,
+      "must be letters, numbers and underscores only"
+    );
+  }
+  return value;
+}

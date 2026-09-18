@@ -62,6 +62,7 @@ const NOTICE: Record<string, { tone: "ok" | "warn" | "danger"; text: string }> =
   mfa_required: { tone: "warn", text: "Complete the MFA challenge before changing staff access." },
   forbidden: { tone: "danger", text: "Only an active super admin can perform this action." },
   already_exists: { tone: "warn", text: "That mailbox already has an Auth account. Use its immutable user ID to grant access, or inspect the existing account." },
+  handle_taken: { tone: "warn", text: "That handle is already in use. Handles are permanent, so no invitation was sent — pick another and try again." },
   last_super_admin: { tone: "danger", text: "The last active super admin cannot be demoted or removed." },
   self_change: { tone: "danger", text: "You cannot change or remove your own access from this page." },
   invalid_input: { tone: "danger", text: "Check the submitted email, ID, role, confirmation, and reason." },
@@ -199,6 +200,25 @@ export default async function StaffPage({
                 placeholder="moderator@company.com"
                 disabled={!authAvailable || !inviteRedirectConfigured}
               />
+            </div>
+            <div>
+              <label className="h-eyebrow mb-1 block">Handle</label>
+              <input
+                name="pseudonym"
+                required
+                minLength={3}
+                maxLength={24}
+                pattern="[A-Za-z0-9_]+"
+                autoComplete="off"
+                className="input w-full"
+                placeholder="venttly_admin"
+                disabled={!authAvailable || !inviteRedirectConfigured}
+              />
+              <p className="mt-1 text-[11px] text-ink-muted">
+                Permanent — it cannot be changed after the invitation is sent,
+                and every audit entry this person writes will carry it. Name the
+                role, not the person.
+              </p>
             </div>
             <div>
               <label className="h-eyebrow mb-1 block">Initial role</label>
