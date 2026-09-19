@@ -22,6 +22,38 @@ VALUES ('9999aaaa-0000-4000-8000-000000000001','enactmod','enactmod','x',
        ('9999aaaa-0000-4000-8000-000000000005','enactshadow','enactshadow','x',
         'enactshadow','enactshadow','enactshadow','normal','active',1990);
 
+-- The profiles above are written with session_replication_role = replica, which
+-- skips the foreign key from public.users to auth.users. A row inserted that way
+-- stays in violation of it, and the next ordinary UPDATE of that row -- a karma
+-- increment, a status change, a counter -- fails the constraint even though the
+-- UPDATE never touches user_id. So each fixture gets the auth row it is supposed
+-- to have.
+--
+-- Written here, still inside the replica fence, rather than before it: an insert
+-- into auth.users fires handle_new_user, which would build a second profile and
+-- collide with the one above on users_pseudonym_lower_unique. Replica mode
+-- suppresses that trigger along with the foreign key.
+INSERT INTO auth.users (
+  id, aud, role, email, raw_app_meta_data, raw_user_meta_data,
+  created_at, updated_at
+) VALUES
+  ('9999aaaa-0000-4000-8000-000000000001', 'authenticated', 'authenticated', 't0022u1@id.venttly.app',
+   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+   now(), now()),
+  ('9999aaaa-0000-4000-8000-000000000002', 'authenticated', 'authenticated', 't0022u2@id.venttly.app',
+   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+   now(), now()),
+  ('9999aaaa-0000-4000-8000-000000000003', 'authenticated', 'authenticated', 't0022u3@id.venttly.app',
+   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+   now(), now()),
+  ('9999aaaa-0000-4000-8000-000000000004', 'authenticated', 'authenticated', 't0022u4@id.venttly.app',
+   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+   now(), now()),
+  ('9999aaaa-0000-4000-8000-000000000005', 'authenticated', 'authenticated', 't0022u5@id.venttly.app',
+   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+   now(), now())
+ON CONFLICT (id) DO NOTHING;
+
 INSERT INTO public.posts (post_id, author_id, content, category_name, post_mood)
 VALUES ('9999bbbb-0000-4000-8000-000000000001','9999aaaa-0000-4000-8000-000000000002',
         'content by a suspended author','vent_zone','healing'),

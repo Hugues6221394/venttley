@@ -34,6 +34,29 @@ VALUES ('aa110000-0000-4000-8000-000000000001','aalmod','aalmod','x',
        ('aa110000-0000-4000-8000-000000000002','aaltarget','aaltarget','x',
         'aaltarget','aaltarget','aaltarget','normal','active',1995);
 
+-- The profiles above are written with session_replication_role = replica, which
+-- skips the foreign key from public.users to auth.users. A row inserted that way
+-- stays in violation of it, and the next ordinary UPDATE of that row -- a karma
+-- increment, a status change, a counter -- fails the constraint even though the
+-- UPDATE never touches user_id. So each fixture gets the auth row it is supposed
+-- to have.
+--
+-- Written here, still inside the replica fence, rather than before it: an insert
+-- into auth.users fires handle_new_user, which would build a second profile and
+-- collide with the one above on users_pseudonym_lower_unique. Replica mode
+-- suppresses that trigger along with the foreign key.
+INSERT INTO auth.users (
+  id, aud, role, email, raw_app_meta_data, raw_user_meta_data,
+  created_at, updated_at
+) VALUES
+  ('aa110000-0000-4000-8000-000000000001', 'authenticated', 'authenticated', 't0039u1@id.venttly.app',
+   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+   now(), now()),
+  ('aa110000-0000-4000-8000-000000000002', 'authenticated', 'authenticated', 't0039u2@id.venttly.app',
+   '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+   now(), now())
+ON CONFLICT (id) DO NOTHING;
+
 SET session_replication_role = origin;
 
 -- ---------------------------------------------------------------------------

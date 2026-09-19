@@ -56,6 +56,7 @@ BEGIN;
 DO $$
 DECLARE
   v_auth_total INTEGER;
+  v_profiles   INTEGER;
   v_orphans    INTEGER;
   -- Well above the two known rows, far below anything that could be mistaken
   -- for the member base. If this is ever legitimately exceeded, the right move
@@ -63,10 +64,19 @@ DECLARE
   v_ceiling CONSTANT INTEGER := 25;
 BEGIN
   SELECT count(*) INTO v_auth_total FROM auth.users;
-  IF v_auth_total = 0 THEN
+  SELECT count(*) INTO v_profiles   FROM public.users;
+
+  -- An empty auth.users is only alarming next to profiles that claim to
+  -- belong to it. Both empty is a database that has just been created --
+  -- `supabase db reset`, CI, a new environment -- where there is nothing to
+  -- delete and nothing to get wrong. The first version of this check refused
+  -- on `v_auth_total = 0` alone and therefore could not be applied to a fresh
+  -- database at all, which would have broken every reset from here on.
+  IF v_auth_total = 0 AND v_profiles > 0 THEN
     RAISE EXCEPTION
-      'refusing to run: auth.users is empty or unreadable, which would make '
-      'every profile row look orphaned';
+      'refusing to run: auth.users is empty or unreadable while % profile '
+      'row(s) exist, which would make every one of them look orphaned',
+      v_profiles;
   END IF;
 
   SELECT count(*) INTO v_orphans
