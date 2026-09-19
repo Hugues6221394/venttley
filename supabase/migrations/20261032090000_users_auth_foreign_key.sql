@@ -41,6 +41,24 @@
 -- doing the right thing, and an operator who meets that error will reach for
 -- the dashboard's SQL editor, which is worse than where we started.
 --
+-- DELETING A PROFILE GOES THROUGH THE SANCTIONED PATH
+--
+-- The delete below cascades into security_events, whose guard refuses every
+-- DELETE except one: it returns OLD when `venttly.purging_account` is 'on'.
+-- admin_delete_user sets exactly that for the length of its transaction, so a
+-- member's own login history is erased along with their account -- deliberate,
+-- and asserted by 0026, because the login history is their personal data and
+-- erasure is the point of a deletion request.
+--
+-- This migration is doing the same thing to two accountless profiles, so it
+-- uses the same switch rather than inventing a second way in. The first
+-- attempt at this file did not, and failed against production with
+-- "security_events is append-only" -- which is how the separate, real defect
+-- in 20261031090000 was found.
+--
+-- set_config(..., true) is transaction-local: it reverts at COMMIT whatever
+-- happens, so the exception cannot outlive this migration.
+--
 -- THE DELETE IS FENCED
 --
 -- `DELETE … WHERE NOT EXISTS (SELECT FROM auth.users)` is one missing GRANT
@@ -93,8 +111,15 @@ BEGIN
   RAISE NOTICE 'deleting % orphaned profile row(s) of % auth accounts',
     v_orphans, v_auth_total;
 
+  -- The one sanctioned reason an append-only security_events row may go: the
+  -- account it belongs to is being erased. Transaction-local, so it lapses at
+  -- COMMIT regardless of what happens below.
+  PERFORM set_config('venttly.purging_account', 'on', true);
+
   DELETE FROM public.users p
    WHERE NOT EXISTS (SELECT 1 FROM auth.users a WHERE a.id = p.user_id);
+
+  PERFORM set_config('venttly.purging_account', 'off', true);
 END $$;
 
 -- Idempotent: a re-run finds the constraint and leaves it alone. Named
@@ -122,7 +147,7 @@ COMMENT ON CONSTRAINT users_user_id_auth_fkey ON public.users IS
   'foreign keys and is unaffected.';
 
 SELECT public.record_migration(
-  '20261031090000', 'users_auth_foreign_key'
+  '20261032090000', 'users_auth_foreign_key'
 );
 
 NOTIFY pgrst, 'reload schema';
