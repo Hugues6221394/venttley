@@ -12,7 +12,8 @@
     "typecheck": "node scripts/check-routes.mjs && node scripts/check-service-role-gates.mjs && node scripts/check-admin-operations.mjs && tsc --noEmit",
     "check:routes": "node scripts/check-routes.mjs",
     "check:gates": "node scripts/check-service-role-gates.mjs",
-    "check:operations": "node scripts/check-admin-operations.mjs"
+    "check:operations": "node scripts/check-admin-operations.mjs",
+    "profile:local": "node scripts/profile-console.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.1",

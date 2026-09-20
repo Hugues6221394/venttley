@@ -2,6 +2,8 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 import { activeStaffRole } from "@/lib/staff";
+import { cache } from "react";
+import { measuredSupabaseFetch } from "@/lib/performance";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
@@ -15,12 +17,13 @@ type CookieToSet = { name: string; value: string; options?: CookieOptions };
  * etc. when the caller has user_role IN (super_admin, admin, moderator,
  * read_only_auditor).
  */
-export async function createSsrClient() {
+export const createSsrClient = cache(async function createSsrClient() {
   const cookieStore = await cookies();
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: { fetch: measuredSupabaseFetch },
       cookies: {
         getAll() {
           return cookieStore.getAll();
@@ -39,7 +42,24 @@ export async function createSsrClient() {
       },
     }
   );
-}
+});
+
+/** React render-pass memoization only: no cross-request authorization cache.
+ * Pages still gate their own data access; a layout is never an authorization
+ * boundary for its concurrently rendered children. Mutation RPCs recheck the
+ * actor in the database independently of this read optimization.
+ */
+export const getRenderStaff = cache(async () => {
+  const ssr = await createSsrClient();
+  const { data: { user }, error } = await ssr.auth.getUser();
+  if (error || !user) return null;
+  const [role, profile] = await Promise.all([
+    activeStaffRole(ssr, user.id),
+    ssr.from("users").select("anonymous_pseudonym").eq("user_id", user.id).maybeSingle(),
+  ]);
+  if (!role || profile.error || !profile.data) return null;
+  return { userId: user.id, role, pseudonym: profile.data.anonymous_pseudonym as string };
+});
 
 /**
  * Returns true when the SUPABASE_SERVICE_ROLE_KEY env var is missing or
@@ -72,14 +92,7 @@ function serviceRoleConfigured(): boolean {
  * is what makes enforcing it here safe rather than merely convenient.
  */
 async function assertActiveStaff(): Promise<void> {
-  const ssr = await createSsrClient();
-  const {
-    data: { user },
-  } = await ssr.auth.getUser();
-  if (!user) throw new Error("admin client requested without a session");
-
-  const role = await activeStaffRole(ssr, user.id);
-  if (!role) {
+  if (!(await getRenderStaff())) {
     // Deliberately terse. It surfaces through the error boundary, and the
     // person who sees it is by definition not someone to hand details to.
     throw new Error("Not authorized");
@@ -108,7 +121,7 @@ export async function createAdminClient() {
     return createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
+      { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: measuredSupabaseFetch } }
     );
   }
   if (process.env.NODE_ENV === "development") {

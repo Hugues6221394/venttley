@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { canAccess } from "@/lib/roles";
 import {
@@ -131,16 +132,10 @@ const groups: Group[] = [
 
 export default function Sidebar({
   role,
-  pendingReports = 0,
-  openIncidents = 0,
-  openSafety = 0,
-  openAppeals = 0,
+  badges,
 }: {
   role?: string;
-  pendingReports?: number;
-  openIncidents?: number;
-  openSafety?: number;
-  openAppeals?: number;
+  badges?: Partial<Record<string, ReactNode>>;
 }) {
   const pathname = usePathname();
   // Least-privilege: a role only sees the sections it may open. The middleware
@@ -189,31 +184,20 @@ export default function Sidebar({
               {g.items.map((it) => {
                 const active = isActive(it.href);
                 const Icon = it.icon;
-                const badge =
-                  it.href === "/moderation"
-                    ? pendingReports
-                    : it.href === "/appeals"
-                      ? openAppeals
-                      : it.href === "/safety"
-                        ? openSafety
-                        : it.href === "/system"
-                          ? openIncidents
-                          : undefined;
                 return (
                   <Link
                     key={it.href}
                     href={it.href}
-                    className={`nav-item ${active ? "nav-item-active" : ""}`}
+                    prefetch={false}
+                    aria-current={active ? "page" : undefined}
+                    className={`nav-item relative ${active ? "nav-item-active" : ""}`}
                   >
                     <span className="flex items-center gap-2.5">
                       <Icon size={16} className={active ? "text-berry" : ""} />
                       <span>{it.label}</span>
                     </span>
-                    {badge !== undefined && badge > 0 && (
-                      <span className="pill bg-danger/15 text-danger">
-                        {badge}
-                      </span>
-                    )}
+                    {badges?.[it.href]}
+                    <NavigationPending />
                   </Link>
                 );
               })}
@@ -235,4 +219,11 @@ export default function Sidebar({
       </div>
     </aside>
   );
+}
+
+function NavigationPending() {
+  const { pending } = useLinkStatus();
+  return <span role="status" className={`pointer-events-none absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-berry ${pending ? "opacity-100" : "opacity-0"}`}>
+    <span className="sr-only">{pending ? "Opening workspace…" : ""}</span>
+  </span>;
 }

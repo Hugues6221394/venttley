@@ -18,6 +18,12 @@ secrets, authentication keys, or unrelated personal data.
 
 ## What exists today
 
+The premium-console rollout is **in progress**, not complete. See
+[Modernization progress and verification](docs/modernization-progress.md) for
+the measured rendering changes, disabled staff-inbox backend, test commands,
+rollout precautions, and remaining design/workflow work. The current bell is
+explicitly unavailable; it no longer mislabels queue totals as unread messages.
+
 | Route | Current capability | Roles admitted by `lib/roles.ts` |
 | --- | --- | --- |
 | `/overview` | Platform counts, recent safety signals, reports, regions, and privileged activity | all staff roles |

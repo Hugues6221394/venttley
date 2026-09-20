@@ -4,7 +4,7 @@ import { PageHeader, SectionHeader } from "@/components/ui/page-header";
 import { StatCard, Sparkline } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/section";
-import { EmptyState } from "@/components/ui/empty-state";
+import { EmptyState, ErrorPanel } from "@/components/ui/empty-state";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -83,6 +83,17 @@ export default async function OverviewPage() {
       .lt("created_at", new Date(Date.now() - 24 * 3600 * 1000).toISOString())
       .is("deleted_at", null),
   ]);
+
+  // A failed source is not an empty queue or a healthy platform. Keep the
+  // shell usable but withhold the composite posture until it can be proved.
+  if (!metricsRes.data || [metricsRes, signupsRes, postsHourlyRes, reportsDailyRes,
+    regionsRes, incidentsRes, auditRes, prevSignupsRes, prevPostsRes].some(result => result.error)) {
+    return <div className="max-w-[1400px] space-y-6">
+      <PageHeader eyebrow="Operate" title="Control Center" subtitle="The platform picture is incomplete." />
+      <ErrorPanel title="Live overview unavailable" hint="One or more data sources could not be verified. Open the individual queues or reload to retry. No healthy status or zero totals have been inferred." />
+      <Link href="/overview" prefetch={false} className="btn-secondary">Retry overview</Link>
+    </div>;
+  }
 
   const m = metricsRes.data ?? {
     total_users: 0,

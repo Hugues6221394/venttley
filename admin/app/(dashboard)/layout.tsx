@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import Sidebar from "@/components/sidebar";
 import Topbar from "@/components/topbar";
-import { createAdminClient, createSsrClient } from "@/lib/supabase/server";
-import { activeStaffRole } from "@/lib/staff";
+import { getRenderStaff } from "@/lib/supabase/server";
+import { Suspense } from "react";
+import { QueueBadge, type QueueBadgePath } from "@/components/queue-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -11,82 +12,25 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createSsrClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: row, error } = await supabase
-    .from("users")
-    .select("anonymous_pseudonym, user_role")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (error || !row) {
-    return <NotAuthorized pseudonym={user.email ?? "unknown"} />;
-  }
-
-  // Checked here as well as in the proxy, and deliberately not trusted from
-  // it. Everything below this line reads with the service-role client, which
-  // bypasses RLS entirely — so this is the only thing standing between a
-  // suspended moderator and the reports queue, the audit log and every session
-  // on the platform. A gate that exists once, in front, is a gate that is
-  // skipped the first time a route is added outside it.
-  const role = await activeStaffRole(supabase, user.id);
-  if (!role) {
-    return <NotAuthorized pseudonym={row.anonymous_pseudonym} />;
-  }
-
-  // Counters used to pin operational urgency in the sidebar / topbar.
-  // Service-role client is intentional: the layout already gated the
-  // caller's role, and these counts power the chrome on every page.
-  const db = await createAdminClient();
-  const [{ count: pendingReports }, { count: crisis24h }] = await Promise.all([
-    db
-      .from("reports")
-      .select("report_id", { count: "exact", head: true })
-      .eq("is_resolved", false),
-    db
-      .from("posts")
-      .select("post_id", { count: "exact", head: true })
-      .not("crisis_level", "is", null)
-      .gte(
-        "created_at",
-        new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-      ),
-  ]);
-
-  // Open appeals. Read with the service-role client for the same reason as the
-  // counters above: moderation_appeals is own-read for authenticated callers,
-  // so the SSR client would count only the operator's own appeals rather than
-  // the queue.
-  const { count: openAppeals } = await db
-    .from("moderation_appeals")
-    .select("appeal_id", { count: "exact", head: true })
-    .eq("status", "open");
-
-  // Open safety-queue count via the SSR (logged-in) client — the RPC is gated
-  // by is_staff(auth.uid()), which the service-role client can't satisfy.
-  const { data: openSafety } = await supabase.rpc("admin_safety_open_count");
+  const staff = await getRenderStaff();
+  if (!staff) redirect("/login");
+  const badges = Object.fromEntries((["/moderation", "/appeals", "/safety"] as QueueBadgePath[]).map(path => [
+    path, <Suspense key={path} fallback={<span className="text-xs text-ink-muted" aria-label="Loading queue count">…</span>}><QueueBadge path={path} /></Suspense>,
+  ]));
 
   const env = resolveEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
 
   return (
     <div className="min-h-screen flex bg-canvas">
       <Sidebar
-        role={role}
-        pendingReports={pendingReports ?? 0}
-        openIncidents={crisis24h ?? 0}
-        openSafety={typeof openSafety === "number" ? openSafety : 0}
-        openAppeals={openAppeals ?? 0}
+        role={staff.role}
+        badges={badges}
       />
       <div className="flex flex-col flex-1 min-w-0">
         <Topbar
-          pseudonym={row.anonymous_pseudonym}
-          role={role}
+          pseudonym={staff.pseudonym}
+          role={staff.role}
           env={env}
-          unread={(pendingReports ?? 0) + (crisis24h ?? 0)}
         />
         <main className="flex-1 px-8 py-8 overflow-y-auto">{children}</main>
       </div>
@@ -117,24 +61,4 @@ function resolveEnv(url?: string): "production" | "staging" | "local" {
   if (!url) return "local";
   if (url.includes("localhost") || url.includes("127.0.0.1")) return "local";
   return "production";
-}
-
-function NotAuthorized({ pseudonym }: { pseudonym: string }) {
-  return (
-    <main className="min-h-screen flex items-center justify-center bg-canvas px-6">
-      <div className="surface max-w-md p-8 text-center">
-        <p className="text-4xl mb-2">🔒</p>
-        <h1 className="text-lg font-extrabold text-burgundy">Not authorised</h1>
-        <p className="text-sm text-ink-muted mt-2">
-          @{pseudonym} doesn&rsquo;t have an admin role. Ask the platform owner
-          to grant <code className="font-mono">super_admin</code> or{" "}
-          <code className="font-mono">admin</code>, or sign in with a different
-          account.
-        </p>
-        <a href="/login" className="btn-secondary mt-6">
-          Back to login
-        </a>
-      </div>
-    </main>
-  );
 }

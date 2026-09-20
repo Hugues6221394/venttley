@@ -1,6 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export type Column<T> = {
   key: string;
@@ -21,9 +23,10 @@ export function DataTable<T>({
   rows: T[];
   rowKey: (row: T) => string;
   empty?: string;
-  /** When set, each row becomes an <a> for keyboard/screen-reader nav. */
+  /** Adds an explicit, keyboard-accessible detail link to each row. */
   onRowHref?: (row: T) => string;
 }) {
+  const router = useRouter();
   return (
     <div className="surface overflow-hidden">
       <div className="overflow-x-auto">
@@ -33,26 +36,28 @@ export function DataTable<T>({
               {columns.map((c) => (
                 <th
                   key={c.key}
+                  scope="col"
                   className={`t-th ${c.align === "right" ? "text-right" : ""}`}
                   style={c.width ? { width: c.width } : undefined}
                 >
                   {c.header}
                 </th>
               ))}
+              {onRowHref && <th scope="col" className="t-th"><span className="sr-only">Details</span></th>}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={columns.length + (onRowHref ? 1 : 0)}
                   className="text-center py-12 text-ink-muted italic"
                 >
                   {empty}
                 </td>
               </tr>
             )}
-            {rows.map((row) => {
+            {rows.map((row, rowIndex) => {
               const cells = columns.map((c) => (
                 <td
                   key={c.key}
@@ -72,10 +77,11 @@ export function DataTable<T>({
                         (e.target as HTMLElement).closest("button,a,form,input,select,textarea,label")
                       )
                         return;
-                      window.location.assign(onRowHref(row));
+                      router.push(onRowHref(row));
                     }}
                   >
                     {cells}
+                    <td className="t-td"><Link prefetch={false} href={onRowHref(row)} className="btn-ghost" aria-label={`Open details for row ${rowIndex + 1}`}>Open</Link></td>
                   </tr>
                 );
               }

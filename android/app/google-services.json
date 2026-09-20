@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "816772009570",
+    "project_id": "venttly",
+    "storage_bucket": "venttly.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:816772009570:android:5e3c79039925e3e3700b3b",
+        "android_client_info": {
+          "package_name": "rw.codafriqa.venttly"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCk0GSzTho51O3tK6zS0eLk_kNg8HlhYms"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
