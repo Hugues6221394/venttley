@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createAdminClient, createRequiredAuthAdminClient } from "@/lib/supabase/server";
+import {
+  createAdminClient,
+  createRequiredAuthAdminClient,
+  createSsrClient,
+} from "@/lib/supabase/server";
 import { rpc } from "@/lib/audit";
 import { limitAction } from "@/lib/guard";
 import { enumOf, optStr, uuid } from "@/lib/validate";
@@ -38,33 +42,118 @@ const ROLES = [
 // restriction is a separate boolean, set from /moderation.
 const STATUSES = ["active", "suspended", "restricted"] as const;
 
+/**
+ * Turn a thrown error into something the page can say out loud.
+ *
+ * Next redacts server error messages before they reach the browser, so an
+ * action that throws surfaces as "Minified React error #441" plus a digest and
+ * nothing else — which is what an operator saw when they tried to demote an
+ * account, and again when they tried to rename one. The message existed the
+ * whole time; it just never left the server. Actions now finish by redirecting
+ * with a code this page knows how to render, the same pattern /staff uses.
+ */
+function resultCode(error: unknown): string {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("self_change")) return "self_change";
+  if (message.includes("caller is not staff")) return "self_change";
+  if (message.includes("mfa") || message.includes("aal2")) return "mfa_required";
+  if (message.includes("forbidden") || message.includes("not_authorized")) {
+    return "forbidden";
+  }
+  if (message.includes("username_changes_disabled")) return "handle_permanent";
+  if (message.includes("rate limit")) return "rate_limited";
+  if (message.includes("must be") || message.includes("is required")) {
+    return "invalid_input";
+  }
+  return "failed";
+}
+
+function finish(userId: string, code: string): never {
+  revalidatePath(`/users/${userId}`);
+  redirect(`/users/${userId}?result=${encodeURIComponent(code)}`);
+}
+
+/**
+ * Who is making this request.
+ *
+ * Needed because a super admin acting on their own account is a special case
+ * the database cannot express cleanly: admin_set_user_role updates the row and
+ * *then* calls admin_log, which re-checks is_staff(auth.uid()). Demote
+ * yourself and the audit write fails as "caller is not staff", rolling the
+ * whole thing back — so the action silently does nothing and reports an opaque
+ * digest. /staff already refuses self-changes outright for this reason; this
+ * page simply never learned the rule.
+ */
+async function currentActorId(): Promise<string | null> {
+  const supabase = await createSsrClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
+const NOTICE: Record<string, { tone: "ok" | "warn" | "danger"; text: string }> = {
+  status_changed: { tone: "ok", text: "Account status changed. The member's sessions were revoked." },
+  role_changed: { tone: "ok", text: "Role changed. The member's sessions were revoked." },
+  profile_updated: { tone: "ok", text: "Profile updated." },
+  verified_changed: { tone: "ok", text: "Verified badge updated." },
+  self_change: {
+    tone: "danger",
+    text:
+      "You cannot change your own role or status here. Removing your own staff access mid-action makes the audit write fail, so the whole change is rolled back. Sign in as another super admin and do it from there.",
+  },
+  handle_permanent: { tone: "warn", text: "Handles are permanent and cannot be changed after the account exists." },
+  mfa_required: { tone: "warn", text: "Complete the MFA challenge before making this change." },
+  forbidden: { tone: "danger", text: "Only an active super admin can perform this action." },
+  rate_limited: { tone: "warn", text: "Too many changes in a short window. Wait a moment and try again." },
+  invalid_input: { tone: "danger", text: "Check the submitted values and try again." },
+  failed: { tone: "danger", text: "The change did not go through, and nothing was altered. Check the audit log before retrying." },
+};
+
 async function setStatus(formData: FormData) {
   "use server";
-  await limitAction("destructive");
   const id = uuid(formData, "user_id");
-  await rpc("admin_set_user_status", {
-    p_target: id,
-    p_status: enumOf(formData, "status", STATUSES),
-    p_reason: optStr(formData, "reason", 500),
-  });
-  revalidatePath(`/users/${id}`);
+  let code = "status_changed";
+  try {
+    await limitAction("destructive");
+    // Suspending yourself has the same failure as demoting yourself: staff
+    // authorization requires an active account, so admin_log stops recognising
+    // the caller mid-transaction.
+    if ((await currentActorId()) === id) throw new Error("self_change");
+    await rpc("admin_set_user_status", {
+      p_target: id,
+      p_status: enumOf(formData, "status", STATUSES),
+      p_reason: optStr(formData, "reason", 500),
+    });
+  } catch (error) {
+    code = resultCode(error);
+  }
+  finish(id, code);
 }
 
 async function setRole(formData: FormData) {
   "use server";
-  await limitAction("destructive");
   const id = uuid(formData, "user_id");
-  await rpc("admin_set_user_role", {
-    p_target: id,
-    p_role: enumOf(formData, "role", ROLES),
-    p_reason: optStr(formData, "reason", 500),
-  });
-  revalidatePath(`/users/${id}`);
+  let code = "role_changed";
+  try {
+    await limitAction("destructive");
+    if ((await currentActorId()) === id) throw new Error("self_change");
+    await rpc("admin_set_user_role", {
+      p_target: id,
+      p_role: enumOf(formData, "role", ROLES),
+      p_reason: optStr(formData, "reason", 500),
+    });
+  } catch (error) {
+    code = resultCode(error);
+  }
+  finish(id, code);
 }
 
 async function editProfile(formData: FormData) {
   "use server";
   const id = uuid(formData, "user_id");
+  let code = "profile_updated";
+  try {
   const verified = String(formData.get("is_verified") ?? "");
   await rpc("admin_update_user_profile", {
     p_target: id,
@@ -75,19 +164,27 @@ async function editProfile(formData: FormData) {
     p_home_country: optStr(formData, "home_country", 100),
     p_reason: optStr(formData, "reason", 500),
   });
-  revalidatePath(`/users/${id}`);
+  } catch (error) {
+    code = resultCode(error);
+  }
+  finish(id, code);
 }
 
 async function setVerified(formData: FormData) {
   "use server";
   const id = uuid(formData, "user_id");
-  const v = enumOf(formData, "verified", ["true", "false", "clear"] as const);
-  await rpc("admin_set_user_verified", {
-    p_target: id,
-    p_verified: v === "clear" ? null : v === "true",
-    p_reason: optStr(formData, "reason", 500),
-  });
-  revalidatePath(`/users/${id}`);
+  let code = "verified_changed";
+  try {
+    const v = enumOf(formData, "verified", ["true", "false", "clear"] as const);
+    await rpc("admin_set_user_verified", {
+      p_target: id,
+      p_verified: v === "clear" ? null : v === "true",
+      p_reason: optStr(formData, "reason", 500),
+    });
+  } catch (error) {
+    code = resultCode(error);
+  }
+  finish(id, code);
 }
 
 async function resetPassword(formData: FormData) {
@@ -144,10 +241,14 @@ async function deleteUser(formData: FormData) {
 
 export default async function UserDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ userId: string }>;
+  searchParams: Promise<{ result?: string }>;
 }) {
   const { userId } = await params;
+  const { result } = await searchParams;
+  const notice = result ? NOTICE[result] ?? NOTICE.failed : null;
   const db = await createAdminClient();
 
   const { data: user } = await db
@@ -235,6 +336,15 @@ export default async function UserDetailPage({
 
   return (
     <div className="flex flex-col gap-6 max-w-[1200px]">
+      {notice && (
+        <div className="surface-flat flex items-start gap-2 px-4 py-3">
+          <Badge tone={notice.tone}>
+            {notice.tone === "ok" ? "complete" : "attention"}
+          </Badge>
+          <p className="text-sm text-burgundy">{notice.text}</p>
+        </div>
+      )}
+
       <div>
         <Link href="/users" className="btn-ghost mb-3">
           <ChevronLeft size={14} /> Users
