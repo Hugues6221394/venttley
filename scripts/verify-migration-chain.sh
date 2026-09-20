@@ -27,7 +27,9 @@
 #
 # Prerequisites the chain needs that are not in the SQL:
 #   1. pg_cron available (cluster-wide; only in the `postgres` database)
-#   2. vault secret `account_purge_cron_secret` present before 20260915090000
+#   2. vault secrets `account_purge_cron_secret` (before 20260915090000) and
+#      `push_fanout_webhook_secret` (before 20261034090000) -- both migrations
+#      refuse to run without them, deliberately
 #   3. `extensions` on the connection search_path (the one that bit us)
 
 set -uo pipefail
@@ -125,8 +127,9 @@ docker exec supabase_db_Venttly pg_dump -U postgres -d postgres \
 # Prerequisite 3: the chain calls uuid_generate_v4() unqualified.
 psql "$PROBE" -q -c 'ALTER DATABASE postgres SET search_path TO "$user", public, extensions;' >/dev/null 2>&1
 
-# Prerequisite 2: 20260915090000 refuses without this, deliberately.
+# Prerequisite 2: these two migrations refuse without their secret, deliberately.
 psql "$PROBE" -q -c "SELECT vault.create_secret('probe-only-not-a-real-secret','account_purge_cron_secret','chain probe');" >/dev/null 2>&1
+psql "$PROBE" -q -c "SELECT vault.create_secret('probe-only-not-a-real-secret','push_fanout_webhook_secret','chain probe');" >/dev/null 2>&1
 
 # The platform's auth.uid() also reads the request.jwt.claims JSON blob; the
 # image ships an older one that only reads request.jwt.claim.sub. Tests set the
@@ -163,6 +166,7 @@ check "auth schema is the platform's, not the image's" \
 check "storage granted to the API roles" \
   "select has_table_privilege('authenticated','storage.objects','INSERT')"
 check "vault secret seeded"     "select exists(select 1 from vault.decrypted_secrets where name='account_purge_cron_secret')"
+check "push secret seeded"      "select exists(select 1 from vault.decrypted_secrets where name='push_fanout_webhook_secret')"
 check "auth.uid() reads request.jwt.claims" \
   "select set_config('request.jwt.claims','{\"sub\":\"11111111-1111-4111-8111-111111111111\"}',false) is not null and auth.uid() is not null"
 [ "$FAITHFUL" = "1" ] || die "the probe does not resemble a real project; results would be meaningless"
