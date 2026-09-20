@@ -33,6 +33,26 @@ import { createSsrClient } from "./supabase/server";
  */
 export function sameOrigin(req: Request): boolean {
   const h = req.headers;
+
+  // Sec-Fetch-Site first, when the browser sends it.
+  //
+  // Origin and Referer are both request headers an intermediary may drop, and
+  // one did: behind Cloudflare, the console's own Logout form -- a plain
+  // same-origin <form method="post"> -- arrived with neither, so this returned
+  // false and signing out was impossible in production while working perfectly
+  // when the same build was reached directly. Fetch Metadata is not subject to
+  // that: it is attached by the browser, cannot be set by page script, and
+  // reaches us through the proxy.
+  //
+  // It is also a stricter statement than Origin. Origin says where a request
+  // claims to come from; Sec-Fetch-Site says what relationship the browser
+  // itself observed. "same-site" is refused along with everything else, so a
+  // sibling subdomain is no more trusted than a stranger.
+  const site = h.get("sec-fetch-site");
+  if (site) return site === "same-origin";
+
+  // Pre-Fetch-Metadata browsers only. Same rule as before: the header must be
+  // present and must match, because "absent" is the easiest state to arrange.
   const host = h.get("x-forwarded-host") ?? h.get("host");
   if (!host) return false;
 
