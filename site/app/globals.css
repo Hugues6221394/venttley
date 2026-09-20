@@ -1,0 +1,178 @@
+/* One stylesheet, no framework. The site is three pages of text; a build
+   pipeline for utility classes would be more machinery than the thing it
+   styles. Colours mirror the app's palette so the policy page does not look
+   like it belongs to someone else. */
+
+:root {
+  --berry: #c2185b;
+  --burgundy: #4a1533;
+  --blush: #fdf4f7;
+  --ink: #2c1a24;
+  --muted: #7b6470;
+  --line: #f0dde5;
+  --page: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --berry: #ff6fa5;
+    --burgundy: #f6e6ee;
+    --blush: #1a1016;
+    --ink: #ece2e7;
+    --muted: #b49fab;
+    --line: #35242e;
+    --page: #130c11;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+a { color: var(--berry); }
+a:hover { text-decoration: underline; }
+
+.wrap {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+/* ---- header ---- */
+
+header {
+  border-bottom: 1px solid var(--line);
+  background: var(--blush);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 4rem;
+}
+
+.mark {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.75rem;
+  background: var(--berry);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex: none;
+}
+
+.bar strong {
+  color: var(--burgundy);
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.bar nav {
+  margin-left: auto;
+  display: flex;
+  gap: 1.1rem;
+  font-size: 0.9rem;
+}
+
+.bar nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.bar nav a:hover { color: var(--berry); }
+
+/* ---- content ---- */
+
+main { padding: 3rem 0 4rem; }
+
+h1 {
+  color: var(--burgundy);
+  font-size: 2rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5rem;
+}
+
+h2 {
+  color: var(--burgundy);
+  font-size: 1.25rem;
+  margin: 2.5rem 0 0.75rem;
+  letter-spacing: -0.01em;
+}
+
+h3 { color: var(--burgundy); font-size: 1.05rem; margin: 1.75rem 0 0.5rem; }
+
+p { margin: 0 0 1rem; }
+
+ul { margin: 0 0 1rem; padding-left: 1.25rem; }
+li { margin: 0.35rem 0; }
+
+.lede {
+  color: var(--muted);
+  font-size: 1.05rem;
+  margin-bottom: 2rem;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.notice {
+  background: var(--blush);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin: 0 0 2rem;
+}
+
+/* ---- landing ---- */
+
+.hero { padding: 4.5rem 0 1rem; }
+.hero h1 { font-size: 2.5rem; }
+
+.cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  margin: 2.5rem 0;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  background: var(--blush);
+}
+
+.card h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+.card p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+
+/* ---- footer ---- */
+
+footer {
+  border-top: 1px solid var(--line);
+  padding: 2rem 0 3rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+footer a { color: var(--muted); }
+footer .links { display: flex; gap: 1.1rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
