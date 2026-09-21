@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -88,8 +89,8 @@ class KeeperHomeScreen extends ConsumerWidget {
                     SliverToBoxAdapter(child: _TopBar(me: me)),
                     const SliverToBoxAdapter(child: _ScopeRail()),
                     SliverToBoxAdapter(child: _KpiGrid(overview: overview)),
-                    SliverToBoxAdapter(child: _ActionBar(overview: overview)),
-                    SliverToBoxAdapter(child: _StudioTools(overview: overview)),
+                    const SliverToBoxAdapter(child: _PrimaryManage()),
+                    SliverToBoxAdapter(child: _QuickLinks(overview: overview)),
                     // The list is what the scope rail is a summary of, so
                     // under one tribe it would be a list of that tribe,
                     // directly below its own name. Only worth drawing when
@@ -675,15 +676,117 @@ class _KpiTile extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Actions
+// Primary action
 // ---------------------------------------------------------------------------
 
-/// The five things a keeper does, rather than reads.
-class _ActionBar extends ConsumerWidget {
-  const _ActionBar({required this.overview});
+/// Managing the tribe, as a button rather than one pill among five.
+///
+/// It was a full-width control inside the old hero, and when the hero went it
+/// became a pill on a scrolling row — which is the wrong size for the thing a
+/// keeper reaches for most, and the reason the tribe-management contract test
+/// asks this screen to name a primary route into management.
+class _PrimaryManage extends ConsumerWidget {
+  const _PrimaryManage();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tribe = ref.watch(studioSelectedTribeProvider);
+    final tribes = ref.watch(tribesIKeepProvider).valueOrNull ?? const <Tribe>[];
+    final named = tribe ?? (tribes.length == 1 ? tribes.single : null);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+      child: SizedBox(
+        height: 54,
+        child: FilledButton(
+          key: const ValueKey('plug-studio-primary-manage-tribe'),
+          onPressed: () => _openForTribe(
+            context,
+            ref,
+            (slug) => '/tribe/$slug/manage/settings',
+          ),
+          style: FilledButton.styleFrom(
+            backgroundColor: VentlyColors.berryMagenta,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.tune_rounded, size: 21),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Manage Tribe',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    if (named != null)
+                      Text(
+                        named.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.78),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_rounded, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Quick links
+// ---------------------------------------------------------------------------
+
+/// Everywhere a keeper goes, grouped by what they came to do.
+///
+/// The first pass at this screen replaced eight repetitive sections with four
+/// numbers, five pills and four rows — which fixed the repetition and took
+/// the Studio's reach with it. A keeper runs a community: they publish, they
+/// moderate, they manage people, they watch how it is going, and they set the
+/// place up. Those are five different jobs, and a link belongs under the job
+/// it serves rather than in a flat list sorted by nothing.
+///
+/// Every destination here is a route that exists, and no tile repeats one the
+/// KPI row above already links to — Members, Join requests, Reports and Vents
+/// are stated once, up there, where they carry their number.
+///
+/// Six to a group, three to a row: every row is full, which is what stops a
+/// panel of thirty links reading as a pile. Three columns rather than four
+/// because "Group chat", "Public page" and "Member feed" are two words, and at
+/// four across they ellipsis into nonsense.
+class _QuickLinks extends ConsumerWidget {
+  const _QuickLinks({required this.overview});
   final KeeperOverview overview;
 
-  Future<void> _compose(
+  void _compose(
+    BuildContext context,
+    WidgetRef ref, {
+    String? format,
+    bool story = false,
+  }) => openCompose(context, ref, format: format, story: story);
+
+  Future<void> _composeForTribe(
     BuildContext context,
     WidgetRef ref, {
     String? draft,
@@ -704,35 +807,35 @@ class _ActionBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: SizedBox(
-        height: 40,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          children: [
-            // The Studio's primary route into tribe management.
-            //
-            // Keyed because the tribe-management contract test asserts this
-            // screen offers one: it used to be a full-width button inside the
-            // hero, and when the hero went, so did a keeper's most-used
-            // destination. Leading the action row, in the brand fill, it is
-            // both the first thing on the row and the only filled control on
-            // it — which is what "primary" has to mean to be worth the name.
-            _ActionPill(
-              key: const ValueKey('plug-studio-primary-manage-tribe'),
-              icon: Icons.tune_rounded,
-              label: 'Manage Tribe',
-              primary: true,
-              onTap: () => _openForTribe(
-                context,
-                ref,
-                (slug) => '/tribe/$slug/manage/settings',
-              ),
+    final scheduled = overview.totalScheduledPrompts;
+
+    return Column(
+      children: [
+        _LinkGroup(
+          title: 'Create',
+          links: [
+            _Link(
+              icon: Icons.edit_rounded,
+              label: 'Vent',
+              onTap: () => _compose(context, ref),
             ),
-            _ActionPill(
-              icon: Icons.lightbulb_outline_rounded,
+            _Link(
+              icon: Icons.auto_stories_rounded,
+              label: 'Story',
+              onTap: () => _compose(context, ref, story: true),
+            ),
+            _Link(
+              icon: Icons.poll_rounded,
+              label: 'Poll',
+              onTap: () => _composeForTribe(context, ref, format: 'poll'),
+            ),
+            _Link(
+              icon: Icons.help_center_rounded,
+              label: 'Ask',
+              onTap: () => context.push('/questions'),
+            ),
+            _Link(
+              icon: Icons.lightbulb_rounded,
               label: 'Prompt',
               onTap: () async {
                 final tribe = await resolveStudioTargetTribe(context, ref);
@@ -740,17 +843,26 @@ class _ActionBar extends ConsumerWidget {
                 showKeeperPromptComposer(context, tribeId: tribe.tribeId);
               },
             ),
-            _ActionPill(
-              icon: Icons.campaign_outlined,
+            _Link(
+              icon: Icons.campaign_rounded,
               label: 'Announce',
-              onTap: () => _compose(context, ref, draft: 'Announcement: '),
+              onTap: () =>
+                  _composeForTribe(context, ref, draft: 'Announcement: '),
             ),
-            _ActionPill(
-              icon: Icons.poll_outlined,
-              label: 'Poll',
-              onTap: () => _compose(context, ref, format: 'poll'),
+          ],
+        ),
+        _LinkGroup(
+          title: 'Safety',
+          links: [
+            // No badge on the queue. The Reports KPI above states that number
+            // already, larger and higher up, and repeating it here is the
+            // exact habit this screen was rebuilt to break.
+            _Link(
+              icon: Icons.gavel_rounded,
+              label: 'Queue',
+              onTap: () => context.push('/keeper/moderation'),
             ),
-            _ActionPill(
+            _Link(
               icon: Icons.rule_rounded,
               label: 'Rules',
               onTap: () => _openForTribe(
@@ -759,150 +871,228 @@ class _ActionBar extends ConsumerWidget {
                 (slug) => '/tribe/$slug/manage/settings/rules',
               ),
             ),
+            _Link(
+              icon: Icons.shield_moon_rounded,
+              label: 'Content',
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings/content',
+              ),
+            ),
+            _Link(
+              icon: Icons.receipt_long_rounded,
+              label: 'Audit log',
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings/audit',
+              ),
+            ),
+            _Link(
+              icon: Icons.volunteer_activism_rounded,
+              label: 'Helpers',
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings/helpers',
+              ),
+            ),
+            _Link(
+              icon: Icons.balance_rounded,
+              label: 'Appeals',
+              onTap: () => context.push('/settings/appeals'),
+            ),
           ],
         ),
-      ),
+        _LinkGroup(
+          title: 'Community',
+          links: [
+            _Link(
+              icon: Icons.admin_panel_settings_rounded,
+              label: 'Co-mods',
+              onTap: () => context.push('/keeper/comod'),
+            ),
+            _Link(
+              icon: Icons.forum_rounded,
+              label: 'Group chat',
+              onTap: () =>
+                  _openForTribe(context, ref, (slug) => '/tribe/$slug/chat'),
+            ),
+            _Link(
+              icon: Icons.diversity_1_rounded,
+              label: 'Friends',
+              onTap: () => context.push('/friends'),
+            ),
+            _Link(
+              icon: Icons.mail_rounded,
+              label: 'Inbox',
+              onTap: () => context.go('/inbox'),
+            ),
+            // CupertinoIcons.bell, not the Material one. The app has a single
+            // bell glyph and a test that keeps it that way, because a filled
+            // Material bell beside the thin outline bell in the header reads
+            // as two different features rather than one.
+            _Link(
+              icon: CupertinoIcons.bell,
+              label: 'Alerts',
+              onTap: () => context.push('/notifications'),
+            ),
+            _Link(
+              icon: Icons.explore_rounded,
+              label: 'Discover',
+              onTap: () => context.go('/discover'),
+            ),
+          ],
+        ),
+        _LinkGroup(
+          title: 'Grow',
+          links: [
+            _Link(
+              icon: Icons.insights_rounded,
+              label: 'Insights',
+              onTap: () => context.push('/keeper/insights'),
+            ),
+            _Link(
+              icon: Icons.calendar_month_rounded,
+              label: 'Calendar',
+              badge: scheduled > 0 ? '$scheduled' : null,
+              onTap: () => context.push('/keeper/calendar'),
+            ),
+            _Link(
+              icon: Icons.public_rounded,
+              label: 'Public page',
+              onTap: () => _openForTribe(context, ref, (slug) => '/tribe/$slug'),
+            ),
+            _Link(
+              icon: Icons.dynamic_feed_rounded,
+              label: 'Member feed',
+              onTap: () {
+                ref.read(keeperMemberViewProvider.notifier).state = true;
+                context.go('/feed');
+              },
+            ),
+            _Link(
+              icon: Icons.graphic_eq_rounded,
+              label: 'Whispers',
+              onTap: () => context.push('/whispers'),
+            ),
+            _Link(
+              icon: Icons.emoji_events_rounded,
+              label: 'Goals',
+              onTap: () => context.push('/goals'),
+            ),
+          ],
+        ),
+        _LinkGroup(
+          title: 'Set up',
+          links: [
+            _Link(
+              icon: Icons.badge_rounded,
+              label: 'Identity',
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings/identity',
+              ),
+            ),
+            _Link(
+              icon: Icons.grid_view_rounded,
+              label: 'Spaces',
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings/spaces',
+              ),
+            ),
+            _Link(
+              icon: Icons.image_rounded,
+              label: 'Cover',
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/edit',
+              ),
+            ),
+            _Link(
+              icon: Icons.add_circle_rounded,
+              label: 'New tribe',
+              onTap: () => context.push('/tribes/new'),
+            ),
+            _Link(
+              icon: Icons.workspaces_rounded,
+              label: 'All tribes',
+              onTap: () => context.go('/tribes'),
+            ),
+            _Link(
+              icon: Icons.settings_rounded,
+              label: 'Settings',
+              onTap: () => context.push('/settings'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
 
-class _ActionPill extends StatelessWidget {
-  const _ActionPill({
-    super.key,
+class _Link {
+  const _Link({
     required this.icon,
     required this.label,
     required this.onTap,
-    this.primary = false,
+    this.badge,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final bool primary;
-
-  @override
-  Widget build(BuildContext context) {
-    final fg = primary ? Colors.white : context.ink;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Material(
-        color: primary
-            ? VentlyColors.berryMagenta
-            : GlassTokens.card(context),
-        borderRadius: BorderRadius.circular(999),
-        child: InkWell(
-          onTap: () {
-            VentlyHaptics.light();
-            onTap();
-          },
-          borderRadius: BorderRadius.circular(999),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 15),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(
-                color: primary
-                    ? Colors.transparent
-                    : GlassTokens.border(context),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 16, color: fg),
-                const SizedBox(width: 7),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: fg,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  final String? badge;
 }
 
-// ---------------------------------------------------------------------------
-// Studio tools
-// ---------------------------------------------------------------------------
+class _LinkGroup extends StatelessWidget {
+  const _LinkGroup({required this.title, required this.links});
 
-/// The four Studio pages, as rows.
-///
-/// They were a 2×2 of tiles carrying an icon, a title, a subtitle and a badge
-/// each, which is a lot of card for four links, and two of the four repeated a
-/// number already stated above. Rows fit the same four destinations in less
-/// than half the height, and a keeper scanning a list of names finds one
-/// faster than a keeper reading four paragraphs.
-class _StudioTools extends StatelessWidget {
-  const _StudioTools({required this.overview});
-  final KeeperOverview overview;
+  final String title;
+  final List<_Link> links;
 
   @override
   Widget build(BuildContext context) {
-    final scheduled = overview.totalScheduledPrompts;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Studio',
-            style: TextStyle(
-              color: context.ink,
-              fontWeight: FontWeight.w900,
-              fontSize: 16,
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 9),
+            child: Text(
+              title.toUpperCase(),
+              style: TextStyle(
+                color: context.ink.withOpacity(0.5),
+                fontWeight: FontWeight.w900,
+                fontSize: 11,
+                letterSpacing: 1.3,
+              ),
             ),
           ),
-          const SizedBox(height: 10),
           Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
             decoration: BoxDecoration(
               color: GlassTokens.card(context),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: GlassTokens.border(context)),
             ),
-            child: Column(
-              children: [
-                _ToolRow(
-                  icon: Icons.gavel_rounded,
-                  accent: VentlyColors.dangerRed,
-                  label: 'Moderation queue',
-                  subtitle: 'Reports, warnings and bans',
-                  onTap: () => context.push('/keeper/moderation'),
-                ),
-                _ToolDivider(),
-                _ToolRow(
-                  icon: Icons.calendar_month_rounded,
-                  accent: VentlyTokens.messageBlue,
-                  label: 'Engagement calendar',
-                  subtitle: 'Schedule prompts and rituals',
-                  badge: scheduled > 0 ? '$scheduled' : null,
-                  onTap: () => context.push('/keeper/calendar'),
-                ),
-                _ToolDivider(),
-                _ToolRow(
-                  icon: Icons.insights_rounded,
-                  accent: VentlyColors.berryMagenta,
-                  label: 'Insights',
-                  subtitle: 'How your community is doing',
-                  onTap: () => context.push('/keeper/insights'),
-                ),
-                _ToolDivider(),
-                _ToolRow(
-                  icon: Icons.admin_panel_settings_rounded,
-                  accent: VentlyTokens.growthTeal,
-                  label: 'Co-moderators',
-                  subtitle: overview.totalModerators > 0
-                      ? '${overview.totalModerators} helping you'
-                      : 'Invite someone to help',
-                  onTap: () => context.push('/keeper/comod'),
-                ),
-              ],
+            // GridView rather than Wrap, so the columns line up between one
+            // group and the next. A Wrap sizes each tile to its own label and
+            // five groups of differently-spaced icons is what a control panel
+            // looks like when nobody laid it out.
+            child: GridView.count(
+              crossAxisCount: 3,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              childAspectRatio: 1.35,
+              children: [for (final link in links) _LinkTile(link: link)],
             ),
           ),
         ],
@@ -911,117 +1101,83 @@ class _StudioTools extends StatelessWidget {
   }
 }
 
-class _ToolDivider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(left: 62),
-    child: Divider(height: 1, color: GlassTokens.border(context)),
-  );
-}
-
-class _ToolRow extends StatelessWidget {
-  const _ToolRow({
-    required this.icon,
-    required this.accent,
-    required this.label,
-    required this.subtitle,
-    required this.onTap,
-    this.badge,
-  });
-
-  final IconData icon;
-  final Color accent;
-  final String label;
-  final String subtitle;
-  final VoidCallback onTap;
-  final String? badge;
+class _LinkTile extends StatelessWidget {
+  const _LinkTile({required this.link});
+  final _Link link;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      type: MaterialType.transparency,
+    const accent = VentlyColors.berryMagenta;
+    return Semantics(
+      button: true,
+      label: link.label,
       child: InkWell(
         onTap: () {
           VentlyHaptics.light();
-          onTap();
+          link.onTap();
         },
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: accent.withOpacity(0.14),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 18, color: accent),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: context.ink,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14.5,
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: context.ink.withOpacity(0.55),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (badge != null) ...[
-                const SizedBox(width: 8),
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    color: accent.withOpacity(0.16),
-                    borderRadius: BorderRadius.circular(999),
+                    color: accent.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(15),
                   ),
-                  child: Text(
-                    badge!,
-                    style: TextStyle(
-                      color: accent,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 12,
+                  child: Icon(link.icon, size: 21, color: accent),
+                ),
+                if (link.badge != null)
+                  Positioned(
+                    right: -5,
+                    top: -5,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accent,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        link.badge!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 10.5,
+                        ),
+                      ),
                     ),
                   ),
-                ),
               ],
-              const SizedBox(width: 4),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 20,
-                color: context.ink.withOpacity(0.35),
+            ),
+            const SizedBox(height: 7),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text(
+                link.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: context.ink,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11.5,
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
-
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({
     required this.title,

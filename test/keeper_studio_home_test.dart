@@ -76,8 +76,12 @@ class _FakeRepo extends VentlyRepository {
 /// rather than by whatever the destination screen happens to render.
 late List<String> _visited;
 
-Future<void> _pumpStudio(WidgetTester tester, _FakeRepo repo) async {
-  tester.view.physicalSize = const Size(520, 1600);
+Future<void> _pumpStudio(
+  WidgetTester tester,
+  _FakeRepo repo, {
+  Size size = const Size(520, 1600),
+}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -206,9 +210,42 @@ void main() {
       ),
     );
     // No rail — a row of one option is furniture — but the tribe is named,
-    // because the four numbers below belong to it.
-    expect(find.text('Alpha'), findsOne);
-    expect(find.text('All tribes'), findsNothing);
+    // because the four numbers below belong to it. Twice, deliberately: once
+    // in the scope header, and once under Manage Tribe, which is naming what
+    // it will open rather than repeating a statistic.
+    expect(find.text('Alpha'), findsNWidgets(2));
+
+    // The member count is the scope header's own line, so finding it is how
+    // we know the header rendered rather than the rail.
+    expect(find.text('120 members'), findsOne);
+  });
+
+  testWidgets('thirty links still lay out on a small phone', (tester) async {
+    // The quick-link panel is five grids of six, and a grid that does not fit
+    // does not shrink — it overflows, and on a sliver it can throw outright.
+    // 375x667 is the smallest screen the app supports, and the test font is
+    // wider than the real one, so clearing it here means clearing it there.
+    await _pumpStudio(
+      tester,
+      _FakeRepo(
+        kept: [_tribe('a', 'Alpha', 120)],
+        statsById: {'a': _stats('a')},
+      ),
+      size: const Size(375, 667),
+    );
+
+    expect(tester.takeException(), isNull);
+
+    // And the links are really there, not clipped out of the tree.
+    for (final label in const [
+      'Vent',
+      'Queue',
+      'Co-mods',
+      'Insights',
+      'Identity',
+    ]) {
+      expect(find.text(label), findsOne, reason: '$label went missing');
+    }
   });
 
   test('no number is rendered twice on the Studio home', () {
