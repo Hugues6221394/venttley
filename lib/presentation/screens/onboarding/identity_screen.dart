@@ -150,13 +150,24 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       return;
     }
     if (!_agreedTerms || !_acknowledgedPrivacy) {
-      setState(
-        () => _error =
+        const message =
             'Please agree to the Terms and acknowledge the Privacy Policy to '
-            'continue.',
-      );
-      return;
-    }
+            'continue.';
+        setState(() => _error = message);
+        // Said twice, deliberately. The banner renders above the submit button
+        // and the two consent boxes are above that again, so on a short phone
+        // the tap, the refusal and the thing that needs fixing are all on
+        // different parts of one scroll -- which reads as the button doing
+        // nothing at all. The button is not disabled on purpose (a disabled
+        // control announces nothing), so the refusal has to reach the reader
+        // wherever they are looking.
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(const SnackBar(content: Text(message)));
+        }
+        return;
+      }
 
     setState(() {
       _loading = true;
