@@ -28,6 +28,22 @@ SELECT is(
 );
 
 -- ---------------------------------------------------------------------------
+-- The version under test is whatever is currently in force.
+--
+-- These assertions used to name '2026-09-07'. That makes the suite fail every
+-- time a policy is legitimately republished, and the repair is always to bump
+-- the literal -- which teaches whoever is repairing it to edit the assertion
+-- rather than read it. Resolving the live version keeps the contract (you must
+-- pass back the version you were shown) while surviving the next rewrite.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION pg_temp.live_version(p_kind TEXT)
+RETURNS TEXT LANGUAGE sql STABLE AS $fn$
+  SELECT version FROM public.policy_documents
+   WHERE kind = p_kind AND retired_at IS NULL
+   ORDER BY version DESC LIMIT 1;
+$fn$;
+
+-- ---------------------------------------------------------------------------
 -- Anonymous readers
 -- ---------------------------------------------------------------------------
 -- The documents have to be legible before an account exists, or "read this
@@ -42,7 +58,7 @@ SELECT is(
 );
 
 SELECT throws_ok(
-  $$SELECT public.accept_policies('2026-09-07','2026-09-07')$$,
+  $$SELECT public.accept_policies(pg_temp.live_version('terms'), pg_temp.live_version('privacy'))$$,
   '42501', NULL,
   'anon cannot record an acceptance'
 );
@@ -73,7 +89,7 @@ SELECT is(
 -- current version instead of checking, a policy that changed while somebody
 -- was reading the old one would be recorded as accepted unread.
 SELECT throws_ok(
-  $$SELECT public.accept_policies('1999-01-01','2026-09-07')$$,
+  $$SELECT public.accept_policies('1999-01-01', pg_temp.live_version('privacy'))$$,
   'P0001', 'policy_version_stale',
   'a version the caller was not shown is refused, not substituted'
 );
@@ -91,13 +107,13 @@ SELECT is(
 -- timestamp either.
 SELECT throws_ok(
   $$INSERT INTO public.policy_acceptances (user_id, kind, version)
-    VALUES ('c04c0000-0000-4000-8000-000000000001','terms','2026-09-07')$$,
+    VALUES ('c04c0000-0000-4000-8000-000000000001','terms','any-version')$$,
   '42501', NULL,
   'a client cannot insert its own acceptance'
 );
 
 SELECT lives_ok(
-  $$SELECT public.accept_policies('2026-09-07','2026-09-07')$$,
+  $$SELECT public.accept_policies(pg_temp.live_version('terms'), pg_temp.live_version('privacy'))$$,
   'accepting the versions actually shown succeeds'
 );
 
@@ -122,7 +138,7 @@ SET LOCAL "request.jwt.claims" =
   '{"sub":"c04c0000-0000-4000-8000-000000000001","role":"authenticated"}';
 
 SELECT lives_ok(
-  $$SELECT public.accept_policies('2026-09-07','2026-09-07')$$,
+  $$SELECT public.accept_policies(pg_temp.live_version('terms'), pg_temp.live_version('privacy'))$$,
   'a repeat acceptance is a no-op rather than an error'
 );
 

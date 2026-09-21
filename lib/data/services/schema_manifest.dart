@@ -101,4 +101,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261033090000': 'policy_urls_point_at_a_domain_we_own',
   '20261034090000': 'push_fanout_webhook_triggers',
   '20261035090000': 'google_sign_in_flag',
+  '20261036090000': 'policy_documents_2026_09_21',
 };
