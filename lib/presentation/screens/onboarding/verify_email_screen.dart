@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
 import '../../theme/colors.dart';
-import '../../theme/glass_tokens.dart';
 
 /// Verifies a REAL email with a 6-digit code (the optional email signup path).
 ///
@@ -193,7 +192,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                   hintText: '••••••',
                   filled: true,
                   // Was hardcoded white: a near-white code box on a black page.
-                  fillColor: GlassTokens.card(context),
+                  fillColor: Theme.of(context).colorScheme.surface,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(18),
                     borderSide: BorderSide.none,

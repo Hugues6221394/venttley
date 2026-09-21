@@ -62,6 +62,25 @@ class VentlyColors {
   /// Hairline dividers on the pure-black canvas.
   static const Color dividerBlack = Color(0xFF241B1F);
 
+  // ---------------- Lifted cards ----------------
+  // [cardBlack] and [cardDark] are input fills and chip backgrounds: surfaces
+  // that sit *inside* a card and only need to be told apart from it. A panel
+  // that has to read as a card in its own right on an empty page needs more
+  // lift than that — #120D0F on #000000 is 1.09, which reads as a slightly
+  // different patch of background rather than as a card.
+  //
+  // These two are measured off the profile dashboard, which is the surface
+  // the design already got right: its cards land on #221F20, or 1.285 against
+  // the page. The charcoal value is solved to the same ratio against its own
+  // canvas so the two dark themes read identically rather than one being a
+  // guess at the other.
+
+  /// Panel surface on the true-black canvas — 1.285 against #000000.
+  static const Color cardLiftBlack = Color(0xFF221F20);
+
+  /// Panel surface on the charcoal canvas — the same 1.285 against #120B0D.
+  static const Color cardLiftDark = Color(0xFF292526);
+
   // ---------------- Semantic helpers ----------------
   static const Color successGreen = Color(0xFF6BA56F);
   static const Color warningAmber = Color(0xFFE6B65C);

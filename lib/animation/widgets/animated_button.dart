@@ -8,8 +8,18 @@ import '../core/motion_tokens.dart';
 enum VentlyButtonState { idle, loading, success }
 
 /// The standard Venttly action button:
-/// gradient pill · scale-to-0.98 on press with spring back · morphs between
+/// berry pill · scale-to-0.98 on press with spring back · morphs between
 /// idle / loading (spinner) / success (check pop) without layout jumps.
+///
+/// Flat, not a gradient. This was VentlyGradients.brand with a berry glow
+/// under it, which rendered #E44984 on the left and #C31D5E on the right with
+/// a halo bleeding onto the page below — three different pinks on a screen
+/// whose other berry control, the sign-in tab, is a flat #E0245E. Next to each
+/// other the gradient reads as lacquered rather than as the brand.
+///
+/// The label stays white: on #E0245E, white and black both measure 4.58:1, so
+/// the choice is aesthetic rather than a legibility trade, and white is what
+/// the tab pill beside it uses.
 class AnimatedButton extends StatefulWidget {
   const AnimatedButton({
     super.key,
@@ -101,16 +111,8 @@ class _AnimatedButtonState extends State<AnimatedButton> {
             padding:
                 const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
             decoration: BoxDecoration(
-              gradient: VentlyGradients.brand,
+              color: VentlyColors.berryMagenta,
               borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFC01A5B)
-                      .withOpacity(_pressed ? 0.20 : 0.35),
-                  blurRadius: _pressed ? 10 : 18,
-                  offset: Offset(0, _pressed ? 3 : 8),
-                ),
-              ],
             ),
             alignment: Alignment.center,
             child: AnimatedSwitcher(

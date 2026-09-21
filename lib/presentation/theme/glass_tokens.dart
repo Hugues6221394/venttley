@@ -37,10 +37,20 @@ class GlassTokens {
   /// 1.046 against the page: still drawn, but making no difference to any
   /// pixel. That is how the trust panel on the welcome screen went missing.
   ///
-  /// The approved design puts an opaque #120D0F card on a #000000 page, which
-  /// is exactly the theme's own surface colour at full strength.
-  static Color card(BuildContext context) =>
-      Theme.of(context).colorScheme.surface;
+  /// Opacity was only half of it. #120D0F is the theme's surface, and that
+  /// colour is tuned for things that sit *inside* a card — input fills, chip
+  /// backgrounds — where 1.09 against the page is plenty because the card
+  /// around them is doing the separating. A panel alone on an empty page has
+  /// nothing doing that for it, and at 1.09 it reads as a slightly different
+  /// patch of background. The profile dashboard already had this right at
+  /// 1.285, so that is the number, measured rather than invented.
+  static Color card(BuildContext context) {
+    final theme = Theme.of(context);
+    if (theme.brightness != Brightness.dark) return theme.colorScheme.surface;
+    return theme.scaffoldBackgroundColor == VentlyColors.pureBlack
+        ? VentlyColors.cardLiftBlack
+        : VentlyColors.cardLiftDark;
+  }
 
   static Color borderLight(BuildContext context) => VentlyColors.softMauve;
 

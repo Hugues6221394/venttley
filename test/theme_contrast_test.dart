@@ -102,6 +102,12 @@ void main() {
         // 1.16 is the light theme's own figure, measured. It is the design
         // that demonstrably reads, so it is the floor the dark ones have to
         // clear rather than a number chosen in the abstract.
+        //
+        // It turned out not to be enough on its own. A card can clear this on
+        // its border alone while its fill stays at 1.09, and that is exactly
+        // what shipped and what came back as "I still cannot see the grey
+        // section" — a rim around a panel the same colour as the page. The
+        // fill now carries its own floor below.
         expect(
           separation,
           greaterThan(1.16),
@@ -131,11 +137,22 @@ void main() {
               'the panel fill in $name is translucent, so it dissolves into '
               'the page instead of reading as a card',
         );
-        expect(
-          card,
-          theme.colorScheme.surface,
-          reason: 'the panel should be the theme surface in $name',
-        );
+        // And the fill alone has to read, not just the border. 1.28 is the
+        // profile dashboard's figure — the one surface in the app whose cards
+        // were never reported as invisible, so it is the one worth matching.
+        // Light clears it comfortably at 1.05 only because its border does the
+        // work there and nobody has ever failed to see a white card on a
+        // near-white page; the floor is therefore only meaningful on dark.
+        if (theme.brightness == Brightness.dark) {
+          final fill = _contrast(card, theme.scaffoldBackgroundColor);
+          expect(
+            fill,
+            greaterThanOrEqualTo(1.28),
+            reason:
+                'the panel fill in $name is ${fill.toStringAsFixed(3)} against '
+                'the page — visible as an edge at best, not as a card',
+          );
+        }
       });
 
       testWidgets('$name: body text on the panel passes AA', (tester) async {

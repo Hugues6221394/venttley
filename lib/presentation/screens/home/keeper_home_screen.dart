@@ -19,11 +19,27 @@ import '../../widgets/studio_tribe_selector.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../widgets/keeper_prompt_composer_sheet.dart';
 import '../../navigation/compose_navigation.dart';
+import '../../../core/vently_haptics.dart';
+import '../../theme/glass_tokens.dart';
 
-/// Keeper / Plug homepage — Tribe Control Center (Creator Studio).
+/// Keeper / Plug homepage — the Studio.
 ///
 /// Replaces the member feed for users who keep at least one tribe.
-/// Stats come from `tribe_studio_stats`; actions deep-link into manage flows.
+/// Stats come from `tribe_studio_stats`; every number here is a link to the
+/// place you act on it.
+///
+/// This screen was eight stacked sections, and they disagreed with each other.
+/// "Open reports" was rendered five separate times — as a status line in the
+/// hero, as an overview card, as a priority tile, as a badge on a studio tile,
+/// and again in the content hub — in five different visual styles, all reading
+/// the same field. Scheduled prompts appeared three times, new members twice.
+/// Each section had been built complete in itself and never reconciled with
+/// the ones above it, which is what makes a screen feel generated rather than
+/// designed: no editor ever asked whether the reader had already been told.
+///
+/// So: one set of numbers, each stated once, each a button that opens the
+/// place you act on it. Then the actions. Then the tools. Then your tribes.
+/// Nothing on this screen says the same thing twice.
 class KeeperHomeScreen extends ConsumerWidget {
   const KeeperHomeScreen({super.key});
 
@@ -38,6 +54,7 @@ class KeeperHomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(sessionProvider);
     final overviewAsync = ref.watch(studioScopedOverviewProvider);
+    final scoped = ref.watch(studioSelectedTribeProvider) != null;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -69,88 +86,37 @@ class KeeperHomeScreen extends ConsumerWidget {
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
                     SliverToBoxAdapter(child: _TopBar(me: me)),
-                    // The Studio's scope, on its own line so it has room
-                    // to name a long tribe. Renders nothing for a keeper
-                    // with one tribe.
-                    const SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(18, 10, 18, 0),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: StudioTribeSelector(),
-                        ),
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: _KeeperWelcome(me: me, overview: overview),
-                    ),
-                    SliverToBoxAdapter(
-                      child: _CommandStrip(me: me, overview: overview),
-                    ),
-                    SliverToBoxAdapter(
-                      child: _PriorityQueue(overview: overview),
-                    ),
-                    SliverToBoxAdapter(
-                      child: _QuickActionsRow(overview: overview),
-                    ),
-                    SliverToBoxAdapter(
-                      child: _StudioV2Grid(overview: overview),
-                    ),
-                    // _TodaySnapshot ("Today's activity": vents, new members,
-                    // reports) and _OverviewGrid (members, vents·24h, new·7d)
-                    // used to sit here. Between them and the Tribe overview
-                    // above, `totalPosts24h` was rendered three times on one
-                    // screen and members, reports and new-members twice each —
-                    // in three different card styles, all reading zero. The
-                    // Tribe overview grid now carries those four numbers once.
-                    if (overview.totalOpenReports > 0 ||
-                        overview.totalScheduledPrompts > 0)
+                    const SliverToBoxAdapter(child: _ScopeRail()),
+                    SliverToBoxAdapter(child: _KpiGrid(overview: overview)),
+                    SliverToBoxAdapter(child: _ActionBar(overview: overview)),
+                    SliverToBoxAdapter(child: _StudioTools(overview: overview)),
+                    // The list is what the scope rail is a summary of, so
+                    // under one tribe it would be a list of that tribe,
+                    // directly below its own name. Only worth drawing when
+                    // there is more than one thing in it.
+                    if (!scoped && overview.tribes.length > 1) ...[
                       SliverToBoxAdapter(
-                        child: _ContentHub(overview: overview),
-                      ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Your tribes',
-                                style: TextStyle(
-                                  color: context.ink,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 17,
-                                ),
-                              ),
-                            ),
-                            TextButton.icon(
-                              onPressed: () => context.push('/tribes/new'),
-                              icon: const Icon(Icons.add_rounded, size: 18),
-                              label: const Text(
-                                'New tribe',
-                                style: TextStyle(fontWeight: FontWeight.w900),
-                              ),
-                            ),
-                          ],
+                        child: _SectionHeader(
+                          title: 'Your tribes',
+                          action: 'New tribe',
+                          onAction: () => context.push('/tribes/new'),
                         ),
                       ),
-                    ),
-                    SliverList.builder(
-                      itemCount: overview.tribes.length,
-                      itemBuilder: (context, i) {
-                        final tribe = overview.tribes[i];
-                        final stats = overview.statsFor(tribe.tribeId);
-                        return RepaintBoundary(
-                          child: _TribeControlCard(
-                            tribe: tribe,
-                            stats: stats,
-                            engagement: overview.engagementScoreFor(stats),
-                          ),
-                        );
-                      },
-                    ),
-                    // Was 28, which left the bottom row of stat cards covered
-                    // by the floating nav pill.
+                      SliverList.builder(
+                        itemCount: overview.tribes.length,
+                        itemBuilder: (context, i) {
+                          final tribe = overview.tribes[i];
+                          final stats = overview.statsFor(tribe.tribeId);
+                          return RepaintBoundary(
+                            child: _TribeControlCard(
+                              tribe: tribe,
+                              stats: stats,
+                              engagement: overview.engagementScoreFor(stats),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                     const SliverToBoxAdapter(
                       child: SizedBox(height: HomeShell.navClearance),
                     ),
@@ -165,300 +131,8 @@ class KeeperHomeScreen extends ConsumerWidget {
   }
 }
 
-/// Warm, guided welcome so a keeper instantly understands where they are and
-/// what to do next. Adapts its hint to the tribe's state (needs attention vs.
-/// calm-and-quiet vs. thriving).
-class _KeeperWelcome extends StatelessWidget {
-  const _KeeperWelcome({required this.me, required this.overview});
-  final AppUser? me;
-  final KeeperOverview overview;
-
-  @override
-  Widget build(BuildContext context) {
-    // Privacy: the studio home is a public-facing surface — never print the
-    // keeper's pseudonym here. Identity lives on the profile tab only.
-    final reports = overview.totalOpenReports;
-    final quiet = overview.totalPosts24h == 0;
-    final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
-
-    final (IconData icon, String hint, VoidCallback? onTap) = reports > 0
-        ? (
-            Icons.shield_rounded,
-            'You have $reports report${reports == 1 ? '' : 's'} to review.',
-            () => context.push('/keeper/moderation'),
-          )
-        : quiet
-        ? (
-            Icons.auto_awesome_rounded,
-            "It's quiet right now.\nSend a Prompt to spark a conversation.",
-            primary == null
-                ? null
-                : () => showKeeperPromptComposer(
-                    context,
-                    tribeId: primary.tribeId,
-                  ),
-          )
-        : (
-            Icons.favorite_rounded,
-            'Your community is active and safe.\nKeep nurturing it.',
-            null,
-          );
-
-    final isDark = context.isDark;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(18, 6, 18, 2),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? const [Color(0xFF351D26), Color(0xFF241419)]
-              : const [Color(0xFFFDD9E7), Color(0xFFFBEAF1)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: isDark
-            ? Border.all(color: Colors.white.withOpacity(0.06))
-            : null,
-        boxShadow: [
-          BoxShadow(
-            color: VentlyColors.berryMagenta.withOpacity(isDark ? 0.18 : 0.12),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          children: [
-            // Decorative orb (Venttly mark inside a soft glowing disc).
-            // A soft glow, not a logo. The disc used to carry the two-bar
-            // Venttly mark at its centre; with the panel shortened to a status
-            // line the callout card now crosses exactly there, slicing the bars
-            // in half. The wordmark is already in the top bar a few points
-            // above, so the disc keeps the warmth and drops the mark.
-            Positioned(
-              right: -12,
-              top: -14,
-              child: Container(
-                width: 132,
-                height: 132,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: isDark
-                        ? [
-                            const Color(0xFFF7A8C6).withOpacity(0.30),
-                            const Color(0xFFE05C93).withOpacity(0.18),
-                            const Color(0xFFE05C93).withOpacity(0.06),
-                          ]
-                        : [
-                            Colors.white.withOpacity(0.9),
-                            const Color(0xFFF7A8C6).withOpacity(0.55),
-                            const Color(0xFFE05C93).withOpacity(0.25),
-                          ],
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // The state of the tribe, not a title for the screen.
-                  //
-                  // This was a "CONTROL CENTER" eyebrow, a 23pt "Your tribe, at
-                  // a glance" and "Everything you need to keep it safe and
-                  // thriving." — three lines telling a keeper what screen they
-                  // are on, above the top bar that already says "Keeper Studio /
-                  // Manage your tribe. Protect your safe space." and above a
-                  // "Creator Studio" section whose own tagline said almost the
-                  // same sentence again. The last line also ran underneath the
-                  // decorative orb, so it was chrome that was hard to read.
-                  //
-                  // A keeper opens this to learn one thing: is anything on
-                  // fire. Now it says so.
-                  Row(
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          color: reports > 0
-                              ? VentlyColors.dangerRed
-                              : VentlyColors.successGreen,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 7),
-                      Text(
-                        reports > 0
-                            ? 'NEEDS REVIEW'
-                            : quiet
-                            ? 'ALL CLEAR · QUIET'
-                            : 'ALL CLEAR · ACTIVE',
-                        style: TextStyle(
-                          color: reports > 0
-                              ? VentlyColors.dangerRed
-                              : context.ink.withOpacity(0.55),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 11,
-                          letterSpacing: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _HeroCallout(icon: icon, hint: hint, onTap: onTap),
-                  if (primary != null) ...[
-                    const SizedBox(height: 10),
-                    _ManageTribeAction(tribe: primary),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Persistent Plugz ownership action, kept above metrics and activity cards.
-class _ManageTribeAction extends StatelessWidget {
-  const _ManageTribeAction({required this.tribe});
-
-  final Tribe tribe;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Manage Tribe ${tribe.name}',
-      child: SizedBox(
-        width: double.infinity,
-        height: 50,
-        child: FilledButton(
-          key: const ValueKey('plug-studio-primary-manage-tribe'),
-          onPressed: () => context.push('/tribe/${tribe.slug}/manage/settings'),
-          style: FilledButton.styleFrom(
-            backgroundColor: VentlyColors.berryMagenta,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.admin_panel_settings_outlined, size: 21),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Manage Tribe',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      tribe.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(.78),
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.arrow_forward_rounded, size: 20),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The action callout inside the keeper welcome hero.
-class _HeroCallout extends StatelessWidget {
-  const _HeroCallout({required this.icon, required this.hint, this.onTap});
-  final IconData icon;
-  final String hint;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      // Opaque in light mode. At 0.72 the decorative orb behind the panel bled
-      // through the card and sat under the action button, which read as a
-      // rendering fault rather than as depth.
-      color: context.isDark ? Colors.white.withOpacity(0.07) : Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-          child: Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: VentlyColors.berryMagenta.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 16, color: VentlyColors.berryMagenta),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  hint,
-                  style: TextStyle(
-                    color: context.ink,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12.5,
-                    height: 1.3,
-                  ),
-                ),
-              ),
-              if (onTap != null) ...[
-                const SizedBox(width: 8),
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: const BoxDecoration(
-                    gradient: VentlyGradients.brand,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
-// Top bar
+// Chrome
 // ---------------------------------------------------------------------------
 
 class _TopBar extends StatelessWidget {
@@ -497,22 +171,25 @@ class _TopBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Row(
-                  children: [
-                    Text(
-                      'Keeper Studio',
-                      style: TextStyle(
-                        color: VentlyColors.berryMagenta,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 22,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                  ],
+                // No Row around these. A Row hands its child unbounded width,
+                // so the title could not wrap or ellipsis and simply ran off
+                // the edge; in the Column it is bounded by the Expanded above.
+                const Text(
+                  'Keeper Studio',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: VentlyColors.berryMagenta,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 22,
+                    letterSpacing: -0.4,
+                  ),
                 ),
                 const SizedBox(height: 1),
                 Text(
                   'Manage your tribes. Protect your safe space.',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: context.ink,
                     fontWeight: FontWeight.w600,
@@ -585,394 +262,504 @@ class _BellButton extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Command strip (replaces large marketing hero)
+// Scope
 // ---------------------------------------------------------------------------
 
-class _CommandStrip extends ConsumerWidget {
-  const _CommandStrip({required this.me, required this.overview});
-  final AppUser? me;
-  final KeeperOverview overview;
+/// Which tribe the Studio is showing — as a rail you tap, not a menu you open.
+///
+/// The scope used to be a small `[All Tribes ▾]` pill that opened a modal
+/// sheet: three taps and a full-screen interruption to answer "how is the
+/// other one doing". A keeper with three tribes compares them constantly, so
+/// the switch belongs in the screen rather than on top of it.
+///
+/// One tribe still gets no rail — a row of one option is furniture — but it
+/// does get its name and member count, because the numbers below are that
+/// tribe's and the screen should say whose they are.
+class _ScopeRail extends ConsumerWidget {
+  const _ScopeRail();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
-    final members = primary?.memberCount ?? overview.totalMembers;
-    final reports = overview.totalOpenReports;
-    final vents = overview.totalPosts24h;
-    final joined = overview.totalNewMembers7d;
+    final tribes = ref.watch(tribesIKeepProvider).valueOrNull ?? const <Tribe>[];
+    if (tribes.isEmpty) return const SizedBox.shrink();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 10, 18, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.insights_rounded,
-                size: 17,
-                color: VentlyColors.berryMagenta,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Tribe overview',
-                style: TextStyle(
-                  color: context.ink,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 15,
-                ),
-              ),
-              const Spacer(),
-              TextButton(
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  minimumSize: Size.zero,
-                ),
-                onPressed: () {
-                  ref.read(keeperMemberViewProvider.notifier).state = true;
-                  context.go('/feed');
-                },
-                child: const Text(
-                  'Member feed',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _OverviewCard(
-                  icon: Icons.groups_rounded,
-                  color: VentlyColors.berryMagenta,
-                  value: PostCard.compactNumber(members),
-                  label: 'Members',
-                  status: members > 1 ? 'Growing' : 'Just you',
-                  statusColor: VentlyColors.successGreen,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _OverviewCard(
-                  icon: Icons.verified_user_rounded,
-                  color: VentlyColors.successGreen,
-                  value: '$reports',
-                  label: 'Reports',
-                  status: reports == 0 ? 'All clear' : 'Needs review',
-                  statusColor: reports == 0
-                      ? VentlyColors.successGreen
-                      : VentlyColors.dangerRed,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _OverviewCard(
-                  icon: Icons.notes_rounded,
-                  color: VentlyTokens.messageBlue,
-                  value: '$vents',
-                  label: '24h vents',
-                  status: vents > 0 ? 'Active' : 'No activity',
-                  statusColor: context.ink.withOpacity(0.5),
-                ),
-              ),
-              const SizedBox(width: 10),
-              // Was "Tribe health", a percentage. `_healthScore` computed
-              // `engagement + 55 - reportsPenalty`, clamped to 40..100, with a
-              // comment saying the floor existed "so it never looks broken" —
-              // so a tribe with no posts and no members beyond its keeper
-              // rendered "55% · Growing ↗". That is not a measurement, it is a
-              // constant wearing a metric's clothes, and it is the same problem
-              // that got the profile's mood ring removed: a number nobody can
-              // explain and nobody maintains. New members in the last week is
-              // something a keeper can act on and verify.
-              Expanded(
-                child: _OverviewCard(
-                  icon: Icons.person_add_alt_1_rounded,
-                  color: VentlyTokens.growthTeal,
-                  value: '$joined',
-                  label: 'New · 7d',
-                  status: joined > 0 ? 'Growing' : 'None yet',
-                  statusColor: joined > 0
-                      ? VentlyColors.successGreen
-                      : context.ink.withOpacity(0.5),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
+    final selectedId = ref.watch(studioTribeScopeProvider);
 
-/// A premium "Tribe overview" stat card: coloured icon in a soft circle, big
-/// value, label, and a friendly status line.
-class _OverviewCard extends StatelessWidget {
-  const _OverviewCard({
-    required this.icon,
-    required this.color,
-    required this.value,
-    required this.label,
-    required this.status,
-    required this.statusColor,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String value;
-  final String label;
-  final String status;
-  final Color statusColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: context.isDark
-            ? Colors.white.withOpacity(0.05)
-            : Colors.white.withOpacity(0.72),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withOpacity(context.isDark ? 0.08 : 0.7),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: context.isDark
-                ? Colors.black.withOpacity(0.30)
-                : VentlyColors.berryMagenta.withOpacity(0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 20, color: color),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: TextStyle(
-              color: context.ink,
-              fontWeight: FontWeight.w900,
-              fontSize: 26,
-              height: 1,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              color: context.ink.withOpacity(0.7),
-              fontWeight: FontWeight.w700,
-              fontSize: 12.5,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            status,
-            style: TextStyle(
-              color: statusColor,
-              fontWeight: FontWeight.w800,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PriorityQueue extends StatelessWidget {
-  const _PriorityQueue({required this.overview});
-  final KeeperOverview overview;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = <({String label, String value, IconData icon, Color color})>[
-      (
-        label: 'Open reports',
-        value: '${overview.totalOpenReports}',
-        icon: Icons.gavel_rounded,
-        color: VentlyColors.dangerRed,
-      ),
-      (
-        label: 'Unanswered',
-        value: '${overview.totalUnansweredPosts}',
-        icon: Icons.mark_chat_unread_outlined,
-        color: VentlyTokens.trendingAmber,
-      ),
-      (
-        label: 'Scheduled',
-        value: '${overview.totalScheduledPrompts}',
-        icon: Icons.event_note_rounded,
-        color: VentlyTokens.messageBlue,
-      ),
-      (
-        label: 'Active 7d',
-        value: PostCard.compactNumber(overview.totalActivePosters7d),
-        icon: Icons.bolt_rounded,
-        color: VentlyTokens.growthTeal,
-      ),
-    ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      child: GlassCard(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Today's priorities",
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 13,
-                color: context.ink,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                for (var i = 0; i < items.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 8),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: items[i].color.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(items[i].icon, size: 14, color: items[i].color),
-                          const SizedBox(height: 4),
-                          Text(
-                            items[i].value,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
-                              color: context.ink,
-                            ),
-                          ),
-                          Text(
-                            items[i].label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: context.ink.withOpacity(0.55),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Legacy hero (unused — kept for reference during migration)
-// ---------------------------------------------------------------------------
-
-// ignore: unused_element
-
-class _QuickActionsRow extends ConsumerWidget {
-  const _QuickActionsRow({required this.overview});
-  final KeeperOverview overview;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final primary = overview.tribes.isNotEmpty ? overview.tribes.first : null;
-    final slug = primary?.slug;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
+    if (tribes.length == 1) {
+      final only = tribes.single;
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 2),
         child: Row(
           children: [
-            _QuickAction(
-              icon: Icons.lightbulb_outline,
-              label: 'Prompt',
-              onTap: primary == null
-                  ? null
-                  : () => showKeeperPromptComposer(
-                      context,
-                      tribeId: primary.tribeId,
+            TribeAvatar(avatarUrl: only.avatarUrl, size: 34),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    only.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.ink,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
                     ),
+                  ),
+                  Text(
+                    '${PostCard.compactNumber(only.memberCount)} '
+                    '${only.memberCount == 1 ? 'member' : 'members'}',
+                    style: TextStyle(
+                      color: context.ink.withOpacity(0.55),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            _QuickAction(
+          ],
+        ),
+      );
+    }
+
+    void select(String? id) {
+      if (ref.read(studioTribeScopeProvider) == id) return;
+      VentlyHaptics.light();
+      ref.read(studioTribeScopeProvider.notifier).state = id;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 2),
+      child: SizedBox(
+        height: 42,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          children: [
+            _ScopeChip(
+              label: 'All tribes',
+              icon: Icons.workspaces_rounded,
+              selected: selectedId == null,
+              onTap: () => select(null),
+            ),
+            for (final tribe in tribes)
+              _ScopeChip(
+                label: tribe.name,
+                avatarUrl: tribe.avatarUrl,
+                selected: selectedId == tribe.tribeId,
+                onTap: () => select(tribe.tribeId),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScopeChip extends StatelessWidget {
+  const _ScopeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+    this.avatarUrl,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData? icon;
+  final String? avatarUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: Material(
+          color: selected
+              ? VentlyColors.berryMagenta
+              : GlassTokens.card(context),
+          borderRadius: BorderRadius.circular(999),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              padding: EdgeInsets.fromLTRB(avatarUrl != null ? 6 : 14, 0, 14, 0),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: selected
+                      ? Colors.transparent
+                      : GlassTokens.border(context),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (avatarUrl != null) ...[
+                    TribeAvatar(avatarUrl: avatarUrl, size: 28),
+                    const SizedBox(width: 8),
+                  ] else if (icon != null) ...[
+                    Icon(
+                      icon,
+                      size: 16,
+                      color: selected ? Colors.white : context.ink,
+                    ),
+                    const SizedBox(width: 7),
+                  ],
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 140),
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color: selected ? Colors.white : context.ink,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The numbers
+// ---------------------------------------------------------------------------
+
+/// Open whichever screen this tile is about, for whichever tribe is in scope.
+///
+/// [resolveStudioTargetTribe] already encodes the rule: a scoped tribe is the
+/// answer, a keeper with one tribe has nothing to resolve, and anyone else is
+/// asked. The Studio's actions used to reach for `overview.tribes.first`
+/// instead, so under All Tribes a keeper's prompt went to whichever tribe the
+/// query happened to return first, silently.
+Future<void> _openForTribe(
+  BuildContext context,
+  WidgetRef ref,
+  String Function(String slug) path,
+) async {
+  final tribe = await resolveStudioTargetTribe(context, ref);
+  if (tribe == null || !context.mounted) return;
+  context.push(path(tribe.slug));
+}
+
+/// The four numbers a keeper opens the Studio to see, each one a button.
+///
+/// They were a read-only grid: a keeper who saw "3 reports" had to find their
+/// way to Moderation through a tile further down the same screen. A number on
+/// a dashboard is a question, and the answer is always a place — so each tile
+/// goes there.
+class _KpiGrid extends ConsumerWidget {
+  const _KpiGrid({required this.overview});
+  final KeeperOverview overview;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final reports = overview.totalOpenReports;
+    final requests = overview.totalPendingRequests;
+    final joined = overview.totalNewMembers7d;
+    final vents = overview.totalPosts24h;
+    final active = overview.totalActivePosters7d;
+
+    final tiles = <Widget>[
+      _KpiTile(
+        icon: Icons.groups_rounded,
+        accent: VentlyColors.berryMagenta,
+        value: PostCard.compactNumber(overview.totalMembers),
+        label: 'Members',
+        footnote: joined > 0
+            ? '+$joined this week'
+            : 'no new members this week',
+        onTap: () => _openForTribe(
+          context,
+          ref,
+          (slug) => '/tribe/$slug/manage/settings/members',
+        ),
+      ),
+      _KpiTile(
+        icon: Icons.shield_rounded,
+        accent: reports > 0
+            ? VentlyColors.dangerRed
+            : VentlyColors.successGreen,
+        value: '$reports',
+        label: 'Reports',
+        footnote: reports > 0 ? 'needs review' : 'all clear',
+        urgent: reports > 0,
+        onTap: () => context.push('/keeper/moderation'),
+      ),
+      _KpiTile(
+        icon: Icons.notes_rounded,
+        accent: VentlyTokens.messageBlue,
+        value: '$vents',
+        label: 'Vents · 24h',
+        footnote: active > 0
+            ? '$active posting this week'
+            : 'nobody posting yet',
+        onTap: () => context.push('/keeper/insights'),
+      ),
+      _KpiTile(
+        icon: Icons.how_to_reg_rounded,
+        accent: VentlyTokens.growthTeal,
+        value: '$requests',
+        label: 'Join requests',
+        footnote: requests > 0 ? 'awaiting you' : 'nothing waiting',
+        urgent: requests > 0,
+        onTap: () => _openForTribe(
+          context,
+          ref,
+          (slug) => '/tribe/$slug/manage/settings/members',
+        ),
+      ),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+      child: Column(
+        children: [
+          // IntrinsicHeight, so a pair of tiles matches its taller half rather
+          // than each sizing to its own text — a one-word footnote beside a
+          // wrapped one is what makes a grid look assembled rather than laid
+          // out. CrossAxisAlignment.stretch alone cannot do it here: a Row in
+          // a sliver has unbounded height, and stretching into that is an
+          // infinite constraint, which is a crash rather than a layout.
+          _KpiRow(left: tiles[0], right: tiles[1]),
+          const SizedBox(height: 10),
+          _KpiRow(left: tiles[2], right: tiles[3]),
+        ],
+      ),
+    );
+  }
+}
+
+class _KpiRow extends StatelessWidget {
+  const _KpiRow({required this.left, required this.right});
+
+  final Widget left;
+  final Widget right;
+
+  @override
+  Widget build(BuildContext context) => IntrinsicHeight(
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: left),
+        const SizedBox(width: 10),
+        Expanded(child: right),
+      ],
+    ),
+  );
+}
+
+class _KpiTile extends StatelessWidget {
+  const _KpiTile({
+    required this.icon,
+    required this.accent,
+    required this.value,
+    required this.label,
+    required this.footnote,
+    required this.onTap,
+    this.urgent = false,
+  });
+
+  final IconData icon;
+  final Color accent;
+  final String value;
+  final String label;
+  final String footnote;
+  final VoidCallback onTap;
+
+  /// Draws the accent on the edge as well as the icon. Reserved for the two
+  /// numbers that are a to-do rather than a statistic — reports and join
+  /// requests — so that "something is waiting for you" is visible without
+  /// reading any of the labels.
+  final bool urgent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '$value $label, $footnote',
+      child: Material(
+        color: GlassTokens.card(context),
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: () {
+            VentlyHaptics.light();
+            onTap();
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: urgent
+                    ? accent.withOpacity(0.55)
+                    : GlassTokens.border(context),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(icon, size: 17, color: accent),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 20,
+                      color: context.ink.withOpacity(0.35),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  value,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: urgent ? accent : context.ink,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 27,
+                    height: 1,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.ink,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  footnote,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.ink.withOpacity(0.5),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
+
+/// The five things a keeper does, rather than reads.
+class _ActionBar extends ConsumerWidget {
+  const _ActionBar({required this.overview});
+  final KeeperOverview overview;
+
+  Future<void> _compose(
+    BuildContext context,
+    WidgetRef ref, {
+    String? draft,
+    String? format,
+  }) async {
+    final tribe = await resolveStudioTargetTribe(context, ref);
+    if (tribe == null || !context.mounted) return;
+    ref.read(composeTargetTribeProvider.notifier).state = tribe;
+    ref.read(composeTargetSpaceProvider.notifier).state = null;
+    openCompose(
+      context,
+      ref,
+      category: format == null ? tribe.category : null,
+      draft: draft,
+      format: format,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: SizedBox(
+        height: 40,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          children: [
+            // The Studio's primary route into tribe management.
+            //
+            // Keyed because the tribe-management contract test asserts this
+            // screen offers one: it used to be a full-width button inside the
+            // hero, and when the hero went, so did a keeper's most-used
+            // destination. Leading the action row, in the brand fill, it is
+            // both the first thing on the row and the only filled control on
+            // it — which is what "primary" has to mean to be worth the name.
+            _ActionPill(
+              key: const ValueKey('plug-studio-primary-manage-tribe'),
+              icon: Icons.tune_rounded,
+              label: 'Manage Tribe',
+              primary: true,
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings',
+              ),
+            ),
+            _ActionPill(
+              icon: Icons.lightbulb_outline_rounded,
+              label: 'Prompt',
+              onTap: () async {
+                final tribe = await resolveStudioTargetTribe(context, ref);
+                if (tribe == null || !context.mounted) return;
+                showKeeperPromptComposer(context, tribeId: tribe.tribeId);
+              },
+            ),
+            _ActionPill(
               icon: Icons.campaign_outlined,
               label: 'Announce',
-              onTap: primary == null
-                  ? null
-                  : () {
-                      ref.read(composeTargetTribeProvider.notifier).state =
-                          primary;
-                      ref.read(composeTargetSpaceProvider.notifier).state =
-                          null;
-                      openCompose(
-                        context,
-                        ref,
-                        category: primary.category,
-                        draft: 'Announcement: ',
-                      );
-                    },
+              onTap: () => _compose(context, ref, draft: 'Announcement: '),
             ),
-            _QuickAction(
+            _ActionPill(
               icon: Icons.poll_outlined,
               label: 'Poll',
-              onTap: primary == null
-                  ? null
-                  : () {
-                      ref.read(composeTargetTribeProvider.notifier).state =
-                          primary;
-                      ref.read(composeTargetSpaceProvider.notifier).state =
-                          null;
-                      openCompose(context, ref, format: 'poll');
-                    },
+              onTap: () => _compose(context, ref, format: 'poll'),
             ),
-            _QuickAction(
-              icon: Icons.person_add_alt_1,
-              label: 'Invite',
-              onTap: slug == null
-                  ? null
-                  : () => context.push('/tribe/$slug/manage/settings/members'),
-            ),
-            _QuickAction(
+            _ActionPill(
               icon: Icons.rule_rounded,
               label: 'Rules',
-              onTap: slug == null
-                  ? null
-                  : () => context.push('/tribe/$slug/manage/settings/rules'),
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings/rules',
+              ),
             ),
           ],
         ),
@@ -981,83 +768,144 @@ class _QuickActionsRow extends ConsumerWidget {
   }
 }
 
-class _StudioV2Grid extends StatelessWidget {
-  const _StudioV2Grid({required this.overview});
+class _ActionPill extends StatelessWidget {
+  const _ActionPill({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.primary = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = primary ? Colors.white : context.ink;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Material(
+        color: primary
+            ? VentlyColors.berryMagenta
+            : GlassTokens.card(context),
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          onTap: () {
+            VentlyHaptics.light();
+            onTap();
+          },
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 15),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: primary
+                    ? Colors.transparent
+                    : GlassTokens.border(context),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 16, color: fg),
+                const SizedBox(width: 7),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: fg,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Studio tools
+// ---------------------------------------------------------------------------
+
+/// The four Studio pages, as rows.
+///
+/// They were a 2×2 of tiles carrying an icon, a title, a subtitle and a badge
+/// each, which is a lot of card for four links, and two of the four repeated a
+/// number already stated above. Rows fit the same four destinations in less
+/// than half the height, and a keeper scanning a list of names finds one
+/// faster than a keeper reading four paragraphs.
+class _StudioTools extends StatelessWidget {
+  const _StudioTools({required this.overview});
   final KeeperOverview overview;
 
   @override
   Widget build(BuildContext context) {
+    final scheduled = overview.totalScheduledPrompts;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // "Everything you need to grow and protect your tribe." used to sit
-          // under this heading, one screen below the hero's "Everything you
-          // need to keep it safe and thriving." and the top bar's "Manage your
-          // tribe. Protect your safe space." Three taglines making the same
-          // promise is not reassurance, it is noise between the keeper and the
-          // four things they came to open.
           Text(
-            'Creator Studio',
+            'Studio',
             style: TextStyle(
               color: context.ink,
               fontWeight: FontWeight.w900,
-              fontSize: 15,
+              fontSize: 16,
             ),
           ),
           const SizedBox(height: 10),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            // A nested ScrollView with a null padding inherits the ambient
-            // MediaQuery padding along its scroll axis — here the home
-            // indicator's bottom inset, which this grid has no business
-            // reserving. It was adding dead space under the last row.
-            padding: EdgeInsets.zero,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            // Raised from 1.18 now that tile content is top-aligned rather than
-            // bottom-anchored: the cells no longer need the extra height that
-            // the Spacer used to absorb.
-            childAspectRatio: 1.3,
-            children: [
-              _V2Tile(
-                icon: Icons.gavel_rounded,
-                accent: VentlyColors.dangerRed,
-                label: 'Moderation',
-                subtitle: 'Review reports & keep it safe',
-                badge: overview.totalOpenReports > 0
-                    ? '${overview.totalOpenReports}'
-                    : null,
-                onTap: () => context.push('/keeper/moderation'),
-              ),
-              _V2Tile(
-                icon: Icons.calendar_month_rounded,
-                accent: VentlyTokens.messageBlue,
-                label: 'Calendar',
-                subtitle: 'Schedule prompts & rituals',
-                badge: overview.totalScheduledPrompts > 0
-                    ? '${overview.totalScheduledPrompts}'
-                    : null,
-                onTap: () => context.push('/keeper/calendar'),
-              ),
-              _V2Tile(
-                icon: Icons.auto_awesome_rounded,
-                accent: VentlyColors.berryMagenta,
-                label: 'AI Insights',
-                subtitle: 'Understand your community',
-                onTap: () => context.push('/keeper/insights'),
-              ),
-              _V2Tile(
-                icon: Icons.admin_panel_settings_rounded,
-                accent: VentlyTokens.growthTeal,
-                label: 'Co-moderators',
-                subtitle: 'Add & manage your mod team',
-                onTap: () => context.push('/keeper/comod'),
-              ),
-            ],
+          Container(
+            decoration: BoxDecoration(
+              color: GlassTokens.card(context),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: GlassTokens.border(context)),
+            ),
+            child: Column(
+              children: [
+                _ToolRow(
+                  icon: Icons.gavel_rounded,
+                  accent: VentlyColors.dangerRed,
+                  label: 'Moderation queue',
+                  subtitle: 'Reports, warnings and bans',
+                  onTap: () => context.push('/keeper/moderation'),
+                ),
+                _ToolDivider(),
+                _ToolRow(
+                  icon: Icons.calendar_month_rounded,
+                  accent: VentlyTokens.messageBlue,
+                  label: 'Engagement calendar',
+                  subtitle: 'Schedule prompts and rituals',
+                  badge: scheduled > 0 ? '$scheduled' : null,
+                  onTap: () => context.push('/keeper/calendar'),
+                ),
+                _ToolDivider(),
+                _ToolRow(
+                  icon: Icons.insights_rounded,
+                  accent: VentlyColors.berryMagenta,
+                  label: 'Insights',
+                  subtitle: 'How your community is doing',
+                  onTap: () => context.push('/keeper/insights'),
+                ),
+                _ToolDivider(),
+                _ToolRow(
+                  icon: Icons.admin_panel_settings_rounded,
+                  accent: VentlyTokens.growthTeal,
+                  label: 'Co-moderators',
+                  subtitle: overview.totalModerators > 0
+                      ? '${overview.totalModerators} helping you'
+                      : 'Invite someone to help',
+                  onTap: () => context.push('/keeper/comod'),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1065,322 +913,153 @@ class _StudioV2Grid extends StatelessWidget {
   }
 }
 
-class _V2Tile extends StatelessWidget {
-  const _V2Tile({
+class _ToolDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(left: 62),
+    child: Divider(height: 1, color: GlassTokens.border(context)),
+  );
+}
+
+class _ToolRow extends StatelessWidget {
+  const _ToolRow({
     required this.icon,
+    required this.accent,
     required this.label,
+    required this.subtitle,
     required this.onTap,
-    this.subtitle,
     this.badge,
-    this.accent = VentlyColors.berryMagenta,
   });
+
   final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final String? subtitle;
-  final String? badge;
   final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: context.isDark
-          ? Theme.of(context).colorScheme.surface
-          : Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: context.isDark
-                ? Theme.of(context).colorScheme.surface
-                : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: accent.withOpacity(0.10),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Stack(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: accent.withOpacity(0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(icon, color: accent, size: 21),
-                  ),
-                  // Top-aligned, not bottom-aligned. A Spacer here pushed the
-                  // text to the bottom of each cell, so a tile whose subtitle
-                  // wrapped to two lines sat its label a line higher than its
-                  // neighbour's — "Moderation" and "Calendar" never lined up.
-                  const SizedBox(height: 14),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13.5,
-                      color: context.ink,
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 10.5,
-                        height: 1.2,
-                        color: context.ink.withOpacity(0.55),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              // Badge (count) if present, else a soft chevron affordance.
-              Positioned(
-                right: 0,
-                top: 0,
-                child: badge != null
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: accent,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: Text(
-                          badge!,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 10,
-                          ),
-                        ),
-                      )
-                    : Container(
-                        width: 26,
-                        height: 26,
-                        decoration: BoxDecoration(
-                          color: accent.withOpacity(0.10),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.arrow_outward_rounded,
-                          color: accent,
-                          size: 15,
-                        ),
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _QuickAction extends StatelessWidget {
-  const _QuickAction({required this.icon, required this.label, this.onTap});
-  final IconData icon;
   final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 10),
-      child: Material(
-        color: context.isDark
-            ? Theme.of(context).colorScheme.surface
-            : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Opacity(
-            opacity: onTap == null ? 0.45 : 1,
-            child: Container(
-              width: 96,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                color: context.isDark
-                    ? Theme.of(context).colorScheme.surface
-                    : Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: VentlyColors.berryMagenta.withOpacity(0.10),
-                    blurRadius: 14,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: VentlyColors.berryMagenta.withOpacity(0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      icon,
-                      color: VentlyColors.berryMagenta,
-                      size: 21,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 11,
-                      color: context.ink,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ContentHub extends StatelessWidget {
-  const _ContentHub({required this.overview});
-  final KeeperOverview overview;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-      child: GlassCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Needs attention',
-              style: TextStyle(
-                color: context.ink,
-                fontWeight: FontWeight.w900,
-                fontSize: 15,
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (overview.totalOpenReports > 0)
-              _HubRow(
-                icon: Icons.flag_rounded,
-                color: VentlyColors.dangerRed,
-                label: 'Open reports',
-                count: overview.totalOpenReports,
-                onTap: () {
-                  final slug = overview.tribes.first.slug;
-                  context.push('/tribe/$slug/manage/reports');
-                },
-              ),
-            if (overview.totalScheduledPrompts > 0) ...[
-              if (overview.totalOpenReports > 0) const SizedBox(height: 8),
-              _HubRow(
-                icon: Icons.campaign_rounded,
-                color: VentlyColors.berryMagenta,
-                label: 'Scheduled prompts',
-                count: overview.totalScheduledPrompts,
-                onTap: () {
-                  final slug = overview.tribes.first.slug;
-                  context.push('/tribe/$slug/manage');
-                },
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HubRow extends StatelessWidget {
-  const _HubRow({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.count,
-    required this.onTap,
-  });
-  final IconData icon;
-  final Color color;
-  final String label;
-  final int count;
+  final String subtitle;
   final VoidCallback onTap;
+  final String? badge;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      type: MaterialType.transparency,
       child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          VentlyHaptics.light();
+          onTap();
+        },
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: color, size: 18),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: color,
+                  color: accent.withOpacity(0.14),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(
-                  '$count',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12,
+                child: Icon(icon, size: 18, color: accent),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: context.ink,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14.5,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: context.ink.withOpacity(0.55),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (badge != null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: accent.withOpacity(0.16),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    badge!,
+                    style: TextStyle(
+                      color: accent,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
+              ],
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: context.ink.withOpacity(0.35),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.title,
+    required this.action,
+    required this.onAction,
+  });
+
+  final String title;
+  final String action;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 20, 10, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: context.ink,
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: onAction,
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: Text(
+              action,
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
       ),
     );
   }

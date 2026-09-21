@@ -7,7 +7,6 @@ import '../../../core/providers.dart';
 import '../../../data/services/supabase_backend.dart'
     show MfaChallengeRequiredException;
 import '../../theme/colors.dart';
-import '../../theme/glass_tokens.dart';
 
 /// Optional phone sign-in: enter a number, receive an SMS OTP, verify.
 ///
@@ -226,7 +225,7 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
         hintText: hint,
         prefixIcon: icon == null ? null : Icon(icon),
         filled: true,
-        fillColor: GlassTokens.card(context),
+        fillColor: Theme.of(context).colorScheme.surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide.none,
