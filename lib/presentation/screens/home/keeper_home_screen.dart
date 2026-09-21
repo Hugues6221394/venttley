@@ -619,7 +619,9 @@ class _KpiTile extends StatelessWidget {
                       width: 32,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: accent.withOpacity(0.14),
+                        // Same reason as the link tiles: 0.14 of an accent was
+                        // legible against #120D0F and is mud against #5B5859.
+                        color: accent.withOpacity(0.22),
                         borderRadius: BorderRadius.circular(11),
                       ),
                       child: Icon(icon, size: 17, color: accent),
