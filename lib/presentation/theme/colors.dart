@@ -88,11 +88,28 @@ class VentlyColors {
   // its own canvas, so the two dark themes read identically rather than one
   // being a guess at the other.
 
-  /// Panel surface on the true-black canvas — 2.98 against #000000.
-  static const Color cardLiftBlack = Color(0xFF5B5859);
+  /// Panel surface on the true-black canvas — 4.70 against #000000.
+  static const Color cardLiftBlack = Color(0xFF787777);
 
-  /// Panel surface on the charcoal canvas — the same 2.99 against #120B0D.
-  static const Color cardLiftDark = Color(0xFF605D5E);
+  /// Panel surface on the charcoal canvas — the same 4.71 against #120B0D.
+  static const Color cardLiftDark = Color(0xFF7F7C7D);
+
+  /// Ink for anything sitting on a lifted card in a dark theme.
+  ///
+  /// Pure black, and it has to be. On #787777 black measures 4.70:1 and every
+  /// softer near-black misses AA — charcoal is 4.36, deepBurgundy 4.03. A
+  /// mid-grey is the hardest surface in the palette to write on, because it is
+  /// equally far from both ends.
+  static const Color onCardLift = Color(0xFF000000);
+
+  /// The chip a brand-coloured icon sits in, on a lifted card.
+  ///
+  /// The card is light enough that the brand berry vanishes on it — #E0245E on
+  /// #787777 is 1.03:1, and even a very deep #6E0B2C only reaches 2.69, under
+  /// the 3.0 that non-text contrast needs. So the accent does not go on the
+  /// card; it goes on a near-black badge laid on the card, where berry reads
+  /// at 4.58 and the badge itself reads at 4.4 against the grey.
+  static const Color cardLiftChip = Color(0xFF141112);
 
   // ---------------- Semantic helpers ----------------
   static const Color successGreen = Color(0xFF6BA56F);

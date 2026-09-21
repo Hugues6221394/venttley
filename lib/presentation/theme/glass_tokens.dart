@@ -52,6 +52,44 @@ class GlassTokens {
         : VentlyColors.cardLiftDark;
   }
 
+  /// Ink for text and glyphs drawn on [card].
+  ///
+  /// A lifted card in a dark theme is now lighter than the page rather than
+  /// darker, so the ordinary on-surface ink — an off-white — is the wrong way
+  /// round on it. Anything drawn on a card reads this instead of context.ink.
+  static Color onCard(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? VentlyColors.onCardLift
+      : VentlyColors.deepBurgundy;
+
+  /// Secondary text on [card].
+  ///
+  /// 0.72 rather than the 0.55–0.62 used elsewhere: on a mid-grey there is
+  /// only 4.70:1 of range to spend, so a soft secondary tone that reads fine
+  /// on near-black disappears here. Even at 0.72 this measures 3.5:1, which is
+  /// below AA for body copy — the reason to keep it for genuinely secondary
+  /// lines and never for anything a reader has to act on.
+  static Color onCardMuted(BuildContext context) =>
+      onCard(context).withOpacity(
+        Theme.of(context).brightness == Brightness.dark ? 0.72 : 0.62,
+      );
+
+  /// The badge a brand-coloured glyph sits in, on [card].
+  static Color cardChip(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? VentlyColors.cardLiftChip
+      : VentlyColors.berryMagenta.withOpacity(0.12);
+
+  /// The edge of a [card].
+  ///
+  /// A light card on a black page separates by its own fill at 4.7:1, so the
+  /// outline is doing nothing but shaping the corner; a dark hairline keeps it
+  /// crisp without ringing it.
+  static Color cardEdge(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? Colors.black.withOpacity(0.18)
+      : VentlyColors.softMauve;
+
   static Color borderLight(BuildContext context) => VentlyColors.softMauve;
 
   /// A hairline lift, drawn over the card rather than against the page.

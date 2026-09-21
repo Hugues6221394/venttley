@@ -17,24 +17,36 @@ import 'package:flutter_test/flutter_test.dart';
 /// The two facts below are what makes the bug, so the two facts are what is
 /// pinned.
 void main() {
-  test('a pushed profile clears the bar that floats over it', () {
+  test('the pushed profile has no bar to float over it', () {
     final src = File(
       'lib/presentation/screens/profile/profile_screen.dart',
     ).readAsStringSync();
 
+    // Zero height unconditionally. A real bar here meant two bugs at once:
+    // with extendBodyBehindAppBar it floated over the scroll view and ate the
+    // touches in its band, and reserving room for it pushed the hero a third
+    // of the way down an empty screen.
     expect(
       src,
-      contains('extendBodyBehindAppBar: true'),
-      reason:
-          'if this goes, the inset below is double-counting and the profile '
-          'gains a band of dead space instead',
+      contains('toolbarHeight: 0'),
+      reason: 'a real app bar here floats over the scroll view and eats taps',
     );
     expect(
       src,
-      contains('(widget.showBackButton ? kToolbarHeight : 0)'),
-      reason:
-          'the pushed profile must reserve the app bar it is rendering behind, '
-          'or its header sits under the bar and under the notch',
+      isNot(contains('toolbarHeight: widget.showBackButton')),
+      reason: 'the two entry points must not disagree about the bar',
     );
+
+    // One inset, the status bar, so the hero starts in the same place however
+    // you arrived at the screen.
+    expect(
+      src,
+      contains('SizedBox(height: MediaQuery.of(ctx).padding.top + 8)'),
+      reason: 'the pushed profile should start where the tab profile starts',
+    );
+
+    // And the back affordance survived the bar being removed.
+    expect(src, contains('if (widget.showBackButton)'));
+    expect(src, contains('Icons.arrow_back_rounded'));
   });
 }

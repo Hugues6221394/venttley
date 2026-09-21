@@ -162,51 +162,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       extendBodyBehindAppBar: true,
       // No app-bar title band — the hero card is the header (settings lives
       // inside it now), so the profile content hugs the top of the screen.
+      // Zero height in both cases, and no leading.
+      //
+      // A 56pt bar for one back chip cost the pushed profile two things. It
+      // sat on top of the scroll view swallowing every touch in its band,
+      // because extendBodyBehindAppBar means it floats rather than pushes —
+      // that was the "unresponsive from the Studio" report. And once the
+      // header reserved room for it, the hero started a third of the way down
+      // an empty screen, which is not where a profile begins.
+      //
+      // The chip is a Positioned overlay in the body instead. Same shape the
+      // public profile uses, no bar, and the hero sits exactly where it does
+      // on the tab.
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        // Zero height when this is the tab: the hero card is the header. When
-        // pushed, just enough bar to float a back chip over the banner, the
-        // same shape the public profile uses.
-        toolbarHeight: widget.showBackButton ? null : 0,
-        leading: widget.showBackButton
-            ? Padding(
-                padding: const EdgeInsets.only(left: 4, top: 4),
-                child: IconButton(
-                  tooltip: 'Back',
-                  style: IconButton.styleFrom(
-                    backgroundColor: scheme.surface.withOpacity(0.82),
-                  ),
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  onPressed: () => context.pop(),
-                ),
-              )
-            : null,
+        toolbarHeight: 0,
+        automaticallyImplyLeading: false,
       ),
-      body: VentlyPremiumBackground(
-        child: NestedScrollView(
+      body: Stack(
+        children: [
+          VentlyPremiumBackground(
+            child: NestedScrollView(
           headerSliverBuilder: (ctx, _) => [
-            // Clear the status bar in both cases, and the app bar too when
-            // there is one.
-            //
-            // The old comment here said that when pushed "the bar is a real
-            // height and already clears it" — which would be true without
-            // extendBodyBehindAppBar above. With it, the body starts at y=0
-            // and the bar floats over the top of it. So the pushed profile
-            // rendered its hero underneath the notch, and the transparent app
-            // bar sat on top of the first 56pt of the scroll view swallowing
-            // every touch in that band: the screen looked wrong and felt dead,
-            // which is exactly how it was reported — "unresponsive from the
-            // Studio, fine from the feed". The feed reaches it as a tab, where
-            // toolbarHeight is 0 and there is nothing to swallow anything.
+            // Just the status bar. The app bar is zero-height in both cases
+            // now, so there is nothing else to clear, and the hero starts in
+            // the same place however you arrived at it.
             SliverToBoxAdapter(
-              child: SizedBox(
-                height:
-                    MediaQuery.of(ctx).padding.top +
-                    (widget.showBackButton ? kToolbarHeight : 0) +
-                    8,
-              ),
+              child: SizedBox(height: MediaQuery.of(ctx).padding.top + 8),
             ),
             SliverToBoxAdapter(
               key: _badgesKey,
@@ -318,8 +302,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   return const SizedBox.shrink();
               }
             }).toList(),
+              ),
+            ),
           ),
-        ),
+          // The back chip, floating rather than occupying a bar.
+          //
+          // Top-left, clear of the hero's avatar: the header spacer is
+          // padding.top + 8 and the avatar sits inside the card below that, so
+          // a 40pt chip at padding.top + 2 lands on the card's rounded corner
+          // and nothing else.
+          if (widget.showBackButton)
+            Positioned(
+              left: 10,
+              top: MediaQuery.of(context).padding.top + 2,
+              child: Material(
+                color: scheme.surface.withOpacity(0.86),
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: IconButton(
+                  tooltip: 'Back',
+                  iconSize: 22,
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => context.pop(),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

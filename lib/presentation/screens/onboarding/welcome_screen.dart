@@ -281,7 +281,7 @@ class _TrustPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: GlassTokens.border(context)),
+        border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
       child: const Column(
         children: [
@@ -320,11 +320,14 @@ class _Bullet extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
+          // A near-black badge, not a berry wash. The panel is a light grey
+          // now, and the brand berry on it measures 1.03:1 — the icon would be
+          // a shape you can only find by knowing where it is.
           Container(
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: scheme.primary.withOpacity(0.12),
+              color: GlassTokens.cardChip(context),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Icon(icon, color: scheme.primary, size: 22),
@@ -337,7 +340,7 @@ class _Bullet extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    color: context.ink,
+                    color: GlassTokens.onCard(context),
                     fontWeight: FontWeight.w900,
                     fontSize: 15,
                   ),
@@ -346,7 +349,7 @@ class _Bullet extends StatelessWidget {
                 Text(
                   text,
                   style: TextStyle(
-                    color: context.ink.withOpacity(0.62),
+                    color: GlassTokens.onCardMuted(context),
                     fontWeight: FontWeight.w600,
                     height: 1.25,
                   ),

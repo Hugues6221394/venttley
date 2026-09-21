@@ -159,12 +159,40 @@ void main() {
         final context = await _contextFor(tester, theme);
         final page = theme.scaffoldBackgroundColor;
         final panel = _over(GlassTokens.card(context), page);
-        final body = theme.colorScheme.onSurface;
+
+        // GlassTokens.onCard, not colorScheme.onSurface. A lifted card in a
+        // dark theme is now lighter than the page rather than darker, so the
+        // theme's on-surface ink — an off-white — is the wrong way round on
+        // it. That inversion is the whole reason the token exists, and
+        // measuring the old one here would pass a screen nobody can read.
+        final body = GlassTokens.onCard(context);
 
         expect(
           _contrast(_over(body, panel), panel),
           greaterThanOrEqualTo(4.5),
           reason: 'body text on the panel is below AA in $name',
+        );
+      });
+
+      testWidgets('$name: secondary text on the panel clears 3:1', (
+        tester,
+      ) async {
+        final context = await _contextFor(tester, theme);
+        final page = theme.scaffoldBackgroundColor;
+        final panel = _over(GlassTokens.card(context), page);
+        final muted = _over(GlassTokens.onCardMuted(context), panel);
+
+        // 3.0, not 4.5, and that is a stated limit rather than an oversight.
+        // A mid-grey card has only 4.7:1 of range in it end to end, so once
+        // the primary ink takes all of it there is nothing left for a softer
+        // tone. Secondary lines on these cards are footnotes and captions —
+        // "no joins this week" — never anything a reader has to act on.
+        expect(
+          _contrast(muted, panel),
+          greaterThanOrEqualTo(3.0),
+          reason:
+              'secondary text on the panel is ${_contrast(muted, panel).toStringAsFixed(2)}'
+              ':1 in $name, below even the large-text floor',
         );
       });
 

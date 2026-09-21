@@ -394,7 +394,7 @@ class _ScopeChip extends StatelessWidget {
                 border: Border.all(
                   color: selected
                       ? Colors.transparent
-                      : GlassTokens.border(context),
+                      : GlassTokens.cardEdge(context),
                 ),
               ),
               child: Row(
@@ -407,7 +407,9 @@ class _ScopeChip extends StatelessWidget {
                     Icon(
                       icon,
                       size: 16,
-                      color: selected ? Colors.white : context.ink,
+                      color: selected
+                          ? Colors.white
+                          : GlassTokens.onCard(context),
                     ),
                     const SizedBox(width: 7),
                   ],
@@ -420,7 +422,9 @@ class _ScopeChip extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w800,
-                        color: selected ? Colors.white : context.ink,
+                        color: selected
+                            ? Colors.white
+                            : GlassTokens.onCard(context),
                       ),
                     ),
                   ),
@@ -605,9 +609,8 @@ class _KpiTile extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: urgent
-                    ? accent.withOpacity(0.55)
-                    : GlassTokens.border(context),
+                color: urgent ? accent : GlassTokens.cardEdge(context),
+                width: urgent ? 1.6 : 1,
               ),
             ),
             child: Column(
@@ -615,22 +618,24 @@ class _KpiTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
+                    // The accent lives on a near-black badge rather than as a
+                    // wash on the card. The card is a light grey now, and a
+                    // berry tint on it is 1.03:1 — a shape you can only find
+                    // by knowing where it is.
                     Container(
-                      width: 32,
-                      height: 32,
+                      width: 34,
+                      height: 34,
                       decoration: BoxDecoration(
-                        // Same reason as the link tiles: 0.14 of an accent was
-                        // legible against #120D0F and is mud against #5B5859.
-                        color: accent.withOpacity(0.22),
-                        borderRadius: BorderRadius.circular(11),
+                        color: GlassTokens.cardChip(context),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(icon, size: 17, color: accent),
+                      child: Icon(icon, size: 18, color: accent),
                     ),
                     const Spacer(),
                     Icon(
                       Icons.chevron_right_rounded,
                       size: 20,
-                      color: context.ink.withOpacity(0.35),
+                      color: GlassTokens.onCard(context).withOpacity(0.45),
                     ),
                   ],
                 ),
@@ -639,7 +644,11 @@ class _KpiTile extends StatelessWidget {
                   value,
                   maxLines: 1,
                   style: TextStyle(
-                    color: urgent ? accent : context.ink,
+                    // The value stays ink even when urgent. The accent is
+                    // unreadable on this card, and the urgency is carried by
+                    // the border instead, where colour does not have to be
+                    // legible to do its job.
+                    color: GlassTokens.onCard(context),
                     fontWeight: FontWeight.w900,
                     fontSize: 27,
                     height: 1,
@@ -652,7 +661,7 @@ class _KpiTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: context.ink,
+                    color: GlassTokens.onCard(context),
                     fontWeight: FontWeight.w800,
                     fontSize: 13,
                   ),
@@ -663,8 +672,8 @@ class _KpiTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: context.ink.withOpacity(0.5),
-                    fontWeight: FontWeight.w600,
+                    color: GlassTokens.onCardMuted(context),
+                    fontWeight: FontWeight.w700,
                     fontSize: 11,
                   ),
                 ),
@@ -950,7 +959,7 @@ class _LinkGroup extends StatelessWidget {
             decoration: BoxDecoration(
               color: GlassTokens.card(context),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: GlassTokens.border(context)),
+              border: Border.all(color: GlassTokens.cardEdge(context)),
             ),
             // GridView rather than Wrap, so the columns line up between one
             // group and the next. A Wrap sizes each tile to its own label and
@@ -961,7 +970,7 @@ class _LinkGroup extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               padding: EdgeInsets.zero,
-              childAspectRatio: 1.35,
+              childAspectRatio: 1.5,
               children: [for (final link in links) _LinkTile(link: link)],
             ),
           ),
@@ -994,16 +1003,13 @@ class _LinkTile extends StatelessWidget {
               clipBehavior: Clip.none,
               children: [
                 Container(
-                  width: 44,
-                  height: 44,
+                  width: 46,
+                  height: 46,
                   decoration: BoxDecoration(
-                    // 0.22, not 0.14. The card underneath went from #120D0F to
-                    // #5B5859 across this thread; a wash tuned against
-                    // near-black turns to mud on it.
-                    color: accent.withOpacity(0.22),
-                    borderRadius: BorderRadius.circular(15),
+                    color: GlassTokens.cardChip(context),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(link.icon, size: 21, color: accent),
+                  child: Icon(link.icon, size: 22, color: accent),
                 ),
                 if (link.badge != null)
                   Positioned(
@@ -1039,8 +1045,8 @@ class _LinkTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: context.ink,
-                  fontWeight: FontWeight.w700,
+                  color: GlassTokens.onCard(context),
+                  fontWeight: FontWeight.w800,
                   fontSize: 11.5,
                 ),
               ),
