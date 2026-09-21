@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/providers.dart';
 import '../../theme/colors.dart';
+import '../../widgets/onboarding_backdrop.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/profile_banner_editor.dart';
 
@@ -47,9 +48,9 @@ class _PersonaliseScreenState extends ConsumerState<PersonaliseScreen> {
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _pickPhoto() async {
@@ -152,11 +153,16 @@ class _PersonaliseScreenState extends ConsumerState<PersonaliseScreen> {
       final masked = await ref.read(repositoryProvider).setRecoveryEmail(value);
       if (mounted) {
         setState(() => _recoverySaved = masked ?? value);
-        _toast('Check $value for a confirmation code, then confirm it in Settings.');
+        _toast(
+          'Check $value for a confirmation code, then confirm it in Settings.',
+        );
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _emailError = "Couldn't save that address. Try again later from Settings.");
+        setState(
+          () => _emailError =
+              "Couldn't save that address. Try again later from Settings.",
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -191,101 +197,106 @@ class _PersonaliseScreenState extends ConsumerState<PersonaliseScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-          children: [
-            Text(
-              'Make it yours',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w900,
-                color: context.ink,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'All optional. You are already signed in, and none of this is '
-              'needed to use Venttly.',
-              style: TextStyle(color: context.inkMuted, height: 1.45),
-            ),
-            const SizedBox(height: 28),
-
-            _BannerAndAvatar(
-              me: me,
-              busy: _busy,
-              onPickPhoto: _pickPhoto,
-              onPickBanner: _pickBanner,
-            ),
-
-            const SizedBox(height: 28),
-
-            _SectionCard(
-              title: 'A way back in',
-              body:
-                  'Your recovery phrase is the only way into this account if '
-                  'you lose your password. A recovery email is a second one. '
-                  'We only ever use it to get you back in.',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: _email,
-                    enabled: !_busy,
-                    keyboardType: TextInputType.emailAddress,
-                    autocorrect: false,
-                    autofillHints: const [AutofillHints.email],
-                    decoration: InputDecoration(
-                      labelText: 'Recovery email (optional)',
-                      hintText: 'you@example.com',
-                      errorText: _emailError,
-                      suffixIcon: _recoverySaved != null
-                          ? const Icon(Icons.check_circle, color: Colors.green)
-                          : null,
-                    ),
-                    onSubmitted: (_) => _saveRecoveryEmail(),
-                  ),
-                  if (_recoverySaved != null) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      'Saved. We sent a code to confirm it — until you confirm '
-                      'it in Settings, it cannot be used to recover the account.',
-                      style: TextStyle(fontSize: 12, color: context.inkMuted),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 32),
-
-            FilledButton(
-              onPressed: _busy ? null : _finish,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(54),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(28),
+      body: OnboardingBackdrop(
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            children: [
+              Text(
+                'Make it yours',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: context.ink,
                 ),
               ),
-              child: _busy
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2.4),
-                    )
-                  : const Text(
-                      'Enter Venttly',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-            ),
-            const SizedBox(height: 12),
-            Center(
-              child: Text(
-                _summary(),
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: context.inkMuted),
+              const SizedBox(height: 8),
+              Text(
+                'All optional. You are already signed in, and none of this is '
+                'needed to use Venttly.',
+                style: TextStyle(color: context.inkMuted, height: 1.45),
               ),
-            ),
-          ],
+              const SizedBox(height: 28),
+
+              _BannerAndAvatar(
+                me: me,
+                busy: _busy,
+                onPickPhoto: _pickPhoto,
+                onPickBanner: _pickBanner,
+              ),
+
+              const SizedBox(height: 28),
+
+              _SectionCard(
+                title: 'A way back in',
+                body:
+                    'Your recovery phrase is the only way into this account if '
+                    'you lose your password. A recovery email is a second one. '
+                    'We only ever use it to get you back in.',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: _email,
+                      enabled: !_busy,
+                      keyboardType: TextInputType.emailAddress,
+                      autocorrect: false,
+                      autofillHints: const [AutofillHints.email],
+                      decoration: InputDecoration(
+                        labelText: 'Recovery email (optional)',
+                        hintText: 'you@example.com',
+                        errorText: _emailError,
+                        suffixIcon: _recoverySaved != null
+                            ? const Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                              )
+                            : null,
+                      ),
+                      onSubmitted: (_) => _saveRecoveryEmail(),
+                    ),
+                    if (_recoverySaved != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        'Saved. We sent a code to confirm it — until you confirm '
+                        'it in Settings, it cannot be used to recover the account.',
+                        style: TextStyle(fontSize: 12, color: context.inkMuted),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 32),
+
+              FilledButton(
+                onPressed: _busy ? null : _finish,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(54),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
+                child: _busy
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.4),
+                      )
+                    : const Text(
+                        'Enter Venttly',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: Text(
+                  _summary(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: context.inkMuted),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

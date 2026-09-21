@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../theme/colors.dart';
+import '../../widgets/onboarding_backdrop.dart';
 import '../../widgets/venttly_logo.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -16,23 +17,10 @@ class WelcomeScreen extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: isDark
-                ? [
-                    Theme.of(context).scaffoldBackgroundColor,
-                    Theme.of(context).colorScheme.surface,
-                  ]
-                : [
-                    const Color(0xFFFFEEF3),
-                    const Color(0xFFFFF8F8),
-                    VentlyColors.cardBlush,
-                  ],
-          ),
-        ),
+      // The gradient and the drifting orbs now live in one place, so welcome,
+      // identity and recovery stop each drawing their own slightly different
+      // wash — three screens somebody crosses in under a minute.
+      body: OnboardingBackdrop(
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -281,7 +269,7 @@ class _WelcomeLogo extends StatelessWidget {
           ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: Image.asset('assets/images/venttly_logo.png', fit: BoxFit.cover),
+        child: const VenttlyLogo(fit: BoxFit.cover),
       ),
     );
   }

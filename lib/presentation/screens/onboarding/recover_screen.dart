@@ -42,11 +42,7 @@ class _SignInLogo extends StatelessWidget {
           ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: Image.asset(
-          'assets/images/venttly_logo.png',
-          fit: BoxFit.contain,
-          alignment: Alignment.center,
-        ),
+        child: const VenttlyLogo(fit: BoxFit.contain),
       ),
     );
   }
