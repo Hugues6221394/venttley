@@ -29,8 +29,16 @@ class GlassTokens {
 
   static Color borderLight(BuildContext context) => VentlyColors.softMauve;
 
+  /// 0.14, not 0.08.
+  ///
+  /// On these surfaces the fill does almost nothing: a glass card sits at
+  /// about 1.04 contrast against its page in every theme, so the border is
+  /// what tells a reader where the card is. At 0.08 that edge measured 1.14
+  /// against a true-black page, below the 1.17 the light theme achieves and
+  /// visibly worse in the hand -- the panel read as a slightly different patch
+  /// of background rather than a card.
   static Color borderDark(BuildContext context) =>
-      Colors.white.withOpacity(0.08);
+      Colors.white.withOpacity(0.14);
 
   static Color border(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;

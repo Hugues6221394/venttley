@@ -7,6 +7,7 @@ import '../../../core/providers.dart';
 import '../../../data/services/supabase_backend.dart'
     show MfaChallengeRequiredException;
 import '../../theme/colors.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Optional phone sign-in: enter a number, receive an SMS OTP, verify.
 ///
@@ -144,7 +145,11 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9+\s]')),
                   ],
-                  decoration: _dec('Phone number', Icons.phone_outlined),
+                  decoration: _dec(
+                    context,
+                    'Phone number',
+                    Icons.phone_outlined,
+                  ),
                 )
               else
                 TextField(
@@ -159,6 +164,7 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
                     letterSpacing: 10,
                   ),
                   decoration: _dec(
+                    context,
                     '6-digit code',
                     null,
                   ).copyWith(counterText: ''),
@@ -213,14 +219,17 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
     );
   }
 
-  InputDecoration _dec(String hint, IconData? icon) => InputDecoration(
-    hintText: hint,
-    prefixIcon: icon == null ? null : Icon(icon),
-    filled: true,
-    fillColor: Colors.white.withOpacity(0.6),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(18),
-      borderSide: BorderSide.none,
-    ),
-  );
+  // Takes a context now: the fill was hardcoded white, which is a bright
+  // slab on a dark page, and the theme is the only thing that knows better.
+  InputDecoration _dec(BuildContext context, String hint, IconData? icon) =>
+      InputDecoration(
+        hintText: hint,
+        prefixIcon: icon == null ? null : Icon(icon),
+        filled: true,
+        fillColor: GlassTokens.tint(context),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide.none,
+        ),
+      );
 }

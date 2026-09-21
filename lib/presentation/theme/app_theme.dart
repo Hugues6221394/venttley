@@ -163,7 +163,17 @@ class VentlyTheme {
       canvasColor: canvas,
       pageTransitionsTheme: VentlyPageTransitions.theme,
       colorScheme: ColorScheme.dark(
-        primary: VentlyColors.berryDesat,
+        // The full brand berry, not the desaturated one.
+        //
+        // berryDesat exists because a saturated pink was assumed to be too
+        // dark to read on a near-black page. Measured, it is not: #E0245E
+        // against pure black is 4.55:1, which passes AA for body text, and the
+        // desaturated #D96B8A reads as a washed-out version of the brand
+        // rather than the brand at night. The email signup screen already
+        // overrode the button back to berryMagenta locally, which is the
+        // clearest evidence that the theme value was the wrong one -- one
+        // screen had quietly opted out and looked better for it.
+        primary: VentlyColors.berryMagenta,
         onPrimary: canvas,
         secondary: divider,
         onSecondary: VentlyColors.softOffWhite,
@@ -197,7 +207,7 @@ class VentlyTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: VentlyColors.berryDesat,
+          backgroundColor: VentlyColors.berryMagenta,
           foregroundColor: canvas,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(
