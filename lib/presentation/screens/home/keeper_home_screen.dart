@@ -596,7 +596,10 @@ class _KpiTile extends StatelessWidget {
       button: true,
       label: '$value $label, $footnote',
       child: Material(
-        color: GlassTokens.card(context),
+        // Tinted with its own accent, not grey. Four grey tiles are four of
+        // the same thing; four tinted ones are members, safety, activity and
+        // people, told apart before a label is read.
+        color: GlassTokens.accentCard(context, accent),
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: () {
@@ -609,8 +612,8 @@ class _KpiTile extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: urgent ? accent : GlassTokens.cardEdge(context),
-                width: urgent ? 1.6 : 1,
+                color: GlassTokens.accentRim(context, accent),
+                width: urgent ? 1.6 : 1.2,
               ),
             ),
             child: Column(
@@ -618,18 +621,22 @@ class _KpiTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    // The accent lives on a near-black badge rather than as a
-                    // wash on the card. The card is a light grey now, and a
-                    // berry tint on it is 1.03:1 — a shape you can only find
-                    // by knowing where it is.
+                    // Solid accent, near-black glyph. An accent wash on an
+                    // accent-tinted card puts the colour behind and in front
+                    // of itself, which is why the icons stayed faint however
+                    // the opacity was tuned.
                     Container(
                       width: 34,
                       height: 34,
                       decoration: BoxDecoration(
-                        color: GlassTokens.cardChip(context),
+                        color: accent,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(icon, size: 18, color: accent),
+                      child: Icon(
+                        icon,
+                        size: 18,
+                        color: GlassTokens.onAccent(context),
+                      ),
                     ),
                     const Spacer(),
                     Icon(
@@ -828,6 +835,10 @@ class _QuickLinks extends ConsumerWidget {
       children: [
         _LinkGroup(
           title: 'Create',
+          // One accent per group rather than one per tile. Twelve differently
+          // coloured badges is a rainbow; two families read as two jobs, which
+          // is what the grouping is for.
+          accent: VentlyColors.berryMagenta,
           links: [
             _Link(
               icon: Icons.edit_rounded,
@@ -868,6 +879,7 @@ class _QuickLinks extends ConsumerWidget {
         ),
         _LinkGroup(
           title: 'Run your tribe',
+          accent: VentlyTokens.growthTeal,
           links: [
             // No badge on the queue. The Reports KPI above states that number
             // already, larger and higher up, and repeating it here is the
@@ -930,10 +942,15 @@ class _Link {
 }
 
 class _LinkGroup extends StatelessWidget {
-  const _LinkGroup({required this.title, required this.links});
+  const _LinkGroup({
+    required this.title,
+    required this.links,
+    required this.accent,
+  });
 
   final String title;
   final List<_Link> links;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
@@ -947,7 +964,7 @@ class _LinkGroup extends StatelessWidget {
             child: Text(
               title.toUpperCase(),
               style: TextStyle(
-                color: context.ink.withOpacity(0.5),
+                color: accent,
                 fontWeight: FontWeight.w900,
                 fontSize: 11,
                 letterSpacing: 1.3,
@@ -957,9 +974,11 @@ class _LinkGroup extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
             decoration: BoxDecoration(
-              color: GlassTokens.card(context),
+              color: GlassTokens.accentPanel(context, accent),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: GlassTokens.cardEdge(context)),
+              border: Border.all(
+                color: GlassTokens.accentRim(context, accent).withOpacity(0.5),
+              ),
             ),
             // GridView rather than Wrap, so the columns line up between one
             // group and the next. A Wrap sizes each tile to its own label and
@@ -971,7 +990,10 @@ class _LinkGroup extends StatelessWidget {
               physics: const NeverScrollableScrollPhysics(),
               padding: EdgeInsets.zero,
               childAspectRatio: 1.5,
-              children: [for (final link in links) _LinkTile(link: link)],
+              children: [
+                for (final link in links)
+                  _LinkTile(link: link, accent: accent),
+              ],
             ),
           ),
         ],
@@ -981,12 +1003,12 @@ class _LinkGroup extends StatelessWidget {
 }
 
 class _LinkTile extends StatelessWidget {
-  const _LinkTile({required this.link});
+  const _LinkTile({required this.link, required this.accent});
   final _Link link;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
-    const accent = VentlyColors.berryMagenta;
     return Semantics(
       button: true,
       label: link.label,
@@ -1006,10 +1028,14 @@ class _LinkTile extends StatelessWidget {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: GlassTokens.cardChip(context),
+                    color: accent,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(link.icon, size: 22, color: accent),
+                  child: Icon(
+                    link.icon,
+                    size: 22,
+                    color: GlassTokens.onAccent(context),
+                  ),
                 ),
                 if (link.badge != null)
                   Positioned(

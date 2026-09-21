@@ -20,6 +20,7 @@ import '../../widgets/tagged_text.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../widgets/post_card.dart' show PostCard;
+import '../profile/profile_screen.dart';
 import '../home/home_shell.dart';
 
 /// The Friend Profile — section 6 of the social spec. A friend-gated
@@ -63,13 +64,20 @@ class _FriendProfileScreenState extends ConsumerState<FriendProfileScreen> {
     final userId = widget.userId;
     final me = ref.watch(sessionProvider);
     if (me != null && me.userId == userId) {
-      // Self → bounce to the dedicated /profile screen. Use a
-      // post-frame callback so we don't navigate during build.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) context.go('/profile');
-      });
-      // Spinner (not an empty box) so the hand-off never flashes blank.
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      // Self → render your own profile here, rather than navigating to it.
+      //
+      // This used to hand off to the profile tab with a `go`, which replaces
+      // the whole stack — so tapping your own avatar in a space chat took you
+      // to a screen with no back button and no chat left to go back to.
+      // Reported exactly that way: "no way of going back".
+      //
+      // pushReplacement would fix the stack but not the route hazard: this
+      // screen is reachable from conversations that live on the root
+      // navigator, and re-entering a shell-owned route from there is what
+      // /user-preview and /post-preview exist to avoid. Rendering in place
+      // navigates nowhere at all, so there is nothing to get wrong — and the
+      // route you are already on keeps its own back affordance.
+      return const ProfileScreen(showBackButton: true);
     }
 
     final async = ref.watch(userProfileProvider(userId));

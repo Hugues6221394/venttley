@@ -62,54 +62,30 @@ class VentlyColors {
   /// Hairline dividers on the pure-black canvas.
   static const Color dividerBlack = Color(0xFF241B1F);
 
-  // ---------------- Lifted cards ----------------
-  // [cardBlack] and [cardDark] are input fills and chip backgrounds: surfaces
-  // that sit *inside* a card and only need to be told apart from it. A panel
-  // that has to read as a card in its own right on an empty page needs more
-  // lift than that — #120D0F on #000000 is 1.09, which reads as a slightly
-  // different patch of background rather than as a card.
+  // ---------------- Lifted surfaces ----------------
+  // Three rounds went into finding a grey that reads on a black page, and the
+  // last one — #787777, matched off the profile dashboard — was legible but
+  // still did not convince. It was worth learning why, because the answer
+  // changed the design rather than the value.
   //
-  // Three targets in, and each was still read as too dark: the profile
-  // dashboard's card (#221F20, 1.29), then 1.61. These are 2.98, which is
-  // where this stops.
+  // A dashboard made of one grey has no arrangement to it. Every card is the
+  // same weight, nothing is more important than anything else, and the only
+  // colour on the whole screen is the primary button. No shade of grey fixes
+  // that; the missing ingredient was never lightness, it was hue.
   //
-  // The greys asked for were the profile's "This week" pillars (#787777) and
-  // its Find Friends pill (#B6B5B5). Both are Colors.white at 45% and 70% over
-  // black — light-mode values that were never re-checked on a dark page, the
-  // same class of bug as the white panel this whole thread started with. They
-  // look good because they are genuinely lighter, and they are unreachable as
-  // card fills for a different reason: at #787777 the off-white body text
-  // measures 3.1:1 and at #B6B5B5 it is 1.4:1. A card that light needs near
-  // black text on it, which is a different design rather than a lighter one.
-  //
-  // #5B5859 is the practical ceiling with the text the dark themes use:
-  // #E0D5D7 on it is 4.91:1, still past AA, with the page separation nearly
-  // doubled from 1.61. The charcoal value is solved to the same ratio against
-  // its own canvas, so the two dark themes read identically rather than one
-  // being a guess at the other.
+  // So the surface goes back to a modest neutral lift and the *cards* carry
+  // colour: each KPI is a deep tint of its own accent over this, with a rim
+  // and a solid accent badge. A tinted card reads as present at 1.7 in a way
+  // a grey one does not at 2.9, because hue separates where luminance cannot.
+  // And with the surface dark again, the off-white type comes back — which
+  // buys back the contrast that a mid-grey card had spent: body text on these
+  // is 8–10:1 rather than 4.7, and secondary text 4.3 rather than 3.5.
 
-  /// Panel surface on the true-black canvas — 4.70 against #000000.
-  static const Color cardLiftBlack = Color(0xFF787777);
+  /// Elevated surface on the true-black canvas — 1.44 against #000000.
+  static const Color surfaceLiftBlack = Color(0xFF2B2829);
 
-  /// Panel surface on the charcoal canvas — the same 4.71 against #120B0D.
-  static const Color cardLiftDark = Color(0xFF7F7C7D);
-
-  /// Ink for anything sitting on a lifted card in a dark theme.
-  ///
-  /// Pure black, and it has to be. On #787777 black measures 4.70:1 and every
-  /// softer near-black misses AA — charcoal is 4.36, deepBurgundy 4.03. A
-  /// mid-grey is the hardest surface in the palette to write on, because it is
-  /// equally far from both ends.
-  static const Color onCardLift = Color(0xFF000000);
-
-  /// The chip a brand-coloured icon sits in, on a lifted card.
-  ///
-  /// The card is light enough that the brand berry vanishes on it — #E0245E on
-  /// #787777 is 1.03:1, and even a very deep #6E0B2C only reaches 2.69, under
-  /// the 3.0 that non-text contrast needs. So the accent does not go on the
-  /// card; it goes on a near-black badge laid on the card, where berry reads
-  /// at 4.58 and the badge itself reads at 4.4 against the grey.
-  static const Color cardLiftChip = Color(0xFF141112);
+  /// Elevated surface on the charcoal canvas — the same 1.45 against #120B0D.
+  static const Color surfaceLiftDark = Color(0xFF312E2F);
 
   // ---------------- Semantic helpers ----------------
   static const Color successGreen = Color(0xFF6BA56F);

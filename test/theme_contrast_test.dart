@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vently_app/presentation/theme/app_theme.dart';
 import 'package:vently_app/presentation/theme/colors.dart';
 import 'package:vently_app/presentation/theme/glass_tokens.dart';
+import 'package:vently_app/presentation/theme/vently_tokens.dart';
 import 'package:vently_app/presentation/widgets/onboarding_backdrop.dart';
 
 /// What the onboarding surfaces actually look like, per theme, as numbers.
@@ -182,11 +183,13 @@ void main() {
         final panel = _over(GlassTokens.card(context), page);
         final muted = _over(GlassTokens.onCardMuted(context), panel);
 
-        // 3.0, not 4.5, and that is a stated limit rather than an oversight.
-        // A mid-grey card has only 4.7:1 of range in it end to end, so once
-        // the primary ink takes all of it there is nothing left for a softer
-        // tone. Secondary lines on these cards are footnotes and captions —
-        // "no joins this week" — never anything a reader has to act on.
+        // 3.0 is the floor; the surface currently clears 4.3.
+        //
+        // It briefly did not. A mid-grey card has only 4.7:1 of range in it
+        // end to end, so once the primary ink spends that there is nothing
+        // left for a softer tone, and secondary text sat at 3.5 — legible,
+        // below AA, and a real cost. Going back to a dark surface and letting
+        // colour do the distinguishing bought that range back.
         expect(
           _contrast(muted, panel),
           greaterThanOrEqualTo(3.0),
@@ -194,6 +197,45 @@ void main() {
               'secondary text on the panel is ${_contrast(muted, panel).toStringAsFixed(2)}'
               ':1 in $name, below even the large-text floor',
         );
+      });
+
+      testWidgets('$name: an accent-tinted card is distinguishable', (
+        tester,
+      ) async {
+        // The point of tinting a card with its own accent is that four of
+        // them are told apart before a label is read. Two things have to hold
+        // for that: each tint has to separate from the plain surface, and the
+        // solid badge on it has to separate from the tint.
+        final context = await _contextFor(tester, theme);
+        final plain = GlassTokens.card(context);
+
+        for (final accent in <Color>[
+          VentlyColors.berryMagenta,
+          VentlyTokens.growthTeal,
+          VentlyTokens.messageBlue,
+          VentlyColors.successGreen,
+          VentlyColors.dangerRed,
+        ]) {
+          final tinted = GlassTokens.accentCard(context, accent);
+          expect(
+            tinted,
+            isNot(plain),
+            reason: 'the tint collapsed to the plain surface in $name',
+          );
+          expect(
+            _contrast(accent, tinted),
+            greaterThanOrEqualTo(2.4),
+            reason:
+                'the badge does not separate from its own tint in $name '
+                '(${_contrast(accent, tinted).toStringAsFixed(2)}:1)',
+          );
+          // And the glyph inside the badge, on every accent in the set.
+          expect(
+            _contrast(GlassTokens.onAccent(context), accent),
+            greaterThanOrEqualTo(3.0),
+            reason: 'the badge glyph is below the non-text floor in $name',
+          );
+        }
       });
 
       testWidgets('$name: the primary button is the brand berry', (

@@ -8,10 +8,17 @@ import 'package:go_router/go_router.dart';
 void openUserProfile(BuildContext context, String? userId) {
   if (userId == null || userId.trim().isEmpty) return;
   final currentPath = GoRouterState.of(context).uri.path;
+  // Tribe and space chats belong on this list too. They are pushed onto the
+  // root navigator so the footer nav gets out of the way, exactly like the DM
+  // routes above — but their paths start with /tribe/, so the check missed
+  // them and opened a shell-owned route from a root one. That is the
+  // double-reservation of the stateful branch keys these preview routes exist
+  // to avoid.
   final fromRootConversation =
       currentPath.startsWith('/chat/') ||
       currentPath.startsWith('/group-chat/') ||
-      currentPath.startsWith('/post-preview/');
+      currentPath.startsWith('/post-preview/') ||
+      currentPath.contains('/chat');
   context.push(
     fromRootConversation ? '/user-preview/$userId' : '/user/$userId',
   );

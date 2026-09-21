@@ -278,10 +278,19 @@ class _TrustPanel extends StatelessWidget {
       // with dark text on it, which is unreadable, and the drifting orbs
       // behind made it worse by lighting it unevenly. The tokens already know
       // what a surface is in each theme -- nothing here needed inventing.
+      // Tinted and rimmed with the brand, the same way the Studio's link
+      // panels are. A plain neutral panel on a black page is the thing that
+      // kept being reported as invisible, and lightening the grey never quite
+      // answered it — what was missing was colour, not luminance.
       decoration: BoxDecoration(
-        color: GlassTokens.card(context),
+        color: GlassTokens.accentPanel(context, VentlyColors.berryMagenta),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: GlassTokens.cardEdge(context)),
+        border: Border.all(
+          color: GlassTokens.accentRim(
+            context,
+            VentlyColors.berryMagenta,
+          ).withOpacity(0.5),
+        ),
       ),
       child: const Column(
         children: [
@@ -320,17 +329,18 @@ class _Bullet extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          // A near-black badge, not a berry wash. The panel is a light grey
-          // now, and the brand berry on it measures 1.03:1 — the icon would be
-          // a shape you can only find by knowing where it is.
+          // A solid berry badge with a near-black glyph, rather than a berry
+          // wash with a berry glyph. A wash puts the accent behind and in
+          // front of itself at once, which is why the icons kept coming out
+          // faint however the opacity was tuned.
           Container(
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: GlassTokens.cardChip(context),
+              color: scheme.primary,
               borderRadius: BorderRadius.circular(18),
             ),
-            child: Icon(icon, color: scheme.primary, size: 22),
+            child: Icon(icon, color: GlassTokens.onAccent(context), size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
