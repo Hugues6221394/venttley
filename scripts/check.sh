@@ -15,6 +15,7 @@
 #   unit        test/ — logic and widgets against fakes
 #   database    supabase/tests/database — pgTAP, real roles, real RLS
 #   console     admin/ — types, route authorization, service-role gating
+#   release     store identifiers, privacy manifest, Firebase config in-bundle
 #   device      integration_test/ — a real iOS build against a real stack
 #
 # The device pass is not a formality. Two bugs in the appeals work existed only
@@ -107,6 +108,16 @@ else
   (cd admin && npm run --silent typecheck)
   record "console" $?
 fi
+
+# ---------------------------------------------------------------------------
+say "release readiness"
+# The store blockers that are cheap to check and expensive to discover: the
+# identifiers, which are permanent once published, and whether the privacy
+# manifest and Firebase config are actually in the iOS build rather than merely
+# on disk. Both of those sat in ios/Runner doing nothing until someone looked
+# inside the built .app. No builds, so this costs about a second.
+node scripts/check-release-readiness.mjs
+record "release readiness" $?
 
 # ---------------------------------------------------------------------------
 if [ "$FAST" -eq 1 ]; then
