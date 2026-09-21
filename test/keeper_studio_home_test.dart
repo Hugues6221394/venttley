@@ -220,9 +220,9 @@ void main() {
     expect(find.text('120 members'), findsOne);
   });
 
-  testWidgets('thirty links still lay out on a small phone', (tester) async {
-    // The quick-link panel is five grids of six, and a grid that does not fit
-    // does not shrink — it overflows, and on a sliver it can throw outright.
+  testWidgets('the whole panel still lays out on a small phone', (tester) async {
+    // The quick-link panel is grids of six, and a grid that does not fit does
+    // not shrink — it overflows, and on a sliver it can throw outright.
     // 375x667 is the smallest screen the app supports, and the test font is
     // wider than the real one, so clearing it here means clearing it there.
     await _pumpStudio(
@@ -239,12 +239,38 @@ void main() {
     // And the links are really there, not clipped out of the tree.
     for (final label in const [
       'Vent',
+      'Announce',
       'Queue',
-      'Co-mods',
       'Insights',
-      'Identity',
+      'Co-mods',
     ]) {
       expect(find.text(label), findsOne, reason: '$label went missing');
+    }
+  });
+
+  testWidgets('the panel stays at two groups', (tester) async {
+    // Thirty tiles in five labelled grids was most of a screen of icons, and
+    // by the third heading it read as a directory rather than something to
+    // reach into. The other eighteen destinations live in the drawer, which is
+    // the right shape for a complete index. This fails if a third group grows
+    // back here rather than going there.
+    await _pumpStudio(
+      tester,
+      _FakeRepo(
+        kept: [_tribe('a', 'Alpha', 120)],
+        statsById: {'a': _stats('a')},
+      ),
+    );
+
+    for (final heading in const ['CREATE', 'RUN YOUR TRIBE']) {
+      expect(find.text(heading), findsOne);
+    }
+    for (final gone in const ['SAFETY', 'COMMUNITY', 'GROW', 'SET UP']) {
+      expect(
+        find.text(gone),
+        findsNothing,
+        reason: '$gone belongs in the drawer now',
+      );
     }
   });
 

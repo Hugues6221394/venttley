@@ -187,15 +187,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       body: VentlyPremiumBackground(
         child: NestedScrollView(
           headerSliverBuilder: (ctx, _) => [
-            // Only clear the status bar — the transparent app bar is 0-height.
-            // When pushed the bar is a real height and already clears it, so
-            // adding this again would leave a band of dead space the tab
-            // version does not have.
+            // Clear the status bar in both cases, and the app bar too when
+            // there is one.
+            //
+            // The old comment here said that when pushed "the bar is a real
+            // height and already clears it" — which would be true without
+            // extendBodyBehindAppBar above. With it, the body starts at y=0
+            // and the bar floats over the top of it. So the pushed profile
+            // rendered its hero underneath the notch, and the transparent app
+            // bar sat on top of the first 56pt of the scroll view swallowing
+            // every touch in that band: the screen looked wrong and felt dead,
+            // which is exactly how it was reported — "unresponsive from the
+            // Studio, fine from the feed". The feed reaches it as a tab, where
+            // toolbarHeight is 0 and there is nothing to swallow anything.
             SliverToBoxAdapter(
               child: SizedBox(
-                height: widget.showBackButton
-                    ? 8
-                    : MediaQuery.of(ctx).padding.top + 8,
+                height:
+                    MediaQuery.of(ctx).padding.top +
+                    (widget.showBackButton ? kToolbarHeight : 0) +
+                    8,
               ),
             ),
             SliverToBoxAdapter(

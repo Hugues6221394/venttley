@@ -69,21 +69,30 @@ class VentlyColors {
   // lift than that — #120D0F on #000000 is 1.09, which reads as a slightly
   // different patch of background rather than as a card.
   //
-  // The profile dashboard's cards (#221F20, 1.285) were the first target, and
-  // on a phone they were still too close to the page — visible once you knew
-  // to look, which is not the same as visible. 1.608 is a deliberate step past
-  // the reference rather than a match to it. Body text on it still measures
-  // 9.1:1, so the lift costs nothing in legibility.
+  // Three targets in, and each was still read as too dark: the profile
+  // dashboard's card (#221F20, 1.29), then 1.61. These are 2.98, which is
+  // where this stops.
   //
-  // The charcoal value is solved to the same ratio against its own canvas, so
-  // the two dark themes read identically rather than one being a guess at the
-  // other.
+  // The greys asked for were the profile's "This week" pillars (#787777) and
+  // its Find Friends pill (#B6B5B5). Both are Colors.white at 45% and 70% over
+  // black — light-mode values that were never re-checked on a dark page, the
+  // same class of bug as the white panel this whole thread started with. They
+  // look good because they are genuinely lighter, and they are unreachable as
+  // card fills for a different reason: at #787777 the off-white body text
+  // measures 3.1:1 and at #B6B5B5 it is 1.4:1. A card that light needs near
+  // black text on it, which is a different design rather than a lighter one.
+  //
+  // #5B5859 is the practical ceiling with the text the dark themes use:
+  // #E0D5D7 on it is 4.91:1, still past AA, with the page separation nearly
+  // doubled from 1.61. The charcoal value is solved to the same ratio against
+  // its own canvas, so the two dark themes read identically rather than one
+  // being a guess at the other.
 
-  /// Panel surface on the true-black canvas — 1.608 against #000000.
-  static const Color cardLiftBlack = Color(0xFF333031);
+  /// Panel surface on the true-black canvas — 2.98 against #000000.
+  static const Color cardLiftBlack = Color(0xFF5B5859);
 
-  /// Panel surface on the charcoal canvas — the same 1.603 against #120B0D.
-  static const Color cardLiftDark = Color(0xFF383536);
+  /// Panel surface on the charcoal canvas — the same 2.99 against #120B0D.
+  static const Color cardLiftDark = Color(0xFF605D5E);
 
   // ---------------- Semantic helpers ----------------
   static const Color successGreen = Color(0xFF6BA56F);

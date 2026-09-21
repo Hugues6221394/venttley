@@ -767,14 +767,18 @@ class _PrimaryManage extends ConsumerWidget {
 /// place up. Those are five different jobs, and a link belongs under the job
 /// it serves rather than in a flat list sorted by nothing.
 ///
-/// Every destination here is a route that exists, and no tile repeats one the
-/// KPI row above already links to — Members, Join requests, Reports and Vents
-/// are stated once, up there, where they carry their number.
+/// Two groups, not five. Thirty tiles was the correction to cutting too far
+/// and it overshot: five labelled grids is most of a screen of icons, and by
+/// the third heading a keeper is reading a directory rather than reaching for
+/// something. What is left is the two jobs somebody opens the Studio to do —
+/// publish something, or run the place — at six each.
 ///
-/// Six to a group, three to a row: every row is full, which is what stops a
-/// panel of thirty links reading as a pile. Three columns rather than four
-/// because "Group chat", "Public page" and "Member feed" are two words, and at
-/// four across they ellipsis into nonsense.
+/// The other eighteen destinations did not disappear; they moved to the
+/// drawer, which is the right shape for a complete index and costs one tap.
+///
+/// No tile repeats a destination the KPI row above already links to, and none
+/// carries a number stated up there: Members, Join requests, Reports and Vents
+/// are said once, where they carry their figure.
 class _QuickLinks extends ConsumerWidget {
   const _QuickLinks({required this.overview});
   final KeeperOverview overview;
@@ -852,7 +856,7 @@ class _QuickLinks extends ConsumerWidget {
           ],
         ),
         _LinkGroup(
-          title: 'Safety',
+          title: 'Run your tribe',
           links: [
             // No badge on the queue. The Reports KPI above states that number
             // already, larger and higher up, and repeating it here is the
@@ -862,92 +866,6 @@ class _QuickLinks extends ConsumerWidget {
               label: 'Queue',
               onTap: () => context.push('/keeper/moderation'),
             ),
-            _Link(
-              icon: Icons.rule_rounded,
-              label: 'Rules',
-              onTap: () => _openForTribe(
-                context,
-                ref,
-                (slug) => '/tribe/$slug/manage/settings/rules',
-              ),
-            ),
-            _Link(
-              icon: Icons.shield_moon_rounded,
-              label: 'Content',
-              onTap: () => _openForTribe(
-                context,
-                ref,
-                (slug) => '/tribe/$slug/manage/settings/content',
-              ),
-            ),
-            _Link(
-              icon: Icons.receipt_long_rounded,
-              label: 'Audit log',
-              onTap: () => _openForTribe(
-                context,
-                ref,
-                (slug) => '/tribe/$slug/manage/settings/audit',
-              ),
-            ),
-            _Link(
-              icon: Icons.volunteer_activism_rounded,
-              label: 'Helpers',
-              onTap: () => _openForTribe(
-                context,
-                ref,
-                (slug) => '/tribe/$slug/manage/settings/helpers',
-              ),
-            ),
-            _Link(
-              icon: Icons.balance_rounded,
-              label: 'Appeals',
-              onTap: () => context.push('/settings/appeals'),
-            ),
-          ],
-        ),
-        _LinkGroup(
-          title: 'Community',
-          links: [
-            _Link(
-              icon: Icons.admin_panel_settings_rounded,
-              label: 'Co-mods',
-              onTap: () => context.push('/keeper/comod'),
-            ),
-            _Link(
-              icon: Icons.forum_rounded,
-              label: 'Group chat',
-              onTap: () =>
-                  _openForTribe(context, ref, (slug) => '/tribe/$slug/chat'),
-            ),
-            _Link(
-              icon: Icons.diversity_1_rounded,
-              label: 'Friends',
-              onTap: () => context.push('/friends'),
-            ),
-            _Link(
-              icon: Icons.mail_rounded,
-              label: 'Inbox',
-              onTap: () => context.go('/inbox'),
-            ),
-            // CupertinoIcons.bell, not the Material one. The app has a single
-            // bell glyph and a test that keeps it that way, because a filled
-            // Material bell beside the thin outline bell in the header reads
-            // as two different features rather than one.
-            _Link(
-              icon: CupertinoIcons.bell,
-              label: 'Alerts',
-              onTap: () => context.push('/notifications'),
-            ),
-            _Link(
-              icon: Icons.explore_rounded,
-              label: 'Discover',
-              onTap: () => context.go('/discover'),
-            ),
-          ],
-        ),
-        _LinkGroup(
-          title: 'Grow',
-          links: [
             _Link(
               icon: Icons.insights_rounded,
               label: 'Insights',
@@ -960,74 +878,24 @@ class _QuickLinks extends ConsumerWidget {
               onTap: () => context.push('/keeper/calendar'),
             ),
             _Link(
-              icon: Icons.public_rounded,
-              label: 'Public page',
-              onTap: () => _openForTribe(context, ref, (slug) => '/tribe/$slug'),
+              icon: Icons.forum_rounded,
+              label: 'Group chat',
+              onTap: () =>
+                  _openForTribe(context, ref, (slug) => '/tribe/$slug/chat'),
             ),
             _Link(
-              icon: Icons.dynamic_feed_rounded,
-              label: 'Member feed',
-              onTap: () {
-                ref.read(keeperMemberViewProvider.notifier).state = true;
-                context.go('/feed');
-              },
-            ),
-            _Link(
-              icon: Icons.graphic_eq_rounded,
-              label: 'Whispers',
-              onTap: () => context.push('/whispers'),
-            ),
-            _Link(
-              icon: Icons.emoji_events_rounded,
-              label: 'Goals',
-              onTap: () => context.push('/goals'),
-            ),
-          ],
-        ),
-        _LinkGroup(
-          title: 'Set up',
-          links: [
-            _Link(
-              icon: Icons.badge_rounded,
-              label: 'Identity',
+              icon: Icons.rule_rounded,
+              label: 'Rules',
               onTap: () => _openForTribe(
                 context,
                 ref,
-                (slug) => '/tribe/$slug/manage/settings/identity',
+                (slug) => '/tribe/$slug/manage/settings/rules',
               ),
             ),
             _Link(
-              icon: Icons.grid_view_rounded,
-              label: 'Spaces',
-              onTap: () => _openForTribe(
-                context,
-                ref,
-                (slug) => '/tribe/$slug/manage/settings/spaces',
-              ),
-            ),
-            _Link(
-              icon: Icons.image_rounded,
-              label: 'Cover',
-              onTap: () => _openForTribe(
-                context,
-                ref,
-                (slug) => '/tribe/$slug/manage/edit',
-              ),
-            ),
-            _Link(
-              icon: Icons.add_circle_rounded,
-              label: 'New tribe',
-              onTap: () => context.push('/tribes/new'),
-            ),
-            _Link(
-              icon: Icons.workspaces_rounded,
-              label: 'All tribes',
-              onTap: () => context.go('/tribes'),
-            ),
-            _Link(
-              icon: Icons.settings_rounded,
-              label: 'Settings',
-              onTap: () => context.push('/settings'),
+              icon: Icons.admin_panel_settings_rounded,
+              label: 'Co-mods',
+              onTap: () => context.push('/keeper/comod'),
             ),
           ],
         ),
@@ -1127,7 +995,10 @@ class _LinkTile extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: accent.withOpacity(0.14),
+                    // 0.22, not 0.14. The card underneath went from #120D0F to
+                    // #5B5859 across this thread; a wash tuned against
+                    // near-black turns to mud on it.
+                    color: accent.withOpacity(0.22),
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: Icon(link.icon, size: 21, color: accent),
@@ -1539,6 +1410,99 @@ class _KeeperDrawer extends ConsumerWidget {
                       context.push('/keeper/comod');
                     },
                   ),
+                  const _DrawerSection('Your tribe'),
+                  _DrawerTile(
+                    icon: Icons.people_alt_rounded,
+                    label: 'Members',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openForTribe(
+                        context,
+                        ref,
+                        (slug) => '/tribe/$slug/manage/settings/members',
+                      );
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.badge_rounded,
+                    label: 'Identity',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openForTribe(
+                        context,
+                        ref,
+                        (slug) => '/tribe/$slug/manage/settings/identity',
+                      );
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.grid_view_rounded,
+                    label: 'Spaces',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openForTribe(
+                        context,
+                        ref,
+                        (slug) => '/tribe/$slug/manage/settings/spaces',
+                      );
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.image_rounded,
+                    label: 'Cover art',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openForTribe(
+                        context,
+                        ref,
+                        (slug) => '/tribe/$slug/manage/edit',
+                      );
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.shield_moon_rounded,
+                    label: 'Content rules',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openForTribe(
+                        context,
+                        ref,
+                        (slug) => '/tribe/$slug/manage/settings/content',
+                      );
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.volunteer_activism_rounded,
+                    label: 'Helpers',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openForTribe(
+                        context,
+                        ref,
+                        (slug) => '/tribe/$slug/manage/settings/helpers',
+                      );
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.receipt_long_rounded,
+                    label: 'Audit log',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openForTribe(
+                        context,
+                        ref,
+                        (slug) => '/tribe/$slug/manage/settings/audit',
+                      );
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.public_rounded,
+                    label: 'Public page',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openForTribe(context, ref, (slug) => '/tribe/$slug');
+                    },
+                  ),
                   const _DrawerSection('Community'),
                   _DrawerTile(
                     icon: Icons.diversity_3_rounded,
@@ -1572,7 +1536,47 @@ class _KeeperDrawer extends ConsumerWidget {
                       context.push('/tribes/new');
                     },
                   ),
+                  _DrawerTile(
+                    icon: Icons.explore_rounded,
+                    label: 'Discover',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.go('/discover');
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.graphic_eq_rounded,
+                    label: 'Whispers',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/whispers');
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.emoji_events_rounded,
+                    label: 'Goals',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/goals');
+                    },
+                  ),
                   const _DrawerSection('Account'),
+                  _DrawerTile(
+                    icon: CupertinoIcons.bell,
+                    label: 'Alerts',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/notifications');
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.balance_rounded,
+                    label: 'Appeals',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/settings/appeals');
+                    },
+                  ),
                   // A keeper is a member too, and the bottom-nav slot where
                   // everyone else finds their profile holds the Studio
                   // analytics here. Without this row there is no route to it.
