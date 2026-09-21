@@ -3509,7 +3509,20 @@ class VentlyRepository implements MusicProvider {
     if (live != null) {
       final controller = StreamController<List<ChatRoom>>();
       late StreamSubscription<List<ChatRoom>> sub;
-      Future<void> emit() async => controller.add(await live.inbox(tab: tab));
+      // Errors go onto the stream, not into the zone. `controller.add(await
+      // ...)` means a failed fetch throws inside an async callback nobody
+      // awaits, which is an unhandled exception rather than a stream error —
+      // so a provider watching this could neither show it nor retry, and the
+      // app printed a red PostgrestException instead of an inbox that failed
+      // to load.
+      Future<void> emit() async {
+        try {
+          controller.add(await live.inbox(tab: tab));
+        } catch (e, st) {
+          if (!controller.isClosed) controller.addError(e, st);
+        }
+      }
+
       sub = live.roomsStream.listen((_) => emit());
       controller.onListen = emit;
       controller.onCancel = () => sub.cancel();

@@ -54,20 +54,19 @@ class GlassTokens {
 
   static Color borderLight(BuildContext context) => VentlyColors.softMauve;
 
-  /// The theme's own divider, not a grey wash.
+  /// A hairline lift, drawn over the card rather than against the page.
   ///
-  /// On these surfaces the fill does almost nothing — an opaque card is still
-  /// only 1.09 against a true-black page — so the border is what tells a
-  /// reader where the card ends. White at 14% did that, but it is a cold grey
-  /// on a warm palette, and it was a value invented here rather than taken
-  /// from the design.
+  /// This has changed roles. When the card fill was #120D0F — 1.09 against a
+  /// true-black page, which is to say invisible — the border was the only
+  /// thing saying where the card was, so it wanted the palette's own warm
+  /// divider doing real work at 1.25.
   ///
-  /// dividerBlack (#241B1F) and dividerDark (#361F23) already exist for this,
-  /// carry the burgundy undertone the rest of the app uses, and measure 1.25
-  /// and 1.28 against their pages — both above the 1.17 the light theme
-  /// achieves with softMauve, which is the design that demonstrably reads.
+  /// The fill carries that now, at 1.61. A dark warm line around a lighter
+  /// card stops reading as an edge and starts reading as a gap, so the edge
+  /// goes the other way: white at 10%, composited over the card it outlines,
+  /// which is the ordinary way a raised surface is finished on a dark UI.
   static Color borderDark(BuildContext context) =>
-      Theme.of(context).dividerColor;
+      Colors.white.withOpacity(0.10);
 
   static Color border(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;

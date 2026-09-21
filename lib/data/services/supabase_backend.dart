@@ -6414,6 +6414,23 @@ class SupabaseBackend {
   //        v1 does NOT advertise end-to-end encryption)
   // ===================================================================
   Future<List<ChatRoom>> inbox({required String tab}) async {
+    // Nobody signed in has no rooms, and that is an answer rather than an
+    // error.
+    //
+    // NotificationForegroundListener is mounted around the whole app in
+    // main.dart, so allInboxRoomsStreamProvider is watched from launch — on
+    // the welcome screen, before anyone has an account. inbox_rooms is granted
+    // to `authenticated` only (correctly: the view carries DM metadata, and
+    // the grant to `anon` was dropped in 20260719000932), so the very first
+    // thing a new user's app did was throw
+    //
+    //   PostgrestException(permission denied for view inbox_rooms, 42501)
+    //
+    // out of a stream with nowhere to catch it. Fixed here rather than by
+    // re-granting anon, which would widen access to private conversations to
+    // fix a client that should not have been asking.
+    if (_uid == null) return const [];
+
     final rows = await _client
         .from('inbox_rooms')
         .select()
