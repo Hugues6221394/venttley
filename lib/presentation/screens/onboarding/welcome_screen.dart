@@ -278,19 +278,17 @@ class _TrustPanel extends StatelessWidget {
       // with dark text on it, which is unreadable, and the drifting orbs
       // behind made it worse by lighting it unevenly. The tokens already know
       // what a surface is in each theme -- nothing here needed inventing.
-      // Tinted and rimmed with the brand, the same way the Studio's link
-      // panels are. A plain neutral panel on a black page is the thing that
-      // kept being reported as invisible, and lightening the grey never quite
-      // answered it — what was missing was colour, not luminance.
+      // A light grey slab, no tint and no border.
+      //
+      // The berry tint that was here read as maroon rather than as grey, which
+      // is fair — at 7% over a near-black surface the hue is the only thing
+      // you can see. And the grey that was wanted turned out to be the one
+      // this panel drew originally: a white wash at about 63%. It was never
+      // the grey that was wrong, it was that the panel kept its dark-theme
+      // contents, so an off-white title on a light card came out faint.
       decoration: BoxDecoration(
-        color: GlassTokens.accentPanel(context, VentlyColors.berryMagenta),
+        color: GlassTokens.panel(context),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(
-          color: GlassTokens.accentRim(
-            context,
-            VentlyColors.berryMagenta,
-          ).withOpacity(0.5),
-        ),
       ),
       child: const Column(
         children: [
@@ -333,6 +331,8 @@ class _Bullet extends StatelessWidget {
           // wash with a berry glyph. A wash puts the accent behind and in
           // front of itself at once, which is why the icons kept coming out
           // faint however the opacity was tuned.
+          // Solid berry with a white glyph, which is the one thing on this
+          // panel that is allowed to be loud — it matches the button below it.
           Container(
             width: 48,
             height: 48,
@@ -340,7 +340,7 @@ class _Bullet extends StatelessWidget {
               color: scheme.primary,
               borderRadius: BorderRadius.circular(18),
             ),
-            child: Icon(icon, color: GlassTokens.onAccent(context), size: 22),
+            child: Icon(icon, color: Colors.white, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -350,7 +350,7 @@ class _Bullet extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    color: GlassTokens.onCard(context),
+                    color: GlassTokens.onPanel(context),
                     fontWeight: FontWeight.w900,
                     fontSize: 15,
                   ),
@@ -359,8 +359,8 @@ class _Bullet extends StatelessWidget {
                 Text(
                   text,
                   style: TextStyle(
-                    color: GlassTokens.onCardMuted(context),
-                    fontWeight: FontWeight.w600,
+                    color: GlassTokens.onPanelMuted(context),
+                    fontWeight: FontWeight.w700,
                     height: 1.25,
                   ),
                 ),

@@ -475,51 +475,38 @@ class _KpiGrid extends ConsumerWidget {
     final requests = overview.totalPendingRequests;
     final joined = overview.totalNewMembers7d;
     final vents = overview.totalPosts24h;
-    final active = overview.totalActivePosters7d;
 
-    final tiles = <Widget>[
-      _KpiTile(
+    final stats = <_Stat>[
+      _Stat(
         icon: Icons.groups_rounded,
-        accent: VentlyColors.berryMagenta,
         value: PostCard.compactNumber(overview.totalMembers),
         label: 'Members',
-        // Short enough to fit a half-width tile on a 390pt phone. The longer
-        // "no new members this week" rendered as "no new members this we…",
-        // which is worse than the shorter sentence it was trying to improve
-        // on.
-        footnote: joined > 0 ? '+$joined this week' : 'no joins this week',
+        caption: joined > 0 ? '+$joined · 7d' : 'no joins',
         onTap: () => _openForTribe(
           context,
           ref,
           (slug) => '/tribe/$slug/manage/settings/members',
         ),
       ),
-      _KpiTile(
+      _Stat(
         icon: Icons.shield_rounded,
-        accent: reports > 0
-            ? VentlyColors.dangerRed
-            : VentlyColors.successGreen,
         value: '$reports',
         label: 'Reports',
-        footnote: reports > 0 ? 'needs review' : 'all clear',
-        urgent: reports > 0,
+        caption: reports > 0 ? 'review' : 'all clear',
         onTap: () => context.push('/keeper/moderation'),
       ),
-      _KpiTile(
+      _Stat(
         icon: Icons.notes_rounded,
-        accent: VentlyTokens.messageBlue,
         value: '$vents',
-        label: 'Vents · 24h',
-        footnote: active > 0 ? '$active posting · 7d' : 'nobody posting yet',
+        label: 'Vents',
+        caption: 'last 24h',
         onTap: () => context.push('/keeper/insights'),
       ),
-      _KpiTile(
+      _Stat(
         icon: Icons.how_to_reg_rounded,
-        accent: VentlyTokens.growthTeal,
         value: '$requests',
-        label: 'Join requests',
-        footnote: requests > 0 ? 'awaiting you' : 'nothing waiting',
-        urgent: requests > 0,
+        label: 'Requests',
+        caption: requests > 0 ? 'waiting' : 'none',
         onTap: () => _openForTribe(
           context,
           ref,
@@ -528,164 +515,125 @@ class _KpiGrid extends ConsumerWidget {
       ),
     ];
 
+    // One card, four columns, instead of a 2x2 of tiles.
+    //
+    // The 2x2 was two thirds of the screen before a keeper reached anything
+    // they could do, which is how four numbers ended up reported as "so big".
+    // Four columns in a single card is the shape the profile already uses for
+    // exactly this job, and it fits in a third of the height without dropping
+    // a number or a destination.
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-      child: Column(
-        children: [
-          // IntrinsicHeight, so a pair of tiles matches its taller half rather
-          // than each sizing to its own text — a one-word footnote beside a
-          // wrapped one is what makes a grid look assembled rather than laid
-          // out. CrossAxisAlignment.stretch alone cannot do it here: a Row in
-          // a sliver has unbounded height, and stretching into that is an
-          // infinite constraint, which is a crash rather than a layout.
-          _KpiRow(left: tiles[0], right: tiles[1]),
-          const SizedBox(height: 10),
-          _KpiRow(left: tiles[2], right: tiles[3]),
-        ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: GlassTokens.card(context),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: GlassTokens.cardEdge(context)),
+        ),
+        child: Row(
+          children: [
+            for (var i = 0; i < stats.length; i++) ...[
+              if (i > 0)
+                SizedBox(
+                  height: 44,
+                  child: VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: GlassTokens.cardEdge(context),
+                  ),
+                ),
+              Expanded(child: _StatColumn(stat: stats[i])),
+            ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _KpiRow extends StatelessWidget {
-  const _KpiRow({required this.left, required this.right});
-
-  final Widget left;
-  final Widget right;
-
-  @override
-  Widget build(BuildContext context) => IntrinsicHeight(
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(child: left),
-        const SizedBox(width: 10),
-        Expanded(child: right),
-      ],
-    ),
-  );
-}
-
-class _KpiTile extends StatelessWidget {
-  const _KpiTile({
+class _Stat {
+  const _Stat({
     required this.icon,
-    required this.accent,
     required this.value,
     required this.label,
-    required this.footnote,
+    required this.caption,
     required this.onTap,
-    this.urgent = false,
   });
 
   final IconData icon;
-  final Color accent;
   final String value;
   final String label;
-  final String footnote;
+  final String caption;
   final VoidCallback onTap;
+}
 
-  /// Draws the accent on the edge as well as the icon. Reserved for the two
-  /// numbers that are a to-do rather than a statistic — reports and join
-  /// requests — so that "something is waiting for you" is visible without
-  /// reading any of the labels.
-  final bool urgent;
+class _StatColumn extends StatelessWidget {
+  const _StatColumn({required this.stat});
+  final _Stat stat;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: '$value $label, $footnote',
-      child: Material(
-        // Tinted with its own accent, not grey. Four grey tiles are four of
-        // the same thing; four tinted ones are members, safety, activity and
-        // people, told apart before a label is read.
-        color: GlassTokens.accentCard(context, accent),
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          onTap: () {
-            VentlyHaptics.light();
-            onTap();
-          },
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: GlassTokens.accentRim(context, accent),
-                width: urgent ? 1.6 : 1.2,
+      label: '${stat.value} ${stat.label}, ${stat.caption}',
+      child: InkWell(
+        onTap: () {
+          VentlyHaptics.light();
+          stat.onTap();
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: GlassTokens.cardChip(context),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  stat.icon,
+                  size: 17,
+                  color: VentlyColors.berryMagenta,
+                ),
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    // Solid accent, near-black glyph. An accent wash on an
-                    // accent-tinted card puts the colour behind and in front
-                    // of itself, which is why the icons stayed faint however
-                    // the opacity was tuned.
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: accent,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        icon,
-                        size: 18,
-                        color: GlassTokens.onAccent(context),
-                      ),
-                    ),
-                    const Spacer(),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 20,
-                      color: GlassTokens.onCard(context).withOpacity(0.45),
-                    ),
-                  ],
+              const SizedBox(height: 7),
+              Text(
+                stat.value,
+                maxLines: 1,
+                style: TextStyle(
+                  color: GlassTokens.onCard(context),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 19,
+                  height: 1,
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  value,
-                  maxLines: 1,
-                  style: TextStyle(
-                    // The value stays ink even when urgent. The accent is
-                    // unreadable on this card, and the urgency is carried by
-                    // the border instead, where colour does not have to be
-                    // legible to do its job.
-                    color: GlassTokens.onCard(context),
-                    fontWeight: FontWeight.w900,
-                    fontSize: 27,
-                    height: 1,
-                    letterSpacing: -0.8,
-                  ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                stat.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: GlassTokens.onCard(context),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11.5,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: GlassTokens.onCard(context),
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                  ),
+              ),
+              Text(
+                stat.caption,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: GlassTokens.onCardMuted(context),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 10,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  footnote,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: GlassTokens.onCardMuted(context),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -835,10 +783,6 @@ class _QuickLinks extends ConsumerWidget {
       children: [
         _LinkGroup(
           title: 'Create',
-          // One accent per group rather than one per tile. Twelve differently
-          // coloured badges is a rainbow; two families read as two jobs, which
-          // is what the grouping is for.
-          accent: VentlyColors.berryMagenta,
           links: [
             _Link(
               icon: Icons.edit_rounded,
@@ -879,7 +823,6 @@ class _QuickLinks extends ConsumerWidget {
         ),
         _LinkGroup(
           title: 'Run your tribe',
-          accent: VentlyTokens.growthTeal,
           links: [
             // No badge on the queue. The Reports KPI above states that number
             // already, larger and higher up, and repeating it here is the
@@ -942,15 +885,10 @@ class _Link {
 }
 
 class _LinkGroup extends StatelessWidget {
-  const _LinkGroup({
-    required this.title,
-    required this.links,
-    required this.accent,
-  });
+  const _LinkGroup({required this.title, required this.links});
 
   final String title;
   final List<_Link> links;
-  final Color accent;
 
   @override
   Widget build(BuildContext context) {
@@ -964,7 +902,7 @@ class _LinkGroup extends StatelessWidget {
             child: Text(
               title.toUpperCase(),
               style: TextStyle(
-                color: accent,
+                color: context.ink.withOpacity(0.55),
                 fontWeight: FontWeight.w900,
                 fontSize: 11,
                 letterSpacing: 1.3,
@@ -974,11 +912,9 @@ class _LinkGroup extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
             decoration: BoxDecoration(
-              color: GlassTokens.accentPanel(context, accent),
+              color: GlassTokens.card(context),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: GlassTokens.accentRim(context, accent).withOpacity(0.5),
-              ),
+              border: Border.all(color: GlassTokens.cardEdge(context)),
             ),
             // GridView rather than Wrap, so the columns line up between one
             // group and the next. A Wrap sizes each tile to its own label and
@@ -989,11 +925,11 @@ class _LinkGroup extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               padding: EdgeInsets.zero,
-              childAspectRatio: 1.5,
-              children: [
-                for (final link in links)
-                  _LinkTile(link: link, accent: accent),
-              ],
+              // 1.55. Tighter than this and the tile's own column overflows
+              // by a few pixels on a 375pt phone — caught by the test that
+              // pumps this panel at that size, not by looking at it.
+              childAspectRatio: 1.55,
+              children: [for (final link in links) _LinkTile(link: link)],
             ),
           ),
         ],
@@ -1003,9 +939,8 @@ class _LinkGroup extends StatelessWidget {
 }
 
 class _LinkTile extends StatelessWidget {
-  const _LinkTile({required this.link, required this.accent});
+  const _LinkTile({required this.link});
   final _Link link;
-  final Color accent;
 
   @override
   Widget build(BuildContext context) {
@@ -1024,17 +959,22 @@ class _LinkTile extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
+                // The Spaces chip: a berry wash with a berry glyph. One
+                // accent for the whole screen — the four-colour version read
+                // as a rainbow, and a keeper opening this does not need the
+                // app to tell them that publishing and moderating are
+                // different activities in two different hues.
                 Container(
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: accent,
+                    color: GlassTokens.cardChip(context),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(
                     link.icon,
                     size: 22,
-                    color: GlassTokens.onAccent(context),
+                    color: VentlyColors.berryMagenta,
                   ),
                 ),
                 if (link.badge != null)
@@ -1047,7 +987,7 @@ class _LinkTile extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: accent,
+                        color: VentlyColors.berryMagenta,
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(

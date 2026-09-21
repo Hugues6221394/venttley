@@ -37,67 +37,62 @@ class GlassTokens {
   /// 1.046 against the page: still drawn, but making no difference to any
   /// pixel. That is how the trust panel on the welcome screen went missing.
   ///
-  /// An opaque elevated surface, for panels with nothing behind them.
+  /// An opaque card, for surfaces with nothing behind them.
   ///
-  /// [tint] is glass: it sits on a BackdropFilter over content that scrolls
-  /// underneath, and its translucency is the point — chat bubbles, sheets, the
-  /// composer. A panel on a flat page has nothing to show through, and the
-  /// translucency only costs it its edges.
+  /// The same colour GlassCard resolves to over a dark page, without the
+  /// translucency — which matters because the Studio's cards sit on a flat
+  /// canvas where there is nothing to show through.
+  ///
+  /// This is the fill the Spaces screen uses, and Spaces is the screen that
+  /// reads well. It is barely lifted off the page on its own, at 1.05; what
+  /// makes it a card is [cardEdge], a berry hairline. Four attempts went into
+  /// lightening this fill before it was clear that the fill was never the
+  /// problem.
   static Color card(BuildContext context) {
     final theme = Theme.of(context);
     if (theme.brightness != Brightness.dark) return theme.colorScheme.surface;
-    return theme.scaffoldBackgroundColor == VentlyColors.pureBlack
-        ? VentlyColors.surfaceLiftBlack
-        : VentlyColors.surfaceLiftDark;
+    return Color.alphaBlend(
+      theme.colorScheme.surface.withOpacity(0.52),
+      theme.scaffoldBackgroundColor,
+    );
   }
 
-  /// A card tinted with its own accent.
-  ///
-  /// What makes a dashboard readable at a glance is not that its cards are
-  /// visible, it is that they are *distinguishable*. Four grey tiles are four
-  /// of the same thing; four tinted ones are members, safety, activity and
-  /// people, told apart before a single label is read.
-  /// 0.16, not 0.20. The tint has to leave room for the solid badge that sits
-  /// on it: at 0.20 the blue badge fell to 2.34:1 against its own tint on the
-  /// charcoal theme, whose surface is the lighter of the two.
-  static Color accentCard(BuildContext context, Color accent) =>
-      Color.alphaBlend(accent.withOpacity(0.16), card(context));
-
-  /// A barely-tinted panel, for a group of links that share an accent.
-  ///
-  /// The KPI cards above it carry real colour, and beside them a plain
-  /// surface reads as the part of the screen nobody finished. Seven percent is
-  /// under the threshold where it would compete with the badges on it; it is
-  /// there to say the panel and its icons belong together.
-  static Color accentPanel(BuildContext context, Color accent) =>
-      Color.alphaBlend(accent.withOpacity(0.07), card(context));
-
-  /// The rim of an [accentCard] — the same accent, harder.
-  static Color accentRim(BuildContext context, Color accent) =>
-      Color.alphaBlend(accent.withOpacity(0.40), accentCard(context, accent));
-
-  /// Ink for text and glyphs drawn on [card] or [accentCard].
+  /// Ink for text and glyphs drawn on [card].
   static Color onCard(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurface;
+
+  /// Secondary text on a [card].
+  static Color onCardMuted(BuildContext context) =>
+      onCard(context).withOpacity(0.6);
+
+  /// The chip a berry glyph sits in, on a [card]. The Spaces pattern.
+  static Color cardChip(BuildContext context) =>
+      VentlyColors.berryMagenta.withOpacity(0.12);
+
+  /// The welcome panel: a light grey slab on the dark canvas.
+  static Color panel(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
-      ? VentlyColors.softOffWhite
+      ? VentlyColors.panelLight
+      : VentlyColors.cardBlush;
+
+  /// Type on [panel] — near-black on the light grey, 8.2:1.
+  static Color onPanel(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? VentlyColors.onPanelLight
       : VentlyColors.deepBurgundy;
 
-  /// Secondary text on a card. 4.3:1 against the surface.
-  static Color onCardMuted(BuildContext context) =>
-      onCard(context).withOpacity(0.62);
+  /// Secondary type on [panel] — 5.3:1.
+  static Color onPanelMuted(BuildContext context) =>
+      onPanel(context).withOpacity(0.72);
 
-  /// The glyph inside a solid accent badge.
+  /// The edge of a [card] — a berry hairline, which is what tells a reader
+  /// where the card is when the fill barely lifts off the page.
   ///
-  /// Near-black on every accent in the palette: 4.6 on berry, 4.4 on blue,
-  /// 6.3 on teal, 7.2 on green, 11.2 on amber. A white glyph would be legible
-  /// on berry and blue and invisible on amber, so the badges would have had to
-  /// disagree with each other about which one they use.
-  static Color onAccent(BuildContext context) => Colors.black;
-
-  /// The edge of a [card] — a hairline lift, drawn over the surface.
+  /// Taken from GlassCard, because the Spaces screen uses it and the Spaces
+  /// screen is the one that was held up as the thing to copy.
   static Color cardEdge(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
-      ? Colors.white.withOpacity(0.10)
+      ? VentlyColors.berryDesat.withOpacity(0.22)
       : VentlyColors.softMauve;
 
   static Color borderLight(BuildContext context) => VentlyColors.softMauve;

@@ -62,30 +62,27 @@ class VentlyColors {
   /// Hairline dividers on the pure-black canvas.
   static const Color dividerBlack = Color(0xFF241B1F);
 
-  // ---------------- Lifted surfaces ----------------
-  // Three rounds went into finding a grey that reads on a black page, and the
-  // last one — #787777, matched off the profile dashboard — was legible but
-  // still did not convince. It was worth learning why, because the answer
-  // changed the design rather than the value.
+  // ---------------- Panels ----------------
+  // The trust panel on the welcome screen, and nothing else so far.
   //
-  // A dashboard made of one grey has no arrangement to it. Every card is the
-  // same weight, nothing is more important than anything else, and the only
-  // colour on the whole screen is the primary button. No shade of grey fixes
-  // that; the missing ingredient was never lightness, it was hue.
+  // Five values were tried against a black page — #120D0F, #221F20, #333031,
+  // #5B5859, #787777 — and the one that was actually wanted turned out to be
+  // the original: a white wash at about 63%, which is what the first version
+  // of this panel drew before any of this started. It was never the grey that
+  // was wrong. It was that the panel kept its dark-theme contents, so an
+  // off-white title on a light grey card came out as the faint, washed-out
+  // block that got reported as unreadable.
   //
-  // So the surface goes back to a modest neutral lift and the *cards* carry
-  // colour: each KPI is a deep tint of its own accent over this, with a rim
-  // and a solid accent badge. A tinted card reads as present at 1.7 in a way
-  // a grey one does not at 2.9, because hue separates where luminance cannot.
-  // And with the surface dark again, the off-white type comes back — which
-  // buys back the contrast that a mid-grey card had spent: body text on these
-  // is 8–10:1 rather than 4.7, and secondary text 4.3 rather than 3.5.
+  // So: that grey, with the contents turned over. Near-black type on #A1A0A1
+  // measures 8.2:1 and the secondary tone 5.3:1 — better than any of the five
+  // darker attempts managed, because a light panel has more room in it, not
+  // less.
 
-  /// Elevated surface on the true-black canvas — 1.44 against #000000.
-  static const Color surfaceLiftBlack = Color(0xFF2B2829);
+  /// The welcome panel on a dark canvas — 7.4 against #000000.
+  static const Color panelLight = Color(0xFFA1A0A1);
 
-  /// Elevated surface on the charcoal canvas — the same 1.45 against #120B0D.
-  static const Color surfaceLiftDark = Color(0xFF312E2F);
+  /// Type on [panelLight].
+  static const Color onPanelLight = Color(0xFF0E0C0D);
 
   // ---------------- Semantic helpers ----------------
   static const Color successGreen = Color(0xFF6BA56F);

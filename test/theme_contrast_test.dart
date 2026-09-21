@@ -138,22 +138,15 @@ void main() {
               'the panel fill in $name is translucent, so it dissolves into '
               'the page instead of reading as a card',
         );
-        // And the fill alone has to read, not just the border. 1.28 is the
-        // profile dashboard's figure — the one surface in the app whose cards
-        // were never reported as invisible, so it is the one worth matching.
-        // Light clears it comfortably at 1.05 only because its border does the
-        // work there and nobody has ever failed to see a white card on a
-        // near-white page; the floor is therefore only meaningful on dark.
-        if (theme.brightness == Brightness.dark) {
-          final fill = _contrast(card, theme.scaffoldBackgroundColor);
-          expect(
-            fill,
-            greaterThanOrEqualTo(1.28),
-            reason:
-                'the panel fill in $name is ${fill.toStringAsFixed(3)} against '
-                'the page — visible as an edge at best, not as a card',
-          );
-        }
+        // There was a floor on the fill here — 1.28, taken off the profile
+        // dashboard — and it is gone on purpose rather than quietly relaxed.
+        //
+        // It encoded a belief that turned out to be wrong: that a card is
+        // found by its fill. Four values were pushed through this test trying
+        // to satisfy it (1.29, 1.61, 2.98, 4.70) and every one of them was
+        // still reported as not reading. The screen that does read — Spaces —
+        // sits at 1.05 and marks its cards with a berry hairline instead. The
+        // edge is what is asserted now, just below.
       });
 
       testWidgets('$name: body text on the panel passes AA', (tester) async {
@@ -199,43 +192,49 @@ void main() {
         );
       });
 
-      testWidgets('$name: an accent-tinted card is distinguishable', (
+      testWidgets('$name: the card edge is the thing that marks the card', (
         tester,
       ) async {
-        // The point of tinting a card with its own accent is that four of
-        // them are told apart before a label is read. Two things have to hold
-        // for that: each tint has to separate from the plain surface, and the
-        // solid badge on it has to separate from the tint.
+        // The fill barely lifts off the page and that is on purpose: this is
+        // the surface the Spaces screen uses, and Spaces is the screen that
+        // was held up as the one that reads. Four attempts went into
+        // lightening this fill — 1.29, 1.61, 2.98, 4.70 — before it was clear
+        // the fill was never what made a card findable. The berry hairline is.
         final context = await _contextFor(tester, theme);
-        final plain = GlassTokens.card(context);
+        final page = theme.scaffoldBackgroundColor;
+        final edge = _over(GlassTokens.cardEdge(context), page);
 
-        for (final accent in <Color>[
-          VentlyColors.berryMagenta,
-          VentlyTokens.growthTeal,
-          VentlyTokens.messageBlue,
-          VentlyColors.successGreen,
-          VentlyColors.dangerRed,
-        ]) {
-          final tinted = GlassTokens.accentCard(context, accent);
-          expect(
-            tinted,
-            isNot(plain),
-            reason: 'the tint collapsed to the plain surface in $name',
-          );
-          expect(
-            _contrast(accent, tinted),
-            greaterThanOrEqualTo(2.4),
-            reason:
-                'the badge does not separate from its own tint in $name '
-                '(${_contrast(accent, tinted).toStringAsFixed(2)}:1)',
-          );
-          // And the glyph inside the badge, on every accent in the set.
-          expect(
-            _contrast(GlassTokens.onAccent(context), accent),
-            greaterThanOrEqualTo(3.0),
-            reason: 'the badge glyph is below the non-text floor in $name',
-          );
-        }
+        expect(
+          _contrast(edge, page),
+          greaterThan(1.16),
+          reason:
+              'the card edge in $name is ${_contrast(edge, page).toStringAsFixed(3)}'
+              ':1 — below what the light theme achieves, so the card has '
+              'nothing marking it at all',
+        );
+      });
+
+      testWidgets('$name: the welcome panel carries its own contents', (
+        tester,
+      ) async {
+        // A light slab on a dark canvas, which means its type runs the other
+        // way to everything around it. The panel was drawn this colour from
+        // the start and kept the dark theme's off-white ink, so the contents
+        // came out faint — the thing that was reported, five times, as a grey
+        // that could not be read.
+        final context = await _contextFor(tester, theme);
+        final panel = GlassTokens.panel(context);
+
+        expect(
+          _contrast(GlassTokens.onPanel(context), panel),
+          greaterThanOrEqualTo(4.5),
+          reason: 'the panel title is below AA in $name',
+        );
+        expect(
+          _contrast(_over(GlassTokens.onPanelMuted(context), panel), panel),
+          greaterThanOrEqualTo(4.5),
+          reason: 'the panel body text is below AA in $name',
+        );
       });
 
       testWidgets('$name: the primary button is the brand berry', (
