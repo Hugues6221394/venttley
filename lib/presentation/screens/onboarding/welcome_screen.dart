@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../theme/colors.dart';
+import '../../theme/glass_tokens.dart';
 import '../../widgets/onboarding_backdrop.dart';
 import '../../widgets/venttly_logo.dart';
 
@@ -272,10 +273,15 @@ class _TrustPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      // GlassTokens, not Colors.white. This panel was a flat white slab at 62%
+      // in every theme: on dark and black it rendered as a light grey card
+      // with dark text on it, which is unreadable, and the drifting orbs
+      // behind made it worse by lighting it unevenly. The tokens already know
+      // what a surface is in each theme -- nothing here needed inventing.
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.62),
+        color: GlassTokens.tint(context),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.30)),
+        border: Border.all(color: GlassTokens.border(context)),
       ),
       child: const Column(
         children: [

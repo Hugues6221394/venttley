@@ -20,6 +20,11 @@ import '../theme/motion.dart';
 /// opacity and read as two pink blobs behind the text rather than light.
 /// The periods are deliberately coprime so the pair never settles into a
 /// visible pulse.
+///
+/// Dark gets roughly a third of the light opacity. The gradient's inner stop
+/// is near-white, so on a dark page the same value that reads as a blush
+/// reads as a spotlight -- and anything translucent sitting on top of it,
+/// like the trust panel, picks up the bloom and loses its contrast.
 class OnboardingBackdrop extends StatefulWidget {
   const OnboardingBackdrop({
     super.key,
@@ -91,7 +96,8 @@ class _OnboardingBackdropState extends State<OnboardingBackdrop>
                   builder: (context, _) => CustomPaint(
                     painter: _OrbPainter(
                       t: _drift.value,
-                      opacity: isDark ? 0.10 : 0.13,
+                      opacity: isDark ? 0.30 : 0.13,
+                      dark: isDark,
                     ),
                   ),
                 ),
@@ -105,10 +111,32 @@ class _OnboardingBackdropState extends State<OnboardingBackdrop>
 }
 
 class _OrbPainter extends CustomPainter {
-  const _OrbPainter({required this.t, required this.opacity});
+  const _OrbPainter({
+    required this.t,
+    required this.opacity,
+    this.dark = false,
+  });
 
   final double t;
   final double opacity;
+
+  /// Dark themes get their own gradient rather than a dimmer version of the
+  /// light one. VentlyGradients.orb opens on #FFE9F1 -- a near-white highlight
+  /// that belongs on a blush page and becomes a spotlight on a dark one. Even
+  /// at a third of the opacity its core was still bleaching the buttons it
+  /// happened to sit behind.
+  final bool dark;
+
+  static const RadialGradient _darkOrb = RadialGradient(
+    center: Alignment(-0.35, -0.45),
+    radius: 1.15,
+    colors: [
+      Color(0x66E84D88),
+      Color(0x33C01A5B),
+      Color(0x00000000),
+    ],
+    stops: [0.0, 0.55, 1.0],
+  );
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -144,7 +172,7 @@ class _OrbPainter extends CustomPainter {
       centre,
       radius,
       Paint()
-        ..shader = VentlyGradients.orb.createShader(rect)
+        ..shader = (dark ? _darkOrb : VentlyGradients.orb).createShader(rect)
         ..colorFilter = ColorFilter.mode(
           Colors.white.withValues(alpha: opacity),
           BlendMode.modulate,
@@ -155,7 +183,7 @@ class _OrbPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_OrbPainter old) =>
-      old.t != t || old.opacity != opacity;
+      old.t != t || old.opacity != opacity || old.dark != dark;
 }
 
 /// Fades and lifts its children in sequence as the screen arrives.
