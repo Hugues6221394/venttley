@@ -171,9 +171,18 @@ class _TopBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // No Row around these. A Row hands its child unbounded width,
+                // No Row around this. A Row hands its child unbounded width,
                 // so the title could not wrap or ellipsis and simply ran off
                 // the edge; in the Column it is bounded by the Expanded above.
+                //
+                // And no tagline under it. "Manage your tribes. Protect your
+                // safe space." did not fit beside the bell and the avatar on
+                // a 390pt phone, so it rendered as "Manage your tribes.
+                // Protect your s…" — but the fix is not a shorter sentence.
+                // It told a keeper who is already in the Studio what the
+                // Studio is for, above four numbers that say how it is
+                // actually going. The tribe's name and member count sit here
+                // now instead, which is the thing that changes.
                 const Text(
                   'Keeper Studio',
                   maxLines: 1,
@@ -183,17 +192,6 @@ class _TopBar extends StatelessWidget {
                     fontWeight: FontWeight.w900,
                     fontSize: 22,
                     letterSpacing: -0.4,
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  'Manage your tribes. Protect your safe space.',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: context.ink,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
                   ),
                 ),
               ],
@@ -480,9 +478,11 @@ class _KpiGrid extends ConsumerWidget {
         accent: VentlyColors.berryMagenta,
         value: PostCard.compactNumber(overview.totalMembers),
         label: 'Members',
-        footnote: joined > 0
-            ? '+$joined this week'
-            : 'no new members this week',
+        // Short enough to fit a half-width tile on a 390pt phone. The longer
+        // "no new members this week" rendered as "no new members this we…",
+        // which is worse than the shorter sentence it was trying to improve
+        // on.
+        footnote: joined > 0 ? '+$joined this week' : 'no joins this week',
         onTap: () => _openForTribe(
           context,
           ref,
@@ -505,9 +505,7 @@ class _KpiGrid extends ConsumerWidget {
         accent: VentlyTokens.messageBlue,
         value: '$vents',
         label: 'Vents · 24h',
-        footnote: active > 0
-            ? '$active posting this week'
-            : 'nobody posting yet',
+        footnote: active > 0 ? '$active posting · 7d' : 'nobody posting yet',
         onTap: () => context.push('/keeper/insights'),
       ),
       _KpiTile(
