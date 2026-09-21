@@ -95,4 +95,10 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261023090000': 'restore_whisper_listens_read',
   '20261024090000': 'recommended_tribes_full_row',
   '20261025090000': 'aal2_on_destructive_admin_rpcs',
+  '20261030090000': 'rename_founding_super_admin_handle',
+  '20261031090000': 'ledgers_stop_blocking_user_deletion',
+  '20261032090000': 'users_auth_foreign_key',
+  '20261033090000': 'policy_urls_point_at_a_domain_we_own',
+  '20261034090000': 'push_fanout_webhook_triggers',
+  '20261035090000': 'google_sign_in_flag',
 };

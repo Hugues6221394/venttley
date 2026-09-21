@@ -228,8 +228,7 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
               if (_mode == _Mode.signIn)
                 Center(
                   child: TextButton(
-                    onPressed: () =>
-                        context.push('/onboarding/reset-password'),
+                    onPressed: () => context.push('/onboarding/reset-password'),
                     child: const Text(
                       'Forgot your password?',
                       style: TextStyle(fontWeight: FontWeight.w800),

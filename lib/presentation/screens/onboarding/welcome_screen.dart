@@ -254,23 +254,13 @@ class _WelcomeLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 188,
-        height: 188,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(34),
-          boxShadow: [
-            BoxShadow(
-              color: VentlyColors.berryMagenta.withOpacity(0.12),
-              blurRadius: 34,
-              offset: const Offset(0, 20),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: const VenttlyLogo(fit: BoxFit.cover),
-      ),
+    // No tile, no clip, no drop shadow. The artwork used to carry its own
+    // background, so it needed a rounded card to look deliberate -- and that
+    // card is exactly what made it read as a pasted image sitting on the page
+    // rather than part of it. The backgrounds are cut out now, so the mark can
+    // sit directly on the wash like every other element.
+    return const Center(
+      child: SizedBox(height: 150, child: VenttlyLogo(fit: BoxFit.contain)),
     );
   }
 }

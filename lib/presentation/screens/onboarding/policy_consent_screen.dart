@@ -249,9 +249,8 @@ class _OutstandingDocState extends State<_OutstandingDoc> {
   void initState() {
     super.initState();
     _open = TapGestureRecognizer()
-      ..onTap = () => context.push(
-        widget.doc.isTerms ? '/legal/terms' : '/legal/privacy',
-      );
+      ..onTap = () =>
+          context.push(widget.doc.isTerms ? '/legal/terms' : '/legal/privacy');
   }
 
   @override

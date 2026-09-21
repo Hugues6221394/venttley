@@ -228,10 +228,12 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
           children: [
             Text(
               switch (_step) {
-                _Step.identify => 'We will send a code to the recovery email '
-                    'on your account.',
-                _Step.code => 'Enter the 6-digit code we sent. It expires in '
-                    '15 minutes.',
+                _Step.identify =>
+                  'We will send a code to the recovery email '
+                      'on your account.',
+                _Step.code =>
+                  'Enter the 6-digit code we sent. It expires in '
+                      '15 minutes.',
                 _Step.newPassword => 'Choose a new password.',
               },
               style: TextStyle(
@@ -387,9 +389,7 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
                 _Step.code => 'Continue',
                 _Step.newPassword => 'Change my password',
               },
-              state: _busy
-                  ? VentlyButtonState.loading
-                  : VentlyButtonState.idle,
+              state: _busy ? VentlyButtonState.loading : VentlyButtonState.idle,
               onPressed: switch (_step) {
                 _Step.identify => _sendCode,
                 _Step.code => _codeEntered,

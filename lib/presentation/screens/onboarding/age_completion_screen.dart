@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
+import '../../widgets/onboarding_backdrop.dart';
 
 /// Mandatory completion step for OAuth/phone accounts created without age
 /// metadata. Only the year is sent and stored; Postgres derives the safety tier.
@@ -76,91 +77,92 @@ class _AgeCompletionScreenState extends ConsumerState<AgeCompletionScreen> {
         automaticallyImplyLeading: false,
         title: const Text('Confirm your age'),
       ),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Icon(
-                    Icons.verified_user_outlined,
-                    size: 48,
-                    color: scheme.primary,
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    'Safety settings depend on age',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
+      body: OnboardingBackdrop(
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Icon(
+                      Icons.verified_user_outlined,
+                      size: 48,
+                      color: scheme.primary,
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'We store only your birth year. It is not shown on your profile. '
-                    'Members aged 13–17 receive additional protections.',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      height: 1.45,
+                    const SizedBox(height: 18),
+                    Text(
+                      'Safety settings depend on age',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w800),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  Semantics(
-                    button: true,
-                    label: date == null
-                        ? 'Select date of birth'
-                        : 'Date of birth selected, ${date.year}',
-                    child: OutlinedButton.icon(
-                      onPressed: _busy ? null : _pickDate,
-                      icon: const Icon(Icons.cake_outlined),
-                      label: Text(
-                        date == null
-                            ? 'Select date of birth'
-                            : '${date.day.toString().padLeft(2, '0')}/'
-                                  '${date.month.toString().padLeft(2, '0')}/${date.year}',
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(54),
+                    const SizedBox(height: 10),
+                    Text(
+                      'We store only your birth year. It is not shown on your profile. '
+                      'Members aged 13–17 receive additional protections.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        height: 1.45,
                       ),
                     ),
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 24),
                     Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: scheme.error,
-                          fontWeight: FontWeight.w700,
+                      button: true,
+                      label: date == null
+                          ? 'Select date of birth'
+                          : 'Date of birth selected, ${date.year}',
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _pickDate,
+                        icon: const Icon(Icons.cake_outlined),
+                        label: Text(
+                          date == null
+                              ? 'Select date of birth'
+                              : '${date.day.toString().padLeft(2, '0')}/'
+                                    '${date.month.toString().padLeft(2, '0')}/${date.year}',
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(54),
                         ),
                       ),
                     ),
-                  ],
-                  const SizedBox(height: 18),
-                  FilledButton(
-                    onPressed: _busy ? null : _continue,
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(54),
+                    if (_error != null) ...[
+                      const SizedBox(height: 12),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: scheme.error,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+                    FilledButton(
+                      onPressed: _busy ? null : _continue,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(54),
+                      ),
+                      child: _busy
+                          ? const SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Continue'),
                     ),
-                    child: _busy
-                        ? const SizedBox.square(
-                            dimension: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Continue'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: _busy ? null : _useAnotherAccount,
-                    child: const Text('Use another account'),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: _busy ? null : _useAnotherAccount,
+                      child: const Text('Use another account'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

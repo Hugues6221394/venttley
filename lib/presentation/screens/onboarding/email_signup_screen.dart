@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
 import '../../theme/colors.dart';
+import '../../widgets/onboarding_backdrop.dart';
 
 /// Email-based sign-up screen.
 ///
@@ -101,123 +102,127 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
           style: TextStyle(fontWeight: FontWeight.w900),
         ),
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Use email if you want password reset to come to your inbox. '
-                'Your public handle stays pseudonymous either way.',
-                style: TextStyle(
-                  color: context.ink.withOpacity(0.7),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 18),
-              TextField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
-                // iOS capitalises the first letter unless told not to, and
-                // this address is a credential — it is what a password reset
-                // is sent to. Seeing it come back with a capital letter is
-                // enough to make somebody retype it or doubt the signup.
-                textCapitalization: TextCapitalization.none,
-                enableSuggestions: false,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  prefixIcon: Icon(Icons.mail_outline_rounded),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _username,
-                autocorrect: false,
-                maxLength: 20,
-                decoration: const InputDecoration(
-                  labelText: 'Anonymous handle',
-                  hintText: 'e.g. nightowl',
-                  prefixIcon: Icon(Icons.alternate_email_rounded),
-                  counterText: '',
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _password,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: Icon(Icons.lock_outline_rounded),
-                ),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: _pickBirthDate,
-                icon: const Icon(Icons.cake_outlined, size: 18),
-                label: Text(
-                  _birthDate == null
-                      ? 'Pick your birth date'
-                      : 'Birth date: '
-                            '${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}',
-                ),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(50),
-                ),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.error.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+      body: OnboardingBackdrop(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Use email if you want password reset to come to your inbox. '
+                  'Your public handle stays pseudonymous either way.',
+                  style: TextStyle(
+                    color: context.ink.withOpacity(0.7),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    height: 1.4,
                   ),
-                  child: Text(
-                    _error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontWeight: FontWeight.w700,
+                ),
+                const SizedBox(height: 18),
+                TextField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  autocorrect: false,
+                  // iOS capitalises the first letter unless told not to, and
+                  // this address is a credential — it is what a password reset
+                  // is sent to. Seeing it come back with a capital letter is
+                  // enough to make somebody retype it or doubt the signup.
+                  textCapitalization: TextCapitalization.none,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.mail_outline_rounded),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _username,
+                  autocorrect: false,
+                  maxLength: 20,
+                  decoration: const InputDecoration(
+                    labelText: 'Anonymous handle',
+                    hintText: 'e.g. nightowl',
+                    prefixIcon: Icon(Icons.alternate_email_rounded),
+                    counterText: '',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _password,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: Icon(Icons.lock_outline_rounded),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: _pickBirthDate,
+                  icon: const Icon(Icons.cake_outlined, size: 18),
+                  label: Text(
+                    _birthDate == null
+                        ? 'Pick your birth date'
+                        : 'Birth date: '
+                              '${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}',
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(50),
+                  ),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.error.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                FilledButton(
+                  onPressed: _busy ? null : _submit,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(54),
+                    backgroundColor: VentlyColors.berryMagenta,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                  ),
+                  child: _busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          'Create my account',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                ),
+                const SizedBox(height: 6),
+                TextButton(
+                  onPressed: () => context.push('/onboarding/identity'),
+                  child: const Text(
+                    'Or continue anonymously (no email)',
+                    style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
               ],
-              const SizedBox(height: 18),
-              FilledButton(
-                onPressed: _busy ? null : _submit,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(54),
-                  backgroundColor: VentlyColors.berryMagenta,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                ),
-                child: _busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Text(
-                        'Create my account',
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
-              ),
-              const SizedBox(height: 6),
-              TextButton(
-                onPressed: () => context.push('/onboarding/identity'),
-                child: const Text(
-                  'Or continue anonymously (no email)',
-                  style: TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

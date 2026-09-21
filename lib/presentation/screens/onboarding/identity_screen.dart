@@ -14,6 +14,7 @@ import '../../../data/services/supabase_backend.dart'
     show UsernameTakenException, EmailConfirmationStillOnException;
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
+import '../../widgets/onboarding_backdrop.dart';
 
 /// Create-Identity screen — DOB age gate + username + password.
 ///
@@ -243,100 +244,103 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
         ),
         title: const Text('Create Identity'),
       ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-          children: [
-            Center(
-              child: AnonymousAvatar(
-                seed: _avatarSeed,
-                label: _username.text,
-                size: 88,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: Text(
-                'Your emotional sanctuary',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurface.withOpacity(0.6),
+      body: OnboardingBackdrop(
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            children: [
+              Center(
+                child: AnonymousAvatar(
+                  seed: _avatarSeed,
+                  label: _username.text,
+                  size: 88,
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            _DobCard(birthDate: _birthDate, onTap: _pickDate),
-            const SizedBox(height: 14),
-            _UsernameCard(
-              controller: _username,
-              onShuffle: _shuffleName,
-              onChanged: () => setState(() {}),
-            ),
-            const SizedBox(height: 14),
-            _PasswordCard(
-              password: _password,
-              confirm: _passwordConfirm,
-              showPassword: _showPassword,
-              onToggleVisibility: () =>
-                  setState(() => _showPassword = !_showPassword),
-            ),
-            const SizedBox(height: 14),
-            _ConsentCard(
-              agreedTerms: _agreedTerms,
-              acknowledgedPrivacy: _acknowledgedPrivacy,
-              documentsLoading: policiesAsync.isLoading,
-              documentsUnavailable:
-                  !policiesLoaded && !policiesAsync.isLoading,
-              onRetryDocuments: () => ref.invalidate(currentPoliciesProvider),
-              onTermsChanged: (v) => setState(() => _agreedTerms = v),
-              onPrivacyChanged: (v) => setState(() => _acknowledgedPrivacy = v),
-            ),
-            const SizedBox(height: 18),
-            if (_error != null) ...[
-              _ErrorBanner(message: _error!),
-              const SizedBox(height: 12),
-            ],
-            ElevatedButton(
-              onPressed: _loading ? null : _onSubmit,
-              child: _loading
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text('Step into the Circle'),
-                        SizedBox(width: 8),
-                        Icon(Icons.arrow_forward_rounded, size: 18),
-                      ],
-                    ),
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.lock_outline,
-                    size: 14,
-                    color: scheme.onSurface.withOpacity(0.55),
+              const SizedBox(height: 16),
+              Center(
+                child: Text(
+                  'Your emotional sanctuary',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurface.withOpacity(0.6),
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'No public real identity required',
-                    style: TextStyle(
-                      fontSize: 11,
+                ),
+              ),
+              const SizedBox(height: 24),
+              _DobCard(birthDate: _birthDate, onTap: _pickDate),
+              const SizedBox(height: 14),
+              _UsernameCard(
+                controller: _username,
+                onShuffle: _shuffleName,
+                onChanged: () => setState(() {}),
+              ),
+              const SizedBox(height: 14),
+              _PasswordCard(
+                password: _password,
+                confirm: _passwordConfirm,
+                showPassword: _showPassword,
+                onToggleVisibility: () =>
+                    setState(() => _showPassword = !_showPassword),
+              ),
+              const SizedBox(height: 14),
+              _ConsentCard(
+                agreedTerms: _agreedTerms,
+                acknowledgedPrivacy: _acknowledgedPrivacy,
+                documentsLoading: policiesAsync.isLoading,
+                documentsUnavailable:
+                    !policiesLoaded && !policiesAsync.isLoading,
+                onRetryDocuments: () => ref.invalidate(currentPoliciesProvider),
+                onTermsChanged: (v) => setState(() => _agreedTerms = v),
+                onPrivacyChanged: (v) =>
+                    setState(() => _acknowledgedPrivacy = v),
+              ),
+              const SizedBox(height: 18),
+              if (_error != null) ...[
+                _ErrorBanner(message: _error!),
+                const SizedBox(height: 12),
+              ],
+              ElevatedButton(
+                onPressed: _loading ? null : _onSubmit,
+                child: _loading
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text('Step into the Circle'),
+                          SizedBox(width: 8),
+                          Icon(Icons.arrow_forward_rounded, size: 18),
+                        ],
+                      ),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.lock_outline,
+                      size: 14,
                       color: scheme.onSurface.withOpacity(0.55),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    Text(
+                      'No public real identity required',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurface.withOpacity(0.55),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
