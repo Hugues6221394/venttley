@@ -183,8 +183,17 @@ class _OrDivider extends StatelessWidget {
   }
 }
 
-/// Optional Google + phone entry points. Both are additive to the anonymous
-/// flow; each needs its provider configured in Supabase before it will work.
+/// Optional Google entry point, additive to the anonymous flow.
+///
+/// Behind the `google_sign_in` flag, defaulting off, because the button is only
+/// honest once external_google_enabled is true in Supabase. It was not: both
+/// this and the phone button rendered against providers that are switched off,
+/// so the two alternatives to the anonymous flow both failed at the tap --
+/// on the first screen a new user ever sees.
+///
+/// Phone is gone rather than flagged. It needs an SMS provider with per-message
+/// billing, the same gap that already keeps `recovery_sms` off, and an entry
+/// point nobody can finish is worse than one that is not offered.
 class _SocialAuthRow extends ConsumerStatefulWidget {
   const _SocialAuthRow();
   @override
@@ -218,24 +227,13 @@ class _SocialAuthRowState extends ConsumerState<_SocialAuthRow> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _SocialButton(
-            icon: Icons.g_mobiledata_rounded,
-            label: 'Google',
-            onTap: _busy ? null : _google,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _SocialButton(
-            icon: Icons.phone_iphone_rounded,
-            label: 'Phone',
-            onTap: _busy ? null : () => context.push('/onboarding/phone'),
-          ),
-        ),
-      ],
+    if (!flagEnabled(ref, 'google_sign_in', fallback: false)) {
+      return const SizedBox.shrink();
+    }
+    return _SocialButton(
+      icon: Icons.g_mobiledata_rounded,
+      label: _busy ? 'Opening Google…' : 'Continue with Google',
+      onTap: _busy ? null : _google,
     );
   }
 }
