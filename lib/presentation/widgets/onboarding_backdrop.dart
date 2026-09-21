@@ -12,19 +12,19 @@ import '../theme/motion.dart';
 /// walks through in under a minute, which is exactly the sequence where a
 /// change of surface reads as a different app rather than a different page.
 ///
-/// Two soft orbs drift behind the content on a long, unsynchronised cycle. They
-/// are the same radial gradient the feed uses for its decorative orb, at low
-/// opacity: enough to keep the surface from looking like flat paper, not enough
-/// to compete with a form. Both are centred off-canvas so only their falloff
-/// reaches the screen — the first pass had them on-screen at three times this
-/// opacity and read as two pink blobs behind the text rather than light.
-/// The periods are deliberately coprime so the pair never settles into a
-/// visible pulse.
+/// On light, two soft orbs drift behind the content on long, coprime cycles:
+/// enough to keep a blush page from looking like flat paper, not enough to
+/// compete with a form.
 ///
-/// Dark gets roughly a third of the light opacity. The gradient's inner stop
-/// is near-white, so on a dark page the same value that reads as a blush
-/// reads as a spotlight -- and anything translucent sitting on top of it,
-/// like the trust panel, picks up the bloom and loses its contrast.
+/// On dark and black there is nothing. Not a dimmer orb, not a subtler
+/// gradient — nothing. Three rounds of tuning opacities proved the problem was
+/// not the strength: any coloured light on a near-black page shows up as a
+/// maroon wash in the corners and a halo around whatever sits in front of it,
+/// which is what made the berry buttons look lacquered. The AMOLED canvas is
+/// #000000 by design, and a decorative gradient is precisely the thing that
+/// stops it being #000000. Measured off the approved design, the page is
+/// (0, 0, 0) at every sample point from the status bar to the home indicator;
+/// the build it replaced ranged from #1F0811 to #3A1624 across the same screen.
 class OnboardingBackdrop extends StatefulWidget {
   const OnboardingBackdrop({
     super.key,
@@ -37,22 +37,40 @@ class OnboardingBackdrop extends StatefulWidget {
   /// Off in tests and for anyone who has asked the system to reduce motion.
   final bool animate;
 
+  /// Whether this theme gets the gradient and the orbs at all.
+  ///
+  /// Public because it is a design decision rather than an implementation
+  /// detail, and one worth a test: the difference between a flat AMOLED canvas
+  /// and a tinted one is invisible to every widget test that does not ask.
+  static bool decorates(ThemeData theme) =>
+      theme.brightness == Brightness.light;
+
   @override
   State<OnboardingBackdrop> createState() => _OnboardingBackdropState();
 }
 
 class _OnboardingBackdropState extends State<OnboardingBackdrop>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _drift;
+  late final AnimationController _drift = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 24),
+  );
 
   @override
-  void initState() {
-    super.initState();
-    _drift = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 24),
-    );
-    if (widget.animate) _drift.repeat();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Only tick when something is actually painted. A repeating controller on
+    // a theme that draws no orbs is a frame every 16ms to compute a value
+    // nothing reads, for as long as the user sits on the screen.
+    final wanted =
+        widget.animate &&
+        OnboardingBackdrop.decorates(Theme.of(context)) &&
+        !(MediaQuery.maybeDisableAnimationsOf(context) ?? false);
+    if (wanted && !_drift.isAnimating) {
+      _drift.repeat();
+    } else if (!wanted && _drift.isAnimating) {
+      _drift.stop();
+    }
   }
 
   @override
@@ -64,26 +82,28 @@ class _OnboardingBackdropState extends State<OnboardingBackdrop>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+
+    if (!OnboardingBackdrop.decorates(theme)) {
+      return ColoredBox(
+        color: theme.scaffoldBackgroundColor,
+        child: widget.child,
+      );
+    }
+
     // Respect the OS setting rather than deciding for people; a drifting
     // background is the kind of ambient motion that reduce-motion exists for.
     final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
     return DecoratedBox(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: isDark
-              ? [
-                  theme.scaffoldBackgroundColor,
-                  theme.colorScheme.surface,
-                ]
-              : const [
-                  Color(0xFFFFEEF3),
-                  Color(0xFFFFF8F8),
-                  VentlyColors.cardBlush,
-                ],
+          colors: [
+            Color(0xFFFFEEF3),
+            Color(0xFFFFF8F8),
+            VentlyColors.cardBlush,
+          ],
         ),
       ),
       child: Stack(
@@ -93,13 +113,8 @@ class _OnboardingBackdropState extends State<OnboardingBackdrop>
               child: IgnorePointer(
                 child: AnimatedBuilder(
                   animation: _drift,
-                  builder: (context, _) => CustomPaint(
-                    painter: _OrbPainter(
-                      t: _drift.value,
-                      opacity: isDark ? 0.30 : 0.13,
-                      dark: isDark,
-                    ),
-                  ),
+                  builder: (context, _) =>
+                      CustomPaint(painter: _OrbPainter(t: _drift.value)),
                 ),
               ),
             ),
@@ -111,32 +126,11 @@ class _OnboardingBackdropState extends State<OnboardingBackdrop>
 }
 
 class _OrbPainter extends CustomPainter {
-  const _OrbPainter({
-    required this.t,
-    required this.opacity,
-    this.dark = false,
-  });
+  const _OrbPainter({required this.t});
 
   final double t;
-  final double opacity;
 
-  /// Dark themes get their own gradient rather than a dimmer version of the
-  /// light one. VentlyGradients.orb opens on #FFE9F1 -- a near-white highlight
-  /// that belongs on a blush page and becomes a spotlight on a dark one. Even
-  /// at a third of the opacity its core was still bleaching the buttons it
-  /// happened to sit behind.
-  final bool dark;
-
-  static const RadialGradient _darkOrb = RadialGradient(
-    center: Alignment(-0.35, -0.45),
-    radius: 1.15,
-    colors: [
-      Color(0x66E84D88),
-      Color(0x33C01A5B),
-      Color(0x00000000),
-    ],
-    stops: [0.0, 0.55, 1.0],
-  );
+  static const double _opacity = 0.13;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -172,9 +166,9 @@ class _OrbPainter extends CustomPainter {
       centre,
       radius,
       Paint()
-        ..shader = (dark ? _darkOrb : VentlyGradients.orb).createShader(rect)
+        ..shader = VentlyGradients.orb.createShader(rect)
         ..colorFilter = ColorFilter.mode(
-          Colors.white.withValues(alpha: opacity),
+          Colors.white.withValues(alpha: _opacity),
           BlendMode.modulate,
         )
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 110),
@@ -182,8 +176,7 @@ class _OrbPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_OrbPainter old) =>
-      old.t != t || old.opacity != opacity || old.dark != dark;
+  bool shouldRepaint(_OrbPainter old) => old.t != t;
 }
 
 /// Fades and lifts its children in sequence as the screen arrives.
@@ -209,10 +202,7 @@ class StaggeredEntrance extends StatelessWidget {
     return Column(
       children: [
         for (var i = 0; i < children.length; i++)
-          _Entrance(
-            delay: interval * i,
-            child: children[i],
-          ),
+          _Entrance(delay: interval * i, child: children[i]),
       ],
     );
   }

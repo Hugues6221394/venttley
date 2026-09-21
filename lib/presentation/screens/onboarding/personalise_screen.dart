@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/providers.dart';
 import '../../theme/colors.dart';
+import '../../theme/glass_tokens.dart';
 import '../../widgets/onboarding_backdrop.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/profile_banner_editor.dart';
@@ -348,7 +349,7 @@ class _BannerAndAvatar extends StatelessWidget {
               width: double.infinity,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(22),
-                color: VentlyColors.softMauve.withValues(alpha: 0.25),
+                color: GlassTokens.card(context),
                 image: bannerUrl != null
                     ? DecorationImage(
                         image: NetworkImage(bannerUrl),

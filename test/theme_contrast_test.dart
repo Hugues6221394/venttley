@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vently_app/presentation/theme/app_theme.dart';
 import 'package:vently_app/presentation/theme/colors.dart';
 import 'package:vently_app/presentation/theme/glass_tokens.dart';
+import 'package:vently_app/presentation/widgets/onboarding_backdrop.dart';
 
 /// What the onboarding surfaces actually look like, per theme, as numbers.
 ///
@@ -13,10 +14,15 @@ import 'package:vently_app/presentation/theme/glass_tokens.dart';
 /// chosen while looking at the light theme, which nothing then re-checked. A
 /// white panel at 62% opacity. An orb gradient opening on near-white. A
 /// desaturated pink introduced on the assumption the brand pink was unreadable
-/// on black, when it is not.
+/// on black, when it is not. A card at 52% that measures 1.046 against a
+/// true-black page — which is to say a card nobody can see.
 ///
-/// Screenshots caught all three, one round trip at a time. These are the same
-/// judgements written down, so the next one fails here instead.
+/// The figures below are read off the approved design rather than picked: a
+/// #000000 page, an opaque #120D0F card, the brand berry, and the palette's
+/// own dividers doing the delineating.
+///
+/// Screenshots caught every one of these, one round trip at a time. This is
+/// the same set of judgements written down, so the next one fails here.
 
 /// WCAG relative luminance.
 double _luminance(Color c) {
@@ -79,13 +85,13 @@ void main() {
       ) async {
         final context = await _contextFor(tester, theme);
         final page = theme.scaffoldBackgroundColor;
-        final panel = _over(GlassTokens.tint(context), page);
+        final panel = _over(GlassTokens.card(context), page);
         final border = _over(GlassTokens.border(context), page);
 
         // A card is separated from its page by whichever of fill or border
-        // does the work, and on these screens it is the border: the fill sits
-        // at roughly 1.04 against the page in *every* theme, including light,
-        // where the card nonetheless reads perfectly well. Measuring only the
+        // does the work, and on these screens it is the border: even an opaque
+        // card sits at 1.05–1.09 against its page in every theme, including
+        // light, where it nonetheless reads perfectly well. Measuring only the
         // fill therefore fails the design that works and says nothing about
         // the one that does not.
         final separation = math.max(
@@ -106,10 +112,36 @@ void main() {
         );
       });
 
+      testWidgets('$name: the panel is an opaque card, not a wash', (
+        tester,
+      ) async {
+        final context = await _contextFor(tester, theme);
+        final card = GlassTokens.card(context);
+
+        // GlassTokens.tint stays translucent — it is glass, sitting on a
+        // BackdropFilter over content that scrolls beneath it, and that is
+        // the whole point of it in chat and the sheets. The onboarding
+        // surfaces have a flat page behind them instead, so translucency
+        // there bought nothing and cost the card its edges: 52% of #120D0F
+        // over #000000 renders as #090708 and stops being visible.
+        expect(
+          card.a,
+          1.0,
+          reason:
+              'the panel fill in $name is translucent, so it dissolves into '
+              'the page instead of reading as a card',
+        );
+        expect(
+          card,
+          theme.colorScheme.surface,
+          reason: 'the panel should be the theme surface in $name',
+        );
+      });
+
       testWidgets('$name: body text on the panel passes AA', (tester) async {
         final context = await _contextFor(tester, theme);
         final page = theme.scaffoldBackgroundColor;
-        final panel = _over(GlassTokens.tint(context), page);
+        final panel = _over(GlassTokens.card(context), page);
         final body = theme.colorScheme.onSurface;
 
         expect(
@@ -147,6 +179,67 @@ void main() {
               '(${label.toStringAsFixed(2)}:1)',
         );
       });
+    });
+  });
+
+  group('the black theme is actually black', () {
+    test('the canvas is #000000, not a tinted near-black', () {
+      // The AMOLED option exists so that the page is off. A value one step
+      // above zero is indistinguishable in a screenshot and entirely visible
+      // on the phone it is meant to be saving.
+      expect(
+        VentlyTheme.dark(pureBlack: true).scaffoldBackgroundColor,
+        VentlyColors.pureBlack,
+      );
+    });
+
+    testWidgets('nothing decorative is painted over a dark canvas', (
+      tester,
+    ) async {
+      // Three rounds of tuning orb opacity proved the strength was never the
+      // problem. Any coloured light on a near-black page shows up as a maroon
+      // wash in the corners and a halo around whatever sits in front of it —
+      // which is what made the berry buttons read as lacquered rather than
+      // flat. Sampled off the build this replaced, the page ran from #1F0811
+      // to #3A1624 down a single screen; the approved design is (0, 0, 0) at
+      // every point from the status bar to the home indicator.
+      expect(OnboardingBackdrop.decorates(VentlyTheme.light()), isTrue);
+      expect(OnboardingBackdrop.decorates(VentlyTheme.dark()), isFalse);
+      expect(
+        OnboardingBackdrop.decorates(VentlyTheme.dark(pureBlack: true)),
+        isFalse,
+      );
+
+      // And the widget honours it: on black the backdrop hands back the canvas
+      // colour with nothing over it.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: VentlyTheme.dark(pureBlack: true),
+          home: const Scaffold(
+            backgroundColor: Colors.transparent,
+            body: OnboardingBackdrop(animate: false, child: SizedBox.shrink()),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final box = tester.widget<ColoredBox>(
+        find
+            .descendant(
+              of: find.byType(OnboardingBackdrop),
+              matching: find.byType(ColoredBox),
+            )
+            .first,
+      );
+      expect(box.color, VentlyColors.pureBlack);
+      expect(
+        find.descendant(
+          of: find.byType(OnboardingBackdrop),
+          matching: find.byType(CustomPaint),
+        ),
+        findsNothing,
+        reason: 'the black canvas should have nothing painted over it',
+      );
     });
   });
 }

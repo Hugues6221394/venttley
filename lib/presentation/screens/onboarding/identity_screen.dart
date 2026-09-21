@@ -13,6 +13,7 @@ import '../../../data/services/identity_service.dart';
 import '../../../data/services/supabase_backend.dart'
     show UsernameTakenException, EmailConfirmationStillOnException;
 import '../../theme/colors.dart';
+import '../../theme/glass_tokens.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/onboarding_backdrop.dart';
 
@@ -150,24 +151,24 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       return;
     }
     if (!_agreedTerms || !_acknowledgedPrivacy) {
-        const message =
-            'Please agree to the Terms and acknowledge the Privacy Policy to '
-            'continue.';
-        setState(() => _error = message);
-        // Said twice, deliberately. The banner renders above the submit button
-        // and the two consent boxes are above that again, so on a short phone
-        // the tap, the refusal and the thing that needs fixing are all on
-        // different parts of one scroll -- which reads as the button doing
-        // nothing at all. The button is not disabled on purpose (a disabled
-        // control announces nothing), so the refusal has to reach the reader
-        // wherever they are looking.
-        if (mounted) {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(const SnackBar(content: Text(message)));
-        }
-        return;
+      const message =
+          'Please agree to the Terms and acknowledge the Privacy Policy to '
+          'continue.';
+      setState(() => _error = message);
+      // Said twice, deliberately. The banner renders above the submit button
+      // and the two consent boxes are above that again, so on a short phone
+      // the tap, the refusal and the thing that needs fixing are all on
+      // different parts of one scroll -- which reads as the button doing
+      // nothing at all. The button is not disabled on purpose (a disabled
+      // control announces nothing), so the refusal has to reach the reader
+      // wherever they are looking.
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text(message)));
       }
+      return;
+    }
 
     setState(() {
       _loading = true;
@@ -614,9 +615,7 @@ class _DobCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Theme.of(context).inputDecorationTheme.fillColor,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: VentlyColors.softMauve.withOpacity(0.7),
-                  ),
+                  border: Border.all(color: GlassTokens.border(context)),
                 ),
                 child: Row(
                   children: [

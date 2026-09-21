@@ -32,7 +32,14 @@ class VentlyColors {
   /// Warm deep charcoal with burgundy undertone.
   static const Color charcoal = Color(0xFF120B0D);
 
-  /// Desaturated berry magenta — meets WCAG 4.5:1 on charcoal.
+  /// Desaturated berry magenta — low-opacity tints only, never ink.
+  ///
+  /// Introduced on the assumption that the brand berry was too dark to read
+  /// on a near-black page. It is not: #E0245E on #000000 measures 4.58:1, so
+  /// the dark themes now use the real brand colour for every button, link,
+  /// title and focus ring. What is left of this value is the handful of places
+  /// that wash it over a surface at 10–22% to tint a row or a chip, where the
+  /// softer hue is doing a different job.
   static const Color berryDesat = Color(0xFFD96B8A);
 
   /// Soft off-white for dark-mode typography (avoids pure white halos).

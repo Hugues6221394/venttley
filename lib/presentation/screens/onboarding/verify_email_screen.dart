@@ -193,7 +193,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                   hintText: '••••••',
                   filled: true,
                   // Was hardcoded white: a near-white code box on a black page.
-                  fillColor: GlassTokens.tint(context),
+                  fillColor: GlassTokens.card(context),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(18),
                     borderSide: BorderSide.none,

@@ -192,7 +192,7 @@ class VentlyTheme {
         titleTextStyle: TextStyle(
           fontSize: 22,
           fontWeight: FontWeight.w800,
-          color: VentlyColors.berryDesat,
+          color: VentlyColors.berryMagenta,
         ),
       ),
       dividerColor: divider,
@@ -230,7 +230,7 @@ class VentlyTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: VentlyColors.berryDesat,
+          foregroundColor: VentlyColors.berryMagenta,
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
@@ -253,15 +253,15 @@ class VentlyTheme {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radius),
           borderSide: const BorderSide(
-            color: VentlyColors.berryDesat,
+            color: VentlyColors.berryMagenta,
             width: 1.5,
           ),
         ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: card,
-        selectedColor: VentlyColors.berryDesat,
-        secondarySelectedColor: VentlyColors.berryDesat,
+        selectedColor: VentlyColors.berryMagenta,
+        secondarySelectedColor: VentlyColors.berryMagenta,
         labelStyle: const TextStyle(
           color: VentlyColors.softOffWhite,
           fontWeight: FontWeight.w600,
@@ -278,7 +278,7 @@ class VentlyTheme {
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: card,
-        selectedItemColor: VentlyColors.berryDesat,
+        selectedItemColor: VentlyColors.berryMagenta,
         unselectedItemColor: VentlyColors.softOffWhite,
         type: BottomNavigationBarType.fixed,
         elevation: 0,

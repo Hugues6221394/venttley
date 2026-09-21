@@ -226,7 +226,7 @@ class _PhoneSignInScreenState extends ConsumerState<PhoneSignInScreen> {
         hintText: hint,
         prefixIcon: icon == null ? null : Icon(icon),
         filled: true,
-        fillColor: GlassTokens.tint(context),
+        fillColor: GlassTokens.card(context),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide.none,

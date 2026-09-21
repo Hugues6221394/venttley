@@ -151,7 +151,7 @@ class _OrDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final line = Expanded(
-      child: Divider(color: VentlyColors.softMauve.withOpacity(0.4), height: 1),
+      child: Divider(color: GlassTokens.border(context), height: 1),
     );
     return Row(
       children: [
@@ -240,7 +240,7 @@ class _SocialButton extends StatelessWidget {
       onPressed: onTap,
       style: OutlinedButton.styleFrom(
         minimumSize: const Size.fromHeight(50),
-        side: BorderSide(color: VentlyColors.softMauve.withOpacity(0.6)),
+        side: BorderSide(color: GlassTokens.border(context)),
         foregroundColor: context.ink,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
       ),
@@ -279,7 +279,7 @@ class _TrustPanel extends StatelessWidget {
       // behind made it worse by lighting it unevenly. The tokens already know
       // what a surface is in each theme -- nothing here needed inventing.
       decoration: BoxDecoration(
-        color: GlassTokens.tint(context),
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(28),
         border: Border.all(color: GlassTokens.border(context)),
       ),
