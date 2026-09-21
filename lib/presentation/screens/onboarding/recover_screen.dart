@@ -9,6 +9,7 @@ import '../../../data/services/identity_service.dart';
 import '../../../data/services/supabase_backend.dart'
     show InvalidCredentialsException, MfaChallengeRequiredException;
 import '../../theme/colors.dart';
+import '../../widgets/venttly_logo.dart';
 
 /// Returning-user entry: sign in with username + password, or recover with
 /// the 12-word phrase.

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../theme/colors.dart';
+import '../../widgets/venttly_logo.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
