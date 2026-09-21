@@ -28,6 +28,7 @@ import '../screens/onboarding/password_reset_screen.dart';
 import '../screens/onboarding/recover_screen.dart';
 import '../screens/onboarding/recovery_key_screen.dart';
 import '../screens/onboarding/phone_signin_screen.dart';
+import '../screens/onboarding/personalise_screen.dart';
 import '../screens/onboarding/policy_consent_screen.dart';
 import '../screens/onboarding/policy_reader_screen.dart';
 import '../screens/onboarding/verify_email_screen.dart';
@@ -204,6 +205,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // from Settings by an account that signed up long ago — and they must
       // stay reachable without a session, since somebody has to be able to
       // read the Terms before deciding to create one.
+      GoRoute(
+        path: '/onboarding/personalise',
+        builder: (_, __) => const PersonaliseScreen(),
+      ),
       GoRoute(
         path: '/onboarding/consent',
         builder: (_, __) => const PolicyConsentScreen(),

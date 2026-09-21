@@ -130,7 +130,7 @@ class _RecoveryKeyScreenState extends ConsumerState<RecoveryKeyScreen> {
               ),
               const SizedBox(height: 6),
               ElevatedButton(
-                onPressed: _acknowledged ? () => context.go('/feed') : null,
+                onPressed: _acknowledged ? () => context.go('/onboarding/personalise') : null,
                 child: const Text('Enter Venttly'),
               ),
             ],
