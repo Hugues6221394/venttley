@@ -25,6 +25,8 @@ const _swept = <String>[
   'lib/presentation/screens/whispers/create_whisper_screen.dart',
   'lib/presentation/screens/compose/create_story_screen.dart',
   'lib/presentation/screens/onboarding/welcome_screen.dart',
+  'lib/presentation/screens/profile/profile_overview.dart',
+  'lib/presentation/screens/feed/story_viewer_screen.dart',
 ];
 
 void main() {

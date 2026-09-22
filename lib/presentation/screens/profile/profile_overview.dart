@@ -15,6 +15,7 @@ import '../../widgets/profile_avatar.dart';
 import '../../widgets/profile_banner_image.dart';
 import '../../widgets/profile_banner_editor.dart';
 import '../../widgets/tagged_text.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Redesigned public-profile overview (hero + quick actions + friends/personas
 /// + highlights/badges), matching the premium pink glassmorphism spec. All
@@ -1238,16 +1239,19 @@ class _FriendsCard extends StatelessWidget {
                         height: 34,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.8),
+                          color: GlassTokens.cardChip(context),
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
+                          border: Border.all(
+                            color: GlassTokens.cardEdge(context),
+                            width: 2,
+                          ),
                         ),
                         child: Text(
                           '+${friends.length - 3}',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
-                            color: context.ink,
+                            color: GlassTokens.onCard(context),
                           ),
                         ),
                       ),
@@ -1257,8 +1261,12 @@ class _FriendsCard extends StatelessWidget {
             ),
           const Spacer(),
           const SizedBox(height: 12),
+          // The "Find Friends" grey, which was white at 70% with berry text on
+          // it: about 1.8:1, the washed-out pink-on-grey it always looked
+          // like. It reads in neither theme — in light it is a near-white pill
+          // on a white card, in dark it is a bright slab with faint type.
           Material(
-            color: Colors.white.withOpacity(0.7),
+            color: GlassTokens.cardChip(context),
             borderRadius: BorderRadius.circular(20),
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
@@ -1552,8 +1560,12 @@ class _MiniStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      // The "This week" pillars: white at 45%, which lands on about #737373
+      // over a black page, carrying off-white type. That is 3.1:1 for the
+      // value and 2.0:1 for the label — the "Hearts Receiv ed" mush that has
+      // been in every screenshot of this screen.
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.45),
+        color: GlassTokens.cardChip(context),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -1565,7 +1577,7 @@ class _MiniStat extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.w900,
               fontSize: 17,
-              color: context.ink,
+              color: GlassTokens.onCard(context),
             ),
           ),
           const SizedBox(height: 2),
@@ -1576,7 +1588,7 @@ class _MiniStat extends StatelessWidget {
               fontSize: 9.5,
               height: 1.2,
               fontWeight: FontWeight.w700,
-              color: context.ink.withOpacity(0.6),
+              color: GlassTokens.onCardMuted(context),
             ),
           ),
         ],
@@ -1709,7 +1721,7 @@ class _CardTitle extends StatelessWidget {
           height: 30,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.white.withOpacity(0.7),
+            color: GlassTokens.cardChip(context),
           ),
           child: Icon(icon, size: 17, color: VentlyColors.berryMagenta),
         ),
