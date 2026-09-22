@@ -90,14 +90,20 @@ class KeeperHomeScreen extends ConsumerWidget {
                     SliverToBoxAdapter(child: _KpiGrid(overview: overview)),
                     const SliverToBoxAdapter(child: _PrimaryManage()),
                     SliverToBoxAdapter(child: _QuickLinks(overview: overview)),
-                    // The list is what the scope rail is a summary of, so
-                    // under one tribe it would be a list of that tribe,
-                    // directly below its own name. Only worth drawing when
-                    // there is more than one thing in it.
-                    if (!scoped && overview.tribes.length > 1) ...[
+                    // Shown for one tribe too.
+                    //
+                    // This was gated on having more than one, on the reasoning
+                    // that a list of your only tribe is a list of one. But the
+                    // card is not a list entry, it is the tribe's own summary
+                    // and its four shortcuts — moderation, group chat, the
+                    // public page, manage — and a keeper of one was the only
+                    // person who could not reach them.
+                    if (!scoped) ...[
                       SliverToBoxAdapter(
                         child: _SectionHeader(
-                          title: 'Your tribes',
+                          title: overview.tribes.length == 1
+                              ? 'Your tribe'
+                              : 'Your tribes',
                           action: 'New tribe',
                           onAction: () => context.push('/tribes/new'),
                         ),
@@ -732,14 +738,15 @@ class _PrimaryManage extends ConsumerWidget {
 /// place up. Those are five different jobs, and a link belongs under the job
 /// it serves rather than in a flat list sorted by nothing.
 ///
-/// Two groups, not five. Thirty tiles was the correction to cutting too far
-/// and it overshot: five labelled grids is most of a screen of icons, and by
-/// the third heading a keeper is reading a directory rather than reaching for
-/// something. What is left is the two jobs somebody opens the Studio to do —
-/// publish something, or run the place — at six each.
+/// Three groups of six. Thirty tiles in five grids was a directory; twelve in
+/// two was short of the tribe's own settings, which is where a keeper spends
+/// the other half of their time. Eighteen covers publishing, running the place
+/// and setting it up, which are the three jobs, and stops there.
 ///
-/// The other eighteen destinations did not disappear; they moved to the
-/// drawer, which is the right shape for a complete index and costs one tap.
+/// The remaining twelve destinations live in the drawer — discover, whispers,
+/// goals, alerts, appeals, friends, the inbox, the member feed, the public
+/// page, cover art, new tribe, settings. That is the right shape for a
+/// complete index and it costs one tap.
 ///
 /// No tile repeats a destination the KPI row above already links to, and none
 /// carries a number stated up there: Members, Join requests, Reports and Vents
@@ -861,6 +868,65 @@ class _QuickLinks extends ConsumerWidget {
               icon: Icons.admin_panel_settings_rounded,
               label: 'Co-mods',
               onTap: () => context.push('/keeper/comod'),
+            ),
+          ],
+        ),
+        _LinkGroup(
+          title: 'Set up',
+          links: [
+            _Link(
+              icon: Icons.people_alt_rounded,
+              label: 'Members',
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings/members',
+              ),
+            ),
+            _Link(
+              icon: Icons.badge_rounded,
+              label: 'Identity',
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings/identity',
+              ),
+            ),
+            _Link(
+              icon: Icons.grid_view_rounded,
+              label: 'Spaces',
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings/spaces',
+              ),
+            ),
+            _Link(
+              icon: Icons.shield_moon_rounded,
+              label: 'Content',
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings/content',
+              ),
+            ),
+            _Link(
+              icon: Icons.volunteer_activism_rounded,
+              label: 'Helpers',
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings/helpers',
+              ),
+            ),
+            _Link(
+              icon: Icons.receipt_long_rounded,
+              label: 'Audit log',
+              onTap: () => _openForTribe(
+                context,
+                ref,
+                (slug) => '/tribe/$slug/manage/settings/audit',
+              ),
             ),
           ],
         ),

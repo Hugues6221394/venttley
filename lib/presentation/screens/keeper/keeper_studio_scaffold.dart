@@ -64,7 +64,10 @@ class KeeperStudioScaffold extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scoped = ref.watch(studioScopedTribesProvider);
-    final selected = ref.watch(studioSelectedTribeProvider);
+    // Focus, not selection: a keeper of one has nothing to pick, so the
+    // per-tribe body renders for their tribe instead of offering them a
+    // list with one row on it.
+    final selected = ref.watch(studioFocusTribeProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,

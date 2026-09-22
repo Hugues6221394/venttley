@@ -294,6 +294,91 @@ void main() {
       await two.read(tribesIKeepProvider.future);
       expect(two.read(studioHasMultipleTribesProvider), isTrue);
     });
+
+    test('a keeper of one tribe is never asked which tribe', () async {
+      // The selector hiding itself has a consequence nobody followed through:
+      // if it never renders, nothing ever sets the scope, so
+      // studioSelectedTribeProvider stays null forever.
+      //
+      // Six Studio surfaces read that provider to decide whether they had
+      // anything to show. Moderation, Co-mods, Insights and the Calendar each
+      // sat on a picker or a spinner, and the Content Studio told a keeper
+      // looking at their own tribe's name to "create a tribe first" — all of
+      // them broken for exactly the keepers who had no choice to make.
+      //
+      // studioFocusTribeProvider is the question those surfaces meant to ask.
+      final one = ProviderContainer(
+        overrides: [
+          repositoryProvider.overrideWithValue(
+            _FakeRepo(kept: [_tribe('a', 'Alpha', 3)]),
+          ),
+        ],
+      );
+      addTearDown(one.dispose);
+      await one.read(tribesIKeepProvider.future);
+
+      expect(
+        one.read(studioSelectedTribeProvider),
+        isNull,
+        reason: 'nothing has been chosen, because there was nothing to choose',
+      );
+      expect(
+        one.read(studioFocusTribeProvider)?.name,
+        'Alpha',
+        reason: 'the only tribe is the tribe to act on',
+      );
+    });
+
+    test('a keeper of several is still asked', () async {
+      // The fallback must not become a default. Picking one of three on the
+      // keeper's behalf is how a prompt meant for a small support tribe lands
+      // in front of a big one — the bug resolveStudioTargetTribe exists for.
+      final many = ProviderContainer(
+        overrides: [
+          repositoryProvider.overrideWithValue(
+            _FakeRepo(
+              kept: [_tribe('a', 'Alpha', 3), _tribe('b', 'Beta', 4)],
+            ),
+          ),
+        ],
+      );
+      addTearDown(many.dispose);
+      await many.read(tribesIKeepProvider.future);
+
+      expect(
+        many.read(studioFocusTribeProvider),
+        isNull,
+        reason: 'two tribes is a real question, so it stays a question',
+      );
+    });
+
+    test('no Studio surface decides by selection alone any more', () {
+      // The six that did. A per-tribe page reading studioSelectedTribeProvider
+      // is reading "has somebody picked", not "which tribe" — and those are
+      // the same answer only for keepers of more than one.
+      final offenders = <String>[];
+      for (final path in const [
+        'lib/presentation/screens/keeper/keeper_insights_screen.dart',
+        'lib/presentation/screens/keeper/keeper_comod_screen.dart',
+        'lib/presentation/screens/keeper/keeper_moderation_center_screen.dart',
+        'lib/presentation/screens/keeper/keeper_engagement_calendar_screen.dart',
+        'lib/presentation/screens/keeper/keeper_studio_scaffold.dart',
+        'lib/presentation/screens/home/keeper_analytics_screen.dart',
+        'lib/presentation/widgets/keeper_content_studio_sheet.dart',
+      ]) {
+        final src = File(path).readAsStringSync();
+        if (src.contains('watch(studioSelectedTribeProvider)')) {
+          offenders.add(path);
+        }
+      }
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            'these are per-tribe surfaces, so they want studioFocusTribeProvider '
+            '— with the selection provider they are dead for a keeper of one',
+      );
+    });
   });
 
   group('Members — All Tribes', () {

@@ -137,15 +137,23 @@ void main() {
       ),
     );
 
-    // The four numbers, once each.
-    expect(find.text('120'), findsOne);
-    expect(find.text('3'), findsOne);
-    expect(find.text('9'), findsOne);
-    expect(find.text('2'), findsOne);
+    // The four numbers in the strip. `findsWidgets` rather than `findsOne`
+    // because the tribe's own summary card below repeats its per-tribe
+    // breakdown — which is not the duplication this screen was rebuilt to
+    // remove. A total stated once at the top and the same tribe's figure in
+    // its own card are two different statements; five renderings of
+    // totalOpenReports in five card styles were one statement, five times.
+    // The source-level test at the bottom still holds the line on that.
+    expect(find.text('120'), findsWidgets);
+    expect(find.text('3'), findsWidgets);
+    expect(find.text('9'), findsWidgets);
+    expect(find.text('2'), findsWidgets);
 
     // Reports is the one that mattered: a keeper who saw a count had to hunt
     // for Moderation in a tile further down the same screen.
-    await tester.tap(find.text('Reports'));
+    // `.first` is the KPI strip's own label; the tribe card below has a
+    // per-tribe Reports figure of its own.
+    await tester.tap(find.text('Reports').first);
     await tester.pumpAndSettle();
     expect(_visited, contains('/keeper/moderation'));
   });
@@ -161,7 +169,9 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Members'));
+    // `.first` is the KPI strip; "Members" is also a quick link under Set up,
+    // and both go to the same place.
+    await tester.tap(find.text('Members').first);
     await tester.pumpAndSettle();
     expect(_visited, contains('/tribe/alpha/manage/settings/members'));
   });
@@ -213,7 +223,10 @@ void main() {
     // because the four numbers below belong to it. Twice, deliberately: once
     // in the scope header, and once under Manage Tribe, which is naming what
     // it will open rather than repeating a statistic.
-    expect(find.text('Alpha'), findsNWidgets(2));
+    // Three times: the scope header, the Manage Tribe button naming its
+    // target, and the tribe's own summary card — which a keeper of one now
+    // gets too, since it carries that tribe's shortcuts.
+    expect(find.text('Alpha'), findsNWidgets(3));
 
     // The member count is the scope header's own line, so finding it is how
     // we know the header rendered rather than the rail.
@@ -248,12 +261,12 @@ void main() {
     }
   });
 
-  testWidgets('the panel stays at two groups', (tester) async {
-    // Thirty tiles in five labelled grids was most of a screen of icons, and
-    // by the third heading it read as a directory rather than something to
-    // reach into. The other eighteen destinations live in the drawer, which is
-    // the right shape for a complete index. This fails if a third group grows
-    // back here rather than going there.
+  testWidgets('the panel stays at three groups', (tester) async {
+    // Thirty tiles in five labelled grids read as a directory; twelve in two
+    // was short of the tribe's own settings. Three groups of six covers
+    // publishing, running the place and setting it up — the three jobs — and
+    // the remaining twelve destinations live in the drawer. This fails if a
+    // fourth group grows back here rather than going there.
     await _pumpStudio(
       tester,
       _FakeRepo(
@@ -262,10 +275,10 @@ void main() {
       ),
     );
 
-    for (final heading in const ['CREATE', 'RUN YOUR TRIBE']) {
+    for (final heading in const ['CREATE', 'RUN YOUR TRIBE', 'SET UP']) {
       expect(find.text(heading), findsOne);
     }
-    for (final gone in const ['SAFETY', 'COMMUNITY', 'GROW', 'SET UP']) {
+    for (final gone in const ['SAFETY', 'COMMUNITY', 'GROW']) {
       expect(
         find.text(gone),
         findsNothing,

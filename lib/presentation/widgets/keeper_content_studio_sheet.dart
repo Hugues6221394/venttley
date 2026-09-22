@@ -89,11 +89,23 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Scoped, so the sheet's deep links point at the tribe the keeper is
-    // actually looking at. Null under All Tribes, which the slug guards
-    // already handle.
-    final tribe = ref.watch(studioSelectedTribeProvider);
-    final slug = tribe?.slug;
+    // What this sheet needs to know is whether the keeper has anywhere to
+    // publish — not whether they have picked a scope.
+    //
+    // It asked studioSelectedTribeProvider, which is null until somebody
+    // explicitly chooses a tribe from the rail. A keeper of one tribe never
+    // sees that rail, so the scope was always null and every action here was
+    // disabled under the words "Create a tribe first to publish community
+    // content" — said to somebody who was, at that moment, looking at their
+    // own tribe's name three rows above. A keeper of three on All Tribes got
+    // the same dead sheet.
+    //
+    // Every action already resolves its own target through
+    // resolveStudioTargetTribe, which picks the scoped tribe, or the only one,
+    // or asks. So the sheet is enabled whenever a tribe exists, and the
+    // subtitle names the destination only when it is already unambiguous.
+    final tribe = ref.watch(studioFocusTribeProvider);
+    final canPublish = ref.watch(studioScopedTribesProvider).isNotEmpty;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.62,
@@ -130,9 +142,11 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                 ),
               ),
               Text(
-                tribe == null
+                !canPublish
                     ? 'Create a tribe first to publish community content.'
-                    : 'Publishing to ${tribe.name}',
+                    : tribe != null
+                    ? 'Publishing to ${tribe.name}'
+                    : 'You will be asked which tribe to publish to.',
                 style: TextStyle(
                   color: context.ink.withOpacity(0.62),
                   fontWeight: FontWeight.w700,
@@ -147,7 +161,7 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                   _StudioChip(
                     icon: Icons.lightbulb_outline_rounded,
                     label: 'Prompt',
-                    enabled: slug != null,
+                    enabled: canPublish,
                     onTap: () => Navigator.pop(
                       context,
                       KeeperContentStudioAction.prompt,
@@ -156,14 +170,14 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                   _StudioChip(
                     icon: Icons.poll_rounded,
                     label: 'Poll',
-                    enabled: slug != null,
+                    enabled: canPublish,
                     onTap: () =>
                         Navigator.pop(context, KeeperContentStudioAction.poll),
                   ),
                   _StudioChip(
                     icon: Icons.campaign_outlined,
                     label: 'Announcement',
-                    enabled: slug != null,
+                    enabled: canPublish,
                     onTap: () => Navigator.pop(
                       context,
                       KeeperContentStudioAction.announcement,
@@ -172,7 +186,7 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                   _StudioChip(
                     icon: Icons.push_pin_outlined,
                     label: 'Pin post',
-                    enabled: slug != null,
+                    enabled: canPublish,
                     onTap: () => Navigator.pop(
                       context,
                       KeeperContentStudioAction.pinPost,
@@ -181,7 +195,7 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                   _StudioChip(
                     icon: Icons.schedule_rounded,
                     label: 'Schedule',
-                    enabled: slug != null,
+                    enabled: canPublish,
                     onTap: () => Navigator.pop(
                       context,
                       KeeperContentStudioAction.schedule,
@@ -190,7 +204,7 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                   _StudioChip(
                     icon: Icons.waving_hand_outlined,
                     label: 'Welcome msg',
-                    enabled: slug != null,
+                    enabled: canPublish,
                     onTap: () => Navigator.pop(
                       context,
                       KeeperContentStudioAction.welcomeMessage,
@@ -199,7 +213,7 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                   _StudioChip(
                     icon: Icons.add_box_outlined,
                     label: 'New space',
-                    enabled: slug != null,
+                    enabled: canPublish,
                     onTap: () => Navigator.pop(
                       context,
                       KeeperContentStudioAction.newSpace,
@@ -208,13 +222,13 @@ class _KeeperContentStudioSheet extends ConsumerWidget {
                   _StudioChip(
                     icon: Icons.rule_rounded,
                     label: 'Rules',
-                    enabled: slug != null,
+                    enabled: canPublish,
                     onTap: () =>
                         Navigator.pop(context, KeeperContentStudioAction.rules),
                   ),
                 ],
               ),
-              if (slug == null) ...[
+              if (!canPublish) ...[
                 const SizedBox(height: 20),
                 FilledButton.icon(
                   onPressed: () {

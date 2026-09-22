@@ -22,7 +22,7 @@ class KeeperAnalyticsScreen extends ConsumerWidget {
     // is a real answer here rather than a chooser — but it has to be the
     // *scoped* roll-up, not every tribe's numbers under one tribe's name.
     final overviewAsync = ref.watch(studioScopedOverviewProvider);
-    final tribe = ref.watch(studioSelectedTribeProvider);
+    final tribe = ref.watch(studioFocusTribeProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,

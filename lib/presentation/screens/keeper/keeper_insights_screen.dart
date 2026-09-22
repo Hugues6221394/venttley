@@ -19,7 +19,7 @@ class KeeperInsightsScreen extends ConsumerWidget {
     // Scoped, not "primary". This page describes one community, so
     // under All Tribes the scaffold asks which one rather than
     // answering for whichever tribe happens to be largest.
-    final tribe = ref.watch(studioSelectedTribeProvider);
+    final tribe = ref.watch(studioFocusTribeProvider);
     final tribeId = tribe?.tribeId;
     final insightsAsync = tribeId == null
         ? const AsyncValue<KeeperAiInsights>.loading()

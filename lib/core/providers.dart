@@ -1004,6 +1004,29 @@ final studioSelectedTribeProvider = Provider.autoDispose<Tribe?>((ref) {
 /// This is what a page should aggregate over. It is the single definition of
 /// "what am I looking at", so a KPI, a member list and a content list on
 /// three different pages cannot disagree about the answer.
+/// The tribe a Studio page should act on, without being asked.
+///
+/// [studioSelectedTribeProvider] answers a narrower question: which tribe has
+/// been *explicitly* chosen from the scope rail. That is null until somebody
+/// picks one — and a keeper with a single tribe never sees the rail, because a
+/// row with one option in it is furniture.
+///
+/// Screens used the narrow one to decide whether they had anything to show, so
+/// Moderation, Co-mods, Insights and the Calendar all sat on a picker or a
+/// spinner for exactly the keepers who had no choice to make, and the Content
+/// Studio told a keeper looking at their own tribe's name to "create a tribe
+/// first". This is the question those screens meant to ask: the chosen tribe,
+/// or the only one there is.
+///
+/// Still null when a keeper of several has not chosen, which is correct —
+/// there the picker is a real question rather than a formality.
+final studioFocusTribeProvider = Provider.autoDispose<Tribe?>((ref) {
+  final selected = ref.watch(studioSelectedTribeProvider);
+  if (selected != null) return selected;
+  final kept = ref.watch(tribesIKeepProvider).valueOrNull ?? const <Tribe>[];
+  return kept.length == 1 ? kept.single : null;
+});
+
 final studioScopedTribesProvider = Provider.autoDispose<List<Tribe>>((ref) {
   final selected = ref.watch(studioSelectedTribeProvider);
   if (selected != null) return <Tribe>[selected];
