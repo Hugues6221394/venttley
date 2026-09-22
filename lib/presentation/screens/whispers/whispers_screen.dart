@@ -24,6 +24,7 @@ import '../../widgets/whisper_comments_sheet.dart';
 import '../../widgets/whisper_mini_player.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/whisper_share_sheet.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Whispers — TikTok/Reels-style vertical audio feed.
 ///
@@ -1462,8 +1463,12 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
           child: Container(
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+            // The one surface on this screen that is not part of the
+            // immersive player. Every other white here is deliberate — it
+            // sits on artwork or on a black scrim, where it reads the same in
+            // any theme. This is a sheet on the app, so it follows the theme.
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: GlassTokens.card(context),
               borderRadius: BorderRadius.circular(28),
               border: Border.all(
                 color: VentlyColors.berryMagenta.withOpacity(0.22),

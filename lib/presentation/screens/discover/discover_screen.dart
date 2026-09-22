@@ -14,6 +14,7 @@ import '../../widgets/profile_avatar.dart';
 import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/verified_badge.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Discover — Image #12.
 ///
@@ -255,9 +256,9 @@ class _SearchField extends StatelessWidget {
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: GlassTokens.card(context),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.55)),
+          border: Border.all(color: GlassTokens.cardEdge(context)),
         ),
         child: Row(
           children: [
@@ -538,10 +539,10 @@ class _TribeResultTile extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: GlassTokens.card(context),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: VentlyColors.softMauve.withOpacity(0.4),
+                color: GlassTokens.cardEdge(context),
               ),
             ),
             child: Row(
@@ -617,10 +618,10 @@ class _PostResultTile extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: GlassTokens.card(context),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: VentlyColors.softMauve.withOpacity(0.4),
+                color: GlassTokens.cardEdge(context),
               ),
             ),
             child: Row(
@@ -840,10 +841,10 @@ class _TrendingSearchesRow extends StatelessWidget {
                     vertical: 7,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: GlassTokens.card(context),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: VentlyColors.softMauve.withOpacity(0.5),
+                      color: GlassTokens.cardEdge(context),
                     ),
                   ),
                   child: Row(
@@ -941,10 +942,10 @@ class _RecentRow extends StatelessWidget {
                     vertical: 7,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: GlassTokens.card(context),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: VentlyColors.softMauve.withOpacity(0.5),
+                      color: GlassTokens.cardEdge(context),
                     ),
                   ),
                   child: Row(
@@ -1094,9 +1095,9 @@ class _NoteworthyTribeCard extends StatelessWidget {
         width: 174,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: GlassTokens.card(context),
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.55)),
+          border: Border.all(color: GlassTokens.cardEdge(context)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1276,9 +1277,9 @@ class _FeaturedVoiceCard extends ConsumerWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: GlassTokens.card(context),
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.55)),
+          border: Border.all(color: GlassTokens.cardEdge(context)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1461,9 +1462,9 @@ class _MiniVoiceCard extends ConsumerWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.55)),
+        border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
       child: horizontal
           ? Row(children: content)
@@ -1514,12 +1515,17 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
       return InkWell(
         onTap: _busy || _sent ? null : _follow,
         customBorder: const CircleBorder(),
+        // The sent state was softMauve at 60% with a white glyph on it —
+        // #F3E4EA is a near-white pink, so that is white on white, in both
+        // themes. It was never a dark-mode bug; it was unreadable everywhere
+        // and only ever appears after you have tapped, which is why nobody
+        // looked at it.
         child: Container(
           width: 36,
           height: 36,
           decoration: BoxDecoration(
             color: _sent
-                ? VentlyColors.softMauve.withOpacity(0.6)
+                ? GlassTokens.cardChip(context)
                 : VentlyColors.berryMagenta,
             shape: BoxShape.circle,
           ),
@@ -1535,7 +1541,9 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
                 )
               : Icon(
                   _sent ? Icons.check_rounded : Icons.add_rounded,
-                  color: Colors.white,
+                  color: _sent
+                      ? GlassTokens.onCardMuted(context)
+                      : Colors.white,
                   size: 18,
                 ),
         ),
@@ -1545,8 +1553,11 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
       onPressed: _busy || _sent ? null : _follow,
       style: FilledButton.styleFrom(
         backgroundColor: _sent
-            ? VentlyColors.softMauve.withOpacity(0.6)
+            ? GlassTokens.cardChip(context)
             : VentlyColors.berryMagenta,
+        foregroundColor: _sent
+            ? GlassTokens.onCardMuted(context)
+            : Colors.white,
         visualDensity: VisualDensity.compact,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -1562,8 +1573,10 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
             )
           : Text(
               _sent ? 'Pending' : 'Follow',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: _sent
+                    ? GlassTokens.onCardMuted(context)
+                    : Colors.white,
                 fontWeight: FontWeight.w900,
                 fontSize: 12,
               ),
@@ -1613,7 +1626,7 @@ class _RecommendedTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: GlassTokens.card(context),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
               color: (accent ?? VentlyColors.softMauve).withOpacity(0.58),
@@ -1741,9 +1754,9 @@ class _EmptyHint extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.45)),
+        border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
       child: Row(
         children: [

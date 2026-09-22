@@ -18,6 +18,7 @@ import '../../widgets/vently_premium_background.dart';
 import '../../widgets/whisper_audio_preview.dart';
 import '../../widgets/music_track_card.dart';
 import '../../widgets/whisper_preview_sheet.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Create Whisper — record audio + tag category + pick background +
 /// choose voice filter + publish.
@@ -476,11 +477,11 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
                     hintText: 'A tiny headline for your story…',
                     hintStyle: TextStyle(color: context.ink.withOpacity(0.42)),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: GlassTokens.card(context),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide(
-                        color: VentlyColors.softMauve.withOpacity(0.5),
+                        color: GlassTokens.cardEdge(context),
                       ),
                     ),
                   ),
@@ -501,11 +502,11 @@ class _CreateWhisperScreenState extends ConsumerState<CreateWhisperScreen> {
                         'Add context, advice, or a question for listeners…',
                     hintStyle: TextStyle(color: context.ink.withOpacity(0.42)),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: GlassTokens.card(context),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide(
-                        color: VentlyColors.softMauve.withOpacity(0.5),
+                        color: GlassTokens.cardEdge(context),
                       ),
                     ),
                   ),
@@ -643,9 +644,9 @@ class _RecordButton extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.45)),
+        border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
       child: Row(
         children: [
@@ -756,12 +757,14 @@ class _CategoryPicker extends StatelessWidget {
               duration: const Duration(milliseconds: 160),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: c == active ? VentlyColors.berryMagenta : Colors.white,
+                color: c == active
+                    ? VentlyColors.berryMagenta
+                    : GlassTokens.card(context),
                 borderRadius: BorderRadius.circular(18),
                 border: c == active
                     ? null
                     : Border.all(
-                        color: VentlyColors.softMauve.withOpacity(0.4),
+                        color: GlassTokens.cardEdge(context),
                       ),
               ),
               child: Text(
@@ -855,9 +858,9 @@ class _VoiceProcessingCard extends StatelessWidget {
       height: 72,
       padding: const EdgeInsets.symmetric(horizontal: 18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.45)),
+        border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
       child: Row(
         children: [
