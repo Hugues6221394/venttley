@@ -374,7 +374,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
       await _showStoryActivity();
     } else if (action == 'settings') {
       _resume();
-      context.push('/settings');
+      context.push('/settings-preview');
     } else if (action == 'delete') {
       await _deleteCurrentStory();
     } else {

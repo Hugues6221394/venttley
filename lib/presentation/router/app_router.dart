@@ -590,6 +590,28 @@ final routerProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
+      // Root-navigator twins, for destinations that normally live inside the
+      // shell but are opened from a route that does not.
+      //
+      // Pushing a shell-owned route from a root one reserves the stateful
+      // branch navigator keys a second time and trips
+      // `!keyReservation.contains(key)`, which surfaces to a user as "this
+      // part of Venttly didn't load". /user-preview and /post-preview already
+      // existed for exactly this; these two close the remaining cases —
+      // "Full tribe manage" from a chat hub, and Settings from the story
+      // composer and the story viewer.
+      //
+      // `go` does not need a twin: it replaces the stack, so the shell is
+      // rebuilt rather than re-entered. Only `push` is affected.
+      GoRoute(
+        path: '/manage-preview/:slug',
+        builder: (ctx, st) =>
+            TribeManageScreen(slug: st.pathParameters['slug']!),
+      ),
+      GoRoute(
+        path: '/settings-preview',
+        builder: (_, __) => const SettingsScreen(),
+      ),
       GoRoute(
         path: '/group-chat/:roomId/settings',
         builder: (ctx, st) =>

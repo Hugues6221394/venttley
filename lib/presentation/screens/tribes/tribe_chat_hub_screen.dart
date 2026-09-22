@@ -188,7 +188,7 @@ class _HubBody extends ConsumerWidget {
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: () =>
-                          context.push('/tribe/${tribe.slug}/manage'),
+                          context.push('/manage-preview/${tribe.slug}'),
                       icon: const Icon(Icons.tune_rounded, size: 18),
                       label: const Text(
                         'Full tribe manage',

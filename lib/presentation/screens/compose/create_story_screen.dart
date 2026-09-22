@@ -422,7 +422,7 @@ class _Header extends StatelessWidget {
               color: context.ink.withOpacity(0.78),
             ),
             tooltip: 'Story settings',
-            onPressed: () => context.push('/settings'),
+            onPressed: () => context.push('/settings-preview'),
           ),
         ],
       ),
