@@ -1891,10 +1891,11 @@ class VentlyRepository implements MusicProvider {
   }
 
   /// Starts the 30-day deletion grace period (deactivates immediately).
-  Future<void> requestAccountDeletion() {
+  Future<void> requestAccountDeletion({required String password}) async {
     final live = _live;
-    if (live != null) return live.requestAccountDeletion();
-    return Future.value();
+    if (live != null) {
+      return live.requestAccountDeletion(password: password);
+    }
   }
 
   /// Restores a deactivated account / cancels a pending deletion on login.

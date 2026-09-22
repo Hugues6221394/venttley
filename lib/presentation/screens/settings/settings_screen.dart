@@ -540,47 +540,75 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
-    final scheme = Theme.of(context).colorScheme;
-    final ok =
-        await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Delete account?'),
-            content: const Text(
-              'Your account is deactivated now and permanently deleted after '
-              '30 days — including your vents, whispers, tribes, and messages. '
-              'This cannot be undone once the 30 days pass.\n\n'
-              'Change your mind? Just log back in within 30 days and your '
-              'account is fully restored.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Keep my account'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: scheme.error,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Delete'),
-              ),
-            ],
+    // Two steps: understand, then prove it is you.
+    //
+    // This used to be one dialog with a Delete button, so anyone holding an
+    // unlocked phone could end somebody's account in two taps. The password is
+    // verified on the server inside the same call that starts the clock, so a
+    // client that skipped this screen would still be refused.
+    final understood = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: const Text(
+          'Your account is hidden straight away — your vents, whispers and '
+          'stories disappear for everyone else, and so do the notifications '
+          'about them.\n\n'
+          'Nothing is erased for 30 days. Log back in any time before then '
+          'and everything comes back exactly as it was. After 30 days it is '
+          'deleted for good.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep my account'),
           ),
-        ) ??
-        false;
-    if (!ok || !context.mounted) return;
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (understood != true || !context.mounted) return;
+
+    final password = await showDialog<String>(
+      context: context,
+      builder: (ctx) => const _ConfirmPasswordDialog(),
+    );
+    if (password == null || password.isEmpty || !context.mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(sessionProvider.notifier).deleteAccount();
+      await ref.read(sessionProvider.notifier).deleteAccount(password: password);
       if (context.mounted) context.go('/onboarding');
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not schedule deletion: $e')),
-        );
-      }
+      if (!context.mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(_deletionMessage(e))));
     }
+  }
+
+  /// The server's refusals, in words a person can act on.
+  ///
+  /// Three of them are not failures at all — they are the feature working, and
+  /// "Could not schedule deletion: PostgrestException(...)" told somebody
+  /// nothing about what to do next.
+  String _deletionMessage(Object error) {
+    final raw = error.toString();
+    if (raw.contains('password_incorrect') || raw.contains('password_required')) {
+      return "That password doesn't match. Nothing has been deleted.";
+    }
+    if (raw.contains('rate_limited')) {
+      return 'Too many attempts. Try again in a little while.';
+    }
+    if (raw.contains('tribe_needs_a_keeper')) {
+      final named = RegExp(r'tribe_needs_a_keeper: ([^"\\)]+)').firstMatch(raw);
+      final tribes = named?.group(1)?.trim();
+      return tribes == null
+          ? 'Hand your tribe to another keeper first, then you can delete.'
+          : 'Hand $tribes to another keeper first, then you can delete.';
+    }
+    return 'Could not start deletion. Please try again.';
   }
 
   /// GDPR/CCPA export — pulls the caller's full data bundle and hands it to the
@@ -797,5 +825,74 @@ String _verificationSubtitle(VerificationState? state) {
       return 'Removed';
     default:
       return 'Apply for the verified check';
+  }
+}
+
+/// Asks for the account password before anything irreversible starts.
+class _ConfirmPasswordDialog extends StatefulWidget {
+  const _ConfirmPasswordDialog();
+
+  @override
+  State<_ConfirmPasswordDialog> createState() => _ConfirmPasswordDialogState();
+}
+
+class _ConfirmPasswordDialogState extends State<_ConfirmPasswordDialog> {
+  final _controller = TextEditingController();
+  bool _obscured = true;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: const Text('Confirm it is you'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Enter your password to start the 30-day deletion.',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _controller,
+            obscureText: _obscured,
+            autofocus: true,
+            onSubmitted: (v) => Navigator.pop(context, v),
+            decoration: InputDecoration(
+              labelText: 'Password',
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscured
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
+                ),
+                onPressed: () => setState(() => _obscured = !_obscured),
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: scheme.error,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: const Text('Delete my account'),
+        ),
+      ],
+    );
   }
 }

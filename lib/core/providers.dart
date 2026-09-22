@@ -372,8 +372,12 @@ class SessionController extends StateNotifier<AppUser?> {
 
   /// Start the 30-day deletion grace period, then sign out. Logging back in
   /// within the window cancels the deletion; after 30 days data is purged.
-  Future<void> deleteAccount() async {
-    await _repo.requestAccountDeletion();
+  ///
+  /// The password is not checked here. It goes to the server, which verifies
+  /// it against auth.users in the same statement that starts the clock — a
+  /// client-side check would be a suggestion rather than a gate.
+  Future<void> deleteAccount({required String password}) async {
+    await _repo.requestAccountDeletion(password: password);
     await logout();
   }
 

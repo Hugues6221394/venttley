@@ -3883,8 +3883,16 @@ class SupabaseBackend {
 
   /// Starts the 30-day deletion clock and deactivates immediately. Logging
   /// back in within the window cancels the deletion.
-  Future<void> requestAccountDeletion() async {
-    await _client.rpc('request_account_deletion');
+  ///
+  /// The password is checked server-side, inside the same call that starts the
+  /// clock — not by a separate "verify" round trip that a client could skip.
+  /// The RPC also refuses when the caller keeps a tribe that still has other
+  /// members in it.
+  Future<void> requestAccountDeletion({required String password}) async {
+    await _client.rpc(
+      'request_account_deletion',
+      params: {'p_password': password},
+    );
   }
 
   /// Called on every successful session restore — restores a deactivated
