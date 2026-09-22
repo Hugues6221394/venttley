@@ -7,21 +7,27 @@ import 'package:go_router/go_router.dart';
 /// when the id is you.
 void openUserProfile(BuildContext context, String? userId) {
   if (userId == null || userId.trim().isEmpty) return;
-  final currentPath = GoRouterState.of(context).uri.path;
-  // Tribe and space chats belong on this list too. They are pushed onto the
-  // root navigator so the footer nav gets out of the way, exactly like the DM
-  // routes above — but their paths start with /tribe/, so the check missed
-  // them and opened a shell-owned route from a root one. That is the
-  // double-reservation of the stateful branch keys these preview routes exist
-  // to avoid.
-  final fromRootConversation =
-      currentPath.startsWith('/chat/') ||
-      currentPath.startsWith('/group-chat/') ||
-      currentPath.startsWith('/post-preview/') ||
-      currentPath.contains('/chat');
-  context.push(
-    fromRootConversation ? '/user-preview/$userId' : '/user/$userId',
-  );
+
+  // Ask the tree, not the path.
+  //
+  // This used to decide by matching the current location against a list of
+  // prefixes — /chat/, /group-chat/, /post-preview/ — and the list was always
+  // going to be incomplete. Tribe and space chats are pushed onto the root
+  // navigator for the same reason those are, but their paths begin with
+  // /tribe/, so a profile opened from a space's chat info page pushed a
+  // shell-owned route from outside the shell and tripped
+  //
+  //   'package:flutter/src/widgets/navigator.dart': Failed assertion:
+  //   '!keyReservation.contains(key)': is not true.
+  //
+  // which surfaces as the "This part of Venttly didn't load" boundary.
+  //
+  // Whether the nearest Navigator is the root one answers the actual question
+  // and cannot fall behind the router: if it is, this route is outside the
+  // shell and needs the root-safe twin.
+  final onRoot =
+      Navigator.of(context) == Navigator.of(context, rootNavigator: true);
+  context.push(onRoot ? '/user-preview/$userId' : '/user/$userId');
 }
 
 /// Wraps [child] so tapping it opens [userId]'s public profile.

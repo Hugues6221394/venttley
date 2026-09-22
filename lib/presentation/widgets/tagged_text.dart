@@ -9,6 +9,7 @@ import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
 import 'profile_avatar.dart';
+import 'user_link.dart';
 
 /// Instagram-style tag rendering: any `@handle` inside [text] renders as a
 /// tappable rose token. Tapping resolves the handle server-side (users win
@@ -54,7 +55,11 @@ class _TaggedTextState extends ConsumerState<TaggedText> {
     final resolved = await repo.resolveTag(handle);
     if (!mounted || resolved == null) return;
     if (resolved.kind == 'user') {
-      router.push('/user/${resolved.id}');
+      // Through openUserProfile, not by hand. Tagged text renders inside chat
+      // messages, which live outside the shell — pushing the shell-owned
+      // profile route from there is the assertion that surfaces as "This part
+      // of Venttly didn't load".
+      openUserProfile(context, resolved.id);
     } else if (resolved.kind == 'tribe' && resolved.slug != null) {
       router.push('/tribe/${resolved.slug}');
     }

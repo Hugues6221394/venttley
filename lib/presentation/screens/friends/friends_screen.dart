@@ -1575,7 +1575,7 @@ class _SuggestionCardState extends ConsumerState<_SuggestionCard> {
       // profile is where that decision can actually be made. The button keeps
       // its own taps, so ADD still adds.
       child: InkWell(
-        onTap: () => context.push('/user/${widget.s.userId}'),
+        onTap: () => openUserProfile(context, widget.s.userId),
         borderRadius: BorderRadius.circular(22),
         child: SizedBox(
           width: 132,
@@ -1787,7 +1787,7 @@ class _FriendRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Pressable(
       pressedScale: 0.98,
-      onTap: () => context.push('/user/${friend.userId}'),
+      onTap: () => openUserProfile(context, friend.userId),
       child: Material(
         color: Colors.transparent,
         child: Container(
@@ -1902,7 +1902,7 @@ class _FriendRow extends ConsumerWidget {
                 ),
                 onTap: () {
                   Navigator.pop(sheetCtx);
-                  context.push('/user/${friend.userId}');
+                  openUserProfile(context, friend.userId);
                 },
               ),
               ListTile(

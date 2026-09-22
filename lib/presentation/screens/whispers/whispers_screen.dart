@@ -22,6 +22,7 @@ import '../../widgets/user_profile_link.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/whisper_comments_sheet.dart';
 import '../../widgets/whisper_mini_player.dart';
+import '../../widgets/user_link.dart';
 import '../../widgets/whisper_share_sheet.dart';
 
 /// Whispers — TikTok/Reels-style vertical audio feed.
@@ -1357,7 +1358,7 @@ class _CaptionBlock extends StatelessWidget {
             const SizedBox(width: 8),
             if (whisper.authorId != null)
               InkWell(
-                onTap: () => context.push('/user/${whisper.authorId}'),
+                onTap: () => openUserProfile(context, whisper.authorId),
                 child: Text(
                   whisper.authorDisplayName,
                   style: const TextStyle(
@@ -2173,7 +2174,7 @@ class _WhispersEmpty extends ConsumerWidget {
                         itemBuilder: (context, index) {
                           final person = people[index];
                           return InkWell(
-                            onTap: () => context.push('/user/${person.userId}'),
+                            onTap: () => openUserProfile(context, person.userId),
                             borderRadius: BorderRadius.circular(12),
                             child: SizedBox(
                               width: 72,

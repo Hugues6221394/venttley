@@ -31,6 +31,7 @@ import '../../widgets/vently_empty_state.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/tribe_avatar.dart';
+import '../../widgets/user_link.dart';
 import '../../widgets/vently_premium_background.dart';
 
 /// Premium home: live social pulse, friend stories, discovery rails, and a
@@ -277,7 +278,7 @@ class FeedScreen extends ConsumerWidget {
                                     context.push('/post/${post.postId}/share'),
                                 onMessage: () {
                                   if (post.authorId != null) {
-                                    context.push('/user/${post.authorId}');
+                                    openUserProfile(context, post.authorId);
                                   }
                                 },
                               ),
@@ -2354,7 +2355,7 @@ class _SuggestedPersonCard extends StatelessWidget {
       child: Column(
         children: [
           GestureDetector(
-            onTap: () => context.push('/user/${s.userId}'),
+            onTap: () => openUserProfile(context, s.userId),
             child: ProfileAvatar(
               avatarSeed: s.avatarSeed,
               label: s.pseudonym,
@@ -2365,7 +2366,7 @@ class _SuggestedPersonCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           GestureDetector(
-            onTap: () => context.push('/user/${s.userId}'),
+            onTap: () => openUserProfile(context, s.userId),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,

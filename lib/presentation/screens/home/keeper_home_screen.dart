@@ -7,7 +7,6 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/keeper/keeper_overview.dart';
 import '../../theme/colors.dart';
-import '../../theme/vently_tokens.dart';
 import 'home_shell.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/post_card.dart';
@@ -598,7 +597,7 @@ class _StatColumn extends StatelessWidget {
                 child: Icon(
                   stat.icon,
                   size: 17,
-                  color: VentlyColors.berryMagenta,
+                  color: GlassTokens.cardGlyph(context),
                 ),
               ),
               const SizedBox(height: 7),
@@ -959,11 +958,6 @@ class _LinkTile extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                // The Spaces chip: a berry wash with a berry glyph. One
-                // accent for the whole screen — the four-colour version read
-                // as a rainbow, and a keeper opening this does not need the
-                // app to tell them that publishing and moderating are
-                // different activities in two different hues.
                 Container(
                   width: 46,
                   height: 46,
@@ -974,7 +968,7 @@ class _LinkTile extends StatelessWidget {
                   child: Icon(
                     link.icon,
                     size: 22,
-                    color: VentlyColors.berryMagenta,
+                    color: GlassTokens.cardGlyph(context),
                   ),
                 ),
                 if (link.badge != null)

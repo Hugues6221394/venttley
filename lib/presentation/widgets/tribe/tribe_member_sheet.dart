@@ -7,6 +7,7 @@ import '../../../core/vently_haptics.dart';
 import '../../../domain/tribe/tribe_chat_hub.dart';
 import '../../theme/colors.dart';
 import '../glass_surfaces.dart';
+import '../user_link.dart';
 import 'online_avatar_ring.dart';
 
 /// Quick member roster from chat header — faster than opening full hub.
@@ -148,7 +149,7 @@ class _MemberTile extends ConsumerWidget {
         borderRadius: BorderRadius.circular(14),
         onTap: () {
           Navigator.pop(context);
-          context.push('/user/${member.userId}');
+          openUserProfile(context, member.userId);
         },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),

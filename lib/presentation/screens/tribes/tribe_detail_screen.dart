@@ -642,7 +642,7 @@ class _SpotlightBanner extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () => context.push('/user/${tribe.spotlightUserId}'),
+        onTap: () => openUserProfile(context, tribe.spotlightUserId),
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(

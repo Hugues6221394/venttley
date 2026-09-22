@@ -34,21 +34,57 @@ void main() {
     );
   });
 
-  test('a chat is a root conversation wherever it lives', () {
+  test('the route is chosen by the tree, not by matching path strings', () {
     final src = File(
       'lib/presentation/widgets/user_link.dart',
     ).readAsStringSync();
 
-    // Tribe and space chats are pushed onto the root navigator so the footer
-    // nav gets out of the way, but their paths start with /tribe/ — so the
-    // original check saw them as ordinary shell routes and opened a
-    // shell-owned profile from a root one.
+    // The prefix list was always going to fall behind the router. It had
+    // /chat/, /group-chat/ and /post-preview/ on it, and missed tribe and
+    // space chats, which are pushed onto the root navigator for exactly the
+    // same reason but whose paths begin with /tribe/. Opening a profile from a
+    // space's chat info page therefore pushed a shell-owned route from outside
+    // the shell and tripped !keyReservation.contains(key), which surfaces as
+    // the "This part of Venttly didn't load" boundary.
     expect(
       src,
-      contains("currentPath.contains('/chat')"),
+      contains('rootNavigator: true'),
       reason:
-          'tribe and space chats are on the root navigator too, so profiles '
-          'opened from them need the root-safe preview route',
+          'whether the nearest Navigator is the root one is the actual '
+          'question, and unlike a list of prefixes it cannot go stale',
+    );
+    expect(
+      src,
+      isNot(contains('GoRouterState.of(context).uri.path')),
+      reason: 'the path-prefix check should be gone, not merely extended',
+    );
+  });
+
+  test('nothing pushes a user profile route by hand', () {
+    // One place decides which of the two profile routes to use. Twenty-two
+    // call sites were pushing /user/:id directly, and the ones reachable from
+    // a chat were the ones that crashed — so the rule was correct and simply
+    // was not being asked.
+    final offenders = <String>[];
+    for (final entity in Directory('lib/presentation').listSync(
+      recursive: true,
+    )) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      if (entity.path.endsWith('user_link.dart')) continue;
+      final src = entity.readAsStringSync();
+      for (final line in src.split('\n')) {
+        // The stat sub-route is a different destination and is not affected.
+        if (line.contains("push('/user/") && !line.contains('/stat/')) {
+          offenders.add('${entity.uri.pathSegments.last}: ${line.trim()}');
+        }
+      }
+    }
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'these push a profile route directly instead of calling '
+          'openUserProfile, so they will crash from anywhere outside the shell',
     );
   });
 }

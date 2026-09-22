@@ -65,9 +65,24 @@ class GlassTokens {
   static Color onCardMuted(BuildContext context) =>
       onCard(context).withOpacity(0.6);
 
-  /// The chip a berry glyph sits in, on a [card]. The Spaces pattern.
+  /// The badge a glyph sits in, on a [card].
+  ///
+  /// Neutral, not a berry wash. With every icon on the screen in the brand
+  /// colour, berry stopped meaning anything — it was the KPI glyphs, the
+  /// twelve link glyphs, the active scope chip, the header and the primary
+  /// button all at once, so nothing on the screen was more berry than
+  /// anything else. Handing the icons to grey gives the colour back its job:
+  /// what is selected, and what to press.
   static Color cardChip(BuildContext context) =>
-      VentlyColors.berryMagenta.withOpacity(0.12);
+      Theme.of(context).brightness == Brightness.dark
+      ? Colors.white.withOpacity(0.09)
+      : VentlyColors.softMauve;
+
+  /// The glyph inside a [cardChip] — 7.4:1 against it.
+  static Color cardGlyph(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? VentlyColors.softOffWhite.withOpacity(0.78)
+      : VentlyColors.deepBurgundy.withOpacity(0.75);
 
   /// The welcome panel: a light grey slab on the dark canvas.
   static Color panel(BuildContext context) =>

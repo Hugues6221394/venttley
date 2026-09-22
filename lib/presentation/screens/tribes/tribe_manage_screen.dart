@@ -12,6 +12,7 @@ import '../../widgets/user_profile_link.dart';
 import '../../widgets/keeper_action_center.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/post_card.dart';
+import '../../widgets/user_link.dart';
 import 'tribe_helpers_screen.dart' show myTribePermissionsProvider;
 
 /// Plugz / Keeper creator dashboard.
@@ -1503,7 +1504,7 @@ class _MemberRow extends ConsumerWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => context.push('/user/${member.userId}'),
+        onTap: () => openUserProfile(context, member.userId),
         borderRadius: BorderRadius.circular(14),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
@@ -3191,7 +3192,7 @@ class _ContributorRow extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.open_in_new, size: 16),
               tooltip: 'Open profile',
-              onPressed: () => context.push('/user/${stat.authorId}'),
+              onPressed: () => openUserProfile(context, stat.authorId),
             ),
         ],
       ),

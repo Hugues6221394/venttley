@@ -16,6 +16,7 @@ import '../../widgets/tribe_avatar.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../widgets/user_link.dart';
 import 'home_shell.dart';
 
 /// Studio → Members.
@@ -916,7 +917,7 @@ class _MemberMenu extends ConsumerWidget {
     String action,
   ) async {
     if (action == 'profile') {
-      context.push('/user/${member.userId}');
+      openUserProfile(context, member.userId);
       return;
     }
 
@@ -1281,7 +1282,7 @@ class _BannedRow extends ConsumerWidget {
                   size: 19,
                   color: context.ink.withOpacity(0.5),
                 ),
-                onPressed: () => context.push('/user/$userId'),
+                onPressed: () => openUserProfile(context, userId),
               ),
             TextButton(
               onPressed: userId.isEmpty

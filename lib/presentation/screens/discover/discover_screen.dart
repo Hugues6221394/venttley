@@ -12,6 +12,7 @@ import '../../theme/colors.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/vently_notification_bell.dart';
+import '../../widgets/user_link.dart';
 import '../../widgets/verified_badge.dart';
 
 /// Discover — Image #12.
@@ -430,7 +431,7 @@ class _UserResultTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-      onTap: () => context.push('/user/${hit.hitId}'),
+      onTap: () => openUserProfile(context, hit.hitId),
       leading: ProfileAvatar(
         avatarSeed: hit.avatarSeed ?? 'default-orb',
         label: hit.title,
@@ -1270,7 +1271,7 @@ class _FeaturedVoiceCard extends ConsumerWidget {
     // showed you people worth knowing and then gave you no way to reach them,
     // which is the one thing a discovery surface has to do.
     return _TappableCard(
-      onTap: () => context.push('/user/${voice.userId}'),
+      onTap: () => openUserProfile(context, voice.userId),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),

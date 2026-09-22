@@ -17,6 +17,7 @@ import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/tribe/online_avatar_ring.dart';
 import '../../widgets/tribe_avatar.dart';
+import '../../widgets/user_link.dart';
 import '../../widgets/vently_premium_background.dart';
 
 /// WhatsApp-style tribe group info hub.
@@ -510,7 +511,7 @@ class _OnlineRow extends StatelessWidget {
         itemBuilder: (_, i) {
           final m = online[i];
           return InkWell(
-            onTap: () => context.push('/user/${m.userId}'),
+            onTap: () => openUserProfile(context, m.userId),
             borderRadius: BorderRadius.circular(12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -566,7 +567,7 @@ class _MembersList extends ConsumerWidget {
         children: [
           for (final m in members)
             ListTile(
-              onTap: () => context.push('/user/${m.userId}'),
+              onTap: () => openUserProfile(context, m.userId),
               leading: UserProfileLink(
                 userId: m.userId,
                 pseudonym: m.pseudonym,

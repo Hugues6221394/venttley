@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
+import 'user_link.dart';
 import 'profile_avatar.dart';
 
 /// Tappable avatar (+ optional name) that opens `/user/:userId`.
@@ -51,7 +51,7 @@ class UserProfileLink extends StatelessWidget {
       override();
       return;
     }
-    context.push('/user/$userId');
+    openUserProfile(context, userId);
   }
 
   @override

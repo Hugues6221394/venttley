@@ -10,6 +10,7 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/vently_error_state.dart';
+import '../../widgets/user_link.dart';
 import '../../widgets/vently_premium_background.dart';
 
 enum _ContentFilter { all, pinned, pending, attention, archived }
@@ -155,7 +156,7 @@ class _TribeContentManagementScreenState
                           onOpen: () => context.push('/post/${post.postId}'),
                           onAuthor: post.authorId == null
                               ? null
-                              : () => context.push('/user/${post.authorId}'),
+                              : () => openUserProfile(context, post.authorId),
                           primaryActionLabel: _isPinSelection ? 'Pin' : null,
                           onPrimaryAction: _isPinSelection
                               ? () => _performAction(tribe, post, 'pin')

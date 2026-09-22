@@ -34,6 +34,7 @@ import '../../../domain/tribe/tribe_chat_poll.dart';
 import '../../widgets/chat_audio_bubble.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../widgets/user_link.dart';
 import '../../../data/services/whisper_recorder.dart';
 
 /// Tribe Group Chat — Image #16.
@@ -1326,7 +1327,7 @@ class _MessageBubble extends ConsumerWidget {
                   child: InkWell(
                     onTap: message.senderId == null
                         ? null
-                        : () => context.push('/user/${message.senderId}'),
+                        : () => openUserProfile(context, message.senderId),
                     borderRadius: BorderRadius.circular(6),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1361,7 +1362,7 @@ class _MessageBubble extends ConsumerWidget {
                     InkWell(
                       onTap: message.senderId == null
                           ? null
-                          : () => context.push('/user/${message.senderId}'),
+                          : () => openUserProfile(context, message.senderId),
                       borderRadius: BorderRadius.circular(17),
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 8),
