@@ -79,10 +79,18 @@ class GlassTokens {
       : VentlyColors.softMauve;
 
   /// The glyph inside a [cardChip] — 7.4:1 against it.
+  ///
+  /// Grey on dark, berry on light. Not for the sake of symmetry: on the dark
+  /// canvas every glyph in the brand colour meant the colour stopped meaning
+  /// anything, since the KPI icons, the twelve link icons, the active scope
+  /// chip, the header and the primary button were all the same pink. The light
+  /// canvas never had that problem — its page and cards are near-white, so
+  /// berry is the only saturated thing on the screen and reads as accent
+  /// rather than as wallpaper.
   static Color cardGlyph(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
       ? VentlyColors.softOffWhite.withOpacity(0.78)
-      : VentlyColors.deepBurgundy.withOpacity(0.75);
+      : VentlyColors.berryMagenta;
 
   /// The welcome panel: a light grey slab on the dark canvas.
   static Color panel(BuildContext context) =>

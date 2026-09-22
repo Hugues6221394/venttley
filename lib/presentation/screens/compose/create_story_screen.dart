@@ -16,6 +16,7 @@ import '../../../data/services/analytics_service.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/music_track_card.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Create Vent Story screen — Image #9.
 ///
@@ -311,7 +312,11 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
                   style: FilledButton.styleFrom(
                     backgroundColor: VentlyColors.berryMagenta,
                     disabledBackgroundColor: VentlyColors.berryMagenta
-                        .withOpacity(0.45),
+                        .withOpacity(0.32),
+                    // Without this the label falls back to Material's disabled
+                    // grey, which on a dim berry fill reads as a button that
+                    // failed to paint rather than one that is not ready yet.
+                    disabledForegroundColor: Colors.white.withOpacity(0.6),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(28),
                     ),
@@ -601,10 +606,16 @@ class _CaptionField extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      // This screen was written light-first: white cards with softMauve
+      // hairlines, and context.ink for the type on them. On the dark themes
+      // context.ink is an off-white, so every label on this screen was
+      // off-white on white — the washed-out, barely-there text that got it
+      // reported as unclear. The surfaces are theme-aware now, which makes
+      // the ink correct in both.
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.42)),
+        border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
       child: TextField(
         controller: controller,
@@ -661,33 +672,31 @@ class _SourceGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       childAspectRatio: 1.2,
       children: [
+        // Four ways to start a story, drawn four different ways: a solid
+        // berry circle, two pale pink ones, and a green (#2E7D44) that is not
+        // in the palette at all. The colours were carrying no meaning — they
+        // were not a state, a category or a ranking — so they are gone, and
+        // the one thing that *is* a state, which source you picked, is what
+        // the berry fill says now.
         _SourceTile(
           label: 'Capture Photo',
           icon: Icons.photo_camera_rounded,
-          bg: VentlyColors.berryMagenta,
-          iconColor: Colors.white,
           onTap: onCapturePhoto,
         ),
         _SourceTile(
           label: 'Gallery',
           icon: Icons.photo_library_outlined,
-          bg: const Color(0xFFFFD8E5),
-          iconColor: VentlyColors.berryMagenta,
           onTap: onGallery,
         ),
         _SourceTile(
           label: 'Text Only',
           icon: Icons.edit_note_rounded,
-          bg: const Color(0xFF2E7D44),
-          iconColor: Colors.white,
           selected: mode == _StoryMode.text,
           onTap: onTextOnly,
         ),
         _SourceTile(
           label: 'Audio Note',
           icon: Icons.mic_none_rounded,
-          bg: const Color(0xFFFFE3EC),
-          iconColor: VentlyColors.berryMagenta,
           onTap: onAudioNote,
         ),
       ],
@@ -699,22 +708,18 @@ class _SourceTile extends StatelessWidget {
   const _SourceTile({
     required this.label,
     required this.icon,
-    required this.bg,
-    required this.iconColor,
     required this.onTap,
     this.selected = false,
   });
   final String label;
   final IconData icon;
-  final Color bg;
-  final Color iconColor;
   final VoidCallback onTap;
   final bool selected;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: GlassTokens.card(context),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
@@ -726,7 +731,7 @@ class _SourceTile extends StatelessWidget {
             border: Border.all(
               color: selected
                   ? VentlyColors.berryMagenta
-                  : VentlyColors.softMauve.withOpacity(0.42),
+                  : GlassTokens.cardEdge(context),
               width: selected ? 1.6 : 1,
             ),
           ),
@@ -736,14 +741,25 @@ class _SourceTile extends StatelessWidget {
               Container(
                 width: 46,
                 height: 46,
-                decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-                child: Icon(icon, color: iconColor, size: 22),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? VentlyColors.berryMagenta
+                      : GlassTokens.cardChip(context),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: selected
+                      ? Colors.white
+                      : GlassTokens.cardGlyph(context),
+                  size: 22,
+                ),
               ),
               const SizedBox(height: 10),
               Text(
                 label,
                 style: TextStyle(
-                  color: context.ink,
+                  color: GlassTokens.onCard(context),
                   fontWeight: FontWeight.w900,
                   fontSize: 13,
                 ),
@@ -775,10 +791,10 @@ class _PrivacyDurationCard extends StatelessWidget {
     // plain colour box between them and the sheet swallows those effects —
     // and trips a debug assertion on every build.
     return Material(
-      color: Colors.white,
+      color: GlassTokens.card(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: VentlyColors.softMauve.withOpacity(0.40)),
+        side: BorderSide(color: GlassTokens.cardEdge(context)),
       ),
       child: Column(
         children: [
@@ -809,7 +825,7 @@ class _PrivacyDurationCard extends StatelessWidget {
               onChanged: onFriendsToggle,
             ),
           ),
-          Divider(color: VentlyColors.softMauve.withOpacity(0.30), height: 1),
+          Divider(color: GlassTokens.cardEdge(context), height: 1),
           ListTile(
             leading: const Icon(
               Icons.timer_outlined,

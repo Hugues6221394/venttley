@@ -898,10 +898,14 @@ class _LinkGroup extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(left: 2, bottom: 9),
+            // Berry, not muted ink. With the glyphs handed over to grey, the
+            // headings are the only thing left to say which family a panel
+            // belongs to, and a 55% ink eyebrow says it too quietly to be
+            // doing that job.
             child: Text(
               title.toUpperCase(),
-              style: TextStyle(
-                color: context.ink.withOpacity(0.55),
+              style: const TextStyle(
+                color: VentlyColors.berryMagenta,
                 fontWeight: FontWeight.w900,
                 fontSize: 11,
                 letterSpacing: 1.3,
