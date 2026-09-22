@@ -281,3 +281,6 @@ GRANT EXECUTE ON FUNCTION public.admin_configure_staff_inbox(UUID,BOOLEAN,TEXT[]
 -- Scheduling is harmless while disabled; activation remains an explicit release
 -- operation after source/recipient validation. No browser can flip this switch.
 SELECT cron.schedule('staff-inbox-dispatch','* * * * *','SELECT private.process_staff_inbox(100)');
+
+-- The ledger, so a database can say whether it has run this.
+SELECT public.record_migration('20261029090001', 'staff_inbox_foundation');

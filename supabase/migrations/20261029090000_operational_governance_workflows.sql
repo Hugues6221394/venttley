@@ -788,4 +788,7 @@ GRANT EXECUTE ON FUNCTION public.admin_complete_recovery_drill(UUID,UUID,BOOLEAN
 GRANT EXECUTE ON FUNCTION public.admin_verify_recovery_drill(UUID,UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_recovery_drills(INTEGER) TO authenticated;
 
+-- The ledger, so a database can say whether it has run this.
+SELECT public.record_migration('20261029090000', 'operational_governance_workflows');
+
 NOTIFY pgrst, 'reload schema';

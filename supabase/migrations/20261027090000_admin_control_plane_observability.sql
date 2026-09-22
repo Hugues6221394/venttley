@@ -212,4 +212,7 @@ GRANT EXECUTE ON FUNCTION public.admin_control_plane_snapshot(TEXT) TO authentic
 COMMENT ON FUNCTION public.admin_control_plane_snapshot(TEXT) IS
   'Aggregate-only, section-authorized operational snapshot. Never returns user identity, authored content, provider tokens, object paths, or model explanations.';
 
+-- The ledger, so a database can say whether it has run this.
+SELECT public.record_migration('20261027090000', 'admin_control_plane_observability');
+
 NOTIFY pgrst, 'reload schema';

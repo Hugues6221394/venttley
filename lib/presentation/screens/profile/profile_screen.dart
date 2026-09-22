@@ -780,6 +780,11 @@ class _TabsHeader extends SliverPersistentHeaderDelegate {
       alignment: Alignment.bottomCenter,
       child: TabBar(
         controller: tabController,
+        // Scrollable, so each label gets its natural width. Six fixed tabs on
+        // a 390pt screen is 65pt each, and "Whispers", "Stories" and "About"
+        // do not fit in that — they were rendering as "Whis", "Stor", "Abo".
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
         labelStyle: const TextStyle(fontWeight: FontWeight.w800),
         tabs: [for (final t in tabs) Tab(text: t)],
       ),
@@ -788,7 +793,17 @@ class _TabsHeader extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _TabsHeader oldDelegate) =>
-      oldDelegate.tabs.length != tabs.length;
+      // bg, not just the tab count.
+      //
+      // A SliverPersistentHeaderDelegate only rebuilds when this says so, and
+      // this compared the number of tabs — which never changes. So the strip
+      // kept whatever background it was first built with: switch from the
+      // black theme to the light one and the tab bar stayed black, a dark band
+      // across the middle of a white page. The tab count is the one thing here
+      // that cannot change; the colour is the one thing that does.
+      oldDelegate.tabs.length != tabs.length ||
+      oldDelegate.bg != bg ||
+      oldDelegate.tabController != tabController;
 }
 
 // =========================================================================

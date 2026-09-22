@@ -1068,4 +1068,7 @@ SELECT cron.schedule(
   $job$SELECT private.refresh_impact_daily(current_date-1); SELECT private.run_impact_data_quality(current_date);$job$
 );
 
+-- The ledger, so a database can say whether it has run this.
+SELECT public.record_migration('20261026090000', 'impact_evidence_platform_phase1');
+
 NOTIFY pgrst, 'reload schema';

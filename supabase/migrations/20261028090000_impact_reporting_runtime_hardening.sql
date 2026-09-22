@@ -98,4 +98,7 @@ SELECT cron.schedule(
   $job$SELECT private.refresh_impact_lookback(30); SELECT private.run_impact_data_quality(current_date);$job$
 );
 
+-- The ledger, so a database can say whether it has run this.
+SELECT public.record_migration('20261028090000', 'impact_reporting_runtime_hardening');
+
 NOTIFY pgrst, 'reload schema';
