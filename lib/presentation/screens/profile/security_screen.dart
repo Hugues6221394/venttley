@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/colors.dart';
 import '../../widgets/modal_text_controller_scope.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Security & 2FA settings. Wires Supabase Auth MFA (TOTP) so a
 /// returning user can require a 6-digit code in addition to their
@@ -242,10 +243,10 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: GlassTokens.card(context),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: VentlyColors.softMauve.withOpacity(0.4)),
+                        color: GlassTokens.cardEdge(context)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

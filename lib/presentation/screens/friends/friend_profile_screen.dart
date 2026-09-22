@@ -22,6 +22,7 @@ import '../../widgets/vently_premium_background.dart';
 import '../../widgets/post_card.dart' show PostCard;
 import '../profile/profile_screen.dart';
 import '../home/home_shell.dart';
+import '../../theme/glass_tokens.dart';
 
 /// The Friend Profile — section 6 of the social spec. A friend-gated
 /// "safe stalking" view: pseudonym + avatar at the top, an emotional
@@ -2038,9 +2039,9 @@ class _WhisperMiniCard extends StatelessWidget {
         width: 180,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: GlassTokens.card(context),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.42)),
+          border: Border.all(color: GlassTokens.cardEdge(context)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2167,10 +2168,10 @@ class _TribesSection extends ConsumerWidget {
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: GlassTokens.card(context),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: VentlyColors.softMauve.withOpacity(0.42),
+                          color: GlassTokens.cardEdge(context),
                         ),
                       ),
                       child: Row(

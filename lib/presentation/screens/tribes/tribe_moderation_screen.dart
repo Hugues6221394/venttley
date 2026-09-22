@@ -6,6 +6,7 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Plugz V2 — Moderation Center for one tribe.
 ///
@@ -354,9 +355,9 @@ class _SectionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
+        border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -407,8 +408,8 @@ class _ReportsQuickLink extends StatelessWidget {
               Container(
                 width: 44,
                 height: 44,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
+                decoration: BoxDecoration(
+                  color: GlassTokens.cardChip(context),
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,

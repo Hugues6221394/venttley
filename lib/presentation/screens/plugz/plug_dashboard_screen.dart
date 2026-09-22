@@ -6,6 +6,7 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/post_card.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Plug-only dashboard. Each plug keeps one or more tribes; this is
 /// the landing they hit instead of the public profile when they
@@ -154,9 +155,9 @@ class _SummaryTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: GlassTokens.card(context),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
+          border: Border.all(color: GlassTokens.cardEdge(context)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,9 +198,9 @@ class _TribeManageCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
+        border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -26,6 +26,7 @@ import '../../widgets/music_track_card.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/tagged_text.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../theme/glass_tokens.dart';
 
 class ComposeScreen extends ConsumerStatefulWidget {
   const ComposeScreen({super.key, this.queryParams = const {}});
@@ -1302,10 +1303,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                       Container(
                         padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.74),
+                          color: GlassTokens.card(context),
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: VentlyColors.softMauve.withOpacity(0.38),
+                            color: GlassTokens.cardEdge(context),
                           ),
                         ),
                         child: Column(
@@ -1680,9 +1681,9 @@ class _StoryCreateOption extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.68),
+          color: GlassTokens.card(context),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.38)),
+          border: Border.all(color: GlassTokens.cardEdge(context)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

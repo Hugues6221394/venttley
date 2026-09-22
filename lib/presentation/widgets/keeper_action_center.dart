@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
+import '../theme/glass_tokens.dart';
 
 /// Keeper dashboard action queue — reports, growth, unanswered vents.
 class KeeperActionCenter extends StatelessWidget {
@@ -107,7 +108,7 @@ class KeeperActionCenter extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   child: Ink(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: GlassTokens.card(context),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: item.color.withOpacity(0.22)),
                     ),

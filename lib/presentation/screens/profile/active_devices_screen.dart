@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Every place this account is currently signed in, with a way to end each one.
 ///
@@ -230,7 +231,7 @@ class _DeviceCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(18),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/colors.dart';
 import '../theme/vently_tokens.dart';
+import '../theme/glass_tokens.dart';
 
 class VentlyEmptyState extends StatelessWidget {
   const VentlyEmptyState({
@@ -32,9 +33,9 @@ class VentlyEmptyState extends StatelessWidget {
         width: double.infinity,
         padding: EdgeInsets.all(compact ? VentlyTokens.s16 : VentlyTokens.s20),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.72),
+          color: GlassTokens.card(context),
           borderRadius: BorderRadius.circular(VentlyTokens.radiusCard),
-          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.28)),
+          border: Border.all(color: GlassTokens.cardEdge(context)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

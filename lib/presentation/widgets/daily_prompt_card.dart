@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/providers.dart';
 import '../theme/colors.dart';
 import '../theme/vently_tokens.dart';
+import '../theme/glass_tokens.dart';
 
 /// Compact once-per-day nudge — not a full-screen hero.
 class DailyPromptCard extends ConsumerStatefulWidget {
@@ -51,9 +52,9 @@ class _DailyPromptCardState extends ConsumerState<DailyPromptCard> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.9),
+          color: GlassTokens.card(context),
           borderRadius: BorderRadius.circular(VentlyTokens.radiusCard),
-          border: Border.all(color: VentlyColors.softMauve.withOpacity(0.25)),
+          border: Border.all(color: GlassTokens.cardEdge(context)),
         ),
         child: Row(
           children: [

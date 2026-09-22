@@ -36,6 +36,7 @@ import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../widgets/user_link.dart';
 import '../../../data/services/whisper_recorder.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Tribe Group Chat — Image #16.
 ///
@@ -936,7 +937,7 @@ class _MessageSearchResults extends StatelessWidget {
             ? 'Photo'
             : 'Message';
         return Material(
-          color: Colors.white,
+          color: GlassTokens.card(context),
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
@@ -1731,7 +1732,7 @@ class _BubbleBody extends StatelessWidget {
             ),
             if (message.hasText)
               Container(
-                color: Colors.white,
+                color: GlassTokens.card(context),
                 padding: const EdgeInsets.all(10),
                 child: Text(
                   message.content!,

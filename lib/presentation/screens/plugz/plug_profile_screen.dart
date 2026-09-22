@@ -7,6 +7,7 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/post_card.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Public profile for a verified Plug (keeper). Shows tribes they
 /// steward, scheduled prompts, and paginated vents from those communities.
@@ -367,9 +368,9 @@ class _StatTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.35)),
+        border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
       child: Column(
         children: [
@@ -405,7 +406,7 @@ class _TribeChipCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: Colors.white,
+      color: GlassTokens.card(context),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,

@@ -12,6 +12,7 @@ import '../../../data/services/supabase_backend.dart'
 import '../../theme/colors.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../onboarding/mfa_challenge_screen.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Instagram-style "Password and security" hub: a security checkup summary,
 /// password rotation, a real recovery email, two-factor, and session control.
@@ -1117,7 +1118,7 @@ class _CheckupCard extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.7),
+                  color: GlassTokens.cardChip(context),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -1257,7 +1258,7 @@ class _Tile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: onTap,

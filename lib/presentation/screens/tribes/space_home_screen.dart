@@ -6,6 +6,7 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/post_card.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Space Home — the focused conversation room inside a Tribe.
 ///
@@ -174,7 +175,7 @@ class _SpaceHeader extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: GlassTokens.cardChip(context),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -278,9 +279,9 @@ class _AISummaryTile extends ConsumerWidget {
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
+        border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers.dart';
 import '../theme/colors.dart';
 import '../theme/motion.dart';
+import '../theme/glass_tokens.dart';
 
 /// Unified create menu — opened from the Post tab and home CTAs.
 ///
@@ -252,7 +253,7 @@ class _FormatTile extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.85),
+                    color: GlassTokens.cardChip(context),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(format.icon, color: format.accent, size: 22),

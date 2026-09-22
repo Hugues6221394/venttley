@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/colors.dart';
 import '../theme/vently_tokens.dart';
+import '../theme/glass_tokens.dart';
 
 class KpiItem {
   const KpiItem({
@@ -51,9 +52,9 @@ class _KpiTile extends StatelessWidget {
     final child = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.88),
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(VentlyTokens.radiusCard),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.22)),
+        border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

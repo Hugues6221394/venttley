@@ -19,6 +19,7 @@ import '../../widgets/tribe/online_avatar_ring.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../theme/glass_tokens.dart';
 
 /// WhatsApp-style tribe group info hub.
 class TribeChatHubScreen extends ConsumerWidget {
@@ -457,7 +458,7 @@ class _ActionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: GlassTokens.card(context),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,

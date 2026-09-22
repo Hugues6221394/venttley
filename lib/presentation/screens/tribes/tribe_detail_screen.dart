@@ -15,6 +15,7 @@ import '../../widgets/tribe_rules_notice.dart';
 import 'tribe_helpers_screen.dart' show myTribePermissionsProvider;
 import '../../widgets/user_link.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../theme/glass_tokens.dart';
 
 class TribeDetailScreen extends ConsumerStatefulWidget {
   const TribeDetailScreen({super.key, required this.slug});
@@ -381,7 +382,7 @@ class _SpaceTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
       child: Material(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),

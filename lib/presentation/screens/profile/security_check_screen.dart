@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
+import '../../theme/glass_tokens.dart';
 
 /// "Was this you?" — the only screen in Venttly that asks the user to make a
 /// security decision.
@@ -242,7 +243,7 @@ class _AlertCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: Colors.white,
+        color: GlassTokens.card(context),
         borderRadius: BorderRadius.circular(18),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
