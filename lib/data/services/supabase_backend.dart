@@ -3877,6 +3877,40 @@ class SupabaseBackend {
 
   /// Reversible: the account instantly disappears from the app. Signs the
   /// user out; logging back in reactivates it.
+  /// Activity status and read receipts, as the server holds them.
+  ///
+  /// One call for both, and a null leaves that one alone — so flipping either
+  /// switch cannot write back a stale value for the other.
+  Future<({bool showLastSeen, bool showReadReceipts})>
+  presencePreferences() async {
+    final rows = await _client.rpc('my_presence_preferences') as List<dynamic>;
+    final row = rows.isEmpty ? const {} : rows.first as Map<String, dynamic>;
+    return (
+      showLastSeen: (row['show_last_seen'] as bool?) ?? true,
+      showReadReceipts: (row['show_read_receipts'] as bool?) ?? true,
+    );
+  }
+
+  Future<({bool showLastSeen, bool showReadReceipts})> setPresencePreferences({
+    bool? showLastSeen,
+    bool? showReadReceipts,
+  }) async {
+    final rows =
+        await _client.rpc(
+              'set_presence_preferences',
+              params: {
+                'p_show_last_seen': showLastSeen,
+                'p_show_read_receipts': showReadReceipts,
+              },
+            )
+            as List<dynamic>;
+    final row = rows.isEmpty ? const {} : rows.first as Map<String, dynamic>;
+    return (
+      showLastSeen: (row['show_last_seen'] as bool?) ?? true,
+      showReadReceipts: (row['show_read_receipts'] as bool?) ?? true,
+    );
+  }
+
   Future<void> deactivateMyAccount() async {
     await _client.rpc('deactivate_my_account');
   }

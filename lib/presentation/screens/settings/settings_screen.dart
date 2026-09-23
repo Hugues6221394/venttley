@@ -262,6 +262,30 @@ class SettingsScreen extends ConsumerWidget {
               },
             ),
           const _SectionHeader('Privacy'),
+          // Activity status and read receipts.
+          //
+          // users.show_last_seen has existed since 0114 and peer_presence has
+          // always honoured it — there was simply never a way to change it.
+          // Read receipts had no preference at all; every read was published.
+          _PresenceSwitch(
+            icon: Icons.circle_outlined,
+            title: 'Activity status',
+            onText: 'People you chat with can see when you were last active',
+            offText: 'Nobody can see when you were last active',
+            read: (p) => p.showLastSeen,
+            write: (n, v) => n.setShowLastSeen(v),
+          ),
+          _PresenceSwitch(
+            icon: Icons.done_all_rounded,
+            title: 'Read receipts',
+            onText: 'Senders can see when you have read their message',
+            // Reciprocal, the way every messenger does it. A setting for
+            // taking without giving is not one people expect here.
+            offText: "Senders cannot see when you've read — and you won't see "
+                'theirs either',
+            read: (p) => p.showReadReceipts,
+            write: (n, v) => n.setShowReadReceipts(v),
+          ),
           SwitchListTile(
             secondary: const Icon(
               Icons.chat_bubble_outline_rounded,
@@ -893,6 +917,61 @@ class _ConfirmPasswordDialogState extends State<_ConfirmPasswordDialog> {
           child: const Text('Delete my account'),
         ),
       ],
+    );
+  }
+}
+
+/// One of the two privacy switches, so they cannot drift apart.
+///
+/// Optimistic: the switch moves on touch and falls back if the server refuses.
+/// "It must happen instantly" was the requirement, and a switch that waits for
+/// a round trip before moving reads as one that did not work.
+class _PresenceSwitch extends ConsumerWidget {
+  const _PresenceSwitch({
+    required this.icon,
+    required this.title,
+    required this.onText,
+    required this.offText,
+    required this.read,
+    required this.write,
+  });
+
+  final IconData icon;
+  final String title;
+  final String onText;
+  final String offText;
+  final bool Function(PresencePreferences) read;
+  final Future<void> Function(PresencePreferencesNotifier, bool) write;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(presencePreferencesProvider);
+    final prefs = async.valueOrNull;
+    // Default to on while loading: it is the stored default, so the switch
+    // does not flick from off to on in front of somebody who never changed it.
+    final value = prefs == null ? true : read(prefs);
+
+    return SwitchListTile(
+      secondary: Icon(icon, color: VentlyColors.berryMagenta),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+      subtitle: Text(value ? onText : offText),
+      activeColor: VentlyColors.berryMagenta,
+      value: value,
+      onChanged: prefs == null
+          ? null
+          : (enabled) async {
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await write(
+                  ref.read(presencePreferencesProvider.notifier),
+                  enabled,
+                );
+              } catch (_) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Could not update $title.')),
+                );
+              }
+            },
     );
   }
 }

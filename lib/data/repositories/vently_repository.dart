@@ -1884,6 +1884,30 @@ class VentlyRepository implements MusicProvider {
   }
 
   /// Reversible: hides the account app-wide until next login.
+  Future<({bool showLastSeen, bool showReadReceipts})>
+  presencePreferences() async {
+    final live = _live;
+    if (live != null) return live.presencePreferences();
+    return (showLastSeen: true, showReadReceipts: true);
+  }
+
+  Future<({bool showLastSeen, bool showReadReceipts})> setPresencePreferences({
+    bool? showLastSeen,
+    bool? showReadReceipts,
+  }) async {
+    final live = _live;
+    if (live != null) {
+      return live.setPresencePreferences(
+        showLastSeen: showLastSeen,
+        showReadReceipts: showReadReceipts,
+      );
+    }
+    return (
+      showLastSeen: showLastSeen ?? true,
+      showReadReceipts: showReadReceipts ?? true,
+    );
+  }
+
   Future<void> deactivateMyAccount() {
     final live = _live;
     if (live != null) return live.deactivateMyAccount();

@@ -765,6 +765,92 @@ class StoryRepliesEnabledNotifier extends AutoDisposeAsyncNotifier<bool> {
   }
 }
 
+/// Activity status and read receipts.
+///
+/// Both preferences in one notifier because they live in one row and one RPC,
+/// and because a screen that shows two switches wants one loading state rather
+/// than two that can disagree.
+///
+/// The write is optimistic: the switch moves the instant it is touched and
+/// falls back if the server refuses. "It must happen instantly" is the
+/// requirement, and a switch that waits for a round trip before moving reads
+/// as a switch that did not work.
+class PresencePreferences {
+  const PresencePreferences({
+    required this.showLastSeen,
+    required this.showReadReceipts,
+  });
+
+  final bool showLastSeen;
+  final bool showReadReceipts;
+
+  PresencePreferences copyWith({bool? showLastSeen, bool? showReadReceipts}) =>
+      PresencePreferences(
+        showLastSeen: showLastSeen ?? this.showLastSeen,
+        showReadReceipts: showReadReceipts ?? this.showReadReceipts,
+      );
+}
+
+class PresencePreferencesNotifier
+    extends AutoDisposeAsyncNotifier<PresencePreferences> {
+  @override
+  Future<PresencePreferences> build() async {
+    final me = ref.watch(sessionProvider);
+    if (me == null) {
+      return const PresencePreferences(
+        showLastSeen: true,
+        showReadReceipts: true,
+      );
+    }
+    final saved = await ref.watch(repositoryProvider).presencePreferences();
+    return PresencePreferences(
+      showLastSeen: saved.showLastSeen,
+      showReadReceipts: saved.showReadReceipts,
+    );
+  }
+
+  Future<void> setShowLastSeen(bool value) =>
+      _write(showLastSeen: value);
+
+  Future<void> setShowReadReceipts(bool value) =>
+      _write(showReadReceipts: value);
+
+  Future<void> _write({bool? showLastSeen, bool? showReadReceipts}) async {
+    final previous =
+        state.valueOrNull ??
+        const PresencePreferences(showLastSeen: true, showReadReceipts: true);
+    state = AsyncData(
+      previous.copyWith(
+        showLastSeen: showLastSeen,
+        showReadReceipts: showReadReceipts,
+      ),
+    );
+    try {
+      final saved = await ref
+          .read(repositoryProvider)
+          .setPresencePreferences(
+            showLastSeen: showLastSeen,
+            showReadReceipts: showReadReceipts,
+          );
+      state = AsyncData(
+        PresencePreferences(
+          showLastSeen: saved.showLastSeen,
+          showReadReceipts: saved.showReadReceipts,
+        ),
+      );
+    } catch (error, stackTrace) {
+      state = AsyncData(previous);
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+}
+
+final presencePreferencesProvider =
+    AsyncNotifierProvider.autoDispose<
+      PresencePreferencesNotifier,
+      PresencePreferences
+    >(PresencePreferencesNotifier.new);
+
 final storyRepliesEnabledProvider =
     AsyncNotifierProvider.autoDispose<StoryRepliesEnabledNotifier, bool>(
       StoryRepliesEnabledNotifier.new,
