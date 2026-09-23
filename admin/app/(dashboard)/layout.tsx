@@ -4,6 +4,8 @@ import Topbar from "@/components/topbar";
 import { getRenderStaff } from "@/lib/supabase/server";
 import { Suspense } from "react";
 import { QueueBadge, type QueueBadgePath } from "@/components/queue-badge";
+import OperatorShell from "@/components/operator-shell";
+import { hasModernShell } from "@/lib/shell-rollout";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,10 @@ export default async function DashboardLayout({
   ]));
 
   const env = resolveEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
+
+  if (hasModernShell(staff.role, process.env.ADMIN_SHELL_V2, process.env.ADMIN_SHELL_V2_ROLES)) {
+    return <OperatorShell key={`${staff.userId}:${staff.role}`} role={staff.role} pseudonym={staff.pseudonym} env={env} badges={badges}>{children}</OperatorShell>;
+  }
 
   return (
     <div className="min-h-screen flex bg-canvas">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { canAccess } from "@/lib/roles";
@@ -10,10 +10,12 @@ export default function Topbar({
   pseudonym,
   role,
   env = "production",
+  navigationControl,
 }: {
   pseudonym: string;
   role: string;
   env?: "production" | "staging" | "local";
+  navigationControl?: ReactNode;
 }) {
   const [menu, setMenu] = useState(false);
   const menuRoot = useRef<HTMLDivElement>(null);
@@ -42,6 +44,7 @@ export default function Topbar({
 
   return (
     <header className="h-16 shrink-0 bg-white border-b border-line flex items-center px-6 gap-4">
+      {navigationControl}
       {/* A submit, not a live query. Every search is audited — searching for
           a member on a pseudonymous platform is exactly the act that should be
           reviewable — and querying per keystroke would flood that ledger and

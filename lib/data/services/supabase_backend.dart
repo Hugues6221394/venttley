@@ -3911,6 +3911,40 @@ class SupabaseBackend {
     );
   }
 
+  // ===================== Feedback ==========================================
+
+  /// File a bug or a suggestion. Returns the new report id.
+  Future<String> submitFeedback({
+    required String kind,
+    required String title,
+    required String detail,
+    String? screen,
+    String? appVersion,
+    String? platform,
+    String? device,
+  }) async {
+    final id = await _client.rpc(
+      'submit_feedback',
+      params: {
+        'p_kind': kind,
+        'p_title': title,
+        'p_detail': detail,
+        'p_screen': screen,
+        'p_app_version': appVersion,
+        'p_platform': platform,
+        'p_device': device,
+      },
+    );
+    return id as String;
+  }
+
+  Future<List<FeedbackReport>> myFeedback() async {
+    final rows = await _client.rpc('my_feedback') as List<dynamic>;
+    return rows
+        .map((r) => FeedbackReport.fromJson(r as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<void> deactivateMyAccount() async {
     await _client.rpc('deactivate_my_account');
   }

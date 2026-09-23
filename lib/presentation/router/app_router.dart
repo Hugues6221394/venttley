@@ -44,6 +44,7 @@ import '../screens/profile/security_check_screen.dart';
 import '../screens/profile/security_screen.dart';
 import '../screens/profile/password_security_screen.dart';
 import '../screens/settings/appeals_screen.dart';
+import '../screens/settings/feedback_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/settings/verification_screen.dart';
 import '../screens/goals/goals_screen.dart';
@@ -247,6 +248,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/verification',
         builder: (_, __) => const VerificationScreen(),
+      ),
+      // Top level, not inside the shell: reachable from Settings, and from a
+      // crash boundary if one ever links to it.
+      GoRoute(
+        path: '/settings/feedback',
+        builder: (_, __) => const FeedbackScreen(),
       ),
       GoRoute(
         path: '/settings/appeals',

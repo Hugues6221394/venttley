@@ -319,6 +319,19 @@ class SettingsScreen extends ConsumerWidget {
           ),
           ListTile(
             leading: const Icon(
+              Icons.bug_report_outlined,
+              color: VentlyColors.berryMagenta,
+            ),
+            title: const Text(
+              'Report a bug or suggest something',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            subtitle: const Text('Goes straight to the team'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => context.push('/settings/feedback'),
+          ),
+          ListTile(
+            leading: const Icon(
               Icons.block_rounded,
               color: VentlyColors.berryMagenta,
             ),

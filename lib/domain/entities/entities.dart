@@ -3363,3 +3363,41 @@ class VerificationCategories {
     return 'Verification';
   }
 }
+
+/// A bug report or a feature suggestion, as the reporter sees it.
+class FeedbackReport {
+  const FeedbackReport({
+    required this.reportId,
+    required this.kind,
+    required this.title,
+    required this.detail,
+    required this.status,
+    required this.createdAt,
+    this.staffNote,
+  });
+
+  final String reportId;
+  final String kind;
+  final String title;
+  final String detail;
+  final String status;
+  final DateTime createdAt;
+
+  /// What staff wrote back, when they have. This is the only reply a reporter
+  /// gets, so it is shown verbatim rather than summarised into a status word.
+  final String? staffNote;
+
+  bool get isBug => kind == 'bug';
+
+  factory FeedbackReport.fromJson(Map<String, dynamic> json) => FeedbackReport(
+    reportId: json['report_id'] as String,
+    kind: (json['kind'] as String?) ?? 'bug',
+    title: (json['title'] as String?) ?? '',
+    detail: (json['detail'] as String?) ?? '',
+    status: (json['status'] as String?) ?? 'new',
+    staffNote: json['staff_note'] as String?,
+    createdAt:
+        DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
+  );
+}
+

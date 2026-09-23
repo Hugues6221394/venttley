@@ -1908,6 +1908,34 @@ class VentlyRepository implements MusicProvider {
     );
   }
 
+  Future<String> submitFeedback({
+    required String kind,
+    required String title,
+    required String detail,
+    String? screen,
+    String? appVersion,
+    String? platform,
+    String? device,
+  }) async {
+    final live = _live;
+    if (live == null) return '';
+    return live.submitFeedback(
+      kind: kind,
+      title: title,
+      detail: detail,
+      screen: screen,
+      appVersion: appVersion,
+      platform: platform,
+      device: device,
+    );
+  }
+
+  Future<List<FeedbackReport>> myFeedback() async {
+    final live = _live;
+    if (live == null) return const [];
+    return live.myFeedback();
+  }
+
   Future<void> deactivateMyAccount() {
     final live = _live;
     if (live != null) return live.deactivateMyAccount();

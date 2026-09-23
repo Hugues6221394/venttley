@@ -851,6 +851,11 @@ final presencePreferencesProvider =
       PresencePreferences
     >(PresencePreferencesNotifier.new);
 
+/// The reports this account has filed, newest first.
+final myFeedbackProvider = FutureProvider.autoDispose<List<FeedbackReport>>(
+  (ref) => ref.watch(repositoryProvider).myFeedback(),
+);
+
 final storyRepliesEnabledProvider =
     AsyncNotifierProvider.autoDispose<StoryRepliesEnabledNotifier, bool>(
       StoryRepliesEnabledNotifier.new,

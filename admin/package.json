@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "typecheck": "node scripts/check-routes.mjs && node scripts/check-service-role-gates.mjs && node scripts/check-admin-operations.mjs && tsc --noEmit",
+    "typecheck": "node scripts/check-routes.mjs && node scripts/check-service-role-gates.mjs && node scripts/check-admin-operations.mjs && node scripts/check-navigation.mjs && tsc --noEmit",
     "check:routes": "node scripts/check-routes.mjs",
     "check:gates": "node scripts/check-service-role-gates.mjs",
     "check:operations": "node scripts/check-admin-operations.mjs",
