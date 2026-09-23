@@ -107,6 +107,37 @@ final routerProvider = Provider<GoRouter>((ref) {
           path == '/onboarding/age') {
         return '/feed';
       }
+      // An unverified real email does not reach the app.
+      //
+      // Verification used to be a banner on the feed: you signed up with an
+      // email, landed on the homepage, and were invited to confirm it from
+      // there whenever you felt like it. So the address on the account was
+      // unproven while the account was fully in use — and the one thing that
+      // address is for is getting back in when the password is gone.
+      //
+      // Only real addresses. The anonymous flow signs in with a synthetic
+      // @id.venttly.app handle that nobody can receive mail at, and gating
+      // those would lock out the entire pseudonymous path, which is the app's
+      // default and its whole point.
+      //
+      // After the age gate and before consent, because an account with no
+      // birth year cannot be asked anything else yet, and because bouncing
+      // somebody between two gates is worse than either.
+      if (session != null &&
+          session.birthYear != null &&
+          !session.emailVerified &&
+          path != '/verify-email' &&
+          !legalRoute &&
+          !onMfa) {
+        final notifier = ref.read(sessionProvider.notifier);
+        if (notifier.hasRealEmail) {
+          final email = notifier.currentEmail;
+          return email == null
+              ? '/verify-email'
+              : '/verify-email?email=${Uri.encodeComponent(email)}';
+        }
+      }
+
       // Outstanding consent, which happens two ways: the acceptance write
       // failed after the account was created, or a policy version changed
       // materially and everybody owes a fresh agreement.

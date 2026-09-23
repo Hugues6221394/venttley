@@ -109,4 +109,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261036090000': 'policy_documents_2026_09_21',
   '20261037090000': 'backfill_schema_ledger',
   '20261038090000': 'account_deletion_is_deliberate',
+  '20261039090000': 'signup_email_is_the_recovery_email',
 };

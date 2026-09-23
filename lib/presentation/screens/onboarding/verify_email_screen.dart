@@ -124,10 +124,20 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Verify your email'),
+        // A skip button used to sit here, and the router now sends an
+        // unverified real address straight back — so it would have been a
+        // button that visibly did nothing, which is worse than no button.
+        //
+        // Signing out is the honest way out: you can leave without verifying,
+        // you just cannot come in. It is also the escape hatch for a typo in
+        // the address, which is otherwise a dead end.
         actions: [
           TextButton(
-            onPressed: () => context.go('/feed'),
-            child: const Text('Skip for now'),
+            onPressed: () async {
+              await ref.read(sessionProvider.notifier).logout();
+              if (context.mounted) context.go('/onboarding');
+            },
+            child: const Text('Sign out'),
           ),
         ],
       ),
