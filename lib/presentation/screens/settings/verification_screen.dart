@@ -596,10 +596,18 @@ class _VerificationApplyScreenState
       setState(() => _error = 'Pick the category that fits best.');
       return;
     }
-    if (_note.text.trim().length < 20) {
+    // The note is optional. It was a 20-character floor, which turned the
+    // one genuinely free-form part of the form into another required field —
+    // and somebody whose case is a link to a licence register has nothing to
+    // write there. The category and the links carry the application; this is
+    // where you add what they cannot say.
+    if (_linkList.isEmpty &&
+        _note.text.trim().isEmpty &&
+        _evidence.text.trim().isEmpty) {
       setState(
         () => _error =
-            'Tell us a little more — at least a sentence or two about why.',
+            'Add a link, a note, or something private we can check — a '
+            'category on its own is not enough to review.',
       );
       return;
     }
@@ -692,7 +700,7 @@ class _VerificationApplyScreenState
           const SizedBox(height: 18),
           _FieldLabel(
             'Why should this account be verified?',
-            hint: 'The reviewer reads this first.',
+            hint: 'Optional. The reviewer reads this first.',
           ),
           TextField(
             controller: _note,

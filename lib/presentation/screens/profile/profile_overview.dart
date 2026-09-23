@@ -16,6 +16,7 @@ import '../../widgets/profile_banner_image.dart';
 import '../../widgets/profile_banner_editor.dart';
 import '../../widgets/tagged_text.dart';
 import '../../theme/glass_tokens.dart';
+import '../settings/verification_screen.dart';
 
 /// Redesigned public-profile overview (hero + quick actions + friends/personas
 /// + highlights/badges), matching the premium pink glassmorphism spec. All
@@ -734,133 +735,20 @@ class _VerificationPill extends ConsumerWidget {
     );
   }
 
-  Future<void> _openApplySheet(BuildContext context, WidgetRef ref) async {
-    bool busy = false;
-    await showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => ModalTextControllerScope(
-        initialValues: const [''],
-        builder: (ctx, controllers) {
-          final noteCtl = controllers.single;
-          return StatefulBuilder(
-            builder: (ctx, setSheet) {
-              return SingleChildScrollView(
-                padding: EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  top: 18,
-                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Apply for verification',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: context.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'The verified check is earned. Tell us why your presence lifts '
-                      'this community — our team reviews every application.',
-                      style: TextStyle(
-                        color: context.ink.withOpacity(0.6),
-                        fontSize: 13,
-                        height: 1.35,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: noteCtl,
-                      maxLines: 4,
-                      maxLength: 400,
-                      decoration: InputDecoration(
-                        hintText: 'Your case for verification (optional)',
-                        filled: true,
-                        fillColor: const Color(0xFFFFF1F6),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: VentlyColors.berryMagenta,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onPressed: busy
-                          ? null
-                          : () async {
-                              setSheet(() => busy = true);
-                              try {
-                                await ref
-                                    .read(repositoryProvider)
-                                    .requestVerification(
-                                      note: noteCtl.text.trim().isEmpty
-                                          ? null
-                                          : noteCtl.text.trim(),
-                                    );
-                                ref.invalidate(myVerificationStatusProvider);
-                                if (ctx.mounted) Navigator.pop(ctx);
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Application submitted — we\'ll review it soon.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              } catch (e) {
-                                if (!ctx.mounted) return;
-                                setSheet(() => busy = false);
-                                ScaffoldMessenger.of(ctx).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      e.toString().replaceFirst(
-                                        'Exception: ',
-                                        '',
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                      child: busy
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Submit application',
-                              style: TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      ),
+  /// Opens the real application form.
+  ///
+  /// This used to be a bottom sheet with a single free-text box — "Your case
+  /// for verification (optional)" — and a Submit button. Meanwhile
+  /// VerificationApplyScreen already existed, with a category picker, public
+  /// links and a private evidence field, reachable only from Settings.
+  ///
+  /// So the affordance somebody actually finds, on their own profile,
+  /// submitted the weakest possible application: the reviewer got a paragraph
+  /// where the form would have given them a category and a link to check. One
+  /// route in now, so there is one thing to keep good.
+  void _openApplySheet(BuildContext context, WidgetRef ref) {
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(builder: (_) => const VerificationApplyScreen()),
     );
   }
 }

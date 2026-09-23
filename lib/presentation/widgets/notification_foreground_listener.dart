@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -34,6 +35,38 @@ class _NotificationForegroundListenerState
 
   @override
   Widget build(BuildContext context) {
+    // A decision on verification changes the account, not just the bell.
+    //
+    // admin_review_verification already sets users.is_verified and writes the
+    // notification. But AppUser is loaded once, at sign-in, so the badge did
+    // not appear until the next cold start — somebody was told they were
+    // verified and then could not see it anywhere, which reads as the approval
+    // not having worked.
+    //
+    // The notification stream is already realtime, so the moment the row
+    // lands the session reloads and every screen showing the badge rebuilds.
+    ref.listen<AsyncValue<List<NotificationItem>>>(notificationsProvider, (
+      prev,
+      next,
+    ) {
+      final items = next.valueOrNull;
+      if (items == null) return;
+
+      final seen = prev?.valueOrNull?.map((n) => n.id).toSet() ?? const <String>{};
+      final decided = items.any(
+        (n) =>
+            !seen.contains(n.id) &&
+            n.payload['action'] == 'verification_approved',
+      );
+      if (!decided) return;
+
+      // Both: the flag lives on the session, the request state on its own
+      // providers, and the screens read a mixture of the two.
+      unawaited(ref.read(sessionProvider.notifier).restore());
+      ref.invalidate(myVerificationStatusProvider);
+      ref.invalidate(myVerificationStateProvider);
+    });
+
     ref.listen<AsyncValue<List<ChatRoom>>>(allInboxRoomsStreamProvider, (
       prev,
       next,

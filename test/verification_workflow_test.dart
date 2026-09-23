@@ -337,17 +337,39 @@ void main() {
       expect(find.text('Pick the category that fits best.'), findsOne);
     });
 
-    testWidgets('a one-word case is refused', (tester) async {
+    testWidgets('a category on its own is not an application', (tester) async {
+      // This used to require twenty characters of free text. That turned the
+      // one genuinely open field into another mandatory one, and somebody
+      // whose whole case is a link to a licence register has nothing to write
+      // there. What a reviewer actually needs is something to check — a link,
+      // a note, or private evidence — so that is what is required now.
       final repo = _FakeRepo();
       await _pump(tester, repo, screen: const VerificationApplyScreen());
 
       await tester.tap(find.text('Creator'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField).first, 'because');
       await _tapSubmit(tester);
 
       expect(repo.applications, isEmpty);
-      expect(find.textContaining('Tell us a little more'), findsOne);
+      expect(find.textContaining('Add a link, a note'), findsOne);
+    });
+
+    testWidgets('a link with no written case is accepted', (tester) async {
+      final repo = _FakeRepo();
+      await _pump(tester, repo, screen: const VerificationApplyScreen());
+
+      await tester.tap(find.text('Creator'));
+      await tester.pumpAndSettle();
+      // Second field is Public links; the first is the optional note.
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'https://example.test/me',
+      );
+      await _tapSubmit(tester);
+
+      expect(repo.applications, hasLength(1));
+      expect(repo.applications.single.note, isEmpty);
+      expect(repo.applications.single.links, ['https://example.test/me']);
     });
 
     testWidgets('links are split one per line, blanks dropped', (tester) async {
