@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/constants.dart';
 import '../../../core/providers.dart';
@@ -100,6 +101,18 @@ class WelcomeScreen extends StatelessWidget {
                           style: TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
+                      // Ways in, together; the footer after them.
+                      //
+                      // The social block used to sit below "Already have an
+                      // account?", so the page ran: sign up, sign up, log in,
+                      // and then another way to sign up — stranded under a
+                      // line that reads as the end of the screen.
+                      if (VentlyConfig.socialAuthEnabled) ...[
+                        const SizedBox(height: 18),
+                        const _OrDivider(),
+                        const SizedBox(height: 14),
+                        const _SocialAuthRow(),
+                      ],
                       const SizedBox(height: 14),
                       Center(
                         child: TextButton(
@@ -127,12 +140,6 @@ class WelcomeScreen extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (VentlyConfig.socialAuthEnabled) ...[
-                        const SizedBox(height: 16),
-                        const _OrDivider(),
-                        const SizedBox(height: 16),
-                        const _SocialAuthRow(),
-                      ],
                       const SizedBox(height: 8),
                     ],
                   ),
@@ -161,9 +168,10 @@ class _OrDivider extends StatelessWidget {
           child: Text(
             'or continue with',
             style: TextStyle(
-              color: context.ink.withOpacity(0.5),
+              color: context.ink.withOpacity(0.55),
               fontWeight: FontWeight.w700,
-              fontSize: 12,
+              fontSize: 11.5,
+              letterSpacing: 0.3,
             ),
           ),
         ),
@@ -230,32 +238,76 @@ class _SocialAuthRowState extends ConsumerState<_SocialAuthRow> {
     if (!providers.contains('google')) {
       return const SizedBox.shrink();
     }
-    return _SocialButton(
-      icon: Icons.g_mobiledata_rounded,
+    return _GoogleButton(
       label: _busy ? 'Opening Google…' : 'Continue with Google',
       onTap: _busy ? null : _google,
     );
   }
 }
 
-class _SocialButton extends StatelessWidget {
-  const _SocialButton({required this.icon, required this.label, this.onTap});
-  final IconData icon;
+/// Google's button, to Google's own spec.
+///
+/// It used to be a Material glyph tinted with the app's ink — a letter G,
+/// not the Google mark. Google's identity
+/// guidelines ask for the four-colour G, unmodified, and they are worth
+/// following here for a reason beyond compliance: a recoloured approximation
+/// of a logo everybody recognises reads as a knock-off, which is the opposite
+/// of the reassurance a sign-in button is for.
+///
+/// The surrounding colours are theirs too — #131314 on dark, white on light,
+/// with their border and text values. Every other button on this screen is
+/// Venttly's; this one is a guest, and guests keep their own face.
+class _GoogleButton extends StatelessWidget {
+  const _GoogleButton({required this.label, this.onTap});
+
   final String label;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onTap,
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size.fromHeight(50),
-        side: BorderSide(color: GlassTokens.border(context)),
-        foregroundColor: context.ink,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fill = isDark ? const Color(0xFF131314) : Colors.white;
+    final edge = isDark ? const Color(0xFF8E918F) : const Color(0xFF747775);
+    final ink = isDark ? const Color(0xFFE3E3E3) : const Color(0xFF1F1F1F);
+
+    return Semantics(
+      button: true,
+      label: label,
+      child: Material(
+        color: fill,
+        borderRadius: BorderRadius.circular(26),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(26),
+          child: Container(
+            height: 52,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: edge),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SvgPicture.asset(
+                  'assets/images/google_g.svg',
+                  width: 20,
+                  height: 20,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: ink,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-      icon: Icon(icon, size: 22),
-      label: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
     );
   }
 }
