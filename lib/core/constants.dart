@@ -199,13 +199,21 @@ class VentlyConfig {
     defaultValue: false,
   );
 
-  /// Deep-link the OAuth (Google) flow returns to. Must be allow-listed in
-  /// Supabase → Authentication → URL Configuration and registered as a native
-  /// deep link (Android intent-filter / iOS URL scheme). Empty ⇒ let the SDK
-  /// use its platform default. Example: 'rw.vently.vently_app://login-callback'.
+  /// Deep-link the OAuth (Google) flow returns to.
+  ///
+  /// Defaulted rather than left empty. An empty value makes the SDK fall back
+  /// to the project's Site URL, which is a web page — so the browser finished
+  /// the Google round trip and then sat on a website, and the app never heard
+  /// that anyone had signed in. On a phone the redirect has to be a link the
+  /// app itself answers.
+  ///
+  /// `venttly` is already this app's scheme (iOS CFBundleURLSchemes, Android
+  /// intent-filter). It must also be listed under Supabase → Authentication →
+  /// URL Configuration → Redirect URLs, or GoTrue refuses to send the browser
+  /// there.
   static const String oauthRedirectUrl = String.fromEnvironment(
     'OAUTH_REDIRECT_URL',
-    defaultValue: '',
+    defaultValue: 'venttly://login-callback',
   );
 
   /// Whether to surface the optional Google / phone sign-in buttons. Off by

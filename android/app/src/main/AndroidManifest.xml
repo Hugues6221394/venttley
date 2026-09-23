@@ -39,6 +39,19 @@
                     android:scheme="venttly"
                     android:host="group-invite" />
             </intent-filter>
+            <!-- Where Google sends the browser back to.
+                 A separate filter because the one above is scoped to a host,
+                 so venttly://login-callback would not have matched it. On iOS
+                 this is not needed: CFBundleURLSchemes claims the whole scheme
+                 and the host is not part of the match. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="venttly"
+                    android:host="login-callback" />
+            </intent-filter>
             <!-- Specifies an Android theme to apply to this Activity as soon as
                  the Android process has started. This theme is visible to the user
                  while the Flutter UI initializes. After that, this theme continues
