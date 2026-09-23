@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -482,6 +483,34 @@ class SupabaseBackend {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Which social providers this project actually has configured.
+  ///
+  /// Asked of GoTrue rather than of a feature flag. The Google button lives on
+  /// the welcome screen, where there is no session — and my_feature_flags() is
+  /// granted to `authenticated` only, so a signed-out client gets "permission
+  /// denied" and every flag reads as its fallback. The button was therefore
+  /// unreachable no matter what the flag said.
+  ///
+  /// /auth/v1/settings is unauthenticated by design and answers the question
+  /// the flag was standing in for: is this provider configured. It cannot
+  /// drift from reality, because it *is* reality — turning the provider off in
+  /// Supabase removes the button on its own.
+  Future<Set<String>> enabledAuthProviders() async {
+    final uri = Uri.parse('${VentlyConfig.supabaseUrl}/auth/v1/settings');
+    final res = await http.get(
+      uri,
+      headers: {'apikey': VentlyConfig.supabaseAnonKey},
+    );
+    if (res.statusCode != 200) return const {};
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    final external = body['external'];
+    if (external is! Map<String, dynamic>) return const {};
+    return {
+      for (final entry in external.entries)
+        if (entry.value == true) entry.key,
+    };
   }
 
   /// True when this account authenticates with a REAL email (not a synthetic

@@ -217,7 +217,17 @@ class _SocialAuthRowState extends ConsumerState<_SocialAuthRow> {
 
   @override
   Widget build(BuildContext context) {
-    if (!flagEnabled(ref, 'google_sign_in', fallback: false)) {
+    // Asked of GoTrue, not of a feature flag.
+    //
+    // This read the google_sign_in flag with fallback: false. Flags come from
+    // my_feature_flags(), which is granted to `authenticated` only — and this
+    // screen is the one place in the app with no session. So the call was
+    // refused, the fallback won, and the button could not appear whatever the
+    // flag was set to. Turning the flag on changed nothing, which is exactly
+    // what happened.
+    final providers =
+        ref.watch(enabledAuthProvidersProvider).valueOrNull ?? const <String>{};
+    if (!providers.contains('google')) {
       return const SizedBox.shrink();
     }
     return _SocialButton(

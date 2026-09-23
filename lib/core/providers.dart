@@ -491,6 +491,16 @@ final featureFlagsProvider = StreamProvider<Map<String, bool>>((ref) {
 /// One flag, with a fallback for when the row doesn't exist yet — default
 /// to enabled for shipped features so a missing row can't dark-launch an
 /// outage.
+/// Social providers this project has configured, asked of GoTrue.
+///
+/// Not a feature flag: the buttons these gate live on the welcome screen,
+/// where there is no session, and my_feature_flags() is granted to
+/// `authenticated` only. A signed-out client gets "permission denied", every
+/// flag reads as its fallback, and the button can never appear.
+final enabledAuthProvidersProvider = FutureProvider<Set<String>>(
+  (ref) => ref.watch(repositoryProvider).enabledAuthProviders(),
+);
+
 bool flagEnabled(WidgetRef ref, String key, {bool fallback = true}) {
   final flags = ref.watch(featureFlagsProvider).valueOrNull;
   if (flags == null) return fallback;
