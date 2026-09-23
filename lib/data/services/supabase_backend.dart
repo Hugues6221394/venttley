@@ -485,6 +485,20 @@ class SupabaseBackend {
     }
   }
 
+  /// Whether a handle is free, asked while somebody is typing it.
+  ///
+  /// Advice, not a reservation: two people racing for the last free name still
+  /// ends with one insert failing against users_pseudonym_lower_unique. What
+  /// this buys is that it almost never happens, and that when it does the
+  /// message is not a surprise at the end of a filled-in form.
+  Future<bool> usernameAvailable(String username) async {
+    final res = await _client.rpc(
+      'username_available',
+      params: {'p_username': username},
+    );
+    return res == true;
+  }
+
   /// Which social providers this project actually has configured.
   ///
   /// Asked of GoTrue rather than of a feature flag. The Google button lives on

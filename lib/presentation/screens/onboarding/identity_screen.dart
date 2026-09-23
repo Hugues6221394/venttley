@@ -16,6 +16,7 @@ import '../../theme/colors.dart';
 import '../../theme/glass_tokens.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/onboarding_backdrop.dart';
+import '../../widgets/username_availability.dart';
 
 /// Create-Identity screen — DOB age gate + username + password.
 ///
@@ -80,6 +81,9 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
   void _shuffleName() {
     setState(() {
       _username.text = PseudonymGenerator.pseudonym();
+      // Shuffle writes straight to the controller, so onChanged never fires
+      // and the hint would still be describing the previous name.
+      ref.read(usernameAvailabilityProvider).check(_username.text);
       _avatarSeed = PseudonymGenerator.avatarSeed();
     });
   }
@@ -653,7 +657,7 @@ class _DobCard extends StatelessWidget {
   }
 }
 
-class _UsernameCard extends StatelessWidget {
+class _UsernameCard extends ConsumerWidget {
   const _UsernameCard({
     required this.controller,
     required this.onShuffle,
@@ -664,8 +668,9 @@ class _UsernameCard extends StatelessWidget {
   final VoidCallback onChanged;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
+    final availability = ref.watch(usernameAvailabilityProvider);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -684,7 +689,10 @@ class _UsernameCard extends StatelessWidget {
                 Expanded(
                   child: TextField(
                     controller: controller,
-                    onChanged: (_) => onChanged(),
+                    onChanged: (value) {
+                      availability.check(value);
+                      onChanged();
+                    },
                     decoration: const InputDecoration(
                       isDense: true,
                       border: InputBorder.none,
@@ -705,14 +713,14 @@ class _UsernameCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              "This is the name on your vents — and how you sign in next time.",
-              style: TextStyle(
-                fontSize: 11,
-                color: scheme.onSurface.withOpacity(0.6),
-                height: 1.4,
-              ),
+            const SizedBox(height: 8),
+            // Answered while they type, rather than after they have chosen a
+            // password, agreed to two policies and pressed the button. Until
+            // now the only signal that a name was gone came from the insert
+            // failing at the very end.
+            UsernameAvailabilityHint(
+              status: availability.status,
+              username: availability.describes,
             ),
           ],
         ),

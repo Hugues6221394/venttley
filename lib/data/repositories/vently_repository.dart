@@ -237,6 +237,12 @@ class VentlyRepository implements MusicProvider {
 
   /// True when the signed-in account uses a real email (vs an anonymous
   /// synthetic handle). Only these accounts are gated on verification.
+  Future<bool> usernameAvailable(String username) async {
+    final live = _live;
+    if (live == null) return true;
+    return live.usernameAvailable(username);
+  }
+
   Future<Set<String>> enabledAuthProviders() async {
     final live = _live;
     if (live == null) return const {};

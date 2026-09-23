@@ -113,4 +113,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261040090000': 'presence_and_receipt_preferences',
   '20261041090000': 'user_feedback_reports',
   '20261042090000': 'provider_signups_get_a_unique_handle',
+  '20261043090000': 'username_availability',
 };
