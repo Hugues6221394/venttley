@@ -51,4 +51,21 @@ void main() {
       reason: 'the last way to sign in should not come after the footer',
     );
   });
+
+  test('the divider does not repeat the buttons around it', () {
+    // The screen said it three times in a row: "Continue with email", "or
+    // continue with", "Continue with Google". A label that only restates its
+    // neighbours still costs a line of reading.
+    final divider = welcome.substring(welcome.indexOf('class _OrDivider'));
+    expect(
+      divider,
+      contains("'or',"),
+      reason: 'the divider should be the conjunction and nothing else',
+    );
+    expect(
+      RegExp(r"Text\(\s*'or continue with'").hasMatch(welcome),
+      isFalse,
+      reason: 'it is said by the button underneath it',
+    );
+  });
 }

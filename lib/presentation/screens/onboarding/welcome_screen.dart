@@ -108,9 +108,9 @@ class WelcomeScreen extends StatelessWidget {
                       // and then another way to sign up — stranded under a
                       // line that reads as the end of the screen.
                       if (VentlyConfig.socialAuthEnabled) ...[
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 20),
                         const _OrDivider(),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 16),
                         const _SocialAuthRow(),
                       ],
                       const SizedBox(height: 14),
@@ -155,43 +155,55 @@ class WelcomeScreen extends StatelessWidget {
 
 class _OrDivider extends StatelessWidget {
   const _OrDivider();
+
   @override
   Widget build(BuildContext context) {
-    final line = Expanded(
-      child: Divider(color: GlassTokens.border(context), height: 1),
+    // "or", not "or continue with".
+    //
+    // The screen said it three times in a row: Continue with email, or
+    // continue with, Continue with Google. The divider was repeating the
+    // sentence the buttons on either side of it were already making, and a
+    // label that adds nothing still costs a line of reading.
+    //
+    // The rules fade out rather than stopping. A hairline that runs to a hard
+    // stop draws attention to its own ends; one that dissolves reads as space
+    // between things, which is what a divider is for.
+    final edge = context.ink.withOpacity(0.18);
+
+    Widget rule({required bool fadeLeft}) => Expanded(
+      child: Container(
+        height: 1,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: fadeLeft
+                ? [Colors.transparent, edge]
+                : [edge, Colors.transparent],
+          ),
+        ),
+      ),
     );
+
     return Row(
       children: [
-        line,
+        rule(fadeLeft: true),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Text(
-            'or continue with',
+            'or',
             style: TextStyle(
-              color: context.ink.withOpacity(0.55),
+              color: context.ink.withOpacity(0.45),
               fontWeight: FontWeight.w700,
-              fontSize: 11.5,
-              letterSpacing: 0.3,
+              fontSize: 12,
+              letterSpacing: 0.6,
             ),
           ),
         ),
-        line,
+        rule(fadeLeft: false),
       ],
     );
   }
 }
 
-/// Optional Google entry point, additive to the anonymous flow.
-///
-/// Behind the `google_sign_in` flag, defaulting off, because the button is only
-/// honest once external_google_enabled is true in Supabase. It was not: both
-/// this and the phone button rendered against providers that are switched off,
-/// so the two alternatives to the anonymous flow both failed at the tap --
-/// on the first screen a new user ever sees.
-///
-/// Phone is gone rather than flagged. It needs an SMS provider with per-message
-/// billing, the same gap that already keeps `recovery_sms` off, and an entry
-/// point nobody can finish is worse than one that is not offered.
 class _SocialAuthRow extends ConsumerStatefulWidget {
   const _SocialAuthRow();
   @override
