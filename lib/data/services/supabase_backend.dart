@@ -3100,6 +3100,39 @@ class SupabaseBackend {
         .toList();
   }
 
+  /// What happened in the tribes I keep.
+  Future<List<KeeperNotification>> keeperNotifications({int limit = 30}) async {
+    final rows =
+        await _client.rpc(
+              'keeper_tribe_notifications',
+              params: {'p_limit': limit},
+            )
+            as List<dynamic>;
+    return rows
+        .cast<Map<String, dynamic>>()
+        .map(
+          (r) => KeeperNotification(
+            notificationId: r['notification_id'] as String,
+            kind: r['kind'] as String,
+            title: (r['title'] as String?) ?? 'Tribe update',
+            body: (r['body'] as String?) ?? '',
+            tribeId: r['tribe_id'] as String?,
+            tribeSlug: r['tribe_slug'] as String?,
+            isRead: (r['is_read'] as bool?) ?? false,
+            createdAt: DateTime.parse(r['created_at'] as String),
+          ),
+        )
+        .toList();
+  }
+
+  Future<int> keeperUnreadNotificationCount() async {
+    final value = await _client.rpc('keeper_unread_notification_count');
+    return (value as int?) ?? 0;
+  }
+
+  Future<void> markKeeperNotificationsRead() =>
+      _client.rpc('mark_keeper_notifications_read');
+
   /// People a keeper could invite to this tribe, matched as they type.
   ///
   /// Prefix on the handle, substring or trigram on the display name — so a

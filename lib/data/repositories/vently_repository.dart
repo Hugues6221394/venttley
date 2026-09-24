@@ -2415,6 +2415,24 @@ class VentlyRepository implements MusicProvider {
     return _mock.spotlightMember(tribeId: tribeId, userId: userId, note: note);
   }
 
+  /// What happened in the tribes I keep.
+  Future<List<KeeperNotification>> keeperNotifications({int limit = 30}) {
+    final live = _live;
+    if (live != null) return live.keeperNotifications(limit: limit);
+    return Future.value(const <KeeperNotification>[]);
+  }
+
+  Future<int> keeperUnreadNotificationCount() {
+    final live = _live;
+    if (live != null) return live.keeperUnreadNotificationCount();
+    return Future.value(0);
+  }
+
+  Future<void> markKeeperNotificationsRead() async {
+    final live = _live;
+    if (live != null) await live.markKeeperNotificationsRead();
+  }
+
   /// People a keeper could invite to this tribe, matched as they type.
   Future<List<TribeInviteCandidate>> searchTribeInviteCandidates({
     required String tribeId,

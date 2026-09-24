@@ -2068,6 +2068,39 @@ class TagCandidate {
   });
 }
 
+/// One line in a keeper's notification centre.
+///
+/// Deliberately not a NotificationItem. A keeper running four tribes has a
+/// different job from a person catching up on likes, and the rows here are all
+/// things somebody else did to a tribe they are responsible for — the shape is
+/// "which tribe, and what happened", not "who reacted to you".
+class KeeperNotification {
+  final String notificationId;
+  final String kind;
+  final String title;
+  final String body;
+  final String? tribeId;
+  final String? tribeSlug;
+  final bool isRead;
+  final DateTime createdAt;
+
+  const KeeperNotification({
+    required this.notificationId,
+    required this.kind,
+    required this.title,
+    required this.body,
+    required this.isRead,
+    required this.createdAt,
+    this.tribeId,
+    this.tribeSlug,
+  });
+
+  /// Whether this one has a clock on it. A report sitting unseen is the whole
+  /// failure mode moderation exists to prevent; somebody joining is news.
+  bool get isUrgent =>
+      kind == 'tribe_report_filed' || kind == 'tribe_join_request';
+}
+
 /// Somebody a keeper could invite to a tribe, as they type.
 ///
 /// [alreadyMember] and [alreadyInvited] are about the tribe rather than the

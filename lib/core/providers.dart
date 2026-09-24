@@ -2018,6 +2018,18 @@ final tagCandidatesProvider = FutureProvider.autoDispose
       return ref.watch(repositoryProvider).searchTagCandidates(prefix);
     });
 
+/// What happened in the tribes I keep.
+final keeperNotificationsProvider =
+    FutureProvider.autoDispose<List<KeeperNotification>>(
+      (ref) => ref.watch(repositoryProvider).keeperNotifications(),
+    );
+
+/// The badge on the Studio. One number rather than a list, so a screen that
+/// only draws a dot does not fetch thirty rows to find out whether to.
+final keeperUnreadCountProvider = FutureProvider.autoDispose<int>(
+  (ref) => ref.watch(repositoryProvider).keeperUnreadNotificationCount(),
+);
+
 /// Who a keeper could invite to this tribe, as they type.
 ///
 /// Keyed on the tribe and the query together, so switching tribes cannot show

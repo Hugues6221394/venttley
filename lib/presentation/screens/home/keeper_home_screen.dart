@@ -21,6 +21,7 @@ import '../../widgets/keeper_prompt_composer_sheet.dart';
 import '../../navigation/compose_navigation.dart';
 import '../../../core/vently_haptics.dart';
 import '../../theme/glass_tokens.dart';
+import '../../widgets/keeper_notification_centre.dart';
 
 /// Keeper / Plug homepage — the Studio.
 ///
@@ -204,6 +205,12 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          // Two bells, which reads odd until you notice they answer different
+          // questions. The one on the right is "did anybody react to me"; this
+          // one is "does one of my tribes need me". A keeper running four
+          // tribes has both, and folding them together buries a report between
+          // two likes.
+          _TribeAlertsButton(),
           _BellButton(),
           const SizedBox(width: 4),
           GestureDetector(
@@ -230,6 +237,54 @@ class _TopBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// What is happening in the tribes this keeper runs.
+///
+/// Its own count rather than a slice of the main bell's, because the two are
+/// read at different moments and the badge has to mean something specific: a
+/// join request waiting, a report filed, somebody new arriving.
+class _TribeAlertsButton extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unread = ref.watch(keeperUnreadCountProvider).valueOrNull ?? 0;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          tooltip: 'Your tribes',
+          icon: Icon(Icons.shield_moon_outlined, color: context.ink),
+          onPressed: () => showKeeperNotificationCentre(context, ref),
+        ),
+        if (unread > 0)
+          Positioned(
+            right: 4,
+            top: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              constraints: const BoxConstraints(minWidth: 17),
+              decoration: BoxDecoration(
+                color: VentlyColors.dangerRed,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+              child: Text(
+                // A count rather than a dot. "Something happened" is not
+                // actionable; "four people are waiting" is.
+                unread > 9 ? '9+' : '$unread',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w900,
+                  height: 1.2,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
