@@ -16,6 +16,7 @@ import '../../widgets/user_link.dart';
 import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/vently_premium_background.dart';
 import 'group_invite_screen.dart';
+import '../../widgets/verified_badge.dart';
 
 class GroupChatSettingsScreen extends ConsumerStatefulWidget {
   const GroupChatSettingsScreen({super.key, required this.roomId});
@@ -1049,11 +1050,21 @@ class _MemberRow extends StatelessWidget {
         showVerifiedBadge: member.isVerified,
         size: 48,
       ),
-      title: Text(
-        member.displayName,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontWeight: FontWeight.w900),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              member.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+          if (member.isVerified) ...[
+            const SizedBox(width: 4),
+            const VerifiedBadge(size: 13),
+          ],
+        ],
       ),
       subtitle: Text(
         member.isOwner

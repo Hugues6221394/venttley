@@ -1684,6 +1684,7 @@ class SupabaseBackend {
         commentsCount: m['comments_count'] as int?,
         createdAt: createdAtRaw == null ? null : DateTime.parse(createdAtRaw),
         rankScore: (m['rank_score'] as num?)?.toDouble() ?? 0,
+        isVerified: (m['is_verified'] as bool?) ?? false,
       );
     }).toList();
   }
@@ -2970,6 +2971,7 @@ class SupabaseBackend {
             likesCount: (r['likes_count'] as int?) ?? 0,
             likedByMe: (r['liked_by_me'] as bool?) ?? false,
             canDelete: (r['can_delete'] as bool?) ?? false,
+            authorIsVerified: (r['author_is_verified'] as bool?) ?? false,
           ),
         )
         .toList();
@@ -3061,6 +3063,7 @@ class SupabaseBackend {
             display: (r['display'] as String?) ?? (r['handle'] as String),
             avatarSeed: r['avatar_seed'] as String?,
             isFriend: (r['is_friend'] as bool?) ?? false,
+            isVerified: (r['is_verified'] as bool?) ?? false,
           ),
         )
         .toList();
@@ -4732,7 +4735,7 @@ class SupabaseBackend {
         .select(
           'role, joined_at, muted_until, warning_count, last_warned_at, member_note, '
           'users!inner(user_id, anonymous_pseudonym, display_name, avatar_seed, '
-          'profile_photo_url)',
+          'profile_photo_url, is_verified)',
         )
         .eq('tribe_id', tribeId)
         .order('joined_at', ascending: true);
@@ -4750,6 +4753,7 @@ class SupabaseBackend {
         warningCount: (r['warning_count'] as num?)?.toInt() ?? 0,
         lastWarnedAt: _coerceDate(r['last_warned_at']),
         memberNote: r['member_note'] as String?,
+        isVerified: (u['is_verified'] as bool?) ?? false,
       );
     }).toList();
   }
@@ -6630,6 +6634,7 @@ class SupabaseBackend {
           '20260719000932_group_chat_membership_and_settings',
       'is_group_owner': '20260719000932_group_chat_membership_and_settings',
       'archived_at': '20261047090000_your_inbox_is_yours',
+      'peer_is_verified': '20261049090000_a_tick_travels_with_the_name',
     });
     final isGroup = row['is_group'] == true;
     final rawName = row['peer_pseudonym'] as String?;
@@ -6664,6 +6669,7 @@ class SupabaseBackend {
       archivedAt: row['archived_at'] == null
           ? null
           : DateTime.parse(row['archived_at'] as String),
+      peerIsVerified: (row['peer_is_verified'] as bool?) ?? false,
     );
   }
 

@@ -15,6 +15,7 @@ import '../../widgets/vently_premium_background.dart';
 import '../home/home_shell.dart';
 import '../../widgets/chat_room_actions.dart';
 import '../../theme/glass_tokens.dart';
+import '../../widgets/verified_badge.dart';
 
 /// Inbox / Chats — premium messaging surface.
 ///
@@ -1052,6 +1053,14 @@ class _ConversationRow extends ConsumerWidget {
                           ),
                         ),
                       ),
+                      // The inbox is the list people open most, and it was the
+                      // one surface that never carried the tick — inbox_rooms
+                      // joined users at both ends and took everything except
+                      // is_verified.
+                      if (room.peerIsVerified) ...[
+                        const SizedBox(width: 4),
+                        const VerifiedBadge(size: 13),
+                      ],
                       const SizedBox(width: 8),
                       Text(
                         formatTimestamp(activityAt),

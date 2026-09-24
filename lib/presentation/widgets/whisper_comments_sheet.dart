@@ -12,6 +12,7 @@ import 'glass_card.dart';
 import 'profile_avatar.dart';
 import 'tagged_text.dart';
 import 'user_profile_link.dart';
+import 'verified_badge.dart';
 
 /// Comments for a Whisper — Instagram-style: single-level replies, likes,
 /// @-tagging, delete for the comment author or the whisper owner.
@@ -531,7 +532,7 @@ class _CommentTile extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(
+                      Flexible(
                         child: Text(
                           comment.authorDisplayName,
                           maxLines: 1,
@@ -543,6 +544,11 @@ class _CommentTile extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (comment.authorIsVerified) ...[
+                        const SizedBox(width: 3),
+                        const VerifiedBadge(size: 12),
+                      ],
+                      const Spacer(),
                       Text(
                         _ago(comment.createdAt),
                         style: TextStyle(

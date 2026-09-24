@@ -439,11 +439,24 @@ class _UserResultTile extends StatelessWidget {
         profilePhotoUrl: hit.profilePhotoUrl,
         size: 44,
       ),
-      title: Text(
-        hit.title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontWeight: FontWeight.w900),
+      // The search centre's whole job is telling you who somebody is, and it
+      // was the surface that could not tell you the one thing that had been
+      // checked. Beside the display name, because that is what the title is.
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              hit.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+          if (hit.isVerified) ...[
+            const SizedBox(width: 4),
+            const VerifiedBadge(size: 14),
+          ],
+        ],
       ),
       subtitle: Text(
         hit.subtitle,

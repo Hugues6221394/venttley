@@ -10,6 +10,7 @@ import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../widgets/tribe/tribe_invite_sheet.dart';
+import '../../widgets/verified_badge.dart';
 
 class TribeMembersManagementScreen extends ConsumerStatefulWidget {
   const TribeMembersManagementScreen({super.key, required this.slug});
@@ -411,11 +412,21 @@ class _MemberCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    member.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          member.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      if (member.isVerified) ...[
+                        const SizedBox(width: 4),
+                        const VerifiedBadge(size: 13),
+                      ],
+                    ],
                   ),
                   Text(
                     '@${member.pseudonym} · ${member.role.toUpperCase()}',

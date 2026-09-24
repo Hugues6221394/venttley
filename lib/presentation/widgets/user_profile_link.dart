@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'user_link.dart';
 import 'profile_avatar.dart';
+import 'verified_badge.dart';
 
 /// Tappable avatar (+ optional name) that opens `/user/:userId`.
 class UserProfileLink extends StatelessWidget {
@@ -100,6 +101,18 @@ class UserProfileLink extends StatelessWidget {
                       nameStyle ?? const TextStyle(fontWeight: FontWeight.w900),
                 ),
               ),
+              // Beside the name, not only on the avatar.
+              //
+              // showVerifiedBadge used to go to ProfileAvatar alone, which
+              // draws a small pip on the corner of the picture. This widget is
+              // what renders "avatar + name" across fifteen screens, so its
+              // name half could never carry a tick no matter what any caller
+              // passed — which is most of what "verification only comes to
+              // their usernames" was describing.
+              if (showVerifiedBadge) ...[
+                const SizedBox(width: 4),
+                VerifiedBadge(size: size <= 28 ? 12 : 14),
+              ],
             ],
           ),
         ),

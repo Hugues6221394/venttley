@@ -147,6 +147,7 @@ class TribeMemberRow {
   final int warningCount;
   final DateTime? lastWarnedAt;
   final String? memberNote;
+  final bool isVerified;
 
   const TribeMemberRow({
     required this.userId,
@@ -160,6 +161,7 @@ class TribeMemberRow {
     this.warningCount = 0,
     this.lastWarnedAt,
     this.memberNote,
+    this.isVerified = false,
   }) : _displayName = displayName;
 
   /// Same contract as [AppUser.displayName] — the fallback keeps an older API
@@ -1157,6 +1159,10 @@ class ChatRoom {
   /// mine alone, and the other side sees nothing.
   final DateTime? archivedAt;
 
+  /// Whether the person on the other end is verified. False for a group,
+  /// which is not a person.
+  final bool peerIsVerified;
+
   bool get isArchived => archivedAt != null;
 
   const ChatRoom({
@@ -1183,6 +1189,7 @@ class ChatRoom {
     this.groupAllowMemberInvites = false,
     this.isGroupOwner = false,
     this.archivedAt,
+    this.peerIsVerified = false,
   }) : _peerDisplayName = peerDisplayName;
 
   String get peerDisplayName {
@@ -1993,6 +2000,11 @@ class WhisperComment {
   final int likesCount;
   final bool likedByMe;
 
+  /// Whether the author is verified. False for a comment left behind a
+  /// persona — a persona exists to hide an identity, so attaching a checked
+  /// one to it would defeat the point.
+  final bool authorIsVerified;
+
   /// True when the caller may delete: own comment, or caller owns the
   /// whisper (owner moderation).
   final bool canDelete;
@@ -2010,6 +2022,7 @@ class WhisperComment {
     this.likesCount = 0,
     this.likedByMe = false,
     this.canDelete = false,
+    this.authorIsVerified = false,
   }) : _authorDisplayName = authorDisplayName;
 
   String get authorDisplayName {
@@ -2042,6 +2055,7 @@ class TagCandidate {
   final String display;
   final String? avatarSeed;
   final bool isFriend;
+  final bool isVerified;
 
   const TagCandidate({
     required this.kind,
@@ -2050,6 +2064,7 @@ class TagCandidate {
     required this.display,
     this.avatarSeed,
     this.isFriend = false,
+    this.isVerified = false,
   });
 }
 
@@ -2693,6 +2708,10 @@ class SearchHit {
   final DateTime? createdAt;
   final double rankScore;
 
+  /// Whether this hit is a verified person. Always false for a tribe, a topic,
+  /// or a post written behind a persona.
+  final bool isVerified;
+
   const SearchHit({
     required this.hitKind,
     required this.hitId,
@@ -2706,6 +2725,7 @@ class SearchHit {
     this.likesCount,
     this.commentsCount,
     this.createdAt,
+    this.isVerified = false,
   });
 
   bool get isTribe => hitKind == 'tribe';

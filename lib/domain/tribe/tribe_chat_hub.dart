@@ -9,6 +9,7 @@ class TribeOnlineMember {
   final String role;
   final bool isOnline;
   final DateTime? lastSeenAt;
+  final bool isVerified;
 
   const TribeOnlineMember({
     required this.userId,
@@ -19,10 +20,11 @@ class TribeOnlineMember {
     this.role = 'member',
     this.isOnline = false,
     this.lastSeenAt,
+    this.isVerified = false,
   }) : _displayName = displayName;
 
-  /// Same contract as [AppUser.displayName]. `tribe_online_members` does not
-  /// select display_name yet, so this reads it opportunistically and otherwise
+  /// Same contract as [AppUser.displayName]. `tribe_online_members` selects it
+  /// since 20261049090000; this reads it opportunistically and otherwise
   /// derives a readable name from the handle — which is still closer to the
   /// rest of the app than rendering "@healing_slow" raw.
   String get displayName {
@@ -43,6 +45,7 @@ class TribeOnlineMember {
       lastSeenAt: json['last_seen_at'] != null
           ? DateTime.parse(json['last_seen_at'] as String)
           : null,
+      isVerified: json['is_verified'] == true,
     );
   }
 }
