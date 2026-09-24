@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'anonymous_avatar.dart';
+import '../../core/media_cache_key.dart';
 
 class ProfileAvatar extends StatelessWidget {
   const ProfileAvatar({
@@ -45,6 +46,10 @@ class ProfileAvatar extends StatelessWidget {
         : ClipOval(
             child: CachedNetworkImage(
               imageUrl: url,
+              // A group avatar lives in a private bucket, so this URL is
+              // signed and differs on every mint. Without a stable key the
+              // avatar was re-downloaded every time a row scrolled past.
+              cacheKey: stableMediaCacheKey(url),
               width: size,
               height: size,
               fit: BoxFit.cover,

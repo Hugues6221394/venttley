@@ -32,6 +32,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'logger.dart';
 import '../data/services/media_saver.dart';
+import '../data/services/signed_url_cache.dart';
 
 /// Factor id waiting on a TOTP code. Null means the current session is
 /// allowed to enter the app, or there is no session.
@@ -1724,10 +1725,19 @@ final groupChatMembersProvider = FutureProvider.autoDispose
       return ref.watch(repositoryProvider).groupChatMembers(roomId);
     });
 
+/// Signed URLs for private chat media, minted once and reused.
+///
+/// Kept alive for the whole session rather than autoDispose: the point is that
+/// leaving a conversation and coming back does not re-mint every URL.
+final signedUrlCacheProvider = Provider<SignedUrlCache>((ref) {
+  final repo = ref.watch(repositoryProvider);
+  return SignedUrlCache(mint: repo.chatImageSignedUrl);
+});
+
 final groupAvatarUrlProvider = FutureProvider.autoDispose
     .family<String?, String>((ref, storagePath) async {
       if (storagePath.trim().isEmpty) return null;
-      return ref.watch(repositoryProvider).chatImageSignedUrl(storagePath);
+      return ref.watch(signedUrlCacheProvider).urlFor(storagePath);
     });
 
 final groupInvitePreviewProvider = FutureProvider.autoDispose

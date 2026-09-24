@@ -1092,7 +1092,7 @@ class _Bubble extends ConsumerWidget {
       const SnackBar(content: Text('Saving…'), duration: Duration(seconds: 1)),
     );
     try {
-      final url = await ref.read(repositoryProvider).chatImageSignedUrl(path);
+      final url = await ref.read(signedUrlCacheProvider).urlFor(path);
       final result = await ref
           .read(mediaSaverProvider)
           .saveFromUrl(
@@ -2337,8 +2337,8 @@ class _ChatVideoState extends ConsumerState<_ChatVideo> {
   void initState() {
     super.initState();
     _urlFuture = ref
-        .read(repositoryProvider)
-        .chatImageSignedUrl(widget.storagePath);
+        .read(signedUrlCacheProvider)
+        .urlFor(widget.storagePath);
   }
 
   @override
@@ -2479,12 +2479,19 @@ class _ChatImage extends ConsumerStatefulWidget {
 class _ChatImageState extends ConsumerState<_ChatImage> {
   late Future<String> _urlFuture;
 
+  /// The address, if the session already has one.
+  ///
+  /// Held so the first frame paints the image rather than a spinner: with the
+  /// URL in hand and a stable cache key, a photo seen before is already on
+  /// disk and appears without a single network call.
+  String? _known;
+
   @override
   void initState() {
     super.initState();
-    _urlFuture = ref
-        .read(repositoryProvider)
-        .chatImageSignedUrl(widget.storagePath);
+    final cache = ref.read(signedUrlCacheProvider);
+    _known = cache.cachedUrlFor(widget.storagePath);
+    _urlFuture = cache.urlFor(widget.storagePath);
   }
 
   void _openFullscreen(BuildContext context, String url) {
@@ -2502,6 +2509,10 @@ class _ChatImageState extends ConsumerState<_ChatImage> {
               maxScale: 5,
               child: CachedNetworkImage(
                 imageUrl: url,
+                // Same key as the bubble, so opening a photo full screen
+                // reuses the bytes already on disk rather than fetching them
+                // a second time under a freshly signed URL.
+                cacheKey: widget.storagePath,
                 fit: BoxFit.contain,
                 placeholder: (_, __) =>
                     const Center(child: CircularProgressIndicator()),
@@ -2522,6 +2533,8 @@ class _ChatImageState extends ConsumerState<_ChatImage> {
   Widget build(BuildContext context) {
     return FutureBuilder<String>(
       future: _urlFuture,
+      // Paints immediately when the session already knows the address.
+      initialData: _known,
       builder: (ctx, snap) {
         if (!snap.hasData) {
           return Container(
@@ -2540,6 +2553,14 @@ class _ChatImageState extends ConsumerState<_ChatImage> {
             borderRadius: BorderRadius.circular(14),
             child: CachedNetworkImage(
               imageUrl: url,
+              // The whole fix for "I have seen this photo before".
+              //
+              // Without it CachedNetworkImage keys on the URL, and a signed
+              // URL carries an issued-at stamp and a signature — so two mints
+              // a second apart are two different strings for one object.
+              // Every mount was a new key, a guaranteed miss, and a full
+              // re-download. The byte cache had never been hit once.
+              cacheKey: widget.storagePath,
               fit: BoxFit.cover,
               placeholder: (_, __) => Container(
                 height: 200,
@@ -2580,8 +2601,8 @@ class _ChatVoiceNoteState extends ConsumerState<_ChatVoiceNote> {
   void initState() {
     super.initState();
     _urlFuture = ref
-        .read(repositoryProvider)
-        .chatImageSignedUrl(widget.storagePath);
+        .read(signedUrlCacheProvider)
+        .urlFor(widget.storagePath);
   }
 
   int get _durationSeconds {
