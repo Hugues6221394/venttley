@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/constants.dart';
 import '../../core/image_magic_bytes.dart';
 import '../../core/image_metadata_scrubber.dart';
+import '../../core/video_metadata_scrubber.dart';
 import '../../core/logger.dart';
 import 'row_shape_guard.dart';
 import '../../domain/entities/entities.dart';
@@ -1491,6 +1492,26 @@ class SupabaseBackend {
     final input = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
     assertSupportedImage(input);
     return _scrubbedUploadBytes(input);
+  }
+
+  /// Video uploads only.
+  ///
+  /// The image scrubber recognises JPEG and PNG and passes everything else
+  /// through, so a clip would have gone up carrying whatever the camera wrote
+  /// — including the ISO-6709 location an iPhone puts in moov/udta/©xyz. That
+  /// is precisely the vector _scrubbedUploadBytes exists to close, so video
+  /// gets its own pass rather than inheriting the gap.
+  Uint8List _videoUploadBytes(List<int> bytes) {
+    final input = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+    assertSupportedVideo(input);
+    final scrubbed = scrubVideoMetadata(input);
+    if (scrubbed.removedBoxes.isNotEmpty) {
+      log.info(
+        'upload.video_metadata_scrubbed',
+        props: {'boxes': scrubbed.removedBoxes.join(',')},
+      );
+    }
+    return scrubbed.bytes;
   }
 
   Future<({String path, String url})> uploadPostImage({
@@ -7848,6 +7869,25 @@ class SupabaseBackend {
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
     return path;
+  }
+
+  /// A short clip, into the same private room-scoped bucket as a photo.
+  Future<({String path, String messageId})> uploadChatVideo({
+    required String roomId,
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'video/mp4',
+  }) async {
+    final messageId = const Uuid().v4();
+    final path = '$roomId/$messageId.$extension';
+    await _client.storage
+        .from('chat-media')
+        .uploadBinary(
+          path,
+          _videoUploadBytes(bytes),
+          fileOptions: FileOptions(contentType: contentType, upsert: false),
+        );
+    return (path: path, messageId: messageId);
   }
 
   Future<void> deleteChatMedia(String path) async {

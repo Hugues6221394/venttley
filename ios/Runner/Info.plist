@@ -42,6 +42,8 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Venttly saves photos and clips from your chats to your library when you choose to.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Venttly uses the camera so you can capture photos for posts and stories.</string>
 	<key>NSMicrophoneUsageDescription</key>

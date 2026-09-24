@@ -79,3 +79,35 @@ void assertSupportedImage(Uint8List bytes) {
     );
   }
 }
+
+/// Raised when upload bytes are not a real video.
+class UnsupportedVideoFormatException implements Exception {
+  const UnsupportedVideoFormatException(this.reason);
+  final String reason;
+
+  @override
+  String toString() => 'UnsupportedVideoFormatException: $reason';
+}
+
+/// Rejects a payload that is not an MP4 or QuickTime file.
+///
+/// Deliberately separate from [assertSupportedImage] rather than folded into
+/// it. An `ftyp` box with brand `isom` or `qt  ` is not a HEIC, so a clip
+/// would be refused by the image check — and letting the two share a function
+/// would mean an image upload silently starting to accept videos.
+void assertSupportedVideo(Uint8List bytes) {
+  if (bytes.length < 32) {
+    throw const UnsupportedVideoFormatException(
+      'That file is too small to be a video.',
+    );
+  }
+  // Every ISO base media file — MP4, M4V, MOV — opens with an `ftyp` box, so
+  // the type sits at offset 4 rather than at 0.
+  final isIsoBmff =
+      bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70;
+  if (!isIsoBmff) {
+    throw const UnsupportedVideoFormatException(
+      'That file is not an MP4 or QuickTime video.',
+    );
+  }
+}

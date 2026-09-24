@@ -87,6 +87,16 @@ dependencies:
   # device", which tells nobody which session to end.
   device_info_plus: ^12.4.0
   image_cropper: ^12.2.1
+  # Saving a shared photo or clip to the camera roll. Deliberately not
+  # permission_handler: gal asks PHPhotoLibrary for add-only access, which is
+  # the narrowest photo permission iOS has, and the Podfile compiles
+  # PERMISSION_PHOTOS out on purpose.
+  gal: ^2.3.3
+
+  # Playing a short clip in a chat bubble. No chewie — the controls a bubble
+  # needs are play, pause and a progress bar, and a second package to draw
+  # them is not worth the surface.
+  video_player: ^2.14.0
 
 dev_dependencies:
   flutter_test:

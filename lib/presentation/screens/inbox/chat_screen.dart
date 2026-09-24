@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../../core/constants.dart';
 import '../../../core/connection.dart';
@@ -27,6 +28,7 @@ import '../../widgets/emoji_picker_sheet.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/verified_badge.dart';
 import '../../theme/glass_tokens.dart';
+import '../../../data/services/media_saver.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.roomId});
@@ -54,6 +56,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Uint8List? _pendingImageBytes;
   String _pendingImageExt = 'jpg';
   String _pendingImageMime = 'image/jpeg';
+
+  /// Whether the staged attachment is a clip rather than a photo. One slot
+  /// holds either, because a message carries one attachment.
+  bool _pendingIsVideo = false;
   bool _recordingVoice = false;
   bool _searching = false;
   final _searchController = TextEditingController();
@@ -103,6 +109,43 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  /// Roughly a minute of phone video, matching the bucket's 24 MB cap.
+  ///
+  /// Capped here rather than left to storage because a clip that fails at the
+  /// bucket boundary fails after the whole upload, on whatever connection the
+  /// sender has.
+  static const _maxClipSeconds = 60;
+  static const _maxClipBytes = 24 * 1024 * 1024;
+
+  Future<void> _pickAttachment() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('Photo'),
+              onTap: () => Navigator.pop(ctx, 'photo'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam_outlined),
+              title: const Text('Video'),
+              subtitle: const Text('Up to a minute'),
+              onTap: () => Navigator.pop(ctx, 'video'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == 'photo') return _pickImage();
+    if (choice == 'video') return _pickVideo();
+  }
+
   Future<void> _pickImage() async {
     try {
       final picker = ImagePicker();
@@ -119,12 +162,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _pendingImageBytes = bytes;
         _pendingImageExt = ext == 'jpeg' ? 'jpg' : ext;
         _pendingImageMime = picked.mimeType ?? 'image/jpeg';
+        _pendingIsVideo = false;
       });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Could not pick image: $e')));
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    try {
+      final picked = await ImagePicker().pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(seconds: _maxClipSeconds),
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (bytes.length > _maxClipBytes) {
+        // maxDuration trims on iOS and is advisory on Android, and neither
+        // says anything about bitrate. Nothing here transcodes — the bundled
+        // ffmpeg is the audio-only build — so the honest answer is to refuse
+        // with a number rather than to fail at the bucket after the upload.
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('That clip is over 24 MB. Try a shorter one.'),
+          ),
+        );
+        return;
+      }
+      final ext = picked.path.split('.').last.toLowerCase();
+      setState(() {
+        _pendingImageBytes = bytes;
+        _pendingImageExt = ext == 'mov' ? 'mov' : 'mp4';
+        _pendingImageMime = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+        _pendingIsVideo = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not pick that video: $e')));
     }
   }
 
@@ -657,11 +737,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             _Composer(
               controller: _controller,
               pendingImageBytes: _pendingImageBytes,
-              onAttachImage: _pickImage,
+              onAttachImage: _pickAttachment,
               onEmoji: _insertEmoji,
               onMicTap: _toggleVoice,
               recording: _recordingVoice,
-              onClearImage: () => setState(() => _pendingImageBytes = null),
+              onClearImage: () => setState(() {
+                _pendingImageBytes = null;
+                _pendingIsVideo = false;
+              }),
               onSend: () async {
                 final t = _controller.text.trim();
                 // EDIT path. Re-run the same safety review as a fresh send so
@@ -751,23 +834,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 final ChatMessage sent;
                 try {
                   if (pending != null) {
+                    final kind = _pendingIsVideo ? 'video' : 'image';
                     stagedMedia = await outbox.stageMedia(
                       operationId: operationId,
                       bytes: pending,
                       extension: _pendingImageExt,
                       contentType: _pendingImageMime,
-                      mediaType: 'image',
+                      mediaType: kind,
                     );
-                    final up = await ref
-                        .read(repositoryProvider)
-                        .uploadChatImage(
-                          roomId: widget.roomId,
-                          bytes: pending,
-                          extension: _pendingImageExt,
-                          contentType: _pendingImageMime,
-                        );
+                    final repo = ref.read(repositoryProvider);
+                    final up = _pendingIsVideo
+                        ? await repo.uploadChatVideo(
+                            roomId: widget.roomId,
+                            bytes: pending,
+                            extension: _pendingImageExt,
+                            contentType: _pendingImageMime,
+                          )
+                        : await repo.uploadChatImage(
+                            roomId: widget.roomId,
+                            bytes: pending,
+                            extension: _pendingImageExt,
+                            contentType: _pendingImageMime,
+                          );
                     mediaPath = up.path;
-                    mediaType = 'image';
+                    mediaType = kind;
                   }
                   sent = await ref
                       .read(repositoryProvider)
@@ -990,6 +1080,50 @@ class _Bubble extends ConsumerWidget {
     }
   }
 
+  /// Download the attachment and hand it to the camera roll.
+  ///
+  /// Via the signed URL rather than any local copy: the receiver never had the
+  /// bytes, and the sender's staged copy is discarded once the message lands.
+  Future<void> _saveMedia(BuildContext context, WidgetRef ref) async {
+    final path = message.attachedMediaPath;
+    if (path == null) return;
+    final isVideo = message.attachedMediaType == 'video';
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Saving…'), duration: Duration(seconds: 1)),
+    );
+    try {
+      final url = await ref.read(repositoryProvider).chatImageSignedUrl(path);
+      final result = await ref
+          .read(mediaSaverProvider)
+          .saveFromUrl(
+            url,
+            isVideo: isVideo,
+            fileName: path.split('/').last,
+          );
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(switch (result) {
+            MediaSaveResult.saved => isVideo
+                ? 'Video saved to your library.'
+                : 'Photo saved to your library.',
+            // Said differently from a failure, because the fix is in Settings
+            // rather than in trying again.
+            MediaSaveResult.denied =>
+              'Venttly needs permission to add to your library.',
+            MediaSaveResult.failed => 'Could not save that just now.',
+          }),
+        ),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not save that just now.')),
+      );
+    }
+  }
+
   Future<void> _openActionSheet(BuildContext context, WidgetRef ref) async {
     HapticFeedback.selectionClick();
     final mine = message.sentByMe;
@@ -1031,6 +1165,26 @@ class _Bubble extends ConsumerWidget {
                   _react(context, ref);
                 },
               ),
+              // Photos and clips only. A voice note has nowhere to go in a
+              // camera roll, and offering "Save" on one would be a button that
+              // fails.
+              if (message.attachedMediaPath != null &&
+                  (message.attachedMediaType == 'image' ||
+                      message.attachedMediaType == 'video'))
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.download_rounded, color: context.ink),
+                  title: Text(
+                    message.attachedMediaType == 'video'
+                        ? 'Save video'
+                        : 'Save photo',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _saveMedia(context, ref);
+                  },
+                ),
               if (onCopy != null && message.plaintext.isNotEmpty)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -1298,6 +1452,18 @@ class _Bubble extends ConsumerWidget {
                   maxWidth: MediaQuery.of(context).size.width * 0.72,
                 ),
                 child: _ChatImage(storagePath: message.attachedMediaPath!),
+              ),
+            if (message.attachedMediaPath != null &&
+                message.attachedMediaType == 'video')
+              GestureDetector(
+                onLongPress: () => _openActionSheet(context, ref),
+                child: Container(
+                  margin: EdgeInsets.only(top: 4, bottom: hasText ? 2 : 4),
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.72,
+                  ),
+                  child: _ChatVideo(storagePath: message.attachedMediaPath!),
+                ),
               ),
             if (message.attachedMediaPath != null &&
                 message.attachedMediaType == 'audio')
@@ -1871,7 +2037,7 @@ class _Composer extends StatelessWidget {
                       const SizedBox(width: 10),
                       const Expanded(
                         child: Text(
-                          'Image attached. Hit send to share.',
+                          'Attached. Hit send to share.',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -2151,6 +2317,158 @@ class _PaletteEmoji extends StatelessWidget {
 /// Image attachment in a chat bubble. Resolves the storage path to a
 /// short-lived signed URL via the repo, then renders via
 /// CachedNetworkImage. Tap → fullscreen InteractiveViewer.
+/// A short clip in a bubble.
+///
+/// Deliberately plain: a poster frame with a play badge, and a tap that opens
+/// a full-screen player. No chewie — the controls a bubble needs are play,
+/// pause and a scrubber, and a second package to draw them is more surface
+/// than the feature is worth.
+class _ChatVideo extends ConsumerStatefulWidget {
+  const _ChatVideo({required this.storagePath});
+  final String storagePath;
+
+  @override
+  ConsumerState<_ChatVideo> createState() => _ChatVideoState();
+}
+
+class _ChatVideoState extends ConsumerState<_ChatVideo> {
+  late final Future<String> _urlFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlFuture = ref
+        .read(repositoryProvider)
+        .chatImageSignedUrl(widget.storagePath);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _urlFuture,
+      builder: (context, snap) {
+        final url = snap.data;
+        return GestureDetector(
+          onTap: url == null
+              ? null
+              : () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => _FullscreenVideo(url: url),
+                  ),
+                ),
+          child: Container(
+            height: 180,
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.55),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            alignment: Alignment.center,
+            child: url == null
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white70,
+                    ),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(
+                        Icons.play_circle_fill_rounded,
+                        size: 46,
+                        color: Colors.white,
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        'Video',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _FullscreenVideo extends StatefulWidget {
+  const _FullscreenVideo({required this.url});
+  final String url;
+
+  @override
+  State<_FullscreenVideo> createState() => _FullscreenVideoState();
+}
+
+class _FullscreenVideoState extends State<_FullscreenVideo> {
+  late final VideoPlayerController _controller;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize().then((_) {
+        if (!mounted) return;
+        setState(() => _ready = true);
+        _controller.play();
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Center(
+        child: !_ready
+            ? const CircularProgressIndicator(color: Colors.white70)
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  AspectRatio(
+                    aspectRatio: _controller.value.aspectRatio,
+                    child: VideoPlayer(_controller),
+                  ),
+                  VideoProgressIndicator(_controller, allowScrubbing: true),
+                  const SizedBox(height: 10),
+                  IconButton(
+                    iconSize: 44,
+                    color: Colors.white,
+                    icon: Icon(
+                      _controller.value.isPlaying
+                          ? Icons.pause_circle_filled_rounded
+                          : Icons.play_circle_fill_rounded,
+                    ),
+                    onPressed: () => setState(() {
+                      _controller.value.isPlaying
+                          ? _controller.pause()
+                          : _controller.play();
+                    }),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
 class _ChatImage extends ConsumerStatefulWidget {
   const _ChatImage({required this.storagePath});
   final String storagePath;

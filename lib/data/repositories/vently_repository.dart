@@ -4284,6 +4284,25 @@ class VentlyRepository implements MusicProvider {
     return Future.value('$roomId/group-avatar-mock.${extension.toLowerCase()}');
   }
 
+  /// A short clip, into the same private room-scoped bucket as a photo.
+  Future<({String path, String messageId})> uploadChatVideo({
+    required String roomId,
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'video/mp4',
+  }) {
+    final live = _live;
+    if (live != null) {
+      return live.uploadChatVideo(
+        roomId: roomId,
+        bytes: bytes,
+        extension: extension,
+        contentType: contentType,
+      );
+    }
+    return Future.error(StateError('not_signed_in'));
+  }
+
   Future<void> deleteChatMedia(String path) {
     final live = _live;
     if (live != null) return live.deleteChatMedia(path);

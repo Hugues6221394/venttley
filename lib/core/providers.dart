@@ -31,6 +31,7 @@ import 'analytics_events.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'logger.dart';
+import '../data/services/media_saver.dart';
 
 /// Factor id waiting on a TOTP code. Null means the current session is
 /// allowed to enter the app, or there is no session.
@@ -904,6 +905,9 @@ final storyViewersProvider = FutureProvider.autoDispose
       ref.watch(feedPostsProvider);
       return ref.watch(repositoryProvider).storyViewers(postId);
     });
+
+/// Saving a shared photo or clip to the camera roll.
+final mediaSaverProvider = Provider<MediaSaver>((ref) => MediaSaver());
 
 final inboxTabProvider = StateProvider<String>((ref) => 'requests');
 final inboxStreamProvider = StreamProvider<List<ChatRoom>>((ref) {
