@@ -10,6 +10,7 @@ import 'profile_avatar.dart';
 import 'report_reason_sheet.dart';
 import 'user_link.dart';
 import 'vently_notification_bell.dart';
+import 'chat_room_actions.dart';
 
 /// Instagram-style DM options sheet, opened from the chat header. Profile /
 /// Search / Mute quick actions, then Theme · Nicknames · Disappearing messages
@@ -201,11 +202,50 @@ class _ChatOptionsSheet extends ConsumerWidget {
                 onTap: () =>
                     Navigator.pop(context, _ChatOptionsAction.createGroup),
               ),
+            // The same three the inbox long-press offers. Somebody who is
+            // already inside the conversation should not have to back out to
+            // the list to file it away or lock it.
+            _Tile(
+              icon: room.isLocked
+                  ? Icons.lock_open_rounded
+                  : Icons.lock_outline_rounded,
+              title: room.isLocked ? 'Remove lock' : 'Lock chat',
+              onTap: () {
+                Navigator.pop(context);
+                toggleChatRoomLock(context, ref, room);
+              },
+            ),
+            _Tile(
+              icon: room.isArchived
+                  ? Icons.unarchive_outlined
+                  : Icons.archive_outlined,
+              title: room.isArchived ? 'Move back to inbox' : 'Archive',
+              onTap: () {
+                Navigator.pop(context);
+                archiveChatRoom(context, ref, room, archived: !room.isArchived);
+              },
+            ),
             _Tile(
               icon: Icons.flag_outlined,
               title: 'Report',
               danger: true,
               onTap: () => _report(context, ref),
+            ),
+            _Tile(
+              icon: Icons.delete_outline_rounded,
+              title: 'Delete conversation',
+              danger: true,
+              onTap: () async {
+                Navigator.pop(context);
+                final cleared = await confirmAndClearChatRoom(
+                  context,
+                  ref,
+                  room,
+                );
+                // Staying on a conversation that is no longer in the inbox
+                // would show an empty thread with a composer under it.
+                if (cleared && context.mounted) Navigator.of(context).maybePop();
+              },
             ),
             if (!room.isGroup)
               _Tile(

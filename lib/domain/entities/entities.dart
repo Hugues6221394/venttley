@@ -1153,6 +1153,17 @@ class ChatRoom {
   final bool groupAllowMemberInvites;
   final bool isGroupOwner;
 
+  /// Set when I have filed this conversation away. Per-person: archiving is
+  /// mine alone, and the other side sees nothing.
+  final DateTime? archivedAt;
+
+  /// Set when I have locked it. The flag is account state so it follows me to
+  /// a new phone; the check that opens it happens on the device.
+  final DateTime? lockedAt;
+
+  bool get isArchived => archivedAt != null;
+  bool get isLocked => lockedAt != null;
+
   const ChatRoom({
     required this.roomId,
     required this.peerPseudonym,
@@ -1176,6 +1187,8 @@ class ChatRoom {
     this.groupInviteEnabled = false,
     this.groupAllowMemberInvites = false,
     this.isGroupOwner = false,
+    this.archivedAt,
+    this.lockedAt,
   }) : _peerDisplayName = peerDisplayName;
 
   String get peerDisplayName {

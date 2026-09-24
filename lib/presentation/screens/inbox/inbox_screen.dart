@@ -13,6 +13,9 @@ import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../home/home_shell.dart';
+import '../../widgets/chat_room_actions.dart';
+import '../../widgets/chat_lock_gate.dart';
+import '../../theme/glass_tokens.dart';
 
 /// Inbox / Chats — premium messaging surface.
 ///
@@ -25,7 +28,9 @@ class InboxScreen extends ConsumerStatefulWidget {
   ConsumerState<InboxScreen> createState() => _InboxScreenState();
 }
 
-enum _InboxFilter { all, active, requests }
+/// Archived is a bucket rather than a tab you sit in: it is the only one that
+/// hides rooms from the others, so All has to stop meaning "everything".
+enum _InboxFilter { all, active, requests, archived }
 
 typedef InboxTimestampFormatter = String Function(DateTime timestamp);
 
@@ -190,10 +195,15 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                           itemCount: filtered.length,
                           itemBuilder: (ctx, i) {
                             final entry = filtered[i];
+                            if (entry.room == null) {
+                              return RepaintBoundary(
+                                child: _TribeConversationRow(
+                                  tribe: entry.tribe!,
+                                ),
+                              );
+                            }
                             return RepaintBoundary(
-                              child: entry.room != null
-                                  ? _ConversationRow(room: entry.room!)
-                                  : _TribeConversationRow(tribe: entry.tribe!),
+                              child: _SwipeableRow(room: entry.room!),
                             );
                           },
                         ),
@@ -284,9 +294,16 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   ) {
     final q = query.trim().toLowerCase();
 
-    Iterable<ChatRoom> roomResult = rooms;
+    // Archived rooms are out of every other bucket, including All. Somebody
+    // who files a conversation away expects it gone from the list, not
+    // demoted; leaving it in All would make archiving a no-op with extra
+    // steps.
+    Iterable<ChatRoom> roomResult = filter == _InboxFilter.archived
+        ? rooms.where((r) => r.isArchived)
+        : rooms.where((r) => !r.isArchived);
     switch (filter) {
       case _InboxFilter.all:
+      case _InboxFilter.archived:
         break;
       case _InboxFilter.active:
         roomResult = roomResult.where((r) => r.roomStatus == 'active');
@@ -310,8 +327,13 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
 
     // Tribe chats belong under All and Active. They can never be a friend
     // request, which is the only thing Requests is for.
+    // Tribe chats come from a different table set with its own archive
+    // columns that nothing in the inbox reads, so they are simply absent from
+    // Archived rather than pretending to be archivable.
     Iterable<TribeChatInboxSummary> tribeResult =
-        filter == _InboxFilter.requests ? const [] : tribes;
+        filter == _InboxFilter.requests || filter == _InboxFilter.archived
+        ? const []
+        : tribes;
     if (q.isNotEmpty) {
       tribeResult = tribeResult.where(
         (t) =>
@@ -763,21 +785,29 @@ class _ConversationsHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              for (final (label, value) in const [
-                ('All', _InboxFilter.all),
-                ('Active', _InboxFilter.active),
-                ('Requests', _InboxFilter.requests),
-              ]) ...[
-                _FilterChip(
-                  label: label,
-                  selected: filter == value,
-                  onTap: () => onChange(value),
-                ),
-                const SizedBox(width: 8),
+          // Scrolls, because a fourth chip overflows a compact phone by about
+          // a hundred pixels — which is how "Archived" was caught before it
+          // shipped rather than after.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
+            child: Row(
+              children: [
+                for (final (label, value) in const [
+                  ('All', _InboxFilter.all),
+                  ('Active', _InboxFilter.active),
+                  ('Requests', _InboxFilter.requests),
+                  ('Archived', _InboxFilter.archived),
+                ]) ...[
+                  _FilterChip(
+                    label: label,
+                    selected: filter == value,
+                    onTap: () => onChange(value),
+                  ),
+                  const SizedBox(width: 8),
+                ],
               ],
-            ],
+            ),
           ),
         ],
       ),
@@ -840,6 +870,120 @@ const double _kColumn = 16;
 const double _kRowPad = 10;
 const double _kListInset = _kColumn - _kRowPad;
 
+/// One conversation, swipeable.
+///
+/// Left archives, right deletes — the two directions people already expect
+/// from every other messenger, and the reason the long-press menu is a
+/// discovery aid rather than the only route.
+///
+/// Delete confirms first and archive does not, which looks inconsistent until
+/// you notice archive is undone by one tap on the snackbar and delete is not
+/// undone by anything.
+class _SwipeableRow extends ConsumerStatefulWidget {
+  const _SwipeableRow({required this.room});
+  final ChatRoom room;
+
+  @override
+  ConsumerState<_SwipeableRow> createState() => _SwipeableRowState();
+}
+
+class _SwipeableRowState extends ConsumerState<_SwipeableRow> {
+  /// Set once the row has been swiped away, so the list stops building it.
+  ///
+  /// Dismissible throws "a dismissed Dismissible widget is still part of the
+  /// tree" if the item is still there on the next frame, and this list is fed
+  /// by a realtime stream whose next tick is not ours to schedule.
+  bool _gone = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_gone) return const SizedBox.shrink();
+    final room = widget.room;
+
+    // A pending request is answered, not filed. Archiving one would hide a
+    // decision somebody is waiting on.
+    if (room.roomStatus == 'pending_request') {
+      return _ConversationRow(room: room);
+    }
+
+    return Dismissible(
+      key: ValueKey('swipe-${room.roomId}'),
+      background: _SwipeBackground(
+        alignment: Alignment.centerLeft,
+        colour: VentlyColors.berryMagenta,
+        icon: room.isArchived
+            ? Icons.unarchive_outlined
+            : Icons.archive_outlined,
+        label: room.isArchived ? 'Unarchive' : 'Archive',
+      ),
+      secondaryBackground: const _SwipeBackground(
+        alignment: Alignment.centerRight,
+        colour: VentlyColors.dangerRed,
+        icon: Icons.delete_outline_rounded,
+        label: 'Delete',
+      ),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          await archiveChatRoom(
+            context,
+            ref,
+            room,
+            archived: !room.isArchived,
+          );
+          return true;
+        }
+        return confirmAndClearChatRoom(context, ref, room);
+      },
+      onDismissed: (_) => setState(() => _gone = true),
+      child: _ConversationRow(room: room),
+    );
+  }
+}
+
+class _SwipeBackground extends StatelessWidget {
+  const _SwipeBackground({
+    required this.alignment,
+    required this.colour,
+    required this.icon,
+    required this.label,
+  });
+
+  final Alignment alignment;
+  final Color colour;
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      // Matches the row's own margin and radius, or the colour bleeds past the
+      // rounded corners of the card it is revealed behind.
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 22),
+      alignment: alignment,
+      decoration: BoxDecoration(
+        color: colour,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 19),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ConversationRow extends ConsumerWidget {
   const _ConversationRow({required this.room});
   final ChatRoom room;
@@ -859,10 +1003,22 @@ class _ConversationRow extends ConsumerWidget {
         : room.peerDisplayName;
     return Pressable(
       pressedScale: 0.985,
-      onTap: () => isRequest
-          ? _showRequestSheet(context, ref)
-          : context.push('/chat/${room.roomId}'),
-      onLongPress: () => _showActionsSheet(context, ref),
+      onTap: () async {
+        if (isRequest) return _showRequestSheet(context, ref);
+        // A locked thread does not open on a tap. The row already shows no
+        // preview — the server withholds it — but the messages themselves are
+        // one push away without this.
+        if (room.isLocked) {
+          final passed = await promptChatUnlock(
+            context,
+            ref,
+            reason: 'Open this conversation',
+          );
+          if (!passed || !context.mounted) return;
+        }
+        if (context.mounted) context.push('/chat/${room.roomId}');
+      },
+      onLongPress: () => showChatRoomActions(context, ref, room),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         curve: Curves.easeOut,
@@ -993,62 +1149,6 @@ class _ConversationRow extends ConsumerWidget {
         .where((w) => w.isNotEmpty)
         .map((w) => w[0].toUpperCase() + w.substring(1))
         .join(' ');
-  }
-
-  void _showActionsSheet(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetCtx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                  room.peerPseudonym,
-                  style: TextStyle(
-                    color: context.ink,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.delete_outline, color: context.ink),
-                title: Text(
-                  'Delete conversation',
-                  style: TextStyle(
-                    color: context.ink,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                onTap: () async {
-                  Navigator.pop(sheetCtx);
-                  try {
-                    await ref
-                        .read(repositoryProvider)
-                        .declineRequest(room.roomId);
-                    ref.invalidate(inboxStreamProvider);
-                  } catch (e) {
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Could not delete: $e')),
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   void _showRequestSheet(BuildContext context, WidgetRef ref) {
@@ -1205,6 +1305,30 @@ class _LastMessageLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Before anything else, including the typing indicator: a locked thread
+    // should not advertise that the other person is writing in it either.
+    // The server sends no preview at all for one, so without this the line
+    // would simply be blank and read as a bug.
+    if (room.isLocked) {
+      return Row(
+        children: [
+          Icon(
+            Icons.lock_rounded,
+            size: 12,
+            color: GlassTokens.onCardMuted(context),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            'Locked',
+            style: TextStyle(
+              color: GlassTokens.onCardMuted(context),
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      );
+    }
     if (typing) {
       return const Text(
         'typing…',
@@ -1332,6 +1456,10 @@ class _EmptyConversations extends StatelessWidget {
         case _InboxFilter.all:
           title = 'Quiet for now.';
           body = 'Add a friend to start a private conversation.';
+          break;
+        case _InboxFilter.archived:
+          title = 'Nothing archived.';
+          body = 'Swipe a conversation left to file it away here.';
           break;
       }
     }

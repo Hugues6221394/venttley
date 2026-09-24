@@ -29,6 +29,12 @@ dependencies:
   shared_preferences: ^2.3.2
   flutter_secure_storage: ^9.2.2
 
+  # Face ID / Touch ID / fingerprint, and the device passcode as the fallback,
+  # for unlocking a locked conversation. The lock is device-local by design —
+  # the flag lives on the account so it follows you, the check lives here
+  # because this is where the sensor is.
+  local_auth: ^2.3.0
+
   # Networking & backend
   supabase_flutter: ^2.6.0
   http: ^1.2.2

@@ -3569,6 +3569,28 @@ class VentlyRepository implements MusicProvider {
     return Future.value(_mock.inbox(tab: tab));
   }
 
+  /// Out of the main list and into Archived, or back.
+  Future<void> setChatRoomArchived(String roomId, bool archived) async {
+    final live = _live;
+    if (live != null) await live.setChatRoomArchived(roomId, archived);
+  }
+
+  /// Needs my face or my PIN to open, or does not.
+  Future<void> setChatRoomLocked(String roomId, bool locked) async {
+    final live = _live;
+    if (live != null) await live.setChatRoomLocked(roomId, locked);
+  }
+
+  /// Delete this conversation for me, and only me.
+  ///
+  /// The old path wrote room_status = 'declined' on the shared row, which took
+  /// the thread out of the other person's inbox too, told them nothing, and
+  /// could not be undone by anything in the app.
+  Future<void> clearChatRoom(String roomId) async {
+    final live = _live;
+    if (live != null) await live.clearChatRoom(roomId);
+  }
+
   Future<ChatRoom> acceptRequest(String roomId) {
     final live = _live;
     if (live != null) return live.acceptRequest(roomId);
