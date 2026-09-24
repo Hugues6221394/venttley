@@ -45,6 +45,11 @@ app.*.map.json
 /android/app/release
 
 # Android production signing material must never enter source control.
+# The upload keystore and anything else that must never leave this machine.
+# *.jks and *.keystore below already cover the key itself; this covers the
+# directory the signing config points at, so a stray export cannot be added
+# by a wildcard `git add`.
+/private/
 /android/key.properties
 *.jks
 *.keystore
