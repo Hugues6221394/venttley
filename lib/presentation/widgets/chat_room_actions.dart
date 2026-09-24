@@ -171,13 +171,11 @@ class _Action extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
-    this.subtitle,
     this.danger = false,
   });
 
   final IconData icon;
   final String label;
-  final String? subtitle;
   final bool danger;
   final VoidCallback onTap;
 
@@ -193,15 +191,6 @@ class _Action extends StatelessWidget {
         label,
         style: TextStyle(color: colour, fontWeight: FontWeight.w800),
       ),
-      subtitle: subtitle == null
-          ? null
-          : Text(
-              subtitle!,
-              style: TextStyle(
-                fontSize: 11.5,
-                color: GlassTokens.onCardMuted(context),
-              ),
-            ),
       onTap: onTap,
     );
   }

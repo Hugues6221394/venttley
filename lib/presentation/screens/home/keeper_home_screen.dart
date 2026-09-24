@@ -839,6 +839,12 @@ class _QuickLinks extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheduled = overview.totalScheduledPrompts;
+    // No badges on these tiles, deliberately. The KPI grid above already
+    // states pending requests and open reports, once each, and that was the
+    // point of the redesign — open reports used to appear five times in five
+    // card shapes. A badge here would be the sixth. The counts that belong on
+    // this screen are in the grid; the ones that belong elsewhere are on the
+    // drawer, which is open when the grid is not on screen.
 
     return Column(
       children: [
@@ -1044,16 +1050,26 @@ class _LinkGroup extends StatelessWidget {
             // group and the next. A Wrap sizes each tile to its own label and
             // five groups of differently-spaced icons is what a control panel
             // looks like when nobody laid it out.
-            child: GridView.count(
-              crossAxisCount: 3,
+            child: GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               padding: EdgeInsets.zero,
-              // 1.55. Tighter than this and the tile's own column overflows
-              // by a few pixels on a 375pt phone — caught by the test that
-              // pumps this panel at that size, not by looking at it.
-              childAspectRatio: 1.55,
-              children: [for (final link in links) _LinkTile(link: link)],
+              // A fixed height per tile, not an aspect ratio.
+              //
+              // childAspectRatio ties the cell's height to the screen's width,
+              // and the thing inside it — a 46pt icon and a line of label —
+              // does not change size at all. So the ratio has to be tuned per
+              // device, and 1.55 was tuned for 375pt: at 360, which is most
+              // budget Android, every one of the eighteen tiles overflowed by
+              // 1.5 pixels. mainAxisExtent is the same height everywhere and
+              // cannot drift.
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    mainAxisExtent: 74,
+                  ),
+              itemCount: links.length,
+              itemBuilder: (context, i) => _LinkTile(link: links[i]),
             ),
           ),
         ],
@@ -1385,6 +1401,14 @@ class _KeeperDrawer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The counts that mean somebody is waiting. Shown here rather than on the
+    // quick-link tiles: the drawer covers the KPI grid that already states
+    // them, so these are the same number in a place the other one is not
+    // visible, instead of the same number twice on one screen.
+    final overview = ref.watch(keeperOverviewProvider).valueOrNull;
+    final pending = overview?.totalPendingRequests ?? 0;
+    final reports = overview?.totalOpenReports ?? 0;
+
     return Drawer(
       backgroundColor: context.isDark
           ? Theme.of(context).colorScheme.surface
@@ -1474,6 +1498,7 @@ class _KeeperDrawer extends ConsumerWidget {
                   _DrawerTile(
                     icon: Icons.gavel_rounded,
                     label: 'Moderation',
+                    badge: reports > 0 ? '$reports' : null,
                     onTap: () {
                       Navigator.pop(context);
                       context.push('/keeper/moderation');
@@ -1507,6 +1532,7 @@ class _KeeperDrawer extends ConsumerWidget {
                   _DrawerTile(
                     icon: Icons.people_alt_rounded,
                     label: 'Members',
+                    badge: pending > 0 ? '$pending' : null,
                     onTap: () {
                       Navigator.pop(context);
                       _openForTribe(
@@ -1725,11 +1751,20 @@ class _DrawerTile extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.badge,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+
+  /// A queue waiting behind this row.
+  ///
+  /// Not a duplicate of the KPI grid: the drawer covers the screen, so the
+  /// grid is not visible while this is. Somebody who opened the drawer to go
+  /// somewhere should be able to see which rows want them without closing it
+  /// again to check.
+  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -1742,6 +1777,23 @@ class _DrawerTile extends StatelessWidget {
         label,
         style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
       ),
+      trailing: badge == null
+          ? null
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: VentlyColors.berryMagenta,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Text(
+                badge!,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
       onTap: onTap,
     );
   }

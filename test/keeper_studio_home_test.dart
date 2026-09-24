@@ -126,6 +126,34 @@ Future<void> _pumpStudio(
 }
 
 void main() {
+  testWidgets('the panel fits a small Android phone', (tester) async {
+    // 360pt is most budget Android, and the quick-link grid was sized by
+    // childAspectRatio — which ties the cell height to the screen width while
+    // the thing inside it, a 46pt icon and a line of label, does not change
+    // size at all. The ratio had been tuned at 375, so every one of the
+    // eighteen tiles overflowed by 1.5 pixels at 360. A fixed mainAxisExtent
+    // is the same height everywhere.
+    //
+    // flutter_test records an overflow as a caught exception rather than a
+    // failure, so this asks for it explicitly.
+    await _pumpStudio(
+      tester,
+      _FakeRepo(
+        kept: [_tribe('t1', 'Quiet Mornings', 240)],
+        statsById: {
+          't1': _stats('t1', posts24h: 4, reports: 2, pending: 3, mods: 1),
+        },
+      ),
+      size: const Size(360, 1700),
+    );
+
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'the Studio overflows on a 360pt phone',
+    );
+  });
+
   testWidgets('every number is a button that opens where you act on it', (
     tester,
   ) async {
