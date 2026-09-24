@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Compass, ChevronRight, ArrowLeft, ShieldCheck, Users, Lock, LineChart, Keyboard } from "lucide-react";
 import { canAccess } from "@/lib/roles";
 import { navigationGroups, searchNavigation, visibleNavigation } from "@/lib/navigation";
+import { containDialogTab } from "@/lib/dialog-focus";
 
 // A local page directory, never a member/content search endpoint. Neither
 // search text nor staff activity is persisted in browser storage or analytics.
@@ -33,6 +34,7 @@ export default function PageSearch({ role, onClose }: { role: string; onClose: (
   return <dialog ref={dialog} className="operator-page-search" aria-labelledby="page-search-title"
     onCancel={event => { event.preventDefault(); onClose(); }} onClose={onClose}
     onKeyDown={event => {
+      if (event.key === "Tab") { containDialogTab(event); return; }
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
       const buttons = Array.from(results.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
       if (!buttons.length) return;

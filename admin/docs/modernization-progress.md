@@ -5,6 +5,17 @@ This is an incremental foundation, **not completion of the approved plan**.
 
 ## Implemented
 
+- 12ui-connected, reference-driven light operator shell behind a server-only
+  pilot flag. Six collapsible sections, role-filtered page search (Ctrl/Cmd+K),
+  safe breadcrumbs, mobile modal navigation, session-only favorites, compact
+  shared-table density, sticky shared-table headers and reduced-motion support.
+  The existing sidebar/layout remains the default rollback interface.
+- Page search is lazy-loaded, searches static navigation metadata only, and
+  keeps audited member search separate. Neither its query nor favorites are
+  persisted to browser storage. Favorites survive client navigation but reset
+  when this workspace session/layout is recreated; they are not account sync.
+- Browser-discovered dialog focus restoration and reverse-Tab escape issues
+  fixed, with regression checks across all six staff roles.
 - Production-build browser profiling against local Supabase using disposable
   Auth fixtures, with cleanup and no saved credentials, HTML, or member data.
 - React render-scoped Supabase client/staff verification memoization. No
@@ -29,6 +40,34 @@ This is an incremental foundation, **not completion of the approved plan**.
   Queue snapshots are reconciled by the minute worker, not counted per reader.
 
 ## Measurements, not capacity claims
+
+### Shell verification — 2026-09-24
+
+Production build, local Supabase, disposable real Auth fixture, Chrome,
+1440×1000 desktop plus 768×844 and 390×844 viewports, reduced motion enabled
+during narrow-screen tests. All six staff roles passed page-search filtering,
+favorites, density, modal keyboard containment/focus return, account-menu and
+direct-URL authorization checks. Suspending the fixture denied access with its
+existing JWT. Fixture cleanup completed. Typecheck now covers **78 routes**;
+the newly added feedback route was aligned to its triage RPC roles.
+
+Final post-typography production rebuild and six-role browser rerun also passed.
+The legacy interface was independently exercised with the pilot disabled; all
+six role checks and suspended-session denial passed there as well.
+
+Single-sample local LCP in the final run: overview 288 ms, moderation 196 ms,
+support 164 ms, incidents 164 ms, impact 192 ms; observed CLS 0. Initial script transfer was
+149,574 bytes for these authenticated routes. Overview still makes 16 measured
+DAL round trips. This is a smoke baseline, **not p75, INP, a speedup claim, or
+capacity evidence**. Lazy page-search code is loaded only when requested.
+
+Artifacts: `.artifacts/operator-shell-v2-final/` contains the final redacted
+measurements and visually inspected synthetic screenshots/HTML.
+`.artifacts/operator-shell-v2/` retains the earlier reference-alignment fixtures;
+`.artifacts/legacy-shell-regression/` retains rollback verification measurements.
+No live HTML or RSC payloads are saved.
+
+### Earlier rendering baseline
 
 Measured 2026-09-20 with Chrome 153.0.8010.48, a local production Next build,
 1440×1000 viewport, unthrottled loopback, existing local fixture data, three
@@ -70,6 +109,10 @@ otherwise make the `playwright` package available to the script.
 cd admin
 npm run typecheck
 ADMIN_SHELL_ASSERT=1 ADMIN_PROFILE_LABEL=verification npm run profile:local
+
+# Exercise the new shell locally for all six roles, never production:
+ADMIN_SHELL_ASSERT=1 ADMIN_MODERN_SHELL_ASSERT=1 ADMIN_PROFILE_SAMPLES=1 \
+  ADMIN_PROFILE_LABEL=operator-shell-v2 npm run profile:local
 ```
 
 The runner builds before starting a loopback-only server on port 3107. It refuses
@@ -130,11 +173,15 @@ audiences require an explicit audited configuration change.
 
 ## Remaining approved work (not implemented)
 
-1. **Design gate:** connect the requested 12ui account, run improvement on the
-   synthetic shell reference, inspect candidates, explicitly pick one, then
-   convert and verify against it. Canva brand assets are not yet available.
-2. Six-section shell, mobile drawer, page-search palette, favorites, breadcrumbs,
-   light/dark semantic tokens, density settings, accessibility/visual QA.
+1. Extend reference coverage to real workflow redesigns. Four 12ui candidates
+   were inspected; A was explicitly selected and converted. Target-based
+   alignment was run for the light shell and page search using sanitized local
+   fixtures. Page-search conversion was recovered through the API after the
+   local exporter reported exhausted credits. Dark reference was rejected for
+   invented actions/content and must be regenerated. Canva assets remain absent.
+2. Dark theme across real workflows, persisted account preferences, full
+   accessibility/contrast/200% zoom review and robust unknown/stale live badges.
+   Shell functionality above is implemented; this is not all-console redesign.
 3. Bell drawer/full `/inbox`, category/severity filters and preferences UI;
    30-second visible polling, focus refresh, backoff, stale states and exact
    filtered-queue badge destinations. DTO/backend existence is not a working UI.
@@ -144,9 +191,63 @@ audiences require an explicit audited configuration change.
    optimistic concurrency, postmortems and separately gated containment links.
 6. Workflow waves A/B/C: reusable accessible queues/details/actions, permission-
    scoped selectors, retained form state, and individual-panel error handling.
-7. Full 77-route browser smoke coverage, real AAL2 mutation journeys, network
+7. Full 78-route browser smoke coverage, real AAL2 mutation journeys, network
    faults, both themes, zoom/narrow-device testing, and screen-reader validation.
 8. Production-shaped query plans, sustained 100-staff load tests, million-member
    fixtures, field INP, memory/CPU/bundle budgets and observed staging SLOs.
 
 No current test result proves millions of concurrent app users are supported.
+
+## Shell pilot / rollback
+
+`ADMIN_SHELL_V2=true` enables the presentation-only pilot. Its default audience
+is `super_admin`. `ADMIN_SHELL_V2_ROLES=super_admin,admin` explicitly expands the
+cohort; unknown/empty role names fail closed. These are server variables, not
+`NEXT_PUBLIC` settings and not client authorization. Routes, DAL and RPCs keep
+their independent gates. No production environment was changed by this work.
+
+Disable/unset `ADMIN_SHELL_V2` and reload the workspace to restore the previous
+interface. The change does not delete records, deliver notifications, or alter
+staff privileges. Existing open browser layouts should be reloaded after a
+rollout switch. Inbox rollout remains independently disabled.
+
+The selected 12ui light reference supplies the sidebar/header geometry, warm
+neutral surfaces, restrained borders, original heart/member artwork, and type
+hierarchy. Existing system fonts and brand tokens remain authoritative. We did
+not copy fictional counts, owners, extra controls, duplicate favorites, a
+hardcoded super-admin identity, or generated full-page absolute positioning.
+Actual queue data and existing workflow pages remain unchanged. The search
+reference supplies the modal's grouping, controls, result rows and help footer;
+counts/labels come from the real permitted page directory. Dark mode is not
+claimed complete.
+
+Target-based closeout reused existing LayerDocs with **no new purchases**.
+Shell DOM anchor coverage was 69.1%; page search reported low overlap (38.2%).
+These are mapping diagnostics, not visual quality scores. The modal's real
+backdrop, keyboard controls, truthful role-filtered page counts and labels must
+not be removed to imitate a static design. The low-overlap plan was reviewed,
+not applied as a blind selector patch. Safe typography recommendations (14px
+page links, 17px result labels, 14px counts) were applied; lighter low-contrast
+copy, fabricated sources, and button-to-text conversions were rejected. The
+shared shell retains the original selected heart asset rather than switching
+logos when search opens. Both states and narrow navigation were visually
+inspected; this is not a claim of pixel-perfect parity or full accessibility
+certification. Remaining contrast/zoom/screen-reader audits are listed above.
+
+The external comparison used no `--repo` option: automated safety review
+blocked repository-attached comparison, so only the reviewed synthetic HTML,
+CSS and original design artifacts were supplied. The optional loopback fixture
+server (`node scripts/serve-design-fixtures.mjs`) serves a fixed allowlist with
+no database clients and no arbitrary repository-file access.
+
+12ui purchase evidence is retained in ignored kits. Known run IDs:
+
+| Run | Purpose | Recorded ceiling |
+| --- | --- | --- |
+| `crt-fa78535d8b477cdfefda1af4f0a439353aa5f852` | Four light-shell candidates | $0.12 |
+| `32072773-3985-494e-8b2b-1ddbdfe63399` and `82b5beff-62a0-4fe7-8b0d-67de7d107f45` | Selected A conversion/export | $0.55 shared stage ceiling |
+| `crt-b2ffe02d5acd0e0b077a327687475dd3157978a5` | Two branch states; local exports failed | See provider ledger |
+| `5adcfa63-0cac-4701-9438-a2bfed8b9187` and `050c527f-47f8-4590-b619-6d6c8412963f` | Page-search API recovery/export | See provider ledger |
+
+These are recorded operation ceilings/identifiers, not a claim about the final
+account bill. No discarded dark implementation or failed prototype is shipped.

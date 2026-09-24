@@ -81,6 +81,9 @@ const SECTION_ROLES: Record<string, StaffRole[]> = {
   "/privacy": ["super_admin", "admin"],
   "/data-governance": ["super_admin", "admin", "read_only_auditor"],
   "/support/cases": ["super_admin", "admin", "support"],
+  // This page presents triage controls, so match admin_triage_feedback rather
+  // than the broader read-only feedback RPC audience.
+  "/feedback": ["super_admin", "admin", "support"],
   "/legal-requests": ["super_admin", "admin"],
   "/crisis/playbooks": ["super_admin", "admin", "moderator", "support"],
   "/recovery-readiness": ["super_admin", "admin"],

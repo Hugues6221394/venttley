@@ -5,6 +5,7 @@ import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
 import 'profile_avatar.dart';
+import 'block_refresh.dart';
 
 /// Opens the blocked-accounts sheet from Settings or Friends.
 void showBlockedAccountsSheet(BuildContext context) {
@@ -111,11 +112,14 @@ class BlockedAccountsSheet extends ConsumerWidget {
                                       await ref
                                           .read(repositoryProvider)
                                           .unblockUser(b.userId);
-                                      ref.invalidate(myBlocksProvider);
+                                      refreshAfterBlockChange(ref);
                                       if (ctx.mounted) {
                                         ScaffoldMessenger.of(ctx).showSnackBar(
                                           const SnackBar(
-                                            content: Text('Unblocked.'),
+                                            content: Text(
+                                              'Unblocked. Any friendship you '
+                                              'had is back.',
+                                            ),
                                           ),
                                         );
                                       }

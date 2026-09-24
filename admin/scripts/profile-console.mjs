@@ -31,6 +31,10 @@ const env = { ...process.env, NEXT_PUBLIC_SUPABASE_URL: config.API_URL,
   NEXT_PUBLIC_ADMIN_ENV: "local", ADMIN_REQUIRE_MFA: "false",
   ADMIN_ORIGIN_SECRET: "", ADMIN_IP_ALLOWLIST: "", NEXT_TELEMETRY_DISABLED: "1",
   ADMIN_PROFILE_METRICS: "1" };
+if (process.env.ADMIN_MODERN_SHELL_ASSERT === "1") {
+  env.ADMIN_SHELL_V2 = "true";
+  env.ADMIN_SHELL_V2_ROLES = STAFF_ROLES.join(",");
+}
 const service = createClient(config.API_URL, config.SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
@@ -133,8 +137,34 @@ try {
           header.querySelectorAll("p").forEach(p => { if (p.textContent?.startsWith("@")) p.textContent = "@operator"; });
           header.querySelectorAll("button > span").forEach(span => span.remove());
         });
+        await page.locator("main h1").evaluate(heading => { heading.className = "h-page"; });
         await page.locator("aside .pill").evaluateAll(elements => elements.forEach(el => el.remove()));
         await page.screenshot({ path: resolve(outputDir, "synthetic-shell.png") });
+        if (process.env.ADMIN_MODERN_SHELL_ASSERT === "1") {
+          // Save only the reconstructed fixture and CSS, never the actual
+          // document/RSC scripts (which may include real database responses).
+          const captureFixture = async name => {
+            const html = await page.evaluate(() => {
+              const shell = document.querySelector(".operator-shell-v2").cloneNode(true);
+              shell.querySelectorAll("script").forEach(element => element.remove());
+              shell.querySelectorAll("a").forEach(element => element.setAttribute("href", "#"));
+              shell.querySelectorAll("input").forEach(element => { element.value = ""; element.removeAttribute("value"); });
+              const css = [...document.styleSheets].flatMap(sheet => { try { return [...sheet.cssRules].map(rule=>rule.cssText); } catch { return []; } }).join("\n");
+              return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body>${shell.outerHTML}</body></html>`;
+            });
+            await writeFile(resolve(outputDir, `${name}.html`), html);
+            await page.screenshot({ path: resolve(outputDir, `${name}.png`) });
+          };
+          await captureFixture("synthetic-shell");
+          await page.getByRole("button",{name:"Find a page",exact:true}).click();
+          await page.getByRole("dialog",{name:"Page navigation search"}).waitFor();
+          await captureFixture("synthetic-page-search");
+          await page.keyboard.press("Escape");
+          await page.setViewportSize({width:390,height:844});
+          await page.getByRole("button",{name:"Open navigation",exact:true}).click();
+          await page.getByRole("dialog",{name:"Workspace navigation"}).waitFor();
+          await captureFixture("synthetic-mobile-navigation");
+        }
       }
       await context.close();
     }
@@ -158,6 +188,38 @@ try {
       assert.equal(await page.locator("#staff-account-menu a[href='/audit']").count(),canAccess(role,"/audit")?1:0);
       await page.keyboard.press("Escape");
       assert.equal(await page.getByRole("button",{name:"Account menu"}).getAttribute("aria-expanded"),"false");
+      if (process.env.ADMIN_MODERN_SHELL_ASSERT === "1") {
+        assert.equal(await page.locator(".operator-shell-v2").count(),1);
+        await page.getByRole("button",{name:"Favorite",exact:true}).click();
+        assert.equal(await page.getByRole("button",{name:"Saved",exact:true}).getAttribute("aria-pressed"),"true");
+        assert.equal(await page.locator(".operator-favorites a[href='/overview']").count(),1);
+        await page.getByRole("button",{name:"Compact view",exact:true}).click();
+        assert.equal(await page.locator(".operator-shell-v2").getAttribute("data-density"),"compact");
+        await page.getByRole("button",{name:"Find a page",exact:true}).click();
+        const search = page.getByRole("dialog",{name:"Page navigation search"});
+        await search.waitFor();
+        await page.getByRole("textbox",{name:"Find an admin page"}).fill("Staff accounts");
+        assert.equal(await search.locator(".operator-search-results button").count(),canAccess(role,"/staff")?1:0);
+        await page.getByRole("textbox",{name:"Find an admin page"}).fill("Control Center");
+        await page.keyboard.press("ArrowDown");
+        assert(await search.locator(".operator-search-results button").first().evaluate(button=>button===document.activeElement),"arrow keys focus actual page result");
+        await page.keyboard.press("Escape");
+        assert(await page.getByRole("button",{name:"Find a page",exact:true}).evaluate(button=>button===document.activeElement),"search returns focus to trigger");
+        await page.emulateMedia({reducedMotion:"reduce"});
+        for (const width of [768,390]) {
+          await page.setViewportSize({width,height:844});
+          await page.getByRole("button",{name:"Open navigation",exact:true}).click();
+          const drawer = page.getByRole("dialog",{name:"Workspace navigation"});
+          await drawer.waitFor();
+          assert(await drawer.evaluate(element=>element.matches(":modal")),"navigation is a modal, background inert");
+          await page.keyboard.press("Shift+Tab");
+          assert(await drawer.evaluate(element=>element.contains(document.activeElement)),"drawer traps keyboard focus");
+          await page.keyboard.press("Escape");
+          assert(await page.getByRole("button",{name:"Open navigation",exact:true}).evaluate(button=>button===document.activeElement),"drawer restores trigger focus");
+          assert(await page.locator("header").first().evaluate(element=>element.getBoundingClientRect().right<=innerWidth+1),"topbar fits narrow viewport");
+        }
+        console.log(`PASS modern shell search, favorites, density, mobile and keyboard: ${role}`);
+      }
       await page.goto(`${origin}/staff`, {waitUntil:"networkidle"});
       assert.equal(new URL(page.url()).pathname,role==="super_admin"?"/staff":"/overview",`${role} direct URL authorization`);
       const attention = await auth.rpc("admin_staff_attention");

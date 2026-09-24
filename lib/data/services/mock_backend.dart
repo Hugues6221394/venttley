@@ -2001,10 +2001,17 @@ class MockBackend {
         createdAt: DateTime.now(),
       ),
     );
-    // Blocks tear down any existing friendship in either status.
-    final pair = _pair(me.userId, otherUserId);
-    _friendships.removeWhere((f) => f.userA == pair.a && f.userB == pair.b);
+    // The friendship is left alone. Blocking suspends it — myFriends filters
+    // it out below for as long as the block exists — so unblocking brings it
+    // back rather than leaving both people to start again.
   }
+
+  /// Whether a block exists in either direction. Symmetric, like has_block.
+  bool _blocked(String a, String b) => _blocks.any(
+    (x) =>
+        (x.blockerId == a && x.blockedId == b) ||
+        (x.blockerId == b && x.blockedId == a),
+  );
 
   Future<void> unblockUser(String otherUserId) async {
     final me = _me;
@@ -2022,7 +2029,11 @@ class MockBackend {
             .where(
               (f) =>
                   f.status == 'accepted' &&
-                  (f.userA == me.userId || f.userB == me.userId),
+                  (f.userA == me.userId || f.userB == me.userId) &&
+                  !_blocked(
+                    me.userId,
+                    f.userA == me.userId ? f.userB : f.userA,
+                  ),
             )
             .toList()
           ..sort(

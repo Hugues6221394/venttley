@@ -120,4 +120,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261047090000': 'your_inbox_is_yours',
   '20261048090000': 'short_clips_in_a_chat',
   '20261049090000': 'a_tick_travels_with_the_name',
+  '20261050090000': 'blocking_suspends_a_friendship',
 };

@@ -27,7 +27,6 @@ import '../../widgets/chat_options_sheet.dart';
 import '../../widgets/emoji_picker_sheet.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/verified_badge.dart';
-import '../../theme/glass_tokens.dart';
 import '../../../data/services/media_saver.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {

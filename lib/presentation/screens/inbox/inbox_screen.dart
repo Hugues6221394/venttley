@@ -14,7 +14,6 @@ import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../home/home_shell.dart';
 import '../../widgets/chat_room_actions.dart';
-import '../../theme/glass_tokens.dart';
 import '../../widgets/verified_badge.dart';
 
 /// Inbox / Chats — premium messaging surface.

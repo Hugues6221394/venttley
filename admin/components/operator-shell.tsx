@@ -8,6 +8,7 @@ import { LayoutDashboard, ShieldCheck, Database, Lock, LineChart, ChevronDown, M
 import { Star, Search } from "lucide-react";
 import dynamic from "next/dynamic";
 import { activeNavigation, navigationGroups, safeFavorites, visibleNavigation } from "@/lib/navigation";
+import { containDialogTab } from "@/lib/dialog-focus";
 
 const groupIcons = [LayoutDashboard, ShieldCheck, null, Database, Lock, LineChart];
 const PageSearch = dynamic(() => import("./page-search"), {
@@ -25,10 +26,18 @@ export default function OperatorShell({ role, pseudonym, env, badges, children }
   const [compact, setCompact] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const searchButton = useRef<HTMLButtonElement>(null);
+  const previouslyOpen = useRef({ mobile: false, search: false });
   const mobileButton = useRef<HTMLButtonElement>(null);
   const allowedFavorites = safeFavorites(role, favorites);
   const isFavorite = !!active && allowedFavorites.includes(active.href);
   useEffect(() => { setMobileOpen(false); }, [pathname]);
+  useEffect(() => {
+    // Restore after React removes the modal. Focusing before that commit is
+    // ignored because the browser still treats the trigger as inert.
+    if (previouslyOpen.current.mobile && !mobileOpen) mobileButton.current?.focus();
+    if (previouslyOpen.current.search && !searchOpen) searchButton.current?.focus();
+    previouslyOpen.current = { mobile: mobileOpen, search: searchOpen };
+  }, [mobileOpen, searchOpen]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k" && !document.querySelector("dialog[open]")) {
@@ -54,6 +63,7 @@ export default function OperatorShell({ role, pseudonym, env, badges, children }
           aria-label="Open navigation" aria-haspopup="dialog" aria-expanded={mobileOpen}
           onClick={() => setMobileOpen(true)}><Menu size={18} /></button>
           <button ref={searchButton} type="button" className="icon-btn shrink-0" aria-label="Find a page" aria-haspopup="dialog"
+            aria-expanded={searchOpen}
             title="Find a page (Ctrl or Command + K)" onClick={() => setSearchOpen(true)}><Search size={18} /></button></>
       } />
       <div className="operator-context">
@@ -75,10 +85,10 @@ export default function OperatorShell({ role, pseudonym, env, badges, children }
       </div>
       <main id="workspace-content" tabIndex={-1} className="operator-main">{children}</main>
     </div>
-    {mobileOpen && <NavigationDialog onClose={() => { setMobileOpen(false); mobileButton.current?.focus(); }}>
+    {mobileOpen && <NavigationDialog onClose={() => setMobileOpen(false)}>
       <Brand role={role} />{nav(true)}
     </NavigationDialog>}
-    {searchOpen && <PageSearch role={role} onClose={() => { setSearchOpen(false); searchButton.current?.focus(); }} />}
+    {searchOpen && <PageSearch role={role} onClose={() => setSearchOpen(false)} />}
   </div>;
 }
 
@@ -141,6 +151,7 @@ function NavigationDialog({ children, onClose }: { children: ReactNode; onClose:
   useEffect(() => { ref.current?.showModal(); }, []);
   // Native dialog supplies focus containment, Escape and background inertness.
   return <dialog ref={ref} className="operator-mobile-dialog" aria-label="Workspace navigation"
+    onKeyDown={containDialogTab}
     onCancel={event => { event.preventDefault(); onClose(); }} onClose={onClose}
     onClick={event => { if (event.target === event.currentTarget) {
       const rect = event.currentTarget.getBoundingClientRect();

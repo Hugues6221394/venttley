@@ -11,6 +11,7 @@ import 'report_reason_sheet.dart';
 import 'user_link.dart';
 import 'vently_notification_bell.dart';
 import 'chat_room_actions.dart';
+import 'block_refresh.dart';
 
 /// Instagram-style DM options sheet, opened from the chat header. Profile /
 /// Search / Mute quick actions, then Theme · Nicknames · Disappearing messages
@@ -409,11 +410,20 @@ class _ChatOptionsSheet extends ConsumerWidget {
     } else {
       await ref.read(repositoryProvider).blockUser(id);
     }
-    ref.invalidate(myBlocksProvider);
+    // Not just the blocks list. Blocking now suspends a friendship instead of
+    // deleting it, so the friend list, the presence rail and the inbox all
+    // change at this moment too.
+    refreshAfterBlockChange(ref);
     if (context.mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(isBlocked ? 'Unblocked.' : 'Blocked.')),
+        SnackBar(
+          content: Text(
+            isBlocked
+                ? 'Unblocked. They are back in your friends.'
+                : 'Blocked.',
+          ),
+        ),
       );
     }
   }
