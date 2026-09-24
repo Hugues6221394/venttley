@@ -3575,12 +3575,6 @@ class VentlyRepository implements MusicProvider {
     if (live != null) await live.setChatRoomArchived(roomId, archived);
   }
 
-  /// Needs my face or my PIN to open, or does not.
-  Future<void> setChatRoomLocked(String roomId, bool locked) async {
-    final live = _live;
-    if (live != null) await live.setChatRoomLocked(roomId, locked);
-  }
-
   /// Delete this conversation for me, and only me.
   ///
   /// The old path wrote room_status = 'declined' on the shared row, which took

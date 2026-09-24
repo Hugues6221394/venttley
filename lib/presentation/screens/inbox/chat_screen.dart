@@ -26,7 +26,6 @@ import '../../widgets/chat_options_sheet.dart';
 import '../../widgets/emoji_picker_sheet.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/verified_badge.dart';
-import '../../widgets/chat_lock_gate.dart';
 import '../../theme/glass_tokens.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -308,13 +307,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         appBar: AppBar(),
         body: const Center(child: Text('Conversation not found')),
       );
-    }
-    // A deep link, a notification tap, or a stale route all reach this screen
-    // without passing the inbox row, so the lock has to be here as well as
-    // there. The set is in-memory, so killing the app locks it again.
-    if (r.isLocked &&
-        !ref.watch(unlockedChatRoomsProvider).contains(widget.roomId)) {
-      return _LockedChatScreen(roomId: widget.roomId);
     }
     final messages =
         ref.watch(messagesProvider(widget.roomId)).valueOrNull ?? const [];
@@ -2369,64 +2361,3 @@ class _ReactionChip extends StatelessWidget {
 }
 
 
-/// What a locked conversation looks like until you prove it is yours.
-class _LockedChatScreen extends ConsumerWidget {
-  const _LockedChatScreen({required this.roomId});
-  final String roomId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    Future<void> unlock() async {
-      final passed = await promptChatUnlock(
-        context,
-        ref,
-        reason: 'Open this conversation',
-      );
-      if (!passed) return;
-      ref.read(unlockedChatRoomsProvider.notifier).update(
-        (set) => {...set, roomId},
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 40),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.lock_rounded,
-                size: 44,
-                color: GlassTokens.onCardMuted(context),
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'This conversation is locked',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Unlock it with Face ID, your fingerprint, or your PIN.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: GlassTokens.onCardMuted(context),
-                ),
-              ),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: unlock,
-                icon: const Icon(Icons.lock_open_rounded, size: 18),
-                label: const Text('Unlock'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

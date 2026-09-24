@@ -202,19 +202,9 @@ class _ChatOptionsSheet extends ConsumerWidget {
                 onTap: () =>
                     Navigator.pop(context, _ChatOptionsAction.createGroup),
               ),
-            // The same three the inbox long-press offers. Somebody who is
-            // already inside the conversation should not have to back out to
-            // the list to file it away or lock it.
-            _Tile(
-              icon: room.isLocked
-                  ? Icons.lock_open_rounded
-                  : Icons.lock_outline_rounded,
-              title: room.isLocked ? 'Remove lock' : 'Lock chat',
-              onTap: () {
-                Navigator.pop(context);
-                toggleChatRoomLock(context, ref, room);
-              },
-            ),
+            // The same two the inbox long-press offers. Somebody already
+            // inside the conversation should not have to back out to the list
+            // to file it away.
             _Tile(
               icon: room.isArchived
                   ? Icons.unarchive_outlined

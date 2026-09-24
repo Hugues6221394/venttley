@@ -14,7 +14,6 @@ import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../home/home_shell.dart';
 import '../../widgets/chat_room_actions.dart';
-import '../../widgets/chat_lock_gate.dart';
 import '../../theme/glass_tokens.dart';
 
 /// Inbox / Chats — premium messaging surface.
@@ -1003,21 +1002,9 @@ class _ConversationRow extends ConsumerWidget {
         : room.peerDisplayName;
     return Pressable(
       pressedScale: 0.985,
-      onTap: () async {
-        if (isRequest) return _showRequestSheet(context, ref);
-        // A locked thread does not open on a tap. The row already shows no
-        // preview — the server withholds it — but the messages themselves are
-        // one push away without this.
-        if (room.isLocked) {
-          final passed = await promptChatUnlock(
-            context,
-            ref,
-            reason: 'Open this conversation',
-          );
-          if (!passed || !context.mounted) return;
-        }
-        if (context.mounted) context.push('/chat/${room.roomId}');
-      },
+      onTap: () => isRequest
+          ? _showRequestSheet(context, ref)
+          : context.push('/chat/${room.roomId}'),
       onLongPress: () => showChatRoomActions(context, ref, room),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
@@ -1305,30 +1292,6 @@ class _LastMessageLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Before anything else, including the typing indicator: a locked thread
-    // should not advertise that the other person is writing in it either.
-    // The server sends no preview at all for one, so without this the line
-    // would simply be blank and read as a bug.
-    if (room.isLocked) {
-      return Row(
-        children: [
-          Icon(
-            Icons.lock_rounded,
-            size: 12,
-            color: GlassTokens.onCardMuted(context),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            'Locked',
-            style: TextStyle(
-              color: GlassTokens.onCardMuted(context),
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
-          ),
-        ],
-      );
-    }
     if (typing) {
       return const Text(
         'typing…',

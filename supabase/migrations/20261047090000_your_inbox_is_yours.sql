@@ -1,4 +1,4 @@
--- Deleting a conversation, archiving it, and locking it — each of them
+-- Deleting a conversation and archiving it — each of them
 -- yours alone.
 --
 -- Today the inbox has one long-press action, "Delete conversation", and it
@@ -12,7 +12,7 @@
 -- do it — guard_chat_message_block stops the messages and leaves the thread
 -- sitting there. Leaving works, and is properly per-user, but only for groups.
 --
--- So: three pieces of per-user state, on dm_room_prefs, which is already keyed
+-- So: two pieces of per-user state, on dm_room_prefs, which is already keyed
 -- (room_id, user_id) with a self-only policy. The name is now a misnomer — it
 -- holds state for group rooms as well, and has since set_dm_room_pref started
 -- guarding on is_chat_room_member rather than on room_kind.
@@ -27,23 +27,19 @@
 --                 something new. The same shape chat_message_hides already
 --                 uses for a single message.
 --
---   locked_at   — the thread needs your face or your PIN to open. Stored here
---                 rather than on the device so the lock follows the account,
---                 and enforced on the device, because that is where the
---                 fingerprint reader is. It is not encryption and nothing here
---                 pretends otherwise: what it buys is that somebody holding
---                 your unlocked phone cannot read the thread. What the server
---                 does do is stop the preview text leaving the database at
---                 all, so a locked chat cannot leak through the inbox row or a
---                 push notification.
+-- Locking a chat behind Face ID or a PIN was built alongside these and then
+-- taken back out, deliberately. It had no way to recover a forgotten PIN, so
+-- somebody who set one and forgot it would be locked out of their own
+-- conversation for good; and local_auth needs a FlutterFragmentActivity on
+-- Android, which is a crash path that cannot be tested on a simulator. It will
+-- come back as one coherent change rather than as a column nothing writes.
 
 ALTER TABLE public.dm_room_prefs
   ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS cleared_at  TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS locked_at   TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS cleared_at  TIMESTAMPTZ;
 
 -- ---------------------------------------------------------------------------
--- The three verbs.
+-- The two verbs.
 -- ---------------------------------------------------------------------------
 --
 -- Separate from set_dm_room_pref because that one COALESCEs every argument to
@@ -77,32 +73,6 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.set_chat_room_locked(
-  p_room_id UUID,
-  p_locked  BOOLEAN
-) RETURNS VOID
-LANGUAGE plpgsql
-VOLATILE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-BEGIN
-  IF NOT private.is_chat_room_member(p_room_id) THEN
-    RAISE EXCEPTION 'not_a_participant';
-  END IF;
-
-  INSERT INTO public.dm_room_prefs (room_id, user_id, locked_at, updated_at)
-  VALUES (
-    p_room_id, (SELECT auth.uid()),
-    CASE WHEN p_locked THEN pg_catalog.now() ELSE NULL END,
-    pg_catalog.now()
-  )
-  ON CONFLICT (room_id, user_id) DO UPDATE SET
-    locked_at  = CASE WHEN p_locked THEN pg_catalog.now() ELSE NULL END,
-    updated_at = pg_catalog.now();
-END;
-$$;
-
 -- "Delete", for one person.
 --
 -- Named clear rather than delete because that is what it does, and because
@@ -131,10 +101,8 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.set_chat_room_archived(UUID, BOOLEAN) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.set_chat_room_locked(UUID, BOOLEAN)  FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.clear_chat_room(UUID)                FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.clear_chat_room(UUID)                 FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.set_chat_room_archived(UUID, BOOLEAN) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.set_chat_room_locked(UUID, BOOLEAN)   TO authenticated;
 GRANT EXECUTE ON FUNCTION public.clear_chat_room(UUID)                 TO authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -183,12 +151,7 @@ SELECT r.room_id,
             ELSE 2
         END AS member_count,
     COALESCE(lm.unread_count, 0) AS unread_count,
-    -- A locked thread's last line does not leave the database. The inbox row
-    -- renders it, and so does the foreground notification built from the same
-    -- stream, so blanking it in the client would still have shipped it to the
-    -- device.
-    CASE WHEN p.locked_at IS NOT NULL THEN NULL::text
-         ELSE lm.last_message_preview END AS last_message_preview,
+    lm.last_message_preview,
     lm.last_message_at,
     COALESCE(lm.last_own_message_read, false) AS last_own_message_read,
     COALESCE(lm.last_message_at, r.updated_at, r.created_at) AS sort_activity_at,
@@ -198,7 +161,6 @@ SELECT r.room_id,
             ELSE NULLIF(btrim(peer_init.profile_photo_url), ''::text)
         END AS peer_profile_photo_url,
     p.archived_at,
-    p.locked_at,
     p.cleared_at
    FROM chat_rooms r
      LEFT JOIN users peer_init ON peer_init.user_id = r.initiated_by

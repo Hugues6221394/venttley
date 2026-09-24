@@ -1,9 +1,9 @@
--- Deleting, archiving and locking a chat, each of them one person's decision.
+-- Deleting and archiving a chat, each of them one person's decision.
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(14);
+SELECT plan(10);
 
 SET session_replication_role = replica;
 
@@ -74,28 +74,6 @@ SELECT is(
 SELECT lives_ok(
   $$ SELECT public.set_chat_room_archived('eee1aaaa-0000-4000-8000-000000000001', FALSE) $$,
   'and I can put it back'
-);
-
--- Locking. The lock itself happens on the device, where the fingerprint
--- reader is; what the server does is stop the last line leaving at all.
-SELECT lives_ok(
-  $$ SELECT public.set_chat_room_locked('eee1aaaa-0000-4000-8000-000000000001', TRUE) $$,
-  'I can lock a conversation'
-);
-SELECT is(
-  (SELECT last_message_preview FROM public.inbox_rooms
-    WHERE room_id = 'eee1aaaa-0000-4000-8000-000000000001'),
-  NULL,
-  'and a locked thread stops sending its last line to the device'
-);
-SELECT ok(
-  (SELECT unread_count FROM public.inbox_rooms
-    WHERE room_id = 'eee1aaaa-0000-4000-8000-000000000001') = 2,
-  'though it still says how many are waiting'
-);
-SELECT lives_ok(
-  $$ SELECT public.set_chat_room_locked('eee1aaaa-0000-4000-8000-000000000001', FALSE) $$,
-  'and unlocking gives it back'
 );
 
 -- Deleting, which is the one that used to take the conversation away from

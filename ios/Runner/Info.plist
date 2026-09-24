@@ -42,8 +42,6 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Venttly uses Face ID to open conversations you have locked.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Venttly uses the camera so you can capture photos for posts and stories.</string>
 	<key>NSMicrophoneUsageDescription</key>

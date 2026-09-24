@@ -6609,7 +6609,6 @@ class SupabaseBackend {
           '20260719000932_group_chat_membership_and_settings',
       'is_group_owner': '20260719000932_group_chat_membership_and_settings',
       'archived_at': '20261047090000_your_inbox_is_yours',
-      'locked_at': '20261047090000_your_inbox_is_yours',
     });
     final isGroup = row['is_group'] == true;
     final rawName = row['peer_pseudonym'] as String?;
@@ -6644,9 +6643,6 @@ class SupabaseBackend {
       archivedAt: row['archived_at'] == null
           ? null
           : DateTime.parse(row['archived_at'] as String),
-      lockedAt: row['locked_at'] == null
-          ? null
-          : DateTime.parse(row['locked_at'] as String),
     );
   }
 
@@ -6656,12 +6652,6 @@ class SupabaseBackend {
         'set_chat_room_archived',
         params: {'p_room_id': roomId, 'p_archived': archived},
       );
-
-  /// Needs my face or my PIN to open, or does not.
-  Future<void> setChatRoomLocked(String roomId, bool locked) => _client.rpc(
-    'set_chat_room_locked',
-    params: {'p_room_id': roomId, 'p_locked': locked},
-  );
 
   /// "Delete", for one person.
   ///

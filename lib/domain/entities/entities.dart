@@ -1157,12 +1157,7 @@ class ChatRoom {
   /// mine alone, and the other side sees nothing.
   final DateTime? archivedAt;
 
-  /// Set when I have locked it. The flag is account state so it follows me to
-  /// a new phone; the check that opens it happens on the device.
-  final DateTime? lockedAt;
-
   bool get isArchived => archivedAt != null;
-  bool get isLocked => lockedAt != null;
 
   const ChatRoom({
     required this.roomId,
@@ -1188,7 +1183,6 @@ class ChatRoom {
     this.groupAllowMemberInvites = false,
     this.isGroupOwner = false,
     this.archivedAt,
-    this.lockedAt,
   }) : _peerDisplayName = peerDisplayName;
 
   String get peerDisplayName {

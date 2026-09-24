@@ -31,7 +31,6 @@ import 'analytics_events.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'logger.dart';
-import '../data/services/chat_lock.dart';
 
 /// Factor id waiting on a TOTP code. Null means the current session is
 /// allowed to enter the app, or there is no session.
@@ -905,17 +904,6 @@ final storyViewersProvider = FutureProvider.autoDispose
       ref.watch(feedPostsProvider);
       return ref.watch(repositoryProvider).storyViewers(postId);
     });
-
-/// Rooms unlocked during this run of the app.
-///
-/// Held in memory on purpose: it empties when the process does, so a locked
-/// chat is locked again after the app is killed. Keeping it anywhere durable
-/// would mean one unlock is the last unlock.
-final unlockedChatRoomsProvider =
-    StateProvider<Set<String>>((ref) => <String>{});
-
-/// Face ID / fingerprint / PIN, for conversations somebody has locked.
-final chatLockProvider = Provider<ChatLock>((ref) => ChatLock());
 
 final inboxTabProvider = StateProvider<String>((ref) => 'requests');
 final inboxStreamProvider = StreamProvider<List<ChatRoom>>((ref) {

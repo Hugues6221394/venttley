@@ -5,7 +5,6 @@ import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
 import '../theme/glass_tokens.dart';
-import 'chat_lock_gate.dart';
 
 /// What a long press or a swipe on an inbox row can do.
 ///
@@ -16,8 +15,9 @@ import 'chat_lock_gate.dart';
 /// confirmation either — a long press and one tap ended a conversation for two
 /// people.
 ///
-/// Delete is now clear-for-me, and it asks first. Archiving and locking do not
-/// ask, because both are reversible in one tap.
+/// Delete is now clear-for-me, and it asks first. Archiving does not ask,
+/// because it is undone by one tap on the snackbar and delete is not undone by
+/// anything.
 
 /// Archive or unarchive, and say which happened.
 Future<void> archiveChatRoom(
@@ -104,45 +104,6 @@ Future<bool> confirmAndClearChatRoom(
   }
 }
 
-/// Lock or unlock, proving you are you first.
-///
-/// Both directions need the check. Locking without it would let somebody
-/// holding your phone lock you out of your own thread; unlocking without it
-/// would make the lock decorative.
-Future<void> toggleChatRoomLock(
-  BuildContext context,
-  WidgetRef ref,
-  ChatRoom room,
-) async {
-  final passed = await promptChatUnlock(
-    context,
-    ref,
-    reason: room.isLocked ? 'Unlock this conversation' : 'Lock this conversation',
-  );
-  if (!passed || !context.mounted) return;
-
-  final messenger = ScaffoldMessenger.maybeOf(context);
-  try {
-    await ref
-        .read(repositoryProvider)
-        .setChatRoomLocked(room.roomId, !room.isLocked);
-    _refresh(ref);
-    messenger?.showSnackBar(
-      SnackBar(
-        content: Text(
-          room.isLocked
-              ? 'Unlocked.'
-              : 'Locked. The last message is hidden from your inbox too.',
-        ),
-      ),
-    );
-  } catch (_) {
-    messenger?.showSnackBar(
-      const SnackBar(content: Text('Could not change the lock just now.')),
-    );
-  }
-}
-
 void _refresh(WidgetRef ref) {
   ref.invalidate(inboxStreamProvider);
   ref.invalidate(inboxCountsProvider);
@@ -187,19 +148,6 @@ Future<void> showChatRoomActions(
               onTap: () {
                 Navigator.pop(sheetCtx);
                 archiveChatRoom(context, ref, room, archived: !room.isArchived);
-              },
-            ),
-            _Action(
-              icon: room.isLocked
-                  ? Icons.lock_open_rounded
-                  : Icons.lock_outline_rounded,
-              label: room.isLocked ? 'Remove lock' : 'Lock chat',
-              subtitle: room.isLocked
-                  ? null
-                  : 'Face ID, fingerprint or a PIN to open it',
-              onTap: () {
-                Navigator.pop(sheetCtx);
-                toggleChatRoomLock(context, ref, room);
               },
             ),
             _Action(
