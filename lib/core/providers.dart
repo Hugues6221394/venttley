@@ -1709,11 +1709,9 @@ final roomByIdProvider = FutureProvider.autoDispose.family<ChatRoom?, String>((
   ref,
   roomId,
 ) async {
-  final repo = ref.watch(repositoryProvider);
-  final rooms = [
-    ...await repo.inbox('active'),
-    ...await repo.inbox('requests'),
-  ];
+  // Was two full inbox fetches, awaited in turn, to find one room — and this
+  // runs on every chat screen open.
+  final rooms = await ref.watch(repositoryProvider).inbox('all');
   for (final r in rooms) {
     if (r.roomId == roomId) return r;
   }
@@ -1748,10 +1746,13 @@ final groupInvitePreviewProvider = FutureProvider.autoDispose
 final inboxCountsProvider = FutureProvider.autoDispose<Map<String, int>>((
   ref,
 ) async {
-  final repo = ref.watch(repositoryProvider);
-  final pending = await repo.inbox('requests');
-  final active = await repo.inbox('active');
-  return {'requests': pending.length, 'active': active.length};
+  // One fetch, counted twice. inbox() reads the whole view and filters by tab
+  // on the client, so two calls downloaded the same rows twice, serially.
+  final rooms = await ref.watch(repositoryProvider).inbox('all');
+  return {
+    'requests': rooms.where((r) => r.roomStatus == 'pending_request').length,
+    'active': rooms.where((r) => r.roomStatus == 'active').length,
+  };
 });
 
 /// Aggregated inbox badge count — pending requests + unread peer messages.

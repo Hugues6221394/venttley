@@ -38,7 +38,8 @@ class WhispersScreen extends ConsumerStatefulWidget {
   ConsumerState<WhispersScreen> createState() => _WhispersScreenState();
 }
 
-class _WhispersScreenState extends ConsumerState<WhispersScreen> {
+class _WhispersScreenState extends ConsumerState<WhispersScreen>
+    with WidgetsBindingObserver {
   static const _preloadAhead = 2;
   static const _loadMoreThreshold = 3;
 
@@ -60,11 +61,35 @@ class _WhispersScreenState extends ConsumerState<WhispersScreen> {
   Timer? _mediaStatusPoll;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _mediaStatusPoll?.cancel();
     _completeSub?.cancel();
     _pageController.dispose();
     super.dispose();
+  }
+
+  /// Stop polling when the app is not on screen.
+  ///
+  /// The poll fires every 2.5 seconds — twenty-four requests a minute — and it
+  /// kept firing after the app was backgrounded, for as long as anything was
+  /// still being scanned. Worse, this screen is a branch of an IndexedStack
+  /// shell, so it stays mounted while the user is on Home: the poll was also
+  /// running for people who had left Whispers entirely.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _syncMediaStatusPoll();
+    } else {
+      _mediaStatusPoll?.cancel();
+      _mediaStatusPoll = null;
+    }
   }
 
   /// When a whisper finishes (and loop is off), glide to the next one — the

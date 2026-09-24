@@ -120,46 +120,68 @@ class _SpaceHomeScreenState extends ConsumerState<SpaceHomeScreen> {
             ),
           );
         },
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: 24),
-          children: [
-            _SpaceHeader(space: space),
-            _AISummaryTile(space: space),
-            _StartVentButton(space: space),
-            _SortStrip(
-              value: _sort,
-              onChanged: (v) => setState(() => _sort = v),
+        // A CustomScrollView with a builder for the vents, rather than a
+        // ListView whose `children` are built eagerly. All sixty PostCards
+        // were constructed and laid out on the first frame, and each card
+        // watches a family provider for its tribe — so opening a Space meant
+        // sixty widget builds and a burst of tribe lookups before anything
+        // appeared.
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Column(
+                children: [
+                  _SpaceHeader(space: space),
+                  _AISummaryTile(space: space),
+                  _StartVentButton(space: space),
+                  _SortStrip(
+                    value: _sort,
+                    onChanged: (v) => setState(() => _sort = v),
+                  ),
+                ],
+              ),
             ),
             if (postsAsync.isLoading && posts.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(child: CircularProgressIndicator()),
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
               )
             else if (posts.isEmpty)
-              const _EmptyVents()
+              const SliverToBoxAdapter(child: _EmptyVents())
             else if (visible.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(32),
-                child: Center(
-                  child: Text(
-                    'No vents matching "${_search.text.trim()}".',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: GlassTokens.onCardMuted(context),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
+                    child: Text(
+                      'No vents matching "${_search.text.trim()}".',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: GlassTokens.onCardMuted(context),
+                      ),
                     ),
                   ),
                 ),
               )
             else
-              ...visible.map(
-                (p) => Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  child: PostCard(
-                    post: p,
-                    onTap: () => context.push('/post/${p.postId}'),
+              SliverPadding(
+                padding: const EdgeInsets.only(bottom: 24),
+                sliver: SliverList.builder(
+                  itemCount: visible.length,
+                  itemBuilder: (context, i) => RepaintBoundary(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      child: PostCard(
+                        post: visible[i],
+                        onTap: () =>
+                            context.push('/post/${visible[i].postId}'),
+                      ),
+                    ),
                   ),
                 ),
               ),

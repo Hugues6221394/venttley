@@ -121,4 +121,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261048090000': 'short_clips_in_a_chat',
   '20261049090000': 'a_tick_travels_with_the_name',
   '20261050090000': 'blocking_suspends_a_friendship',
+  '20261051090000': 'three_queries_that_do_not_scale',
 };

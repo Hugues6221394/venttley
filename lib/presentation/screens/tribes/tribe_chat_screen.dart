@@ -1719,6 +1719,9 @@ class _BubbleBody extends StatelessWidget {
               constraints: const BoxConstraints(maxHeight: 220, maxWidth: 260),
               child: CachedNetworkImage(
                 imageUrl: message.imageUrl!,
+                // Drawn at most 260x220; decoded at whatever the camera
+                // produced without this.
+                memCacheWidth: 720,
                 fit: BoxFit.cover,
                 placeholder: (_, __) => Container(
                   height: 180,

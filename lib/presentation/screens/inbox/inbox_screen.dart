@@ -1536,9 +1536,10 @@ final _allRoomsProvider = FutureProvider.autoDispose<List<ChatRoom>>((
 ) async {
   ref.watch(inboxStreamProvider);
   final repo = ref.watch(repositoryProvider);
-  final pending = await repo.inbox('requests');
-  final active = await repo.inbox('active');
-  final all = [...pending, ...active];
+  // One fetch, not two awaited in turn. inbox() reads the whole inbox_rooms
+  // view and filters by tab on the client, so asking for 'requests' and then
+  // 'active' downloaded the same rows twice, serially, on every realtime tick.
+  final all = await repo.inbox('all');
   // By last activity, not by room creation. Sorting on createdAt pinned the
   // order to when each thread was opened, so a chat you replied to a minute ago
   // stayed wherever it was and an old room never moved — in a messaging hub

@@ -2561,6 +2561,12 @@ class _ChatImageState extends ConsumerState<_ChatImage> {
               // Every mount was a new key, a guaranteed miss, and a full
               // re-download. The byte cache had never been hit once.
               cacheKey: widget.storagePath,
+              // Decoded at bubble size, not camera size. A 12-megapixel photo
+              // decodes to ~48 MB of bitmap regardless of the box it is drawn
+              // in, and main.dart raises the image cache to 200 MB — four of
+              // these in a conversation is an out-of-memory kill on a cheap
+              // Android device.
+              memCacheWidth: 1080,
               fit: BoxFit.cover,
               placeholder: (_, __) => Container(
                 height: 200,

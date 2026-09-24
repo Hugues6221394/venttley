@@ -974,14 +974,45 @@ class SupabaseBackend {
     });
   }
 
+  /// Room changes that concern me, not every room in the app.
+  ///
+  /// This listened to the whole `chat_rooms` table with no filter, and its
+  /// callback did a full inbox refetch. Every room anybody created, and every
+  /// status change anywhere, was broadcast to every connected client, each of
+  /// which then went back to the database. The comment on the method directly
+  /// below this one describes avoiding exactly that fan-out for
+  /// `chat_messages`; `chat_rooms` was missed.
+  ///
+  /// Two filters rather than one channel-wide subscription: a direct room
+  /// names both people, so either column matching me is a room I am in. Group
+  /// rooms are already covered by the scoped `chat_messages` listener and by
+  /// the membership writes that create them.
   void _subscribeRoomsRealtime() {
     _roomsChannel?.unsubscribe();
+    final uid = _uid;
+    if (uid == null) return;
     _roomsChannel = _client
-        .channel('public:chat_rooms')
+        .channel('rooms:scoped:$uid')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'chat_rooms',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'initiated_by',
+            value: uid,
+          ),
+          callback: (_) => _emitRooms(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'chat_rooms',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'received_by',
+            value: uid,
+          ),
           callback: (_) => _emitRooms(),
         )
         .subscribe();
@@ -6961,13 +6992,32 @@ class SupabaseBackend {
         .eq('room_id', roomId);
   }
 
+  /// The most recent stretch of a conversation.
+  ///
+  /// Capped, which it was not. This selected the entire history of a room and
+  /// then ran three more queries keyed on every message id it found. Two
+  /// people with a long friendship meant downloading twenty thousand rows and
+  /// putting twenty thousand ids into a query string, which PostgREST rejects
+  /// outright once the URL gets long enough — so the failure mode was not a
+  /// slow chat, it was a chat that would not open at all.
+  ///
+  /// It is also re-run by realtime on every reaction and every edit, so the
+  /// cost was paid again on each one.
+  ///
+  /// Newest first for the query, reversed for the caller, because the last
+  /// three hundred messages are the ones a conversation is about and the
+  /// screen renders oldest-to-newest.
+  static const _messagePageSize = 300;
+
   Future<List<ChatMessage>> messages(String roomId) async {
     final rows = await _client
         .from('chat_messages')
         .select()
         .eq('room_id', roomId)
-        .order('created_at', ascending: true);
-    final base = rows.map<ChatMessage>(_messageFromRow).toList();
+        .order('created_at', ascending: false)
+        .limit(_messagePageSize);
+    final base = rows.map<ChatMessage>(_messageFromRow).toList().reversed
+        .toList();
     if (base.isEmpty) return base;
 
     // Delete-for-me: drop any messages the caller has hidden from their own

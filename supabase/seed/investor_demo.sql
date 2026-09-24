@@ -91,6 +91,18 @@ UPDATE public.users
    SET user_role = 'plug', is_verified = true
  WHERE anonymous_pseudonym = 'tester_keeper';
 
+-- Every seeded account accepts the current policies.
+--
+-- private.assert_user_can_write refuses any write from an account that has
+-- not, which is correct — but it means the friendships and posts below fail
+-- with policy_acceptance_required on a fresh database, and the seed stops
+-- halfway. Recorded the way signup records it, rather than leaving these
+-- accounts in a state no real one occupies.
+INSERT INTO public.policy_acceptances (user_id, kind, version)
+SELECT u.user_id, c.kind, c.version
+  FROM public.users u, public.current_policies() c
+ON CONFLICT DO NOTHING;
+
 WITH keeper AS (
     SELECT user_id FROM public.users WHERE anonymous_pseudonym = 'tester_keeper'
 )
