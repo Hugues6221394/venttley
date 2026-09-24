@@ -4941,29 +4941,24 @@ class SupabaseBackend {
   }) async {
     final uid = _uid;
     if (uid == null) throw StateError('Not signed in');
-    // Flip the status. RLS lets only the invitee do this.
-    final row = await _client
-        .from('tribe_invites')
-        .update({
-          'status': accept ? 'accepted' : 'declined',
-          'decided_at': DateTime.now().toUtc().toIso8601String(),
-        })
-        .eq('invite_id', inviteId)
-        .select('tribe_id, invited_user_id')
-        .single();
-    if (accept) {
-      // Auto-join the tribe — UNIQUE(tribe_id, user_id) on tribe_members
-      // means re-accepting an invite the user already joined manually is
-      // a no-op.
-      try {
-        await _client.from('tribe_members').insert({
-          'tribe_id': row['tribe_id'],
-          'user_id': uid,
-        });
-        _joinedTribes.add(row['tribe_id'] as String);
-      } on PostgrestException catch (e) {
-        if (e.code != '23505') rethrow;
-      }
+    // One call, because accepting is two writes that must agree: flip the
+    // invite and create the membership. The membership half used to be a
+    // direct insert, which needed a table grant that let anybody join any
+    // tribe by naming themselves.
+    final status =
+        await _client.rpc(
+              'respond_to_tribe_invite',
+              params: {'p_invite_id': inviteId, 'p_accept': accept},
+            )
+            as String?;
+    if (status == 'joined') {
+      final row = await _client
+          .from('tribe_invites')
+          .select('tribe_id')
+          .eq('invite_id', inviteId)
+          .maybeSingle();
+      final tribeId = row?['tribe_id'] as String?;
+      if (tribeId != null) _joinedTribes.add(tribeId);
     }
   }
 
@@ -6550,19 +6545,25 @@ class SupabaseBackend {
     return _tribeFromRow(row);
   }
 
-  Future<void> joinTribe(String tribeId) async {
-    if (_uid == null || _joinedTribes.contains(tribeId)) return;
-    await requestTribeMembership(tribeId);
+  /// Join, or ask to. Returns `'joined'` or `'pending'`.
+  ///
+  /// The status used to be thrown away here, which is how two of the three
+  /// join buttons came to lie: one showed nothing at all after creating a
+  /// pending request, and one said "You joined" and flipped the card.
+  Future<String> joinTribe(String tribeId) async {
+    if (_uid == null) return 'joined';
+    if (_joinedTribes.contains(tribeId)) return 'joined';
+    final status = await requestTribeMembership(tribeId);
+    if (status == 'joined') _joinedTribes.add(tribeId);
+    return status;
   }
 
   Future<void> leaveTribe(String tribeId) async {
-    final uid = _uid;
-    if (uid == null) return;
-    await _client
-        .from('tribe_members')
-        .delete()
-        .eq('tribe_id', tribeId)
-        .eq('user_id', uid);
+    if (_uid == null) return;
+    // Through the RPC, not a DELETE. authenticated has never had DELETE on
+    // tribe_members — it was revoked in 20260816020550 and never re-granted —
+    // so the direct delete this replaces failed with 42501 every time.
+    await _client.rpc('leave_tribe', params: {'p_tribe_id': tribeId});
     _joinedTribes.remove(tribeId);
   }
 

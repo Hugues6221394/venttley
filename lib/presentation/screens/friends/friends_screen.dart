@@ -24,6 +24,7 @@ import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/verified_badge.dart';
 import '../home/home_shell.dart';
+import '../../widgets/tribe/join_tribe_action.dart';
 
 /// Friends — Image #15.
 ///
@@ -737,27 +738,20 @@ class _RecommendedTribeCardState extends ConsumerState<_RecommendedTribeCard> {
   Future<void> _join() async {
     if (_joining || _joined) return _open();
     setState(() => _joining = true);
-    try {
-      await ref.read(repositoryProvider).joinTribe(tribe.tribeId);
-      if (!mounted) return;
-      setState(() {
+    // This card used to flip itself to "View", add one to the member count
+    // and say "You joined" before the server had agreed to anything. For a
+    // private tribe the server says 'pending', and none of that was true.
+    final status = await joinTribeAndTell(context, ref, tribe);
+    if (!mounted) return;
+    setState(() {
+      _joining = false;
+      if (status == 'joined') {
         _joined = true;
         _memberCount += 1;
-      });
-      ref.invalidate(tribesProvider);
-      ref.invalidate(recommendedTribesProvider);
-      ref.invalidate(tribeBySlugProvider(tribe.slug));
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('You joined ${tribe.name}.')));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not join this Tribe. Try again.')),
-      );
-    } finally {
-      if (mounted) setState(() => _joining = false);
-    }
+      }
+    });
+    ref.invalidate(recommendedTribesProvider);
+    ref.invalidate(tribeBySlugProvider(tribe.slug));
   }
 
   @override
@@ -861,7 +855,9 @@ class _RecommendedTribeCardState extends ConsumerState<_RecommendedTribeCard> {
                           child: const Text('View'),
                         )
                       : FilledButton(
-                          onPressed: _joining ? null : _join,
+                          onPressed: _joining || !canRequestToJoin(tribe)
+                              ? null
+                              : _join,
                           child: _joining
                               ? const SizedBox.square(
                                   dimension: 16,
@@ -869,7 +865,7 @@ class _RecommendedTribeCardState extends ConsumerState<_RecommendedTribeCard> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Text('Join'),
+                              : Text(tribeJoinLabelShort(tribe)),
                         ),
                 ),
               ],

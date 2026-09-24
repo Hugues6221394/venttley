@@ -2619,15 +2619,21 @@ class MockBackend {
     return t;
   }
 
-  void joinTribe(String tribeId) {
+  String joinTribe(String tribeId) {
     final i = _tribes.indexWhere((t) => t.tribeId == tribeId);
-    if (i == -1) return;
-    if (_joinedTribes.contains(tribeId)) return;
+    if (i == -1) return 'joined';
+    if (_joinedTribes.contains(tribeId)) return 'joined';
+    // The mock answers the same two words the RPC does, so a screen that
+    // mishandles 'pending' is wrong in the widget tests too.
+    if (_tribes[i].visibility != 'public') {
+      return requestTribeMembership(tribeId);
+    }
     _joinedTribes.add(tribeId);
     _tribes[i] = _tribes[i].copyWith(
       memberCount: _tribes[i].memberCount + 1,
       joinedByMe: true,
     );
+    return 'joined';
   }
 
   void leaveTribe(String tribeId) {

@@ -1151,6 +1151,9 @@ Color _accentFor(String kind) {
     case 'tribe_prompt':
     case 'tribe_invite':
     case 'tribe_ownership_transfer':
+    case 'tribe_join_request':
+    case 'tribe_join_approved':
+    case 'tribe_join_declined':
       return VentlyTokens.trendingAmber;
     case 'moderation_action':
       return VentlyTokens.dangerRed;
@@ -1172,7 +1175,13 @@ IconData _iconFor(String kind) {
       return Icons.forum_outlined;
     case 'tribe_invite':
     case 'tribe_ownership_transfer':
+    case 'tribe_join_approved':
       return Icons.group_add_outlined;
+    // A decision waiting on you reads differently from news about you.
+    case 'tribe_join_request':
+      return Icons.how_to_reg_outlined;
+    case 'tribe_join_declined':
+      return Icons.do_not_disturb_on_outlined;
     case 'post_like':
     case 'comment_like':
       return Icons.favorite_border_rounded;

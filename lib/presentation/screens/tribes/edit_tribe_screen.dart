@@ -253,10 +253,11 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
                     const SizedBox(height: 8),
                     Text(
                       switch (visibility) {
-                        'public' => 'Anyone can discover the Tribe.',
-                        'private' => 'Only approved members can view content.',
+                        'public' => 'Anyone can find it and join.',
+                        'private' =>
+                          'Anyone can find it. You approve everyone who joins.',
                         _ =>
-                          'People need an invitation before requesting access.',
+                          'Hidden from search. People get in by invitation.',
                       },
                       style: TextStyle(
                         color: context.ink.withOpacity(0.55),

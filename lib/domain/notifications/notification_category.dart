@@ -20,6 +20,9 @@ const List<String> kNotificationKinds = <String>[
   'tribe_prompt',
   'tribe_invite',
   'tribe_ownership_transfer',
+  'tribe_join_request',
+  'tribe_join_approved',
+  'tribe_join_declined',
   'whisper_reply',
   'whisper_reaction',
   'moderation_action',
@@ -88,6 +91,9 @@ enum NotificationCategory {
       'tribe_prompt',
       'tribe_invite',
       'tribe_ownership_transfer',
+      'tribe_join_request',
+      'tribe_join_approved',
+      'tribe_join_declined',
     },
     // Everything the platform says to you rather than another person:
     // moderation decisions, broadcasts, and security. Grouped together because

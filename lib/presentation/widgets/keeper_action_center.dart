@@ -24,7 +24,21 @@ class KeeperActionCenter extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final openReports = stats?.openReports ?? 0;
+    final pendingRequests = stats?.pendingRequests ?? 0;
     final items = <_ActionItem>[
+      // First, because it is the only one where somebody is waiting on the
+      // keeper personally. The count already existed on the stats row; this
+      // panel just never showed it, so the only way to learn that four people
+      // were queued was to go looking.
+      if (pendingRequests > 0)
+        _ActionItem(
+          icon: Icons.how_to_reg_rounded,
+          label: 'Asked to join',
+          count: pendingRequests,
+          color: VentlyColors.berryMagenta,
+          onTap: () =>
+              context.push('/tribe/${tribe.slug}/manage/settings/members'),
+        ),
       if (openReports > 0)
         _ActionItem(
           icon: Icons.flag_rounded,

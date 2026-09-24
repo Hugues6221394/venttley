@@ -669,10 +669,17 @@ class _CreateTribeScreenState extends ConsumerState<CreateTribeScreen> {
               _ReviewRow(label: 'Category', value: categoryLabel ?? category),
               _ReviewRow(
                 label: 'Visibility',
+                // These two were the wrong way round. Per
+                // 20260929090000_private_tribes_discoverable, private means
+                // anybody can find it but nobody joins without the Keeper
+                // agreeing; invite-only means you get in by being invited and
+                // it is not advertised. The copy said the opposite of both.
                 value: switch (_visibility) {
-                  'private' => 'Private — invite only',
-                  'invite_only' => 'Invite — people request to join',
-                  _ => 'Public — anyone can find it',
+                  'private' =>
+                    'Private — anyone can find it, you approve who joins',
+                  'invite_only' =>
+                    'Invite-only — hidden, and you invite people in',
+                  _ => 'Public — anyone can find it and join',
                 },
               ),
               _ReviewRow(

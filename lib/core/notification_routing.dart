@@ -20,6 +20,9 @@ class NotificationPayload {
       tab == null || tab == 'all' ? 'inbox' : 'inbox:$tab';
   static String post(String postId) => 'post:$postId';
   static String tribe(String slug) => 'tribe:$slug';
+
+  /// The members screen of a tribe you keep — where a join request is decided.
+  static String tribeRequests(String slug) => 'tribe_requests:$slug';
   static String tribeChat(String slug, {String? messageId}) =>
       messageId == null || messageId.isEmpty
       ? 'tribe_chat:$slug'
@@ -36,8 +39,16 @@ class NotificationPayload {
     switch (kind) {
       case 'tribe_prompt':
       case 'tribe_invite':
+      // Approved or declined, the thing you want is the tribe itself.
+      case 'tribe_join_approved':
+      case 'tribe_join_declined':
         final slug = payload['tribe_slug'] as String?;
         return slug == null ? null : tribe(slug);
+      // A request is a decision waiting on you, so it lands where the decision
+      // is made rather than on the tribe's front page.
+      case 'tribe_join_request':
+        final slug = payload['tribe_slug'] as String?;
+        return slug == null ? null : tribeRequests(slug);
       case 'tribe_ownership_transfer':
         return notifications();
       case 'tribe_chat_message':
@@ -169,6 +180,10 @@ String? routeForNotificationPayload(String? payload) {
       return id == null || id.isEmpty ? null : '/post/$id';
     case 'tribe':
       return id == null || id.isEmpty ? null : '/tribe/$id';
+    case 'tribe_requests':
+      return id == null || id.isEmpty
+          ? null
+          : '/tribe/$id/manage/settings/members';
     case 'tribe_chat':
       if (id == null || id.isEmpty) return null;
       final slash = id.indexOf('/');

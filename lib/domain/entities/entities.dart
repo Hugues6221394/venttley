@@ -1702,6 +1702,12 @@ class NotificationItem {
         return 'A new conversation is ready in your tribe.';
       case 'tribe_invite':
         return 'invited you to join a tribe.';
+      case 'tribe_join_request':
+        return 'asked to join a tribe you keep.';
+      case 'tribe_join_approved':
+        return 'You are in.';
+      case 'tribe_join_declined':
+        return 'Your request was not accepted.';
       case 'message_request':
         return 'sent you a message request.';
       case 'moderation_action':

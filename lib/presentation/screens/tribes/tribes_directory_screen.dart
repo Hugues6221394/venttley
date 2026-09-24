@@ -14,6 +14,7 @@ import '../../widgets/tribe_avatar.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/vently_logo.dart';
 import '../../widgets/tribe_age_gate.dart';
+import '../../widgets/tribe/join_tribe_action.dart';
 
 /// Hybrid Tribes browse + search + create entry point.
 class TribesDirectoryScreen extends ConsumerStatefulWidget {
@@ -300,18 +301,13 @@ class _JoinPill extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final repo = ref.watch(repositoryProvider);
     if (tribe.joinedByMe) {
       return OutlinedButton(
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           foregroundColor: context.ink,
         ),
-        onPressed: () async {
-          await repo.leaveTribe(tribe.tribeId);
-          ref.invalidate(tribesProvider);
-          ref.invalidate(tribeBySlugProvider);
-        },
+        onPressed: () => leaveTribeAndTell(context, ref, tribe),
         child: const Text('Joined'),
       );
     }
@@ -319,11 +315,10 @@ class _JoinPill extends ConsumerWidget {
       style: ElevatedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       ),
-      onPressed: () async {
-        await repo.joinTribe(tribe.tribeId);
-        ref.invalidate(tribesProvider);
-      },
-      child: const Text('Join'),
+      onPressed: canRequestToJoin(tribe)
+          ? () => joinTribeAndTell(context, ref, tribe)
+          : null,
+      child: Text(tribeJoinLabel(tribe)),
     );
   }
 }

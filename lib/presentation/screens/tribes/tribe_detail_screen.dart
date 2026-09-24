@@ -16,6 +16,7 @@ import 'tribe_helpers_screen.dart' show myTribePermissionsProvider;
 import '../../widgets/user_link.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../theme/glass_tokens.dart';
+import '../../widgets/tribe/join_tribe_action.dart';
 
 class TribeDetailScreen extends ConsumerStatefulWidget {
   const TribeDetailScreen({super.key, required this.slug});
@@ -502,44 +503,26 @@ class _JoinAction extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final repo = ref.watch(repositoryProvider);
-    void invalidate() {
-      ref.invalidate(tribeBySlugProvider(tribe.slug));
-      ref.invalidate(tribesProvider);
-    }
-
     if (tribe.joinedByMe) {
       return OutlinedButton.icon(
         icon: const Icon(Icons.check_circle_outline, size: 16),
-        onPressed: () async {
-          await repo.leaveTribe(tribe.tribeId);
-          invalidate();
-        },
+        onPressed: () => leaveTribeAndTell(context, ref, tribe),
         label: const Text('Joined'),
       );
     }
     return ElevatedButton.icon(
-      icon: const Icon(Icons.add, size: 16),
-      onPressed: tribe.acceptsNewActivity
-          ? () async {
-              try {
-                final status = await repo.requestTribeMembership(tribe.tribeId);
-                invalidate();
-                if (!context.mounted || status != 'pending') return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Request sent. The Keeper will review it.'),
-                  ),
-                );
-              } catch (error) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Could not join this Tribe: $error')),
-                );
-              }
-            }
+      icon: Icon(
+        tribe.visibility == 'public' ? Icons.add : Icons.lock_open_rounded,
+        size: 16,
+      ),
+      onPressed: canRequestToJoin(tribe)
+          ? () => joinTribeAndTell(context, ref, tribe)
           : null,
-      label: Text(tribe.acceptsNewActivity ? 'Join Tribe' : 'Joining paused'),
+      // It used to read "Join Tribe" for a private tribe too, so the button
+      // was worded identically whether it would admit you or start a queue.
+      label: Text(
+        tribe.acceptsNewActivity ? tribeJoinLabel(tribe) : 'Joining paused',
+      ),
     );
   }
 }

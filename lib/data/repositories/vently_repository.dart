@@ -3544,12 +3544,21 @@ class VentlyRepository implements MusicProvider {
     return _mock.joinedTribe(tribeId);
   }
 
-  Future<void> joinTribe(String tribeId) async {
+  /// Join, or ask to. Returns `'joined'` or `'pending'`.
+  ///
+  /// Callers must read it. A private tribe answers `'pending'`, and a button
+  /// that ignores that either says nothing or says you joined — both of which
+  /// this app did until now.
+  Future<String> joinTribe(String tribeId) async {
     _cache.invalidate(prefix: 'tribes:');
-    unawaited(_telemetry.event(Events.tribeJoined));
     final live = _live;
-    if (live != null) return live.joinTribe(tribeId);
-    _mock.joinTribe(tribeId);
+    final status = live != null
+        ? await live.joinTribe(tribeId)
+        : _mock.joinTribe(tribeId);
+    // Only a membership is a join. Counting a pending request as one made the
+    // funnel look healthier than it was.
+    if (status == 'joined') unawaited(_telemetry.event(Events.tribeJoined));
+    return status;
   }
 
   Future<void> leaveTribe(String tribeId) async {
