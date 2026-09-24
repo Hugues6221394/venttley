@@ -91,6 +91,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       // would bounce to /onboarding and the consent links would be dead.
       final legalRoute = path.startsWith('/legal');
       final onMfa = path == '/onboarding/mfa';
+
+      // The last two steps of creating an account: being shown the recovery
+      // phrase, and being offered an avatar and a background.
+      //
+      // Both sit behind the email gate below, which was written to keep an
+      // unverified address off the homepage. It kept it off these as well —
+      // so somebody signing up with an email went straight from the form to
+      // the verification screen and then to the feed, and was never shown the
+      // recovery phrase that is the only way back into the account if the
+      // password goes. Losing the background picker was the visible half of
+      // that; losing the phrase was the serious half.
+      //
+      // Verification is required before the app, not before finishing signup.
+      final finishingSignup =
+          path == '/onboarding/key' || path == '/onboarding/personalise';
       if (pendingMfa != null && !onMfa && !legalRoute) {
         return '/onboarding/mfa';
       }
@@ -129,7 +144,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           !session.emailVerified &&
           path != '/verify-email' &&
           !legalRoute &&
-          !onMfa) {
+          !onMfa &&
+          !finishingSignup) {
         final notifier = ref.read(sessionProvider.notifier);
         if (notifier.hasRealEmail) {
           final email = notifier.currentEmail;

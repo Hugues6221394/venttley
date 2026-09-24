@@ -47,6 +47,36 @@ void main() {
     );
   });
 
+  test('finishing signup is not gated', () {
+    // The gate was written to keep an unverified address off the homepage. It
+    // kept it off the last two steps of signup as well, so an email signup
+    // went form -> verify -> feed and never saw /onboarding/key — the screen
+    // that shows the recovery phrase, which is the only way back into the
+    // account when the password is gone. Losing the background picker on
+    // /onboarding/personalise was the visible half of that bug; losing the
+    // phrase was the serious half.
+    expect(
+      router,
+      contains('finishingSignup'),
+      reason: 'without the exemption an email signup never sees its phrase',
+    );
+    expect(
+      router,
+      contains("path == '/onboarding/key'"),
+      reason: 'the recovery-phrase screen has to be reachable before the gate',
+    );
+    expect(
+      router,
+      contains("path == '/onboarding/personalise'"),
+      reason: 'and so does the avatar and background step',
+    );
+    expect(
+      router,
+      contains('!finishingSignup'),
+      reason: 'the exemption has to actually be wired into the gate condition',
+    );
+  });
+
   test('the verify screen offers a way out that is not a dead button', () {
     // "Skip for now" used to sit in the app bar. With the gate in place the
     // router sends you straight back, so it would be a button that visibly
