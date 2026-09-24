@@ -377,9 +377,7 @@ class _SpaceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = space.themeColor != null
-        ? Color(int.parse(space.themeColor!.replaceFirst('#', '0xff')))
-        : VentlyColors.berryMagenta;
+    final accent = parseAccent(space.themeColor, VentlyColors.berryMagenta);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
       child: Material(
@@ -619,9 +617,7 @@ class _SpotlightBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final accent = tribe.themeColor != null
-        ? Color(int.parse(tribe.themeColor!.replaceFirst('#', '0xff')))
-        : scheme.primary;
+    final accent = parseAccent(tribe.themeColor, scheme.primary);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       child: InkWell(

@@ -6155,12 +6155,19 @@ class SupabaseBackend {
   }
 
   /// All Spaces inside a tribe (active first, then archived).
+  ///
+  /// Pinned before default before oldest. The keeper's editor has always had a
+  /// "Pin this Space / Keep it at the top of the Tribe" switch that wrote
+  /// is_pinned, and nothing anywhere ordered by it — the only thing the flag
+  /// did was draw a pin icon on the management screen. It does what the switch
+  /// says now.
   Future<List<Space>> spacesByTribe(String tribeId) async {
     final rows = await _client
         .from('space_directory')
         .select()
         .eq('tribe_id', tribeId)
         .order('archived_at', ascending: true, nullsFirst: true)
+        .order('is_pinned', ascending: false)
         .order('is_default', ascending: false)
         .order('created_at', ascending: true);
     return rows.map<Space>(_spaceFromRow).toList();
@@ -6220,44 +6227,17 @@ class SupabaseBackend {
     );
   }
 
-  Future<String> createSpace({
-    required String tribeId,
-    required String name,
-    String? description,
-  }) async {
-    final res = await _client.rpc(
-      'create_space',
-      params: {
-        'p_tribe_id': tribeId,
-        'p_name': name,
-        if (description != null) 'p_description': description,
-      },
-    );
-    return res as String;
+  /// Whether this Space will accept a vent from me, and if not, why.
+  Future<String> mySpacePostingState(String spaceId) async {
+    final state =
+        await _client.rpc(
+              'my_space_posting_state',
+              params: {'p_space_id': spaceId},
+            )
+            as String?;
+    return state ?? 'open';
   }
 
-  Future<bool> renameSpace({
-    required String spaceId,
-    required String name,
-  }) async {
-    final res = await _client.rpc(
-      'rename_space',
-      params: {'p_space_id': spaceId, 'p_name': name},
-    );
-    return res == true;
-  }
-
-  Future<bool> archiveSpace(String spaceId) async {
-    final res = await _client.rpc(
-      'archive_space',
-      params: {'p_space_id': spaceId},
-    );
-    return res == true;
-  }
-
-  /// Latest AI summary for a Space, or null if none has been
-  /// generated yet. Reads from the denormalized `latest_space_summary`
-  /// view — single round trip, indexed by space_id.
   Future<SpaceSummary?> latestSpaceSummary(String spaceId) async {
     final row = await _client
         .from('latest_space_summary')
@@ -6279,24 +6259,6 @@ class SupabaseBackend {
           ? null
           : DateTime.parse(row['generated_at'] as String),
     );
-  }
-
-  Future<bool> updateSpaceTheme({
-    required String spaceId,
-    String? weeklyTheme,
-    String? themeColor,
-    String? description,
-  }) async {
-    final res = await _client.rpc(
-      'update_space_theme',
-      params: {
-        'p_space_id': spaceId,
-        if (weeklyTheme != null) 'p_weekly_theme': weeklyTheme,
-        if (themeColor != null) 'p_theme_color': themeColor,
-        if (description != null) 'p_description': description,
-      },
-    );
-    return res == true;
   }
 
   Future<List<Tribe>> tribesIKeep() async {

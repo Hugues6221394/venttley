@@ -164,3 +164,18 @@ class VentlyGradients {
     stops: [0.0, 0.55, 1.0],
   );
 }
+
+/// Parse a stored `#RRGGBB` accent, or fall back.
+///
+/// `int.parse(value.replaceFirst('#', '0xff'))` was inlined at four call
+/// sites, all inside `build`, none of them guarded. Any stored value that is
+/// not exactly six hex digits after a hash — a named colour, an `rgba()`, a
+/// stray space, an eight-digit ARGB — throws FormatException while painting,
+/// which takes down the screen rather than the colour.
+Color parseAccent(String? value, Color fallback) {
+  if (value == null) return fallback;
+  final hex = value.startsWith('#') ? value.substring(1) : value;
+  if (hex.length != 6) return fallback;
+  final parsed = int.tryParse(hex, radix: 16);
+  return parsed == null ? fallback : Color(0xFF000000 | parsed);
+}

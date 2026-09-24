@@ -7,6 +7,7 @@ import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/vently_premium_background.dart';
+import 'tribe_helpers_screen.dart' show myTribePermissionsProvider;
 
 class TribeSpacesManagementScreen extends ConsumerStatefulWidget {
   const TribeSpacesManagementScreen({
@@ -39,7 +40,21 @@ class _TribeSpacesManagementScreenState
         body: const Center(child: CircularProgressIndicator()),
       );
     }
-    if (me == null || tribe.keeperId != me.userId) {
+    // The same test the server applies. manage_tribe_space was relaxed to
+    // require_tribe_permission(..., 'manage_spaces') in 20260901090000, and the
+    // settings screen has shown this entry point to anybody holding that
+    // permission ever since — but this screen still demanded keeper_id
+    // equality, so a helper granted manage_spaces could see the row, tap it,
+    // and be told only the Keeper may be here.
+    final isKeeper = me != null && tribe.keeperId == me.userId;
+    final canManage =
+        isKeeper ||
+        (ref
+                .watch(myTribePermissionsProvider(tribe.tribeId))
+                .valueOrNull
+                ?.contains('manage_spaces') ??
+            false);
+    if (!canManage) {
       return Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(title: const Text('Spaces')),
@@ -47,7 +62,7 @@ class _TribeSpacesManagementScreenState
           child: Padding(
             padding: EdgeInsets.all(28),
             child: Text(
-              'Only the current Keeper can manage Tribe Spaces.',
+              'You do not have permission to manage this Tribe\'s Spaces.',
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.w700),
             ),

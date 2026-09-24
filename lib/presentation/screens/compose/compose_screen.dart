@@ -726,6 +726,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       return _buildStoryComposer(context);
     }
     final Tribe? target = ref.watch(composeTargetTribeProvider);
+    // Arriving from a Space's "Start a Vent" set only the Space, and the
+    // banner read only the tribe — so the destination chip did not appear at
+    // all, and neither did the ✕ that clears it.
+    final Space? targetSpace = ref.watch(composeTargetSpaceProvider);
     final personas = ref.watch(myPersonasProvider).valueOrNull ?? const [];
     final activePersona = ref.watch(activePersonaProvider);
     return Scaffold(
@@ -753,7 +757,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (target != null)
+                if (target != null || targetSpace != null)
                   GlassCard(
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.symmetric(
@@ -771,7 +775,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            'Posting in ${target.name}',
+                            targetSpace != null
+                                ? 'Posting in ${targetSpace.name} · '
+                                      '${targetSpace.tribeName}'
+                                : 'Posting in ${target!.name}',
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               color: scheme.primary,

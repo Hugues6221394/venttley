@@ -1089,11 +1089,35 @@ class MockBackend {
     }).toList();
     items.sort((a, b) {
       if (a.isArchived != b.isArchived) return a.isArchived ? 1 : -1;
-      if (a.isDefault != b.isDefault) return a.isDefault ? -1 : 1;
+      // Pinned outranks default, matching the live order. The mock had these
+      // the other way round, so the General Space sat above a pinned one.
       if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+      if (a.isDefault != b.isDefault) return a.isDefault ? -1 : 1;
       return a.createdAt.compareTo(b.createdAt);
     });
     return List.unmodifiable(items);
+  }
+
+  /// Mirrors my_space_posting_state, minus the role checks the mock has no
+  /// data for. Enough that a screen which ignores a closed Space is wrong in
+  /// the widget tests too.
+  String mySpacePostingState(String spaceId) {
+    final space = spaceById(spaceId);
+    if (space == null) return 'not_found';
+    if (space.archivedAt != null) return 'archived';
+    final now = DateTime.now();
+    if (space.activatesAt != null && space.activatesAt!.isAfter(now)) {
+      return 'not_open_yet';
+    }
+    if (space.deactivatesAt != null && !space.deactivatesAt!.isAfter(now)) {
+      return 'closed';
+    }
+    return switch (space.postingPermission) {
+      'read_only' => 'read_only',
+      'mods' => 'mods_only',
+      'keeper' => 'keeper_only',
+      _ => 'open',
+    };
   }
 
   Space? spaceById(String spaceId) =>

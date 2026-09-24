@@ -17,6 +17,23 @@ import '../../theme/glass_tokens.dart';
 ///
 /// See `supabase/migrations/0050_spaces_emotional_communities.sql`
 /// and `lib/domain/entities/entities.dart::Space`.
+/// The vents in a Space that match what has been typed into its search box.
+///
+/// Top-level and public so it can be tested without a widget tree: PostCard
+/// reads Supabase directly and cannot be built under `flutter test`, so a test
+/// that drove the real list would be testing the card, not the filter.
+List<Post> ventsMatching(List<Post> posts, String query) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return posts;
+  return posts
+      .where(
+        (p) =>
+            p.content.toLowerCase().contains(q) ||
+            p.authorPseudonym.toLowerCase().contains(q),
+      )
+      .toList();
+}
+
 class SpaceHomeScreen extends ConsumerStatefulWidget {
   const SpaceHomeScreen({super.key, required this.spaceId});
   final String spaceId;
@@ -27,6 +44,24 @@ class SpaceHomeScreen extends ConsumerStatefulWidget {
 
 class _SpaceHomeScreenState extends ConsumerState<SpaceHomeScreen> {
   String _sort = 'fresh';
+
+  /// Filtering what is already loaded, rather than a round trip.
+  ///
+  /// The search button used to answer "Space search is coming next." A Space
+  /// holds one page of vents, they are all in memory, and matching against
+  /// them is instant and cannot fail — which is more use than a button that
+  /// apologises.
+  final _search = TextEditingController();
+  bool _searching = false;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  List<Post> _matching(List<Post> posts) =>
+      ventsMatching(posts, _search.text);
 
   @override
   Widget build(BuildContext context) {
@@ -50,19 +85,29 @@ class _SpaceHomeScreenState extends ConsumerState<SpaceHomeScreen> {
       spacePostsProvider(SpaceFeedQuery(spaceId: widget.spaceId, sort: _sort)),
     );
     final posts = postsAsync.valueOrNull ?? const <Post>[];
+    final visible = _matching(posts);
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: Text(space.name, overflow: TextOverflow.ellipsis),
+        title: _searching
+            ? TextField(
+                controller: _search,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Search ${space.name}',
+                  border: InputBorder.none,
+                ),
+                onChanged: (_) => setState(() {}),
+              )
+            : Text(space.name, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
-            tooltip: 'Search this Space',
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Space search is coming next.')),
-              );
-            },
+            tooltip: _searching ? 'Done' : 'Search this Space',
+            icon: Icon(_searching ? Icons.close_rounded : Icons.search),
+            onPressed: () => setState(() {
+              _searching = !_searching;
+              if (!_searching) _search.clear();
+            }),
           ),
         ],
       ),
@@ -92,8 +137,21 @@ class _SpaceHomeScreenState extends ConsumerState<SpaceHomeScreen> {
               )
             else if (posts.isEmpty)
               const _EmptyVents()
+            else if (visible.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(32),
+                child: Center(
+                  child: Text(
+                    'No vents matching "${_search.text.trim()}".',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: GlassTokens.onCardMuted(context),
+                    ),
+                  ),
+                ),
+              )
             else
-              ...posts.map(
+              ...visible.map(
                 (p) => Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -117,9 +175,7 @@ class _SpaceHeader extends StatelessWidget {
   final Space space;
   @override
   Widget build(BuildContext context) {
-    final accent = space.themeColor != null
-        ? Color(int.parse(space.themeColor!.replaceFirst('#', '0xff')))
-        : VentlyColors.berryMagenta;
+    final accent = parseAccent(space.themeColor, VentlyColors.berryMagenta);
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
@@ -431,8 +487,107 @@ class _AISummaryTile extends ConsumerWidget {
 class _StartVentButton extends ConsumerWidget {
   const _StartVentButton({required this.space});
   final Space space;
+
+  /// What to say instead of the button, when the Space will not take a vent.
+  ///
+  /// All five of these were already enforced by the guard trigger on posts and
+  /// none of them was visible. The button was rendered unconditionally, so the
+  /// way somebody found out a Space was shut was writing a vent and having the
+  /// insert throw 'space_is_read_only' or 'space_posting_restricted' at them.
+  static ({IconData icon, String text})? _closedNotice(
+    String state,
+    Space space,
+  ) => switch (state) {
+    'read_only' => (
+      icon: Icons.lock_outline_rounded,
+      text: 'This Space is for reading. Nobody is posting here.',
+    ),
+    'mods_only' => (
+      icon: Icons.shield_outlined,
+      text: 'Only mods and the Keeper post in this Space.',
+    ),
+    'keeper_only' => (
+      icon: Icons.campaign_outlined,
+      text: 'Only the Keeper posts in this Space.',
+    ),
+    'not_open_yet' => (
+      icon: Icons.schedule_rounded,
+      text: space.activatesAt == null
+          ? 'This Space has not opened yet.'
+          : 'This Space opens ${_when(space.activatesAt!)}.',
+    ),
+    'closed' => (
+      icon: Icons.event_busy_rounded,
+      text: 'This Space has closed.',
+    ),
+    'archived' => (
+      icon: Icons.inventory_2_outlined,
+      text: 'This Space is archived. You can still read it.',
+    ),
+    'muted' => (
+      icon: Icons.volume_off_rounded,
+      text: 'You are muted in this Tribe.',
+    ),
+    'not_a_member' => (
+      icon: Icons.group_add_outlined,
+      // A different answer from the rest: join the Tribe, not come back later.
+      text: 'Join the Tribe to vent here.',
+    ),
+    _ => null,
+  };
+
+  static String _when(DateTime at) {
+    final local = at.toLocal();
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    return 'on ${local.day} ${months[local.month - 1]}';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(spacePostingStateProvider(space.spaceId));
+
+    // While the answer is in flight, show nothing rather than a button that
+    // might be about to disappear. It arrives in one round trip.
+    final value = state.valueOrNull;
+    if (value == null) return const SizedBox(height: 8);
+
+    final notice = _closedNotice(value, space);
+    if (notice != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: GlassTokens.cardChip(context),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                notice.icon,
+                size: 17,
+                color: GlassTokens.onCardMuted(context),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  notice.text,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: GlassTokens.onCardMuted(context),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
       child: ElevatedButton.icon(
@@ -446,9 +601,6 @@ class _StartVentButton extends ConsumerWidget {
           minimumSize: const Size.fromHeight(48),
         ),
         onPressed: () {
-          // Pre-fill compose with this Space's tribe so the post lands
-          // back in the right thread. space_id will follow once compose
-          // knows about Spaces — for now tribe pre-fill keeps parity.
           ref.read(composeTargetSpaceProvider.notifier).state = space;
           context.push('/compose');
         },

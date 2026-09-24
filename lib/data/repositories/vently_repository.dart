@@ -3412,56 +3412,22 @@ class VentlyRepository implements MusicProvider {
     );
   }
 
-  Future<String> createSpace({
-    required String tribeId,
-    required String name,
-    String? description,
-  }) {
+  /// Whether this Space will accept a vent from me, and if not, why.
+  ///
+  /// Asked of the server rather than worked out from the Space row, because
+  /// the answer depends on the caller's role in the tribe — which the row does
+  /// not carry — and because a second implementation of the rule would
+  /// eventually disagree with the trigger that enforces it.
+  Future<String> mySpacePostingState(String spaceId) {
     final live = _live;
-    if (live != null) {
-      return live.createSpace(
-        tribeId: tribeId,
-        name: name,
-        description: description,
-      );
-    }
-    return Future.error(StateError('not_signed_in'));
-  }
-
-  Future<bool> renameSpace({required String spaceId, required String name}) {
-    final live = _live;
-    if (live != null) return live.renameSpace(spaceId: spaceId, name: name);
-    return Future.value(false);
-  }
-
-  Future<bool> archiveSpace(String spaceId) {
-    final live = _live;
-    if (live != null) return live.archiveSpace(spaceId);
-    return Future.value(false);
+    if (live != null) return live.mySpacePostingState(spaceId);
+    return Future.value(_mock.mySpacePostingState(spaceId));
   }
 
   Future<SpaceSummary?> latestSpaceSummary(String spaceId) {
     final live = _live;
     if (live != null) return live.latestSpaceSummary(spaceId);
     return Future.value(null);
-  }
-
-  Future<bool> updateSpaceTheme({
-    required String spaceId,
-    String? weeklyTheme,
-    String? themeColor,
-    String? description,
-  }) {
-    final live = _live;
-    if (live != null) {
-      return live.updateSpaceTheme(
-        spaceId: spaceId,
-        weeklyTheme: weeklyTheme,
-        themeColor: themeColor,
-        description: description,
-      );
-    }
-    return Future.value(false);
   }
 
   Future<Tribe?> tribeBySlug(String slug) {

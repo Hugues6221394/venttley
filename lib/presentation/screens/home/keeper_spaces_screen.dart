@@ -143,14 +143,22 @@ class _TribeSpacesCard extends ConsumerWidget {
             spacesAsync.when(
               loading: () => const LinearProgressIndicator(minHeight: 2),
               error: (_, __) => const Text('Could not load spaces'),
-              data: (spaces) {
+              data: (all) {
+                // spacesByTribe returns archived Spaces too, for the
+                // management screen's "Archived" section. This panel showed
+                // them mixed in with the live ones, unlabelled.
+                final spaces = all.where((s) => !s.isArchived).toList();
                 if (spaces.isEmpty) {
-                  return Text(
-                    'No spaces yet — add one from tribe manage.',
-                    style: TextStyle(
-                      color: context.ink.withOpacity(0.55),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
+                  // Was a sentence telling the keeper to go somewhere else.
+                  // The destination is one tap away, so it may as well be one.
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => context.push(
+                        '/tribe/${tribe.slug}/manage/settings/spaces?create=true',
+                      ),
+                      icon: const Icon(Icons.add_rounded, size: 17),
+                      label: const Text('Open the first Space'),
                     ),
                   );
                 }
@@ -161,6 +169,21 @@ class _TribeSpacesCard extends ConsumerWidget {
                         space: s,
                         onTap: () => context.push(
                           '/tribe/${tribe.slug}/space/${s.spaceId}',
+                        ),
+                      ),
+                    // The cap was silent: a tribe with nine Spaces showed four
+                    // and gave no hint the rest existed.
+                    if (spaces.length > 4)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: () => context.push(
+                            '/tribe/${tribe.slug}/manage/settings/spaces',
+                          ),
+                          child: Text(
+                            'All ${spaces.length} Spaces',
+                            style: const TextStyle(fontSize: 12.5),
+                          ),
                         ),
                       ),
                   ],

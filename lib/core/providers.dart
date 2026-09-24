@@ -1232,6 +1232,19 @@ final spacePostsProvider = FutureProvider.autoDispose
           .postsInSpace(spaceId: q.spaceId, sort: q.sort),
     );
 
+/// Whether the viewer can file a vent in this Space, and if not, why.
+///
+/// A Space can be read-only, restricted to mods or the keeper, archived, or
+/// scheduled shut — all four already enforced by the guard trigger on posts,
+/// and none of them visible before. The screen showed "Start a Vent"
+/// regardless, so the way anybody learned a Space was closed was a raw
+/// 'space_is_read_only' after they had written something.
+final spacePostingStateProvider = FutureProvider.autoDispose
+    .family<String, String>(
+      (ref, spaceId) =>
+          ref.watch(repositoryProvider).mySpacePostingState(spaceId),
+    );
+
 final spaceSummaryProvider = FutureProvider.autoDispose
     .family<SpaceSummary?, String>(
       (ref, spaceId) async =>

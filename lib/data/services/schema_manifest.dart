@@ -116,4 +116,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261043090000': 'username_availability',
   '20261044090000': 'invite_search_finds_people',
   '20261045090000': 'private_tribes_are_actually_private',
+  '20261046090000': 'a_space_says_whether_it_is_open',
 };
