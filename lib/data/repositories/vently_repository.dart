@@ -2415,25 +2415,17 @@ class VentlyRepository implements MusicProvider {
     return _mock.spotlightMember(tribeId: tribeId, userId: userId, note: note);
   }
 
-  // ===================== User lookup =====================
-  Future<({String userId, String pseudonym, String avatarSeed})?>
-  findUserByPseudonym(String pseudonym) async {
+  /// People a keeper could invite to this tribe, matched as they type.
+  Future<List<TribeInviteCandidate>> searchTribeInviteCandidates({
+    required String tribeId,
+    required String query,
+  }) {
     final live = _live;
     if (live != null) {
-      final row = await live.findUserByPseudonym(pseudonym);
-      if (row == null) return null;
-      return (
-        userId: row['user_id'] as String,
-        pseudonym: row['anonymous_pseudonym'] as String,
-        avatarSeed: (row['avatar_seed'] as String?) ?? 'default-orb',
-      );
+      return live.searchTribeInviteCandidates(tribeId: tribeId, query: query);
     }
-    final u = _mock.findUserByPseudonym(pseudonym);
-    if (u == null) return null;
-    return (
-      userId: u.userId,
-      pseudonym: u.anonymousPseudonym,
-      avatarSeed: u.avatarSeed,
+    return Future.value(
+      _mock.searchTribeInviteCandidates(tribeId: tribeId, query: query),
     );
   }
 

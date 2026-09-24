@@ -1990,6 +1990,34 @@ final tagCandidatesProvider = FutureProvider.autoDispose
       return ref.watch(repositoryProvider).searchTagCandidates(prefix);
     });
 
+/// Who a keeper could invite to this tribe, as they type.
+///
+/// Keyed on the tribe and the query together, so switching tribes cannot show
+/// the previous tribe's answers about who is already a member.
+///
+/// The debounce cancels for real. [tagCandidatesProvider] above awaits a delay
+/// and then calls the network, which still fires for every abandoned keystroke:
+/// autoDispose disposes the provider but does not interrupt a body that is
+/// already running. Here disposal sets a flag the body checks, so a keystroke
+/// that has been superseded costs nothing.
+final tribeInviteCandidatesProvider = FutureProvider.autoDispose
+    .family<List<TribeInviteCandidate>, ({String tribeId, String query})>((
+      ref,
+      args,
+    ) async {
+      final query = args.query.trim().replaceAll('@', '');
+      if (query.length < 2) return const <TribeInviteCandidate>[];
+
+      var abandoned = false;
+      ref.onDispose(() => abandoned = true);
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (abandoned) return const <TribeInviteCandidate>[];
+
+      return ref
+          .read(repositoryProvider)
+          .searchTribeInviteCandidates(tribeId: args.tribeId, query: query);
+    });
+
 /// Live comments on a Whisper (migration 0059, realtime via 0111) —
 /// re-emits on every insert/soft-delete so open sheets stay current.
 final whisperCommentsProvider = StreamProvider.autoDispose

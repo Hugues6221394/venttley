@@ -3045,6 +3045,44 @@ class SupabaseBackend {
         .toList();
   }
 
+  /// People a keeper could invite to this tribe, matched as they type.
+  ///
+  /// Prefix on the handle, substring or trigram on the display name — so a
+  /// keeper who half-remembers a name still finds them, which the old exact
+  /// lookup could not do.
+  Future<List<TribeInviteCandidate>> searchTribeInviteCandidates({
+    required String tribeId,
+    required String query,
+  }) async {
+    final rows =
+        await _client.rpc(
+              'search_tribe_invite_candidates',
+              params: {
+                'p_tribe_id': tribeId,
+                'p_query': query,
+                'p_limit': 12,
+              },
+            )
+            as List<dynamic>;
+    return rows
+        .cast<Map<String, dynamic>>()
+        .map(
+          (r) => TribeInviteCandidate(
+            userId: r['user_id'] as String,
+            pseudonym: r['pseudonym'] as String,
+            displayName:
+                (r['display_name'] as String?) ?? (r['pseudonym'] as String),
+            avatarSeed: (r['avatar_seed'] as String?) ?? 'default-orb',
+            profilePhotoUrl: r['profile_photo_url'] as String?,
+            isVerified: (r['is_verified'] as bool?) ?? false,
+            isFriend: (r['is_friend'] as bool?) ?? false,
+            alreadyMember: (r['already_member'] as bool?) ?? false,
+            alreadyInvited: (r['already_invited'] as bool?) ?? false,
+          ),
+        )
+        .toList();
+  }
+
   /// Server-evaluated feature flags for this user (migration 0118).
   /// Deterministic percentage rollouts happen in SQL; the map is
   /// flag_key -> enabled.
@@ -8892,19 +8930,6 @@ class SupabaseBackend {
 
   /// Friendly, UI-facing auth failure types — see [signUp] / [signIn].
   // (defined below the class)
-
-  /// Look up a user by pseudonym (case-insensitive). Returns enough info to
-  /// show a confirmation card before sending an invite.
-  Future<Map<String, dynamic>?> findUserByPseudonym(String pseudonym) async {
-    final cleaned = pseudonym.trim().replaceAll('@', '');
-    if (cleaned.isEmpty) return null;
-    final row = await _client
-        .from('users')
-        .select('user_id, anonymous_pseudonym, avatar_seed, is_verified')
-        .ilike('anonymous_pseudonym', cleaned)
-        .maybeSingle();
-    return row;
-  }
 
   /// Pick a random other user — used for the demo "find a peer" flow until
   /// a richer peer-discovery UX ships.

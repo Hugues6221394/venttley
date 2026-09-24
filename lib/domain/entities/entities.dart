@@ -2040,6 +2040,40 @@ class TagCandidate {
   });
 }
 
+/// Somebody a keeper could invite to a tribe, as they type.
+///
+/// [alreadyMember] and [alreadyInvited] are about the tribe rather than the
+/// person, and they are the reason this is not just a user row: without them
+/// the picker offers somebody who is already in, the unique constraint on
+/// (tribe_id, invited_user_id) swallows the insert, and the keeper is told an
+/// invitation went out that nobody will ever receive.
+class TribeInviteCandidate {
+  final String userId;
+  final String pseudonym;
+  final String displayName;
+  final String avatarSeed;
+  final String? profilePhotoUrl;
+  final bool isVerified;
+  final bool isFriend;
+  final bool alreadyMember;
+  final bool alreadyInvited;
+
+  const TribeInviteCandidate({
+    required this.userId,
+    required this.pseudonym,
+    required this.displayName,
+    required this.avatarSeed,
+    this.profilePhotoUrl,
+    this.isVerified = false,
+    this.isFriend = false,
+    this.alreadyMember = false,
+    this.alreadyInvited = false,
+  });
+
+  /// Whether an invite can still be sent to this person.
+  bool get invitable => !alreadyMember && !alreadyInvited;
+}
+
 /// One search typeahead / trending entry (migration 0119).
 /// kind: 'user' | 'tribe' | 'category'. value is what to search or route
 /// with (pseudonym, slug, category key), display is what to render.

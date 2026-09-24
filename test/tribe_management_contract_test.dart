@@ -88,16 +88,34 @@ void main() {
         expect(source, contains('sessionProvider'), reason: path);
         expect(source, contains('tribe.keeperId'), reason: path);
       }
-      final members = File(
-        'lib/presentation/screens/tribes/tribe_members_management_screen.dart',
-      ).readAsStringSync();
       final content = File(
         'lib/presentation/screens/tribes/tribe_content_management_screen.dart',
       ).readAsStringSync();
-      expect(members, contains('Could not send this invitation'));
       expect(content, contains('Could not load Spaces'));
+      // Both invite surfaces — the members screen and the manage dashboard —
+      // now open one shared sheet, so the copy they used to each own lives in
+      // one place. The invariant is unchanged: a keeper who cannot search, or
+      // whose invite does not send, is told so where they are standing.
+      final inviteSheet = File(
+        'lib/presentation/widgets/tribe/tribe_invite_sheet.dart',
+      ).readAsStringSync();
+      for (final surface in const [
+        'lib/presentation/screens/tribes/tribe_members_management_screen.dart',
+        'lib/presentation/screens/tribes/tribe_manage_screen.dart',
+      ]) {
+        expect(
+          File(surface).readAsStringSync(),
+          contains('showTribeInviteSheet('),
+          reason: '\$surface must invite through the shared sheet',
+        );
+      }
       expect(
-        dashboard,
+        inviteSheet,
+        contains('Could not invite @'),
+        reason: 'A failed invite must be reported, not swallowed',
+      );
+      expect(
+        inviteSheet,
         contains('Could not search right now'),
         reason: 'Invite lookup failures must remain inside the sheet',
       );

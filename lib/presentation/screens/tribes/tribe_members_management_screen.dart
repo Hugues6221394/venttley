@@ -9,6 +9,7 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../widgets/tribe/tribe_invite_sheet.dart';
 
 class TribeMembersManagementScreen extends ConsumerStatefulWidget {
   const TribeMembersManagementScreen({super.key, required this.slug});
@@ -295,60 +296,14 @@ class _TribeMembersManagementScreenState
   }
 
   Future<void> _showInviteDialog(Tribe tribe) async {
-    final username = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => ModalTextControllerScope(
-        initialValues: const [''],
-        builder: (dialogContext, controllers) => AlertDialog(
-          title: const Text('Invite member'),
-          content: TextField(
-            controller: controllers.single,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Username',
-              prefixText: '@',
-              prefixIcon: Icon(Icons.person_search_outlined),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () =>
-                  Navigator.pop(dialogContext, controllers.single.text.trim()),
-              child: const Text('Invite'),
-            ),
-          ],
-        ),
-      ),
+    await showTribeInviteSheet(
+      context,
+      tribeId: tribe.tribeId,
+      tribeName: tribe.name,
     );
-    if (username == null || username.isEmpty || !mounted) return;
-    try {
-      final user = await ref
-          .read(repositoryProvider)
-          .findUserByPseudonym(username);
-      if (user == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No user found with that username.')),
-        );
-        return;
-      }
-      await ref
-          .read(repositoryProvider)
-          .inviteToTribe(tribeId: tribe.tribeId, invitedUserId: user.userId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Invitation sent to @${user.pseudonym}.')),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not send this invitation: $error')),
-      );
-    }
+    if (!mounted) return;
+    // Somebody invited from the sheet shows up in Pending straight away.
+    ref.invalidate(tribeMembersProvider(tribe.tribeId));
   }
 }
 

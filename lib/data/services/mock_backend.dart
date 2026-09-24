@@ -1502,17 +1502,43 @@ class MockBackend {
   List<UserBadge> badgesFor(String userId) => _userBadges[userId] ?? const [];
   List<UserStreak> myStreaks() => const [];
 
-  // -------------------- User lookup --------------------
-  AppUser? findUserByPseudonym(String pseudonym) {
-    final q = pseudonym.trim().replaceAll('@', '').toLowerCase();
-    if (q.isEmpty) return null;
-    return _users.firstWhereOrNull(
-      (u) => u.anonymousPseudonym.toLowerCase() == q,
-    );
-  }
-
   // -------------------- Tribe invitations --------------------
   final List<TribeInvite> _invites = [];
+
+  List<TribeInviteCandidate> searchTribeInviteCandidates({
+    required String tribeId,
+    required String query,
+  }) {
+    final q = query.trim().replaceAll('@', '').toLowerCase();
+    if (q.length < 2) return const [];
+    final members = tribeMembers(tribeId).map((m) => m.userId).toSet();
+    return _users
+        .where((u) => u.userId != _me?.userId)
+        .where(
+          (u) =>
+              u.anonymousPseudonym.toLowerCase().startsWith(q) ||
+              u.displayName.toLowerCase().contains(q),
+        )
+        .map(
+          (u) => TribeInviteCandidate(
+            userId: u.userId,
+            pseudonym: u.anonymousPseudonym,
+            displayName: u.displayName,
+            avatarSeed: u.avatarSeed,
+            profilePhotoUrl: u.profilePhotoUrl,
+            isVerified: u.isVerified,
+            alreadyMember: members.contains(u.userId),
+            alreadyInvited: _invites.any(
+              (i) =>
+                  i.tribeId == tribeId &&
+                  i.invitedUserId == u.userId &&
+                  i.isPending,
+            ),
+          ),
+        )
+        .take(12)
+        .toList();
+  }
 
   void inviteToTribe({
     required String tribeId,
