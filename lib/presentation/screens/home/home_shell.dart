@@ -146,7 +146,8 @@ class HomeShell extends ConsumerWidget {
             // Follows the Studio scope, and asks when it is ambiguous, rather
             // than opening the largest tribe's chat. A keeper working in one
             // tribe tapping Chat means *that* tribe's chat.
-            if ((ref.read(tribesIKeepProvider).valueOrNull ?? const []).isEmpty) {
+            if ((ref.read(tribesIKeepProvider).valueOrNull ?? const [])
+                .isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Create a tribe first.')),
               );
@@ -167,10 +168,19 @@ class HomeShell extends ConsumerWidget {
             context.go(tab.pushRoute!);
             return;
           }
-          navigationShell.goBranch(
-            tab.branchIndex!,
-            initialLocation: tab.branchIndex == navigationShell.currentIndex,
-          );
+          // Always the branch's own first page, never the page you left it on.
+          //
+          // goBranch restores a branch's saved stack by default, so tapping
+          // Inbox could land on a conversation from an hour ago and tapping
+          // Profile could land three screens into Settings. A tab that
+          // sometimes opens its page and sometimes opens somewhere else is a
+          // tab you have to look at before you tap. Reported as exactly that:
+          // "the app must bring me to the page I am clicking, regardless of
+          // where I previously was".
+          //
+          // Anything worth resuming — a half-written message, an open thread —
+          // is a root route above this shell and is unaffected.
+          navigationShell.goBranch(tab.branchIndex!, initialLocation: true);
         },
       ),
     );
@@ -225,6 +235,8 @@ class _GlassNavBar extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final inboxBadge = ref.watch(navInboxBadgeCountProvider).valueOrNull ?? 0;
+    final friendsBadge =
+        ref.watch(navFriendsBadgeCountProvider).valueOrNull ?? 0;
     final isKeeper = ref.watch(isKeeperProvider).valueOrNull ?? false;
     final memberView = ref.watch(keeperMemberViewProvider);
     final studioMode = isKeeper && !memberView;
@@ -232,6 +244,9 @@ class _GlassNavBar extends ConsumerWidget {
     int? badgeFor(_Tab tab) {
       if (studioMode) return null;
       if (tab.label == 'Inbox' && inboxBadge > 0) return inboxBadge;
+      // A connection request is answered on Friends, so it is marked there
+      // too. Both badges move on the same realtime event.
+      if (tab.label == 'Friends' && friendsBadge > 0) return friendsBadge;
       return null;
     }
 

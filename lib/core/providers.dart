@@ -1800,6 +1800,24 @@ final unreadInboxCountProvider = FutureProvider.autoDispose<int>((ref) async {
   return unreadChats + pending;
 });
 
+/// Friends tab badge: connection requests waiting on an answer.
+///
+/// The same number the inbox badge folds in, said in the second place it is
+/// true. A request is answered on the Friends screen, so a badge that appears
+/// only over Inbox sends somebody to the wrong page — and the two icons sit
+/// next to each other, which made the inbox badge look like a message.
+///
+/// Live for the same reason the list is: incomingFriendRequestsProvider
+/// re-fetches on every friendships change involving this user, so both badges
+/// move on the same event rather than one of them waiting for a screen to be
+/// opened.
+final navFriendsBadgeCountProvider = FutureProvider.autoDispose<int>((
+  ref,
+) async {
+  final incoming = await ref.watch(incomingFriendRequestsProvider.future);
+  return incoming.length;
+});
+
 /// Inbox tab badge: pending chat requests + unread peer messages +
 /// incoming friend requests.
 final navInboxBadgeCountProvider = FutureProvider.autoDispose<int>((ref) async {
