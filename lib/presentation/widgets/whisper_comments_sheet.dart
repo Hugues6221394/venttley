@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +9,8 @@ import '../../data/services/draft_store.dart';
 import '../../data/services/outbox.dart';
 import '../../domain/entities/entities.dart';
 import '../theme/colors.dart';
+import 'emoji_picker_sheet.dart';
+import 'gif_picker_sheet.dart';
 import 'glass_card.dart';
 import 'profile_avatar.dart';
 import 'tagged_text.dart';
@@ -51,6 +54,10 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
   /// When set, the next send is a reply to this comment.
   WhisperComment? _replyingTo;
 
+  /// A chosen GIF, waiting to be sent. Hotlinked from the picker — nothing is
+  /// uploaded, so this is a URL rather than bytes.
+  String? _pendingGif;
+
   DraftSaver? _draftSaver;
 
   @override
@@ -86,9 +93,13 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
 
   Future<void> _send() async {
     final text = _controller.text.trim();
-    if (text.isEmpty || _sending) return;
+    final gif = _pendingGif;
+    // A GIF on its own is a comment. Nothing at all is not.
+    if ((text.isEmpty && gif == null) || _sending) return;
 
-    final moderation = await ref.read(moderationServiceProvider).review(text);
+    final moderation = await ref
+        .read(moderationServiceProvider)
+        .review(text.isEmpty ? ' ' : text);
     if (!mounted) return;
     if (moderation.isBlocked) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -119,13 +130,17 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
             parentId: target == null
                 ? null
                 : (target.parentId ?? target.commentId),
+            imageUrl: gif,
             idempotencyKey: operationId,
           );
       await _draftSaver?.clear();
       ref.invalidate(whisperCommentsProvider(widget.whisper.whisperId));
       ref.invalidate(whispersFeedProvider);
       _controller.clear();
-      setState(() => _replyingTo = null);
+      setState(() {
+        _replyingTo = null;
+        _pendingGif = null;
+      });
     } catch (e) {
       if (UserFriendlyErrors.isPermanent(e)) {
         if (mounted) {
@@ -147,11 +162,15 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
           'parentId': target == null
               ? null
               : (target.parentId ?? target.commentId),
+          'imageUrl': gif,
         }, operationId: operationId);
         await _draftSaver?.clear();
         _controller.clear();
         if (mounted) {
-          setState(() => _replyingTo = null);
+          setState(() {
+            _replyingTo = null;
+            _pendingGif = null;
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
@@ -168,6 +187,38 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  /// Insert an emoji where the cursor is, rather than at the end.
+  ///
+  /// Somebody who has written "that sounds hard" and moves the caret back to
+  /// the start means it to go there. The sheet stays open, so this runs once
+  /// per tap.
+  void _insertEmoji(String emoji) {
+    final value = _controller.value;
+    final selection = value.selection;
+    if (!selection.isValid) {
+      _controller.text = value.text + emoji;
+      _controller.selection = TextSelection.collapsed(
+        offset: _controller.text.length,
+      );
+      return;
+    }
+    final text = value.text.replaceRange(selection.start, selection.end, emoji);
+    _controller.value = value.copyWith(
+      text: text,
+      selection: TextSelection.collapsed(
+        offset: selection.start + emoji.length,
+      ),
+      composing: TextRange.empty,
+    );
+  }
+
+  Future<void> _pickGif() async {
+    final url = await showGifPickerSheet(context);
+    if (!mounted || url == null) return;
+    setState(() => _pendingGif = url);
+    _focusNode.requestFocus();
   }
 
   Future<void> _delete(WhisperComment c) async {
@@ -404,10 +455,66 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
                             ],
                           ),
                         ),
+                      if (_pendingGif != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: CachedNetworkImage(
+                                    imageUrl: _pendingGif!,
+                                    height: 96,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: Material(
+                                    color: Colors.black54,
+                                    shape: const CircleBorder(),
+                                    child: InkWell(
+                                      customBorder: const CircleBorder(),
+                                      onTap: () =>
+                                          setState(() => _pendingGif = null),
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(4),
+                                        child: Icon(
+                                          Icons.close_rounded,
+                                          size: 15,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       TagAutocomplete(
                         controller: _controller,
                         child: Row(
                           children: [
+                            _ComposerTool(
+                              tooltip: 'Emoji',
+                              icon: Icons.emoji_emotions_outlined,
+                              onTap: _sending
+                                  ? null
+                                  : () => showEmojiPicker(
+                                      context,
+                                      onEmoji: _insertEmoji,
+                                    ),
+                            ),
+                            _ComposerTool(
+                              tooltip: 'GIF',
+                              icon: Icons.gif_box_outlined,
+                              onTap: _sending ? null : _pickGif,
+                            ),
+                            const SizedBox(width: 4),
                             Expanded(
                               child: TextField(
                                 controller: _controller,
@@ -466,6 +573,37 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One of the two round buttons to the left of the field.
+class _ComposerTool extends StatelessWidget {
+  const _ComposerTool({
+    required this.tooltip,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        onPressed: onTap,
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+        icon: Icon(
+          icon,
+          size: 22,
+          color: VentlyColors.berryMagenta.withOpacity(onTap == null ? 0.4 : 1),
         ),
       ),
     );
@@ -560,15 +698,53 @@ class _CommentTile extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  TaggedText(
-                    comment.content,
-                    style: TextStyle(
-                      color: context.ink,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                      height: 1.35,
+                  if (comment.content.trim().isNotEmpty)
+                    TaggedText(
+                      comment.content,
+                      style: TextStyle(
+                        color: context.ink,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        height: 1.35,
+                      ),
                     ),
-                  ),
+                  if (comment.imageUrl != null) ...[
+                    if (comment.content.trim().isNotEmpty)
+                      const SizedBox(height: 6),
+                    // Capped rather than sized: a GIF is a reaction, and one
+                    // that fills the sheet pushes the conversation off screen.
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: compact ? 120 : 160,
+                          maxWidth: 220,
+                        ),
+                        child: CachedNetworkImage(
+                          imageUrl: comment.imageUrl!,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(
+                            height: compact ? 120 : 160,
+                            width: 220,
+                            color: context.ink.withOpacity(0.06),
+                          ),
+                          errorWidget: (_, __, ___) => Container(
+                            height: 60,
+                            width: 220,
+                            alignment: Alignment.center,
+                            color: context.ink.withOpacity(0.06),
+                            child: Text(
+                              'GIF unavailable',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.ink.withOpacity(0.5),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   Row(
                     children: [

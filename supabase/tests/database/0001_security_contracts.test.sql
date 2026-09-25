@@ -122,7 +122,7 @@ SELECT ok(
 SELECT ok(
   has_function_privilege(
     'authenticated',
-    'public.add_whisper_comment_idempotent(uuid,uuid,text,uuid,uuid)',
+    'public.add_whisper_comment_idempotent(uuid,uuid,text,uuid,uuid,text)',
     'EXECUTE'
   ),
   'authenticated clients can use the idempotent whisper comment RPC'
@@ -130,7 +130,7 @@ SELECT ok(
 SELECT ok(
   NOT has_function_privilege(
     'anon',
-    'public.add_whisper_comment_idempotent(uuid,uuid,text,uuid,uuid)',
+    'public.add_whisper_comment_idempotent(uuid,uuid,text,uuid,uuid,text)',
     'EXECUTE'
   ),
   'anon cannot create whisper comments through the idempotent RPC'

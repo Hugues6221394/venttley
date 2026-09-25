@@ -529,6 +529,7 @@ class OutboxService extends ChangeNotifier {
           payload['content'] as String,
           personaId: payload['personaId'] as String?,
           parentId: payload['parentId'] as String?,
+          imageUrl: payload['imageUrl'] as String?,
           idempotencyKey: operation.id,
         );
       case OutboxKind.dm:

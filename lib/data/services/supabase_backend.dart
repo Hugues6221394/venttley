@@ -3003,6 +3003,7 @@ class SupabaseBackend {
             likedByMe: (r['liked_by_me'] as bool?) ?? false,
             canDelete: (r['can_delete'] as bool?) ?? false,
             authorIsVerified: (r['author_is_verified'] as bool?) ?? false,
+            imageUrl: r['image_url'] as String?,
           ),
         )
         .toList();
@@ -3046,6 +3047,7 @@ class SupabaseBackend {
     String content, {
     String? personaId,
     String? parentId,
+    String? imageUrl,
     String? idempotencyKey,
   }) async {
     final res = await _client.rpc(
@@ -3056,6 +3058,7 @@ class SupabaseBackend {
         'p_content': content,
         'p_persona_id': personaId,
         'p_parent_id': parentId,
+        'p_image_url': imageUrl,
       },
     );
     return res as String;

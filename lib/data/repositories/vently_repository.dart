@@ -2026,6 +2026,7 @@ class VentlyRepository implements MusicProvider {
     String content, {
     String? personaId,
     String? parentId,
+    String? imageUrl,
     String? idempotencyKey,
   }) {
     final live = _live;
@@ -2035,6 +2036,7 @@ class VentlyRepository implements MusicProvider {
         content,
         personaId: personaId,
         parentId: parentId,
+        imageUrl: imageUrl,
         idempotencyKey: idempotencyKey,
       );
     }

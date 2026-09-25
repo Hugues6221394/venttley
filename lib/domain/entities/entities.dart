@@ -2009,6 +2009,11 @@ class WhisperComment {
   /// whisper (owner moderation).
   final bool canDelete;
 
+  /// A GIF, hotlinked from the picker. Null for a comment that is only words.
+  ///
+  /// A comment is text, or a GIF, or both — the database refuses neither.
+  final String? imageUrl;
+
   const WhisperComment({
     required this.commentId,
     required this.whisperId,
@@ -2023,6 +2028,7 @@ class WhisperComment {
     this.likedByMe = false,
     this.canDelete = false,
     this.authorIsVerified = false,
+    this.imageUrl,
   }) : _authorDisplayName = authorDisplayName;
 
   String get authorDisplayName {
