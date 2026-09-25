@@ -796,7 +796,12 @@ class _WhisperPageState extends ConsumerState<_WhisperPage> {
               ),
             SafeArea(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 70, 20, 28),
+                // The right inset is the action rail's own width plus its
+                // margin. Without it the player ran the full width underneath
+                // the rail: "Share" sat on top of the clip's duration, and the
+                // caption ran under Save and More. A premium surface is mostly
+                // things not touching each other.
+                padding: const EdgeInsets.fromLTRB(20, 70, _railInset, 28),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -837,6 +842,12 @@ class _SkipFlash extends StatelessWidget {
   }
 }
 
+/// How much room the action rail needs on the right of a whisper.
+///
+/// 44 for the buttons, 12 for the margin they sit in, and 16 of air so the
+/// player's own right edge is not against them.
+const double _railInset = 72;
+
 class _AudioCard extends ConsumerWidget {
   const _AudioCard({required this.whisper, required this.isActive});
   final Whisper whisper;
@@ -847,9 +858,14 @@ class _AudioCard extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
+        // Darkened rather than lightened. At white 18% the card took its
+        // contrast from whatever photo was behind it — over the light half of
+        // an image the waveform and the timestamps disappeared. Black at 38%
+        // under a white hairline reads the same over every background, which
+        // is the point of a glass panel that has to work over anything.
+        color: Colors.black.withOpacity(0.38),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.32)),
+        border: Border.all(color: Colors.white.withOpacity(0.22)),
       ),
       child: playerAsync.when(
         loading: () => _StaticAudioCard(whisper: whisper),
@@ -1631,35 +1647,37 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
         _RailButton(
           icon: _myReaction == null ? Icons.favorite_border : null,
           emoji: _myReaction != null ? PostReactions.emoji(_myReaction!) : null,
-          label: _short(_totalReactions),
+          count: _short(_totalReactions),
+          action: _myReaction == null ? 'React' : 'Change your reaction',
           color: _myReaction != null ? VentlyColors.berryMagenta : Colors.white,
           onTap: isMine ? null : _openReactionPicker,
         ),
         const SizedBox(height: 14),
         _RailButton(
           icon: Icons.mode_comment_outlined,
-          label: _short(widget.whisper.commentsCount),
+          count: _short(widget.whisper.commentsCount),
+          action: 'Comments',
           color: Colors.white,
           onTap: () => showWhisperCommentsSheet(context, ref, widget.whisper),
         ),
         const SizedBox(height: 14),
         _RailButton(
           icon: Icons.ios_share,
-          label: 'Share',
+          action: 'Share',
           color: Colors.white,
           onTap: () => showWhisperShareSheet(context, widget.whisper),
         ),
         const SizedBox(height: 14),
         _RailButton(
           icon: _saved ? Icons.bookmark : Icons.bookmark_border,
-          label: _saved ? 'Saved' : 'Save',
+          action: _saved ? 'Saved' : 'Save',
           color: _saved ? VentlyColors.berryMagenta : Colors.white,
           onTap: _toggleSave,
         ),
         const SizedBox(height: 14),
         _RailButton(
           icon: Icons.more_horiz,
-          label: 'More',
+          action: 'More',
           color: Colors.white,
           onTap: () => _openWhisperMenu(isMine),
         ),
@@ -1852,48 +1870,74 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
   }
 }
 
+/// One button on the rail beside a whisper.
+///
+/// [count] is written under the button; [action] is not. The rail used to
+/// print a word under three of its five buttons — "Share", "Save", "More" —
+/// beside two that printed numbers, so the column read as a list of labels
+/// with two stray figures in it, and the words were long enough to collide
+/// with the player behind them. A count says something the icon cannot. A
+/// word under a share icon does not, and it is still announced: it goes to
+/// the tooltip and to the semantics node, where somebody who needs it gets it
+/// and somebody who does not gets a clean column.
 class _RailButton extends StatelessWidget {
   const _RailButton({
     this.icon,
     this.emoji,
-    required this.label,
+    this.count,
+    required this.action,
     required this.color,
     required this.onTap,
   });
   final IconData? icon;
   final String? emoji;
-  final String label;
+
+  /// Written under the button. Null for the buttons that have nothing to
+  /// count.
+  final String? count;
+
+  /// What the button does, for the tooltip and the screen reader.
+  final String action;
   final Color color;
   final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: Column(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.42),
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: emoji != null
-                ? Text(emoji!, style: const TextStyle(fontSize: 22))
-                : Icon(icon, color: color, size: 22),
+    return Semantics(
+      button: true,
+      label: count == null ? action : '$action, $count',
+      child: Tooltip(
+        message: action,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Column(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.42),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: emoji != null
+                    ? Text(emoji!, style: const TextStyle(fontSize: 22))
+                    : Icon(icon, color: color, size: 22),
+              ),
+              if (count != null) ...[
+                const SizedBox(height: 3),
+                Text(
+                  count!,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: 3),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2207,7 +2251,8 @@ class _WhispersEmpty extends ConsumerWidget {
                         itemBuilder: (context, index) {
                           final person = people[index];
                           return InkWell(
-                            onTap: () => openUserProfile(context, person.userId),
+                            onTap: () =>
+                                openUserProfile(context, person.userId),
                             borderRadius: BorderRadius.circular(12),
                             child: SizedBox(
                               width: 72,
