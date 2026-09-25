@@ -32,6 +32,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:vently_app/core/providers.dart';
 import 'package:vently_app/presentation/router/app_router.dart';
 import 'package:vently_app/presentation/theme/app_theme.dart';
+import 'package:vently_app/presentation/widgets/profile_avatar.dart';
 
 const _url = String.fromEnvironment('SUPABASE_URL');
 const _anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
@@ -63,8 +64,10 @@ Future<void> _until(
       .where((t) => t.trim().isNotEmpty)
       .take(25)
       .toList();
-  fail('${reason ?? 'timed out waiting for $finder'}\n'
-      'On screen instead: $visible');
+  fail(
+    '${reason ?? 'timed out waiting for $finder'}\n'
+    'On screen instead: $visible',
+  );
 }
 
 void main() {
@@ -262,10 +265,26 @@ void main() {
     );
 
     expect(find.text('Make it yours'), findsOneWidget);
+
+    // The three optional things this step exists to offer, asked for by name:
+    // "the same screen should show optional steps to put profile picture,
+    // background image, input a recovery email". Asserted here rather than
+    // taken on trust, because the screen is one redirect away from being
+    // skipped entirely and that is exactly what happened once.
     expect(
       find.textContaining('Recovery email'),
       findsWidgets,
       reason: 'the personalise step should offer a recovery email',
+    );
+    expect(
+      find.textContaining('Add a background'),
+      findsWidgets,
+      reason: 'and a background image',
+    );
+    expect(
+      find.byType(ProfileAvatar),
+      findsWidgets,
+      reason: 'and a profile photo, which is the avatar sitting on the banner',
     );
   });
 }
