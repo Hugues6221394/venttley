@@ -65,7 +65,18 @@ class NotificationPayload {
         if (postId != null) return post(postId);
         // Whisper-comment likes/replies carry whisper_id instead.
         final commentWhisperId = payload['whisper_id'] as String?;
-        return commentWhisperId == null ? null : 'whisper:$commentWhisperId';
+        if (commentWhisperId != null) return 'whisper:$commentWhisperId';
+        // Tagged in a tribe chat, or in a group thread in the inbox. Both
+        // carry what is needed to open the conversation it happened in.
+        final mentionTribe = payload['tribe_slug'] as String?;
+        if (mentionTribe != null) {
+          return tribeChat(
+            mentionTribe,
+            messageId: payload['message_id'] as String?,
+          );
+        }
+        final mentionRoom = payload['room_id'] as String?;
+        return mentionRoom == null ? null : chat(mentionRoom);
       case 'whisper_reply':
       case 'whisper_reaction':
         final whisperId = payload['whisper_id'] as String?;

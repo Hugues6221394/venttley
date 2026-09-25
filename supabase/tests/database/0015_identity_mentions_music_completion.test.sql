@@ -235,7 +235,7 @@ SELECT is(
 SELECT ok(
   NOT has_function_privilege(
     'authenticated',
-    'public._notify_mentions(uuid,text,text,uuid,jsonb)',
+    'public._notify_mentions(uuid,text,text,uuid,jsonb,uuid)',
     'EXECUTE'
   ),
   'clients cannot forge immutable mention bindings or notifications'

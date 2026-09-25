@@ -28,6 +28,7 @@ import '../../widgets/emoji_picker_sheet.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/verified_badge.dart';
 import '../../../data/services/media_saver.dart';
+import '../../widgets/tagged_text.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.roomId});
@@ -1095,18 +1096,15 @@ class _Bubble extends ConsumerWidget {
       final url = await ref.read(signedUrlCacheProvider).urlFor(path);
       final result = await ref
           .read(mediaSaverProvider)
-          .saveFromUrl(
-            url,
-            isVideo: isVideo,
-            fileName: path.split('/').last,
-          );
+          .saveFromUrl(url, isVideo: isVideo, fileName: path.split('/').last);
       if (!context.mounted) return;
       messenger.showSnackBar(
         SnackBar(
           content: Text(switch (result) {
-            MediaSaveResult.saved => isVideo
-                ? 'Video saved to your library.'
-                : 'Photo saved to your library.',
+            MediaSaveResult.saved =>
+              isVideo
+                  ? 'Video saved to your library.'
+                  : 'Photo saved to your library.',
             // Said differently from a failure, because the fix is in Settings
             // rather than in trying again.
             MediaSaveResult.denied =>
@@ -1506,7 +1504,10 @@ class _Bubble extends ConsumerWidget {
                             color: VentlyColors.softMauve.withOpacity(0.4),
                           ),
                   ),
-                  child: Text(
+                  // TaggedText rather than Text: a group chat is one of the
+                  // places people name each other, and a handle that is not
+                  // tappable is just punctuation.
+                  child: TaggedText(
                     message.plaintext,
                     style: TextStyle(
                       color: mine ? Colors.white : null,
@@ -2010,96 +2011,103 @@ class _Composer extends StatelessWidget {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (pendingImageBytes != null)
-              Padding(
-                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 6),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(
-                          pendingImageBytes!,
-                          width: 56,
-                          height: 56,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'Attached. Hit send to share.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+        // Around the whole composer, so the suggestions appear above the row
+        // rather than inside the field.
+        child: TagAutocomplete(
+          controller: controller,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (pendingImageBytes != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, right: 8, bottom: 6),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.memory(
+                            pendingImageBytes!,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
                           ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: onClearImage,
-                        tooltip: 'Discard image',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.image_outlined),
-                  tooltip: 'Attach image',
-                  onPressed: onAttachImage,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.emoji_emotions_outlined),
-                  tooltip: 'Emoji',
-                  onPressed: onEmoji,
-                ),
-                IconButton(
-                  icon: Icon(
-                    recording
-                        ? Icons.stop_circle_rounded
-                        : Icons.mic_none_rounded,
-                    color: recording ? Colors.redAccent : null,
-                  ),
-                  tooltip: recording ? 'Tap to send voice note' : 'Voice note',
-                  onPressed: onMicTap,
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    minLines: 1,
-                    maxLines: 5,
-                    decoration: InputDecoration(
-                      hintText: recording
-                          ? 'Recording… tap ■ to send'
-                          : 'Message',
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Attached. Hit send to share.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: onClearImage,
+                          tooltip: 'Discard image',
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: scheme.primary,
-                    shape: BoxShape.circle,
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.image_outlined),
+                    tooltip: 'Attach image',
+                    onPressed: onAttachImage,
                   ),
-                  child: IconButton(
-                    icon: const Icon(Icons.send_rounded, color: Colors.white),
-                    onPressed: onSend,
+                  IconButton(
+                    icon: const Icon(Icons.emoji_emotions_outlined),
+                    tooltip: 'Emoji',
+                    onPressed: onEmoji,
                   ),
-                ),
-              ],
-            ),
-          ],
+                  IconButton(
+                    icon: Icon(
+                      recording
+                          ? Icons.stop_circle_rounded
+                          : Icons.mic_none_rounded,
+                      color: recording ? Colors.redAccent : null,
+                    ),
+                    tooltip: recording
+                        ? 'Tap to send voice note'
+                        : 'Voice note',
+                    onPressed: onMicTap,
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      minLines: 1,
+                      maxLines: 5,
+                      decoration: InputDecoration(
+                        hintText: recording
+                            ? 'Recording… tap ■ to send'
+                            : 'Message',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.send_rounded, color: Colors.white),
+                      onPressed: onSend,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2336,9 +2344,7 @@ class _ChatVideoState extends ConsumerState<_ChatVideo> {
   @override
   void initState() {
     super.initState();
-    _urlFuture = ref
-        .read(signedUrlCacheProvider)
-        .urlFor(widget.storagePath);
+    _urlFuture = ref.read(signedUrlCacheProvider).urlFor(widget.storagePath);
   }
 
   @override
@@ -2606,9 +2612,7 @@ class _ChatVoiceNoteState extends ConsumerState<_ChatVoiceNote> {
   @override
   void initState() {
     super.initState();
-    _urlFuture = ref
-        .read(signedUrlCacheProvider)
-        .urlFor(widget.storagePath);
+    _urlFuture = ref.read(signedUrlCacheProvider).urlFor(widget.storagePath);
   }
 
   int get _durationSeconds {
@@ -2703,5 +2707,3 @@ class _ReactionChip extends StatelessWidget {
     );
   }
 }
-
-

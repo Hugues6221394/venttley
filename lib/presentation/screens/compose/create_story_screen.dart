@@ -17,6 +17,7 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/music_track_card.dart';
 import '../../theme/glass_tokens.dart';
+import '../../widgets/tagged_text.dart';
 
 /// Create Vent Story screen — Image #9.
 ///
@@ -617,27 +618,34 @@ class _CaptionField extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
-      child: TextField(
+      // A story caption can name somebody, like a vent can. The posts table
+      // is where stories live, so the mention already reached the person —
+      // what was missing was any way to type the handle without knowing it by
+      // heart.
+      child: TagAutocomplete(
         controller: controller,
-        onChanged: onChanged,
-        maxLength: 280,
-        maxLines: 3,
-        textCapitalization: TextCapitalization.sentences,
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          counterText: '',
-          hintText: isImage
-              ? 'Add an optional caption…'
-              : 'Type the moment you want to share…',
-          hintStyle: TextStyle(
-            color: context.ink.withOpacity(0.42),
-            fontWeight: FontWeight.w700,
+        child: TextField(
+          controller: controller,
+          onChanged: onChanged,
+          maxLength: 280,
+          maxLines: 3,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: InputDecoration(
+            border: InputBorder.none,
+            counterText: '',
+            hintText: isImage
+                ? 'Add an optional caption…'
+                : 'Type the moment you want to share…',
+            hintStyle: TextStyle(
+              color: context.ink.withOpacity(0.42),
+              fontWeight: FontWeight.w700,
+            ),
           ),
-        ),
-        style: TextStyle(
-          color: context.ink,
-          fontWeight: FontWeight.w700,
-          fontSize: 14,
+          style: TextStyle(
+            color: context.ink,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+          ),
         ),
       ),
     );

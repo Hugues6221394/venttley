@@ -37,6 +37,7 @@ import '../../widgets/vently_premium_background.dart';
 import '../../widgets/user_link.dart';
 import '../../../data/services/whisper_recorder.dart';
 import '../../theme/glass_tokens.dart';
+import '../../widgets/tagged_text.dart';
 
 /// Tribe Group Chat — Image #16.
 ///
@@ -1737,7 +1738,7 @@ class _BubbleBody extends StatelessWidget {
               Container(
                 color: GlassTokens.card(context),
                 padding: const EdgeInsets.all(10),
-                child: Text(
+                child: TaggedText(
                   message.content!,
                   style: TextStyle(
                     color: context.ink,
@@ -1773,7 +1774,9 @@ class _BubbleBody extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _replyQuote(),
-        Text(
+        // TaggedText, so an @handle in a tribe chat is a name you can tap
+        // rather than plain letters that happen to start with @.
+        TaggedText(
           message.content ?? '',
           style: TextStyle(
             color: mine ? Colors.white : context.ink,
@@ -1848,231 +1851,240 @@ class _Composer extends StatelessWidget {
       child: GlassComposer(
         child: SafeArea(
           top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (typingLabel != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-                  child: Row(
-                    children: [
-                      const _TypingDots(),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          typingLabel!,
-                          style: TextStyle(
-                            color: VentlyColors.berryMagenta.withOpacity(0.85),
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
+          // Wrapped around the whole composer rather than the field, so the
+          // suggestions sit above the row instead of inside it. A tribe chat
+          // is the place people most want to pull somebody in by name.
+          child: TagAutocomplete(
+            controller: controller,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (typingLabel != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                    child: Row(
+                      children: [
+                        const _TypingDots(),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            typingLabel!,
+                            style: TextStyle(
+                              color: VentlyColors.berryMagenta.withOpacity(
+                                0.85,
+                              ),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              if (replyTo != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
-                  child: Material(
-                    color: VentlyColors.softMauve.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                      ),
-                      leading: const Icon(
-                        Icons.reply,
-                        size: 18,
-                        color: VentlyColors.berryMagenta,
-                      ),
-                      title: Text(
-                        'Reply to ${replyTo!.displayName}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 12,
-                        ),
-                      ),
-                      subtitle: Text(
-                        replyTo!.content ?? 'Attachment',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: onClearReply,
-                      ),
+                      ],
                     ),
                   ),
-                ),
-              if (recording)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          color: VentlyColors.dangerRed,
-                          shape: BoxShape.circle,
+                if (replyTo != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                    child: Material(
+                      color: VentlyColors.softMauve.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10,
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Recording… tap mic to send',
-                          style: TextStyle(
+                        leading: const Icon(
+                          Icons.reply,
+                          size: 18,
+                          color: VentlyColors.berryMagenta,
+                        ),
+                        title: Text(
+                          'Reply to ${replyTo!.displayName}',
+                          style: const TextStyle(
                             fontWeight: FontWeight.w900,
-                            color: VentlyColors.dangerRed,
                             fontSize: 12,
                           ),
                         ),
-                      ),
-                      const _TypingDots(),
-                    ],
-                  ),
-                ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFE3EC),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: IconButton(
-                      iconSize: 18,
-                      padding: EdgeInsets.zero,
-                      icon: const Icon(
-                        Icons.add_rounded,
-                        color: VentlyColors.berryMagenta,
-                      ),
-                      onPressed: _showAttachmentSheet(context),
-                      tooltip: 'More ways to share',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: context.isDark
-                            ? Colors.white.withOpacity(0.08)
-                            : VentlyColors.cardBlush.withOpacity(0.65),
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: controller,
-                              minLines: 1,
-                              maxLines: 5,
-                              textCapitalization: TextCapitalization.sentences,
-                              style: TextStyle(
-                                color: context.ink,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: 'Share your thoughts…',
-                                hintStyle: TextStyle(
-                                  color: context.ink.withOpacity(0.42),
-                                  fontWeight: FontWeight.w700,
-                                ),
-                                border: InputBorder.none,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              recording
-                                  ? Icons.stop_circle
-                                  : Icons.mic_none_rounded,
-                              color: recording
-                                  ? VentlyColors.dangerRed
-                                  : context.ink,
-                              size: 20,
-                            ),
-                            onPressed: onMicTap,
-                            visualDensity: VisualDensity.compact,
-                            // Every control on this row was unlabelled, so
-                            // VoiceOver announced five anonymous buttons and
-                            // the composer was unusable without sight —
-                            // confirmed with `idb ui describe-all`, which
-                            // reported each one as ''.
-                            //
-                            // The mic label follows its state: "Record a voice
-                            // message" on a button that stops the recording
-                            // would be worse than no label at all.
-                            tooltip: recording
-                                ? 'Stop recording and send'
-                                : 'Record a voice message',
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.image_outlined,
-                              color: context.ink,
-                              size: 20,
-                            ),
-                            onPressed: onPickImage,
-                            visualDensity: VisualDensity.compact,
-                            tooltip: 'Add a photo',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Wrapped rather than given a tooltip parameter, because
-                  // FilledButton does not take one. Semantics still resolves
-                  // to a labelled button either way.
-                  Tooltip(
-                    message: sending ? 'Sending' : 'Send message',
-                    child: SizedBox(
-                      width: 46,
-                      height: 46,
-                      child: FilledButton(
-                        onPressed: sending ? null : onSend,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: VentlyColors.berryMagenta,
-                          padding: EdgeInsets.zero,
-                          shape: const CircleBorder(),
+                        subtitle: Text(
+                          replyTo!.content ?? 'Attachment',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        child: sending
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.5,
-                                ),
-                              )
-                            // semanticLabel on the icon, not just the
-                            // Tooltip above: the Tooltip alone left this
-                            // button reporting a null label, because the
-                            // FilledButton's own semantics node won. This is
-                            // the node a screen reader actually reads.
-                            : const Icon(
-                                Icons.send_rounded,
-                                color: Colors.white,
-                                size: 20,
-                                semanticLabel: 'Send message',
-                              ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: onClearReply,
+                        ),
                       ),
                     ),
                   ),
-                ],
-              ),
-            ],
+                if (recording)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: const BoxDecoration(
+                            color: VentlyColors.dangerRed,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Recording… tap mic to send',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: VentlyColors.dangerRed,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        const _TypingDots(),
+                      ],
+                    ),
+                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFE3EC),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: IconButton(
+                        iconSize: 18,
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(
+                          Icons.add_rounded,
+                          color: VentlyColors.berryMagenta,
+                        ),
+                        onPressed: _showAttachmentSheet(context),
+                        tooltip: 'More ways to share',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: context.isDark
+                              ? Colors.white.withOpacity(0.08)
+                              : VentlyColors.cardBlush.withOpacity(0.65),
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: controller,
+                                minLines: 1,
+                                maxLines: 5,
+                                textCapitalization:
+                                    TextCapitalization.sentences,
+                                style: TextStyle(
+                                  color: context.ink,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Share your thoughts…',
+                                  hintStyle: TextStyle(
+                                    color: context.ink.withOpacity(0.42),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  border: InputBorder.none,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                recording
+                                    ? Icons.stop_circle
+                                    : Icons.mic_none_rounded,
+                                color: recording
+                                    ? VentlyColors.dangerRed
+                                    : context.ink,
+                                size: 20,
+                              ),
+                              onPressed: onMicTap,
+                              visualDensity: VisualDensity.compact,
+                              // Every control on this row was unlabelled, so
+                              // VoiceOver announced five anonymous buttons and
+                              // the composer was unusable without sight —
+                              // confirmed with `idb ui describe-all`, which
+                              // reported each one as ''.
+                              //
+                              // The mic label follows its state: "Record a voice
+                              // message" on a button that stops the recording
+                              // would be worse than no label at all.
+                              tooltip: recording
+                                  ? 'Stop recording and send'
+                                  : 'Record a voice message',
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                Icons.image_outlined,
+                                color: context.ink,
+                                size: 20,
+                              ),
+                              onPressed: onPickImage,
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Add a photo',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Wrapped rather than given a tooltip parameter, because
+                    // FilledButton does not take one. Semantics still resolves
+                    // to a labelled button either way.
+                    Tooltip(
+                      message: sending ? 'Sending' : 'Send message',
+                      child: SizedBox(
+                        width: 46,
+                        height: 46,
+                        child: FilledButton(
+                          onPressed: sending ? null : onSend,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: VentlyColors.berryMagenta,
+                            padding: EdgeInsets.zero,
+                            shape: const CircleBorder(),
+                          ),
+                          child: sending
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2.5,
+                                  ),
+                                )
+                              // semanticLabel on the icon, not just the
+                              // Tooltip above: the Tooltip alone left this
+                              // button reporting a null label, because the
+                              // FilledButton's own semantics node won. This is
+                              // the node a screen reader actually reads.
+                              : const Icon(
+                                  Icons.send_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                  semanticLabel: 'Send message',
+                                ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

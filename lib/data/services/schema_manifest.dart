@@ -127,4 +127,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261054090000': 'a_whisper_says_how_many_comments_it_has',
   '20261055090000': 'a_gif_belongs_in_a_whisper_comment',
   '20261056090000': 'the_last_message_is_one_message',
+  '20261057090000': 'an_at_sign_works_where_people_talk',
 };

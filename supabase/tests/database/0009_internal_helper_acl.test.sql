@@ -32,7 +32,7 @@ SELECT ok(
 SELECT ok(
   NOT has_function_privilege(
     'authenticated',
-    'public._notify_mentions(uuid,text,text,uuid,jsonb)',
+    'public._notify_mentions(uuid,text,text,uuid,jsonb,uuid)',
     'EXECUTE'
   ),
   'signed-in clients cannot forge mention notifications'
@@ -40,7 +40,7 @@ SELECT ok(
 SELECT ok(
   NOT has_function_privilege(
     'anon',
-    'public._notify_mentions(uuid,text,text,uuid,jsonb)',
+    'public._notify_mentions(uuid,text,text,uuid,jsonb,uuid)',
     'EXECUTE'
   ),
   'anonymous clients cannot invoke _notify_mentions'
@@ -48,7 +48,7 @@ SELECT ok(
 SELECT ok(
   has_function_privilege(
     'service_role',
-    'public._notify_mentions(uuid,text,text,uuid,jsonb)',
+    'public._notify_mentions(uuid,text,text,uuid,jsonb,uuid)',
     'EXECUTE'
   ),
   'service role retains operational access to _notify_mentions'
