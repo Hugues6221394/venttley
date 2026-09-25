@@ -50,7 +50,10 @@ SELECT ok(
   'and not a read-then-insert with a lock that cannot be taken'
 );
 
-SET LOCAL ROLE authenticated;
+-- Called as the owner with a caller's JWT in scope, which is exactly how it
+-- runs in production: every caller is a SECURITY DEFINER function, so the
+-- claim executes as the owner while auth.uid() still resolves to the person
+-- who made the request. authenticated deliberately has no EXECUTE.
 SET LOCAL request.jwt.claims = '{"sub":"eef10000-0000-4000-8000-000000000001","role":"authenticated"}';
 
 -- The first call is the one that used to race, and it still has to work.
@@ -78,21 +81,15 @@ SELECT ok(
 -- The window turns over on time, not on the count. The rewrite lets the
 -- counter keep climbing past the maximum where the old one pinned it there;
 -- neither is visible to a caller, but the reset has to still happen.
-RESET ROLE;
 UPDATE public.rate_limits
    SET window_started_at = now() - INTERVAL '2 hours'
  WHERE user_id = 'eef10000-0000-4000-8000-000000000001'
    AND action_key = 'pgtap_first';
 
-SET LOCAL ROLE authenticated;
-SET LOCAL request.jwt.claims = '{"sub":"eef10000-0000-4000-8000-000000000001","role":"authenticated"}';
 SELECT ok(
   public.claim_rate_limit('pgtap_first', 3600, 3),
   'an expired window starts again'
 );
-RESET ROLE;
--- Read as postgres: rate_limits is revoked from authenticated on purpose, so
--- only the definer function may touch it.
 SELECT is(
   (SELECT counter FROM public.rate_limits
     WHERE user_id = 'eef10000-0000-4000-8000-000000000001'

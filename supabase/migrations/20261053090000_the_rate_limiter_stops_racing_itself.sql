@@ -74,8 +74,15 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.claim_rate_limit(TEXT, INT, INT) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.claim_rate_limit(TEXT, INT, INT) TO authenticated;
+-- Nobody but the owner calls this directly.
+--
+-- Every one of its thirty-seven callers is SECURITY DEFINER, so the claim
+-- happens as the function owner and the signed-in caller never needs EXECUTE.
+-- Granting it would let anybody burn their own budget, or probe the limits,
+-- and 0009_internal_helper_acl asserts exactly that — it caught this when an
+-- earlier draft of this migration handed the grant to authenticated.
+REVOKE ALL ON FUNCTION public.claim_rate_limit(TEXT, INT, INT)
+  FROM PUBLIC, anon, authenticated;
 
 SELECT public.record_migration(
   '20261053090000', 'the_rate_limiter_stops_racing_itself'
