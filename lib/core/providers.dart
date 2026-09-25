@@ -912,6 +912,11 @@ final mediaSaverProvider = Provider<MediaSaver>((ref) => MediaSaver());
 
 final inboxTabProvider = StateProvider<String>((ref) => 'requests');
 final inboxStreamProvider = StreamProvider<List<ChatRoom>>((ref) {
+  // Same reason as notificationsProvider: the stream reads and subscribes as
+  // whoever is signed in when it is created, and neither of these two is
+  // autoDispose — created once at app start and kept for the life of the
+  // process, empty included.
+  ref.watch(sessionProvider.select((user) => user?.userId));
   final repo = ref.watch(repositoryProvider);
   final tab = ref.watch(inboxTabProvider);
   return repo.watchInbox(tab);
@@ -919,6 +924,7 @@ final inboxStreamProvider = StreamProvider<List<ChatRoom>>((ref) {
 
 /// Full inbox list for badges + foreground notification diffing.
 final allInboxRoomsStreamProvider = StreamProvider<List<ChatRoom>>((ref) {
+  ref.watch(sessionProvider.select((user) => user?.userId));
   return ref.watch(repositoryProvider).watchInbox('all');
 });
 
@@ -1317,9 +1323,10 @@ final myFriendsProvider = FutureProvider.autoDispose<List<FriendSummary>>((
 /// Incoming pending requests addressed to the current user.
 /// Ticks on every friendships change involving me — makes friend-request
 /// lists + badges live (friendships joined the publication in 0112).
-final friendshipEventsProvider = StreamProvider.autoDispose<int>(
-  (ref) => ref.watch(repositoryProvider).watchFriendshipEvents(),
-);
+final friendshipEventsProvider = StreamProvider.autoDispose<int>((ref) {
+  ref.watch(sessionProvider.select((user) => user?.userId));
+  return ref.watch(repositoryProvider).watchFriendshipEvents();
+});
 
 final incomingFriendRequestsProvider =
     FutureProvider.autoDispose<List<FriendRequest>>((ref) async {
@@ -1476,9 +1483,26 @@ final userQuestionsProvider = FutureProvider.autoDispose
 /// (migration 0113), so the bell list + badge update the instant a like,
 /// reply, or friend request lands.
 final notificationsProvider =
-    StreamProvider.autoDispose<List<NotificationItem>>(
-      (ref) => ref.watch(repositoryProvider).watchNotifications(),
-    );
+    StreamProvider.autoDispose<List<NotificationItem>>((ref) {
+      // Rebuilt when the signed-in user changes, which is what makes the list
+      // arrive at all.
+      //
+      // Reported from the phone: Notifications says "All quiet for now", and
+      // everything appears the moment you pull to refresh. The stream captures
+      // auth.currentUser when it is created and does two things with it — reads
+      // the rows, and subscribes to the realtime channel for that user. The
+      // bell badge on the feed watches this same provider, so it is first
+      // created at app start, sometimes before the session has been restored.
+      // With no user there are no rows to read and no channel to subscribe to,
+      // and nothing afterwards retries either. The list then stays empty for
+      // the life of the app, and an empty state that is wrong tells somebody
+      // nobody has replied to them.
+      //
+      // Watching the id rather than the whole AppUser: a mood change or a new
+      // avatar should not tear down and rebuild a realtime channel.
+      ref.watch(sessionProvider.select((user) => user?.userId));
+      return ref.watch(repositoryProvider).watchNotifications();
+    });
 
 /// Unread notification count — derived from notificationsProvider so it
 /// updates whenever the list does. Used by the bell-icon badge.
@@ -1670,9 +1694,10 @@ final commentsProvider = FutureProvider.autoDispose
     );
 
 final messagesProvider = StreamProvider.autoDispose
-    .family<List<ChatMessage>, String>(
-      (ref, roomId) => ref.watch(repositoryProvider).watchMessages(roomId),
-    );
+    .family<List<ChatMessage>, String>((ref, roomId) {
+      ref.watch(sessionProvider.select((user) => user?.userId));
+      return ref.watch(repositoryProvider).watchMessages(roomId);
+    });
 
 /// Per-user DM room preferences (mute, nickname, theme).
 final dmRoomPrefsProvider = FutureProvider.autoDispose
@@ -1689,9 +1714,13 @@ final roomDisappearingProvider = FutureProvider.autoDispose.family<int, String>(
 
 /// True while the peer in [roomId] is actively typing. Flips false ~3s
 /// after the last broadcast. Pure ephemeral signal — no DB read.
-final typingProvider = StreamProvider.autoDispose.family<bool, String>(
-  (ref, roomId) => ref.watch(repositoryProvider).watchTyping(roomId),
-);
+final typingProvider = StreamProvider.autoDispose.family<bool, String>((
+  ref,
+  roomId,
+) {
+  ref.watch(sessionProvider.select((user) => user?.userId));
+  return ref.watch(repositoryProvider).watchTyping(roomId);
+});
 
 /// Peer presence tier (online / recent / offline / hidden) — re-polled
 /// every 30s while watched so the chat header stays honest.
@@ -1819,10 +1848,10 @@ final friendSuggestionsProvider =
 
 /// Realtime stream of group-chat messages in a single tribe (migration 0041).
 final tribeMessagesProvider = StreamProvider.autoDispose
-    .family<List<TribeMessage>, String>(
-      (ref, tribeId) =>
-          ref.watch(repositoryProvider).watchTribeMessages(tribeId),
-    );
+    .family<List<TribeMessage>, String>((ref, tribeId) {
+      ref.watch(sessionProvider.select((user) => user?.userId));
+      return ref.watch(repositoryProvider).watchTribeMessages(tribeId);
+    });
 
 /// Friends who are around right now, re-polled while the inbox is watching.
 ///
@@ -1874,9 +1903,10 @@ final tribeOnlineMembersProvider = FutureProvider.autoDispose
 
 /// Who is typing in a tribe group chat (Realtime broadcast).
 final tribeTypingProvider = StreamProvider.autoDispose
-    .family<List<TribeTypingUser>, String>(
-      (ref, tribeId) => ref.watch(repositoryProvider).watchTribeTyping(tribeId),
-    );
+    .family<List<TribeTypingUser>, String>((ref, tribeId) {
+      ref.watch(sessionProvider.select((user) => user?.userId));
+      return ref.watch(repositoryProvider).watchTribeTyping(tribeId);
+    });
 
 /// Inbox summaries for joined tribe group chats (unread + preview).
 final tribeChatInboxProvider =
@@ -2061,10 +2091,10 @@ final tribeInviteCandidatesProvider = FutureProvider.autoDispose
 /// Live comments on a Whisper (migration 0059, realtime via 0111) —
 /// re-emits on every insert/soft-delete so open sheets stay current.
 final whisperCommentsProvider = StreamProvider.autoDispose
-    .family<List<WhisperComment>, String>(
-      (ref, whisperId) =>
-          ref.watch(repositoryProvider).watchWhisperComments(whisperId),
-    );
+    .family<List<WhisperComment>, String>((ref, whisperId) {
+      ref.watch(sessionProvider.select((user) => user?.userId));
+      return ref.watch(repositoryProvider).watchWhisperComments(whisperId);
+    });
 
 /// Shared audio player for the Whispers feed — kept alive for fast return.
 final whisperPlayerProvider = FutureProvider<WhisperPlayerController>((

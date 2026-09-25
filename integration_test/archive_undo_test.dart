@@ -30,6 +30,28 @@ import 'package:vently_app/presentation/theme/app_theme.dart';
 const _url = String.fromEnvironment('SUPABASE_URL');
 const _anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
+/// Put the two accounts back to strangers.
+///
+/// `unfriend` only deletes an accepted row, so a pending request outlives every
+/// teardown — and a second request between the same two people is refused,
+/// which is how a test like this passes once and fails on every run
+/// afterwards. `decline_friend_request` deletes a pending row from either side.
+Future<void> clearFriendship(SupabaseClient client, String other) async {
+  await client.rpc('unfriend', params: {'p_target': other});
+  final rows = await client
+      .from('friendships')
+      .select('friendship_id, status')
+      .or('user_a.eq.$other,user_b.eq.$other');
+  for (final row in rows) {
+    if (row['status'] == 'pending') {
+      await client.rpc(
+        'decline_friend_request',
+        params: {'p_friendship': row['friendship_id']},
+      );
+    }
+  }
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -66,6 +88,7 @@ void main() {
       // Accepted from the other side, so the friendship is real rather than
       // written past the RPCs that guard it.
       await signIn('tester_user');
+      await clearFriendship(client, peer);
       await client.rpc('send_friend_request', params: {'p_target': peer});
       await signIn('tester_keeper2');
       final inbox = await client
@@ -104,8 +127,8 @@ void main() {
             params: {'p_room_id': row['room_id'], 'p_archived': false},
           );
         }
-        // And the friendship this run invented.
-        await client.rpc('unfriend', params: {'p_target': peer});
+        // And the friendship this run invented, accepted or not.
+        await clearFriendship(client, peer);
       });
 
       final container = ProviderContainer();
