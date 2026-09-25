@@ -104,6 +104,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       // that; losing the phrase was the serious half.
       //
       // Verification is required before the app, not before finishing signup.
+      //
+      // The consent gate below needs the same exemption, for a subtler reason.
+      // Signup accepts the policies and then invalidates
+      // outstandingPoliciesProvider — but invalidating refetches
+      // asynchronously and keeps the previous value until the new one lands,
+      // while context.go runs on the next line. So the gate read the
+      // pre-acceptance answer, bounced /onboarding/key to the consent screen,
+      // and consent — finding nothing outstanding by then — sent the user
+      // straight to the feed. The recovery phrase was never shown.
+      //
+      // Consent is still enforced: if the acceptance write genuinely failed,
+      // these two screens pass and /feed catches it.
       final finishingSignup =
           path == '/onboarding/key' || path == '/onboarding/personalise';
       if (pendingMfa != null && !onMfa && !legalRoute) {
@@ -168,7 +180,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           session.birthYear != null &&
           !legalRoute &&
           path != '/onboarding/consent' &&
-          !onMfa) {
+          !onMfa &&
+          !finishingSignup) {
         final outstanding = ref.read(outstandingPoliciesProvider).valueOrNull;
         if (outstanding != null && !outstanding.isEmpty) {
           return '/onboarding/consent';

@@ -249,6 +249,10 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
                 ? 'Reply sent — they\'ll see it in requests.'
                 : 'Reply sent.',
           ),
+          // A bar with an action persists unless told otherwise, and this one
+          // sits over the story somebody is still watching.
+          persist: false,
+          duration: const Duration(seconds: 6),
           action: SnackBarAction(
             label: 'Open chat',
             onPressed: () {

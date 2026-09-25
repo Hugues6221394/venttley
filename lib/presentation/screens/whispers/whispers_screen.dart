@@ -1581,6 +1581,9 @@ class _ActionRailState extends ConsumerState<_ActionRail> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(nowSaved ? 'Whisper saved' : 'Removed from saved'),
+          // A bar with an action persists unless told otherwise.
+          persist: false,
+          duration: const Duration(seconds: 6),
           action: nowSaved
               ? SnackBarAction(
                   label: 'Undo',

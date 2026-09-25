@@ -61,6 +61,9 @@ class _SharePostToFriendSheetState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Sent to @${friend.pseudonym}'),
+          // A bar with an action persists unless told otherwise.
+          persist: false,
+          duration: const Duration(seconds: 6),
           action: SnackBarAction(
             label: 'Open',
             onPressed: () => context.push('/chat/${room.roomId}'),

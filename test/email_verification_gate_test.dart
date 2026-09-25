@@ -77,6 +77,32 @@ void main() {
     );
   });
 
+  test('the consent gate also lets signup finish', () {
+    // The subtler half of the same bug, and the one that hit the anonymous
+    // path — which is the app's default.
+    //
+    // Signup accepts the policies and then invalidates
+    // outstandingPoliciesProvider. Invalidating refetches asynchronously and
+    // keeps the previous value until the new one lands, while context.go runs
+    // on the very next line. So the gate read the pre-acceptance answer,
+    // bounced /onboarding/key to the consent screen, and consent — finding
+    // nothing outstanding by then — sent the user to the feed.
+    //
+    // The recovery phrase was never shown. On the anonymous path there is no
+    // email to fall back on, so that phrase is the only way back into the
+    // account, and it was generated and discarded in the same second.
+    final consentGate = router.substring(
+      router.indexOf("path != '/onboarding/consent'"),
+    );
+    expect(
+      consentGate.substring(0, 400),
+      contains('!finishingSignup'),
+      reason:
+          'without this the recovery phrase screen is skipped on the '
+          'anonymous signup path',
+    );
+  });
+
   test('the verify screen offers a way out that is not a dead button', () {
     // "Skip for now" used to sit in the app bar. With the gate in place the
     // router sends you straight back, so it would be a button that visibly

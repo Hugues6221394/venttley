@@ -24,6 +24,25 @@ class _RecoveryKeyScreenState extends ConsumerState<RecoveryKeyScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+
+    // No phrase to show.
+    //
+    // The route reads it from `extra`, and go_router drops `extra` across a
+    // redirect — so any rule that bounced this path and came back would land
+    // here with nothing. Splitting an empty string gives one empty chip, so
+    // the screen used to render a blank grid under "write these down" with a
+    // checkbox saying you had.
+    //
+    // The phrase is generated once at signup and never stored anywhere, so an
+    // empty one is not a loading state that resolves. It is gone. Saying that
+    // is the only honest thing available, and a recovery email is the
+    // remaining way back into the account.
+    if (widget.phrase.trim().isEmpty) {
+      return _PhraseUnavailable(
+        onContinue: () => context.go('/onboarding/personalise'),
+      );
+    }
+
     final words = widget.phrase.split(RegExp(r'\s+'));
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -200,6 +219,64 @@ class _PhraseGrid extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// What the phrase screen shows when there is no phrase to show.
+class _PhraseUnavailable extends StatelessWidget {
+  const _PhraseUnavailable({required this.onContinue});
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(title: const Text('Your Recovery Phrase')),
+      body: OnboardingBackdrop(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Icon(
+                  Icons.key_off_rounded,
+                  size: 44,
+                  color: scheme.onSurface.withOpacity(0.5),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'We could not show your recovery phrase',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Your account was created and you are signed in. The phrase '
+                  'is generated once and never stored, so it cannot be shown '
+                  'again.\n\nAdd a recovery email on the next screen — it '
+                  'becomes the way back in if you lose your password.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    height: 1.45,
+                    color: scheme.onSurface.withOpacity(0.75),
+                  ),
+                ),
+                const SizedBox(height: 28),
+                ElevatedButton(
+                  onPressed: onContinue,
+                  child: const Text('Add a recovery email'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

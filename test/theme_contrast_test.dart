@@ -1,7 +1,9 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui show Image, ImageByteFormat;
 import 'dart:ui' show Color;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vently_app/presentation/theme/app_theme.dart';
 import 'package:vently_app/presentation/theme/colors.dart';
@@ -29,7 +31,9 @@ import 'package:vently_app/presentation/widgets/onboarding_backdrop.dart';
 double _luminance(Color c) {
   double channel(double v) {
     final s = v / 255.0;
-    return s <= 0.03928 ? s / 12.92 : math.pow((s + 0.055) / 1.055, 2.4) as double;
+    return s <= 0.03928
+        ? s / 12.92
+        : math.pow((s + 0.055) / 1.055, 2.4) as double;
   }
 
   return 0.2126 * channel(c.r * 255) +
@@ -303,7 +307,12 @@ void main() {
           theme: VentlyTheme.dark(pureBlack: true),
           home: const Scaffold(
             backgroundColor: Colors.transparent,
-            body: OnboardingBackdrop(animate: false, child: SizedBox.shrink()),
+            body: RepaintBoundary(
+              child: OnboardingBackdrop(
+                animate: false,
+                child: SizedBox.shrink(),
+              ),
+            ),
           ),
         ),
       );
@@ -318,13 +327,46 @@ void main() {
             .first,
       );
       expect(box.color, VentlyColors.pureBlack);
+
+      // No orb. The orbs are the only thing this backdrop paints, and they are
+      // drawn by a CustomPaint with a `painter`; the backdrop's transparent
+      // Material — the ink surface that lets a tap ripple show in front of the
+      // page rather than behind it — also builds a CustomPaint, but only ever
+      // a foreground shape border, and with no shape it draws nothing.
+      final painters = tester
+          .widgetList<CustomPaint>(
+            find.descendant(
+              of: find.byType(OnboardingBackdrop),
+              matching: find.byType(CustomPaint),
+            ),
+          )
+          .where((p) => p.painter != null);
       expect(
-        find.descendant(
-          of: find.byType(OnboardingBackdrop),
-          matching: find.byType(CustomPaint),
-        ),
-        findsNothing,
+        painters,
+        isEmpty,
         reason: 'the black canvas should have nothing painted over it',
+      );
+
+      // And the claim the comment above makes, measured rather than inferred:
+      // every pixel from the status bar to the home indicator is (0, 0, 0).
+      final bytes = await tester.runAsync(() async {
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find.byType(RepaintBoundary).first,
+        );
+        final ui.Image image = await boundary.toImage();
+        return image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      });
+      final rgba = bytes!.buffer.asUint8List();
+      var offColour = 0;
+      for (var i = 0; i < rgba.length; i += 4) {
+        if (rgba[i] != 0 || rgba[i + 1] != 0 || rgba[i + 2] != 0) offColour++;
+      }
+      expect(
+        offColour,
+        0,
+        reason:
+            'sampled the whole page: $offColour of ${rgba.length ~/ 4} pixels '
+            'are not #000000',
       );
     });
   });

@@ -35,6 +35,20 @@ Future<void> archiveChatRoom(
     messenger?.showSnackBar(
       SnackBar(
         content: Text(archived ? 'Archived.' : 'Back in your inbox.'),
+        // Both of these, or the bar never leaves.
+        //
+        // SnackBar defaults `persist` to `action != null` — a bar with an
+        // action stays up until somebody taps the action or the close icon.
+        // The timer does fire; it looks at `persist` and returns without
+        // hiding. So "Archived. Undo" sat on screen indefinitely, over
+        // whatever the person did next, and the only way out was to undo the
+        // thing they had just chosen to do.
+        //
+        // Six seconds rather than the default four: an offer to undo is worth
+        // reading twice, and it is the offer, not the confirmation, that sets
+        // the clock.
+        persist: false,
+        duration: const Duration(seconds: 6),
         action: SnackBarAction(
           // Archiving by swipe is one gesture, so undoing it should be too.
           label: 'Undo',

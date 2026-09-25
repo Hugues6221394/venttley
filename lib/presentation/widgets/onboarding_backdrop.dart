@@ -86,7 +86,7 @@ class _OnboardingBackdropState extends State<OnboardingBackdrop>
     if (!OnboardingBackdrop.decorates(theme)) {
       return ColoredBox(
         color: theme.scaffoldBackgroundColor,
-        child: widget.child,
+        child: _InkSurface(child: widget.child),
       );
     }
 
@@ -118,11 +118,34 @@ class _OnboardingBackdropState extends State<OnboardingBackdrop>
                 ),
               ),
             ),
-          widget.child,
+          _InkSurface(child: widget.child),
         ],
       ),
     );
   }
+}
+
+/// Somewhere for taps to splash.
+///
+/// The backdrop paints the page itself, and it paints it *above* the Scaffold's
+/// Material. So a ripple — a ListTile, a checkbox row, anything inkwell-shaped
+/// — draws onto that Material and then the backdrop covers it over. Flutter
+/// says this out loud in debug ("ListTile background color or ink splashes may
+/// be invisible") and it was true on every onboarding screen: on black the
+/// recovery-phrase checkbox had no ripple at all, because the ripple was behind
+/// the page.
+///
+/// A transparent Material adds no colour and no layout, and becomes the nearest
+/// Material ancestor for everything on the page, so the splash lands in front
+/// of the backdrop instead of underneath it.
+class _InkSurface extends StatelessWidget {
+  const _InkSurface({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      Material(type: MaterialType.transparency, child: child);
 }
 
 class _OrbPainter extends CustomPainter {

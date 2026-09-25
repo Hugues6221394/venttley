@@ -175,6 +175,10 @@ class _SecurityCheckScreenState extends ConsumerState<SecurityCheckScreen> {
       SnackBar(
         content: const Text('Device blocked. Change your password next.'),
         duration: const Duration(seconds: 8),
+        // The eight seconds above did nothing on their own: a bar with an
+        // action persists unless told otherwise, so this one stayed until it
+        // was tapped.
+        persist: false,
         action: SnackBarAction(
           label: 'Change',
           onPressed: () => context.push('/profile/password-security'),
