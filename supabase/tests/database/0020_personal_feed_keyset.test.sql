@@ -83,41 +83,39 @@ SET session_replication_role = origin;
 
 SET LOCAL role authenticated;
 SET LOCAL request.jwt.claim.sub = '81000000-0000-4000-8000-000000000001';
+SET LOCAL request.jwt.claims =
+  '{"sub":"81000000-0000-4000-8000-000000000001","role":"authenticated"}';
 
+-- The cursor is a position inside a pool frozen at an anchor now, not a
+-- (score, created_at, post_id) triple. Scores move while you read -- somebody
+-- reacts, somebody comments, and the post you were about to be served slides
+-- past the cursor -- and a feed that reshuffles between page one and page two
+-- either repeats posts or drops them. The anchor is what the client echoes
+-- back, so every page of a session ranks the same pool.
 SELECT ok(
-  (SELECT COUNT(*) FROM public.personal_feed(2, 0, NULL, NULL)) = 2,
+  (SELECT COUNT(*) FROM public.personal_feed(2, 'foryou')) = 2,
   'personal_feed returns the first page'
 );
 
-WITH first_page AS (
-  SELECT post_id, personal_score, created_at
-    FROM public.personal_feed(1, 0, NULL, NULL)
-   LIMIT 1
-),
+WITH anchored AS (SELECT now() AS a),
 second_page AS (
   SELECT p.post_id
-    FROM public.personal_feed(
-      5,
-      0,
-      NULL,
-      NULL,
-      (SELECT personal_score FROM first_page),
-      (SELECT created_at FROM first_page),
-      (SELECT post_id FROM first_page)
-    ) AS p
+    FROM anchored, public.personal_feed(5, 'foryou', anchored.a, 1) AS p
 )
 SELECT ok(
   (SELECT COUNT(*) FROM second_page) >= 1,
-  'personal_feed keyset cursor returns a following page'
+  'and a following page from where the last one stopped'
 );
 
 SET LOCAL request.jwt.claim.sub = '81000000-0000-4000-8000-000000000002';
+SET LOCAL request.jwt.claims =
+  '{"sub":"81000000-0000-4000-8000-000000000002","role":"authenticated"}';
 
 SELECT ok(
   (
     SELECT post_id
-      FROM public.personal_feed(3, 0, NULL, NULL)
-     ORDER BY personal_score DESC, created_at DESC, post_id DESC
+      FROM public.personal_feed(3, 'foryou')
+     ORDER BY feed_position
      LIMIT 1
   ) IS NOT NULL,
   'personal_feed is personalized per viewer'

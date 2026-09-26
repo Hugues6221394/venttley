@@ -3307,6 +3307,14 @@ class VentlyRepository implements MusicProvider {
     return live.whispersForMe(limit: limit);
   }
 
+  /// Which posts actually reached the screen. Feeds demote what you have
+  /// already been shown rather than hiding it.
+  Future<void> noteFeedImpressions(List<String> postIds) async {
+    final live = _live;
+    if (live == null) return;
+    await live.noteFeedImpressions(postIds);
+  }
+
   Future<void> noteDiscoveryImpressions({
     required String kind,
     required List<String> ids,

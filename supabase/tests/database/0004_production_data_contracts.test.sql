@@ -42,7 +42,7 @@ INSERT INTO public.posts (
   '72000000-0000-4000-8000-000000000001',
   '71000000-0000-4000-8000-000000000001',
   'confessions', 'database-backed cold-start post', 'hopeful',
-  NOW() - INTERVAL '30 minutes'
+  NOW() - INTERVAL '1 minute'
 );
 
 INSERT INTO public.whispers (
@@ -70,9 +70,16 @@ SET LOCAL "request.jwt.claim.sub" = '71000000-0000-4000-8000-000000000002';
 SET LOCAL "request.jwt.claims" =
   '{"sub":"71000000-0000-4000-8000-000000000002","role":"authenticated"}';
 
+-- Two halves of one claim, because the first half alone used to be written
+-- as "this fixture is in the top thirty", which stops being about cold start
+-- the moment the database holds a few hundred posts with real engagement on
+-- them: the fixture loses to them on merit and the test reports a cold-start
+-- failure that is not one. So: the feed is not empty for somebody with no
+-- history at all, and the post is genuinely reachable.
 SELECT ok(
-  EXISTS (
-    SELECT 1 FROM public.personal_feed(30, 0, NULL, NULL)
+  (SELECT count(*) FROM public.personal_feed(30, 'foryou')) > 0
+  AND EXISTS (
+    SELECT 1 FROM public.personal_feed(30, 'fresh')
      WHERE post_id = '72000000-0000-4000-8000-000000000001'
   ),
   'a user with no history receives global database posts'

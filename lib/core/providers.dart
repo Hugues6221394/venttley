@@ -42,6 +42,62 @@ final repositoryProvider = Provider<VentlyRepository>((ref) {
   return VentlyRepository();
 });
 
+/// Batches "this post reached the screen" into one call every few seconds.
+///
+/// The ranked feed demotes what you have already been shown, which only works
+/// if somebody tells it. Reporting one row per card would be a request per
+/// scroll tick, so cards drop their id in here and the batch goes out on a
+/// timer or when it fills.
+class FeedImpressionReporter {
+  FeedImpressionReporter(this._repository);
+
+  final VentlyRepository _repository;
+  final Set<String> _pending = <String>{};
+  final Set<String> _sent = <String>{};
+  Timer? _timer;
+  bool _disposed = false;
+
+  void saw(String postId) {
+    if (_disposed || _sent.contains(postId)) return;
+    _pending.add(postId);
+    if (_pending.length >= 25) {
+      flush();
+      return;
+    }
+    _timer ??= Timer(const Duration(seconds: 4), flush);
+  }
+
+  void flush() {
+    _timer?.cancel();
+    _timer = null;
+    if (_pending.isEmpty) return;
+    final batch = _pending.toList();
+    _pending.clear();
+    // Already-sent ids are remembered so a rebuild does not re-send the whole
+    // viewport, and forgotten well before the set could grow into a leak.
+    if (_sent.length > 2000) _sent.clear();
+    _sent.addAll(batch);
+    unawaited(_repository.noteFeedImpressions(batch));
+  }
+
+  void dispose() {
+    _disposed = true;
+    _timer?.cancel();
+    _timer = null;
+    if (_pending.isNotEmpty) {
+      final batch = _pending.toList();
+      _pending.clear();
+      unawaited(_repository.noteFeedImpressions(batch));
+    }
+  }
+}
+
+final feedImpressionReporterProvider = Provider<FeedImpressionReporter>((ref) {
+  final reporter = FeedImpressionReporter(ref.read(repositoryProvider));
+  ref.onDispose(reporter.dispose);
+  return reporter;
+});
+
 /// This installation's stable identity, used to register device sessions.
 final deviceIdentityServiceProvider = Provider<DeviceIdentityService>((ref) {
   return DeviceIdentityService();
@@ -596,17 +652,18 @@ class FeedPostsNotifier extends AutoDisposeAsyncNotifier<List<Post>> {
     _loadingMore = false;
     _nextCursor = null;
 
-    final page = await ref.read(repositoryProvider).feedPage(
-      category: filter.category,
-      mood: filter.mood,
-      tribeSlug: filter.tribeSlug,
-      locationBucket: bucket,
-      sort: filter.sort,
-      limit: pageSize,
-    );
+    final page = await ref
+        .read(repositoryProvider)
+        .feedPage(
+          category: filter.category,
+          mood: filter.mood,
+          tribeSlug: filter.tribeSlug,
+          locationBucket: bucket,
+          sort: filter.sort,
+          limit: pageSize,
+        );
     _nextCursor = page.nextCursor;
-    _hasMore =
-        page.posts.length >= pageSize && page.nextCursor != null;
+    _hasMore = page.posts.length >= pageSize && page.nextCursor != null;
     return page.posts;
   }
 
@@ -620,22 +677,23 @@ class FeedPostsNotifier extends AutoDisposeAsyncNotifier<List<Post>> {
       final filter = ref.read(feedFilterProvider);
       final me = ref.read(sessionProvider);
       final bucket = filter.scope == 'local' ? me?.localBucket : null;
-      final page = await ref.read(repositoryProvider).feedPage(
-        category: filter.category,
-        mood: filter.mood,
-        tribeSlug: filter.tribeSlug,
-        locationBucket: bucket,
-        sort: filter.sort,
-        limit: pageSize,
-        cursor: _nextCursor,
-      );
+      final page = await ref
+          .read(repositoryProvider)
+          .feedPage(
+            category: filter.category,
+            mood: filter.mood,
+            tribeSlug: filter.tribeSlug,
+            locationBucket: bucket,
+            sort: filter.sort,
+            limit: pageSize,
+            cursor: _nextCursor,
+          );
       if (page.posts.isEmpty) {
         _hasMore = false;
         return;
       }
       _nextCursor = page.nextCursor;
-      _hasMore =
-          page.posts.length >= pageSize && page.nextCursor != null;
+      _hasMore = page.posts.length >= pageSize && page.nextCursor != null;
       final seen = current.map((p) => p.postId).toSet();
       state = AsyncData([
         ...current,
@@ -691,10 +749,12 @@ final homeTribeRailProvider = FutureProvider.autoDispose<List<Tribe>>((
   // Recorded here rather than in the widget so it happens once per fetch, not
   // once per rebuild — a scroll or a keyboard opening must not count as having
   // shown somebody a new set of tribes.
-  await ref.read(repositoryProvider).noteDiscoveryImpressions(
-    kind: 'tribe',
-    ids: tribes.take(6).map((t) => t.tribeId).toList(),
-  );
+  await ref
+      .read(repositoryProvider)
+      .noteDiscoveryImpressions(
+        kind: 'tribe',
+        ids: tribes.take(6).map((t) => t.tribeId).toList(),
+      );
   return tribes;
 });
 
@@ -821,8 +881,7 @@ class PresencePreferencesNotifier
     );
   }
 
-  Future<void> setShowLastSeen(bool value) =>
-      _write(showLastSeen: value);
+  Future<void> setShowLastSeen(bool value) => _write(showLastSeen: value);
 
   Future<void> setShowReadReceipts(bool value) =>
       _write(showReadReceipts: value);
@@ -1032,8 +1091,7 @@ final tribeJoinRequestsProvider = FutureProvider.autoDispose
 /// mods of that tribe.
 final tribeBansProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
-      (ref, tribeId) async =>
-          ref.watch(repositoryProvider).tribeBans(tribeId),
+      (ref, tribeId) async => ref.watch(repositoryProvider).tribeBans(tribeId),
     );
 
 final tribeAuditLogProvider = FutureProvider.autoDispose
@@ -1655,10 +1713,12 @@ final popularWhispersProvider = FutureProvider.autoDispose<List<Whisper>>((
     whispers = await repo.listWhispers(limit: 24);
   }
   final shown = whispers.take(10).toList();
-  await ref.read(repositoryProvider).noteDiscoveryImpressions(
-    kind: 'whisper',
-    ids: shown.map((w) => w.whisperId).toList(),
-  );
+  await ref
+      .read(repositoryProvider)
+      .noteDiscoveryImpressions(
+        kind: 'whisper',
+        ids: shown.map((w) => w.whisperId).toList(),
+      );
   return shown;
 });
 

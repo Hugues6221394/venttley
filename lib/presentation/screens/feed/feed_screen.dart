@@ -126,170 +126,183 @@ class FeedScreen extends ConsumerWidget {
                     return false;
                   },
                   child: CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  // Pre-build offscreen items so fast flings never show a
-                  // blank gap on mid-tier devices. Data Saver prefetches
-                  // less to keep network + memory down.
-                  cacheExtent: dataSaver ? 300 : 800,
-                  slivers: [
-                    SliverToBoxAdapter(child: _VentlyFeedTopBar(me: me)),
-                    const SliverToBoxAdapter(child: _CompactGreeting()),
-                    const SliverToBoxAdapter(child: EmailVerificationBanner()),
-                    SliverToBoxAdapter(
-                      child: storiesAsync.when(
-                        // Never swap content we still have for a skeleton; first load only.
-                        skipLoadingOnReload: true,
-                        loading: () => _StoriesLoadingRail(me: me),
-                        error: (_, __) => _StoriesUnavailableRail(me: me),
-                        data: (_) => FadeSlideIn(
-                          index: 1,
-                          child: _VentlyStoriesRail(
-                            stories: stories,
-                            me: me,
-                            showingCommunityStories: showingCommunityStories,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: PopularWhispersRail()),
-                    if (discovery.trendingTribes.isNotEmpty)
-                      SliverToBoxAdapter(
-                        child: FadeSlideIn(
-                          index: 2,
-                          child: _TribesRail(tribes: discovery.trendingTribes),
-                        ),
-                      ),
-                    SliverToBoxAdapter(
-                      child: topicStatsAsync.when(
-                        // Never swap content we still have for a skeleton; first load only.
-                        skipLoadingOnReload: true,
-                        loading: () => const _TrendingTopicsLoading(),
-                        error: (_, __) => _TrendingTopicsUnavailable(
-                          onRetry: () =>
-                              ref.invalidate(trendingTopicStatsProvider),
-                        ),
-                        data: (topics) => topics.isEmpty
-                            ? const SizedBox.shrink()
-                            : FadeSlideIn(
-                                index: 3,
-                                child: _TrendingTopicsRail(topics: topics),
-                              ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: _SuggestedPeopleRail()),
-                    if (filter.scope == 'local' && me?.localBucket == null)
-                      const SliverToBoxAdapter(child: _LocationPromptBanner()),
-                    SliverPersistentHeader(
-                      pinned: true,
-                      delegate: _FeedFiltersHeader(filter: filter),
-                    ),
-                    if (showingRecommendations)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Recommended from Venttly',
-                                style: TextStyle(
-                                  color: context.ink,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                'Fresh conversations while this feed learns what matters to you.',
-                                style: TextStyle(
-                                  color: context.inkFaint,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    if (visiblePosts.isEmpty)
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    // Pre-build offscreen items so fast flings never show a
+                    // blank gap on mid-tier devices. Data Saver prefetches
+                    // less to keep network + memory down.
+                    cacheExtent: dataSaver ? 300 : 800,
+                    slivers: [
+                      SliverToBoxAdapter(child: _VentlyFeedTopBar(me: me)),
+                      const SliverToBoxAdapter(child: _CompactGreeting()),
                       const SliverToBoxAdapter(
-                        child: VentlyEmptyState(
-                          icon: Icons.forum_outlined,
-                          title: 'Venttly is just getting started',
-                          subtitle:
-                              'Explore communities, connect with people, or start the first conversation.',
-                        ),
-                      )
-                    else
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(18, 8, 18, 22),
-                        sliver: SliverList.separated(
-                          itemCount: visiblePosts.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 14),
-                          itemBuilder: (ctx, i) {
-                            final post = visiblePosts[i];
-                            return FeedItemEntrance(
-                              id: post.postId,
-                              index: i,
-                              child: _VentlyFeedPostCard(
-                                post: post,
-                                dataSaver: dataSaver,
-                                onTap: () => _pushPostOnce(context, post),
-                                // Optimistic. `post.myReaction` alone was the
-                                // wrong input — it is the *server's* value, so
-                                // a second tap arriving before the refetch sent
-                                // the same reaction again instead of clearing
-                                // it. The adjusted value is what the user can
-                                // actually see.
-                                onLike: () {
-                                  final shown = reactionAdjusted(ref, post);
-                                  final messenger = ScaffoldMessenger.of(
-                                    context,
-                                  );
-                                  ref
-                                      .read(
-                                        reactionControllerProvider.notifier,
-                                      )
-                                      .toggle(
-                                        postId: post.postId,
-                                        reaction: 'hug',
-                                        currentReaction: shown.myReaction,
-                                      )
-                                      .then((outcome) {
-                                        if (outcome !=
-                                            ReactionResult.rolledBack) {
-                                          return;
-                                        }
-                                        messenger.showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'That reaction didn’t save.',
-                                            ),
-                                          ),
-                                        );
-                                      });
-                                },
-                                onComment: () => context.push(
-                                  '/post/${post.postId}',
-                                  extra: post,
-                                ),
-                                onShare: () =>
-                                    context.push('/post/${post.postId}/share'),
-                                onMessage: () {
-                                  if (post.authorId != null) {
-                                    openUserProfile(context, post.authorId);
-                                  }
-                                },
-                              ),
-                            );
-                          },
+                        child: EmailVerificationBanner(),
+                      ),
+                      SliverToBoxAdapter(
+                        child: storiesAsync.when(
+                          // Never swap content we still have for a skeleton; first load only.
+                          skipLoadingOnReload: true,
+                          loading: () => _StoriesLoadingRail(me: me),
+                          error: (_, __) => _StoriesUnavailableRail(me: me),
+                          data: (_) => FadeSlideIn(
+                            index: 1,
+                            child: _VentlyStoriesRail(
+                              stories: stories,
+                              me: me,
+                              showingCommunityStories: showingCommunityStories,
+                            ),
+                          ),
                         ),
                       ),
-                    const SliverToBoxAdapter(
-                      child: SizedBox(height: HomeShell.navClearance),
-                    ),
-                  ],
+                      const SliverToBoxAdapter(child: PopularWhispersRail()),
+                      if (discovery.trendingTribes.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: FadeSlideIn(
+                            index: 2,
+                            child: _TribesRail(
+                              tribes: discovery.trendingTribes,
+                            ),
+                          ),
+                        ),
+                      SliverToBoxAdapter(
+                        child: topicStatsAsync.when(
+                          // Never swap content we still have for a skeleton; first load only.
+                          skipLoadingOnReload: true,
+                          loading: () => const _TrendingTopicsLoading(),
+                          error: (_, __) => _TrendingTopicsUnavailable(
+                            onRetry: () =>
+                                ref.invalidate(trendingTopicStatsProvider),
+                          ),
+                          data: (topics) => topics.isEmpty
+                              ? const SizedBox.shrink()
+                              : FadeSlideIn(
+                                  index: 3,
+                                  child: _TrendingTopicsRail(topics: topics),
+                                ),
+                        ),
+                      ),
+                      const SliverToBoxAdapter(child: _SuggestedPeopleRail()),
+                      if (filter.scope == 'local' && me?.localBucket == null)
+                        const SliverToBoxAdapter(
+                          child: _LocationPromptBanner(),
+                        ),
+                      SliverPersistentHeader(
+                        pinned: true,
+                        delegate: _FeedFiltersHeader(filter: filter),
+                      ),
+                      if (showingRecommendations)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Recommended from Venttly',
+                                  style: TextStyle(
+                                    color: context.ink,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  'Fresh conversations while this feed learns what matters to you.',
+                                  style: TextStyle(
+                                    color: context.inkFaint,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (visiblePosts.isEmpty)
+                        const SliverToBoxAdapter(
+                          child: VentlyEmptyState(
+                            icon: Icons.forum_outlined,
+                            title: 'Venttly is just getting started',
+                            subtitle:
+                                'Explore communities, connect with people, or start the first conversation.',
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(18, 8, 18, 22),
+                          sliver: SliverList.separated(
+                            itemCount: visiblePosts.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 14),
+                            itemBuilder: (ctx, i) {
+                              final post = visiblePosts[i];
+                              // What actually reached the screen. The feed
+                              // demotes posts you have already been shown, and
+                              // it can only do that if somebody tells it.
+                              ref
+                                  .read(feedImpressionReporterProvider)
+                                  .saw(post.postId);
+                              return FeedItemEntrance(
+                                id: post.postId,
+                                index: i,
+                                child: _VentlyFeedPostCard(
+                                  post: post,
+                                  dataSaver: dataSaver,
+                                  onTap: () => _pushPostOnce(context, post),
+                                  // Optimistic. `post.myReaction` alone was the
+                                  // wrong input — it is the *server's* value, so
+                                  // a second tap arriving before the refetch sent
+                                  // the same reaction again instead of clearing
+                                  // it. The adjusted value is what the user can
+                                  // actually see.
+                                  onLike: () {
+                                    final shown = reactionAdjusted(ref, post);
+                                    final messenger = ScaffoldMessenger.of(
+                                      context,
+                                    );
+                                    ref
+                                        .read(
+                                          reactionControllerProvider.notifier,
+                                        )
+                                        .toggle(
+                                          postId: post.postId,
+                                          reaction: 'hug',
+                                          currentReaction: shown.myReaction,
+                                        )
+                                        .then((outcome) {
+                                          if (outcome !=
+                                              ReactionResult.rolledBack) {
+                                            return;
+                                          }
+                                          messenger.showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'That reaction didn’t save.',
+                                              ),
+                                            ),
+                                          );
+                                        });
+                                  },
+                                  onComment: () => context.push(
+                                    '/post/${post.postId}',
+                                    extra: post,
+                                  ),
+                                  onShare: () => context.push(
+                                    '/post/${post.postId}/share',
+                                  ),
+                                  onMessage: () {
+                                    if (post.authorId != null) {
+                                      openUserProfile(context, post.authorId);
+                                    }
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      const SliverToBoxAdapter(
+                        child: SizedBox(height: HomeShell.navClearance),
+                      ),
+                    ],
                   ),
                 );
               },
@@ -453,97 +466,101 @@ class _VentlyFeedTopBar extends ConsumerWidget {
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-          const SheetGrabber(),
-          for (final (icon, label, route, isBranch) in entries)
-            ListTile(
-              dense: true,
-              leading: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: VentlyColors.berryMagenta.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 18, color: VentlyColors.berryMagenta),
-              ),
-              title: Text(
-                label,
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                  color: context.ink,
-                ),
-              ),
-              trailing: const Icon(
-                Icons.chevron_right_rounded,
-                color: VentlyColors.softMauve,
-              ),
-              onTap: () {
-                Navigator.of(sheetCtx).pop();
-                // Returning to the Studio must exit "member view" first, or the
-                // /feed branch just re-renders the member feed.
-                if (label == 'Keeper Studio') {
-                  ref.read(keeperMemberViewProvider.notifier).state = false;
-                }
-                if (isBranch) {
-                  context.go(route);
-                } else {
-                  context.push(route);
-                }
-              },
-            ),
-          Divider(color: VentlyColors.softMauve.withOpacity(0.3)),
-          ListTile(
-            dense: true,
-            leading: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: VentlyColors.dangerRed.withOpacity(0.12),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.logout_rounded,
-                size: 18,
-                color: VentlyColors.dangerRed,
-              ),
-            ),
-            title: const Text(
-              'Sign out',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-                color: VentlyColors.dangerRed,
-              ),
-            ),
-            onTap: () async {
-              Navigator.of(sheetCtx).pop();
-              final confirmed =
-                  await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Sign out?'),
-                      content: const Text(
-                        'You will need your username and password to sign back in.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Cancel'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('Sign out'),
-                        ),
-                      ],
+              const SheetGrabber(),
+              for (final (icon, label, route, isBranch) in entries)
+                ListTile(
+                  dense: true,
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: VentlyColors.berryMagenta.withOpacity(0.12),
+                      shape: BoxShape.circle,
                     ),
-                  ) ??
-                  false;
-              if (!confirmed || !context.mounted) return;
-              await ref.read(sessionProvider.notifier).logout();
-              if (context.mounted) context.go('/onboarding');
-            },
-          ),
+                    child: Icon(
+                      icon,
+                      size: 18,
+                      color: VentlyColors.berryMagenta,
+                    ),
+                  ),
+                  title: Text(
+                    label,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      color: context.ink,
+                    ),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right_rounded,
+                    color: VentlyColors.softMauve,
+                  ),
+                  onTap: () {
+                    Navigator.of(sheetCtx).pop();
+                    // Returning to the Studio must exit "member view" first, or the
+                    // /feed branch just re-renders the member feed.
+                    if (label == 'Keeper Studio') {
+                      ref.read(keeperMemberViewProvider.notifier).state = false;
+                    }
+                    if (isBranch) {
+                      context.go(route);
+                    } else {
+                      context.push(route);
+                    }
+                  },
+                ),
+              Divider(color: VentlyColors.softMauve.withOpacity(0.3)),
+              ListTile(
+                dense: true,
+                leading: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: VentlyColors.dangerRed.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.logout_rounded,
+                    size: 18,
+                    color: VentlyColors.dangerRed,
+                  ),
+                ),
+                title: const Text(
+                  'Sign out',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: VentlyColors.dangerRed,
+                  ),
+                ),
+                onTap: () async {
+                  Navigator.of(sheetCtx).pop();
+                  final confirmed =
+                      await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Sign out?'),
+                          content: const Text(
+                            'You will need your username and password to sign back in.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Sign out'),
+                            ),
+                          ],
+                        ),
+                      ) ??
+                      false;
+                  if (!confirmed || !context.mounted) return;
+                  await ref.read(sessionProvider.notifier).logout();
+                  if (context.mounted) context.go('/onboarding');
+                },
+              ),
             ],
           );
         },
@@ -2054,7 +2071,7 @@ class _ScopeToggle extends StatelessWidget {
 }
 
 /// Fresh (chronological) vs Hot (engagement-ranked). Backed by the
-/// `feed_hot` view + `mv_hot_posts` materialized view from migration 0013.
+/// personal_feed's three modes (migration 20261058090000).
 class _SortToggle extends StatelessWidget {
   const _SortToggle({required this.sort, required this.onChanged});
   final String sort;

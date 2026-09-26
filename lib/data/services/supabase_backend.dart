@@ -925,18 +925,17 @@ class SupabaseBackend {
     if (uid == null) return;
 
     var channel = _client.channel('feed:scoped:$uid');
-    channel = channel
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'posts',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'author_id',
-            value: uid,
-          ),
-          callback: (_) => _scheduleFeedInvalidation(),
-        );
+    channel = channel.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'posts',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'author_id',
+        value: uid,
+      ),
+      callback: (_) => _scheduleFeedInvalidation(),
+    );
 
     for (final tribeId in _joinedTribes.take(_maxTribeFeedRealtimeFilters)) {
       channel = channel.onPostgresChanges(
@@ -1087,66 +1086,52 @@ class SupabaseBackend {
     int offset = 0,
     FeedCursor? cursor,
   }) async {
-    // "For You" is a server-side blended ranking (migration 0015).
-    // The personal_score already factors in local + tribe affinity, so
-    // we pass through category + mood and ignore the scope filters
-    // (those would just over-constrain the candidate pool).
-    if (sort == 'foryou' && tribeSlug == null) {
+    // One ranked feed serves all three sorts (migration 20261058090000). It
+    // runs as the caller, so row level security is what decides what is in it,
+    // and it pages by position inside a pool frozen at the cursor's anchor.
+    final mode = switch (sort) {
+      'foryou' => 'foryou',
+      'hot' => 'hot',
+      _ => 'fresh',
+    };
+    if (_client.auth.currentUser != null) {
       try {
         final params = <String, dynamic>{
           'p_limit': limit,
+          'p_mode': mode,
           'p_category': category,
           'p_mood': mood,
+          'p_tribe_slug': tribeSlug,
+          'p_location': locationBucket,
+          'p_after_position': cursor?.position ?? offset,
         };
-        if (cursor != null) {
-          params['p_before_score'] = cursor.personalScore;
-          params['p_before_created_at'] = cursor.createdAt.toUtc().toIso8601String();
-          params['p_before_post_id'] = cursor.postId;
-        } else {
-          params['p_offset'] = offset;
+        final anchor = cursor?.anchor;
+        if (anchor != null) {
+          params['p_anchor'] = anchor.toUtc().toIso8601String();
         }
         final rows =
             await _client.rpc('personal_feed', params: params) as List<dynamic>;
-        final cutoff = DateTime.now().subtract(const Duration(hours: 24));
         final raw = rows.cast<Map<String, dynamic>>();
-        final personalized = raw
+        // Whispers vanish from the feed after 24h. The server already filters
+        // them; this is belt and braces for a clock that disagrees.
+        final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+        final posts = raw
             .map<Post>(_postFromRow)
             .where(
               (p) =>
                   (!p.isWhisper && !p.isStory) || p.createdAt.isAfter(cutoff),
             )
             .toList();
-        if (personalized.isNotEmpty ||
-            cursor != null ||
-            offset > 0 ||
-            category != null ||
-            mood != null) {
-          final hydrated = await _hydratePosts(personalized);
-          return FeedPage(
-            posts: hydrated,
-            nextCursor: _personalFeedCursor(raw, hydrated),
-          );
-        }
+        final hydrated = await _hydratePosts(posts);
+        return FeedPage(posts: hydrated, nextCursor: _personalFeedCursor(raw));
       } on PostgrestException catch (error) {
         if (!_isMissingRpc(error, 'personal_feed')) rethrow;
       }
-
-      // Cold-start resilience: use the same RLS-protected database feed,
-      // ranked globally, when a new account has no affinity signals yet.
-      return feedPage(
-        category: category,
-        mood: mood,
-        tribeSlug: tribeSlug,
-        locationBucket: locationBucket,
-        sort: 'hot',
-        limit: limit,
-        offset: offset,
-        cursor: cursor,
-      );
     }
 
-    final source = sort == 'hot' ? 'feed_hot' : 'feed_posts';
-    var query = _client.from(source).select();
+    // No session, or a database that predates the ranked feed: the plain
+    // chronological view, which carries the same row level security.
+    var query = _client.from('feed_posts').select();
     if (category != null) query = query.eq('category_name', category);
     if (mood != null) query = query.eq('post_mood', mood);
     if (tribeSlug != null) query = query.eq('tribe_slug', tribeSlug);
@@ -1156,42 +1141,18 @@ class SupabaseBackend {
 
     if (cursor != null) {
       final iso = cursor.createdAt.toUtc().toIso8601String();
-      if (sort == 'hot') {
-        final hotScore = cursor.hotScore ?? await _hotScoreForPost(cursor.postId);
-        if (hotScore != null) {
-          query = query.or(
-            'hot_score.lt.$hotScore,'
-            'and(hot_score.eq.$hotScore,created_at.lt.$iso),'
-            'and(hot_score.eq.$hotScore,and(created_at.eq.$iso,post_id.lt.${cursor.postId}))',
-          );
-        } else {
-          query = query.or(
-            'created_at.lt.$iso,'
-            'and(created_at.eq.$iso,post_id.lt.${cursor.postId})',
-          );
-        }
-      } else {
-        query = query.or(
-          'created_at.lt.$iso,'
-          'and(created_at.eq.$iso,post_id.lt.${cursor.postId})',
-        );
-      }
+      query = query.or(
+        'created_at.lt.$iso,'
+        'and(created_at.eq.$iso,post_id.lt.${cursor.postId})',
+      );
     }
 
-    final ordered = sort == 'hot'
-        ? query
-            .order('hot_score', ascending: false)
-            .order('created_at', ascending: false)
-            .order('post_id', ascending: false)
-        : query
-            .order('created_at', ascending: false)
-            .order('post_id', ascending: false);
+    final ordered = query
+        .order('created_at', ascending: false)
+        .order('post_id', ascending: false);
     final rows = cursor == null
         ? await ordered.range(offset, offset + limit - 1)
         : await ordered.limit(limit);
-    // Whispers vanish from the feed after 24h. We filter client-side
-    // because PostgREST's `or` filter doesn't cleanly express
-    // "is_whisper = false OR created_at > now() - 24h" against a view.
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
     final raw = (rows as List).cast<Map<String, dynamic>>();
     final posts = raw
@@ -1201,62 +1162,49 @@ class SupabaseBackend {
         )
         .toList();
     final hydrated = await _hydratePosts(posts);
-    return FeedPage(
-      posts: hydrated,
-      nextCursor: _viewFeedCursor(raw, hydrated, sort: sort),
+    return FeedPage(posts: hydrated, nextCursor: _viewFeedCursor(raw));
+  }
+
+  /// The cursor is built from the raw rows, not the hydrated ones: a post the
+  /// client filtered out was still served, and asking for it again would hand
+  /// back a page that never advances.
+  FeedCursor? _personalFeedCursor(List<Map<String, dynamic>> raw) {
+    if (raw.isEmpty) return null;
+    final last = raw.last;
+    final position = (last['feed_position'] as num?)?.toInt();
+    if (position == null) return null;
+    final anchorText = last['feed_anchor'] as String?;
+    return FeedCursor(
+      createdAt: DateTime.parse(last['created_at'] as String),
+      postId: last['post_id'] as String,
+      personalScore: (last['personal_score'] as num?)?.toDouble(),
+      anchor: anchorText == null ? null : DateTime.parse(anchorText),
+      position: position,
     );
   }
 
-  Map<String, dynamic>? _rowForPost(
-    List<Map<String, dynamic>> raw,
-    String postId,
-  ) {
-    for (final row in raw) {
-      if (row['post_id'] == postId) return row;
+  FeedCursor? _viewFeedCursor(List<Map<String, dynamic>> raw) {
+    if (raw.isEmpty) return null;
+    final last = raw.last;
+    return FeedCursor(
+      createdAt: DateTime.parse(last['created_at'] as String),
+      postId: last['post_id'] as String,
+    );
+  }
+
+  /// Tell the server which posts actually reached the screen, so the next page
+  /// can show something else. Best-effort: a dropped batch costs a little
+  /// repetition, never an error in front of somebody scrolling.
+  Future<void> noteFeedImpressions(List<String> postIds) async {
+    if (postIds.isEmpty) return;
+    try {
+      await _client.rpc(
+        'note_post_impressions',
+        params: {'p_ids': postIds.take(200).toList()},
+      );
+    } catch (_) {
+      // Degrades to "the feed repeats itself a bit", which is where it was.
     }
-    return null;
-  }
-
-  FeedCursor? _personalFeedCursor(
-    List<Map<String, dynamic>> raw,
-    List<Post> hydrated,
-  ) {
-    if (hydrated.isEmpty) return null;
-    final lastPost = hydrated.last;
-    final rawRow = _rowForPost(raw, lastPost.postId);
-    final score = (rawRow?['personal_score'] as num?)?.toDouble();
-    if (score == null) return null;
-    return FeedCursor(
-      createdAt: lastPost.createdAt,
-      postId: lastPost.postId,
-      personalScore: score,
-    );
-  }
-
-  FeedCursor? _viewFeedCursor(
-    List<Map<String, dynamic>> raw,
-    List<Post> hydrated, {
-    required String sort,
-  }) {
-    if (hydrated.isEmpty) return null;
-    final lastPost = hydrated.last;
-    final rawRow = _rowForPost(raw, lastPost.postId);
-    return FeedCursor(
-      createdAt: lastPost.createdAt,
-      postId: lastPost.postId,
-      hotScore: sort == 'hot'
-          ? (rawRow?['hot_score'] as num?)?.toDouble()
-          : null,
-    );
-  }
-
-  Future<double?> _hotScoreForPost(String postId) async {
-    final row = await _client
-        .from('feed_hot')
-        .select('hot_score')
-        .eq('post_id', postId)
-        .maybeSingle();
-    return (row?['hot_score'] as num?)?.toDouble();
   }
 
   Future<List<Post>> friendStories({int limit = 24}) async {
@@ -3148,11 +3096,7 @@ class SupabaseBackend {
     final rows =
         await _client.rpc(
               'search_tribe_invite_candidates',
-              params: {
-                'p_tribe_id': tribeId,
-                'p_query': query,
-                'p_limit': 12,
-              },
+              params: {'p_tribe_id': tribeId, 'p_query': query, 'p_limit': 12},
             )
             as List<dynamic>;
     return rows
@@ -3516,8 +3460,7 @@ class SupabaseBackend {
           'tribe_id': tribeId,
           'kind': kind,
           'status': error.statusCode ?? '',
-          'hint':
-              'storage policy 20261016090000 is probably not applied here',
+          'hint': 'storage policy 20261016090000 is probably not applied here',
         },
       );
       final legacy = _legacyTribeImagePath(uid, tribeId, safeExt);
@@ -6741,11 +6684,10 @@ class SupabaseBackend {
   }
 
   /// Out of the main list and into Archived, or back. Mine alone.
-  Future<void> setChatRoomArchived(String roomId, bool archived) =>
-      _client.rpc(
-        'set_chat_room_archived',
-        params: {'p_room_id': roomId, 'p_archived': archived},
-      );
+  Future<void> setChatRoomArchived(String roomId, bool archived) => _client.rpc(
+    'set_chat_room_archived',
+    params: {'p_room_id': roomId, 'p_archived': archived},
+  );
 
   /// "Delete", for one person.
   ///
@@ -7052,7 +6994,10 @@ class SupabaseBackend {
         .eq('room_id', roomId)
         .order('created_at', ascending: false)
         .limit(_messagePageSize);
-    final base = rows.map<ChatMessage>(_messageFromRow).toList().reversed
+    final base = rows
+        .map<ChatMessage>(_messageFromRow)
+        .toList()
+        .reversed
         .toList();
     if (base.isEmpty) return base;
 
@@ -8407,7 +8352,8 @@ class SupabaseBackend {
 
     final notices = <EnforcementNotice>[];
     for (final r in rows) {
-      final payload = (r['payload'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final payload =
+          (r['payload'] as Map?)?.cast<String, dynamic>() ?? const {};
       final notice = EnforcementNotice.fromNotificationPayload(
         payload,
         notificationId: r['notification_id'] as String?,
@@ -8429,14 +8375,18 @@ class SupabaseBackend {
     // their way back to the notice they belong to.
     final bySubject = <String, Map<String, dynamic>>{};
     for (final a in appeals) {
-      final key = (a['case_id'] ??
-          a['verification_request_id'] ??
-          a['enforcement_notification_id']) as String?;
-      if (key != null) bySubject.putIfAbsent(key, () => a.cast<String, dynamic>());
+      final key =
+          (a['case_id'] ??
+                  a['verification_request_id'] ??
+                  a['enforcement_notification_id'])
+              as String?;
+      if (key != null)
+        bySubject.putIfAbsent(key, () => a.cast<String, dynamic>());
     }
 
     return notices.map((notice) {
-      final key = notice.caseId ??
+      final key =
+          notice.caseId ??
           notice.verificationRequestId ??
           notice.notificationId;
       final appeal = key == null ? null : bySubject[key];
@@ -8460,7 +8410,10 @@ class SupabaseBackend {
   /// only, one open appeal per decision, within thirty days, already-heard is
   /// final — and refuses with a message naming the reason, which is surfaced
   /// to the member unchanged.
-  Future<String> submitAppeal(EnforcementNotice notice, String statement) async {
+  Future<String> submitAppeal(
+    EnforcementNotice notice,
+    String statement,
+  ) async {
     final result = switch (notice.appealRoute) {
       AppealRoute.moderationCase => await _client.rpc(
         'submit_appeal',
