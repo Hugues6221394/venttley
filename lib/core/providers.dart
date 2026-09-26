@@ -709,6 +709,28 @@ class FeedPostsNotifier extends AutoDisposeAsyncNotifier<List<Post>> {
     ref.invalidateSelf();
     await future;
   }
+
+  /// Take a post off the screen the moment somebody says they do not want it.
+  /// Waiting for the server round trip and a refetch would leave the card
+  /// sitting there under an "Undo" snack bar, which reads as "that did not
+  /// work". Returns where it was, so undo can put it back in its place.
+  int removeLocally(String postId) {
+    final current = state.valueOrNull;
+    if (current == null) return -1;
+    final index = current.indexWhere((p) => p.postId == postId);
+    if (index < 0) return -1;
+    state = AsyncData([...current]..removeAt(index));
+    return index;
+  }
+
+  void restoreLocally(Post post, int index) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    if (current.any((p) => p.postId == post.postId)) return;
+    final next = [...current];
+    next.insert(index.clamp(0, next.length), post);
+    state = AsyncData(next);
+  }
 }
 
 final feedPostsProvider =

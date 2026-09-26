@@ -1180,6 +1180,153 @@ void _pushPostOnce(BuildContext context, Post post) {
   context.push('/post/${post.postId}', extra: post);
 }
 
+/// The three things a reader can say about somebody else's post.
+///
+/// Two of them are new. Until now the only signal a person could give was a
+/// hug or silence, and silence had to stand in for "I have read this", "this
+/// is not for me" and "please stop showing me this person" all at once.
+Future<void> _openPostActions(
+  BuildContext context,
+  WidgetRef ref,
+  Post post,
+) async {
+  final scheme = Theme.of(context).colorScheme;
+  final choice = await showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) {
+      Widget row(String value, IconData icon, String title, String subtitle) {
+        return InkWell(
+          key: ValueKey('post-action-$value'),
+          onTap: () => Navigator.of(ctx).pop(value),
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: ctx.ink.withOpacity(0.7)),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: ctx.ink,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: ctx.ink.withOpacity(0.55),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      return SafeArea(
+        child: Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: Theme.of(ctx).cardColor,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: scheme.primary.withOpacity(0.22)),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.primary.withOpacity(0.10),
+                blurRadius: 28,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              row(
+                'not_interested',
+                Icons.do_not_disturb_on_outlined,
+                'Not interested',
+                'Fewer posts like this one',
+              ),
+              row(
+                'less_author',
+                Icons.volume_off_outlined,
+                'Show less from ${post.authorDisplayName}',
+                'They are not told, and you are still connected',
+              ),
+              row(
+                'report',
+                Icons.flag_outlined,
+                'Report',
+                'Something here breaks the rules',
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+
+  if (choice == null || !context.mounted) return;
+  if (choice == 'report') {
+    openReportPostSheet(context, ref, post.postId);
+    return;
+  }
+
+  final notifier = ref.read(feedPostsProvider.notifier);
+  final messenger = ScaffoldMessenger.of(context);
+  // Off the screen first. Waiting for the round trip would leave the card
+  // sitting there underneath an Undo snack bar, which reads as "that did not
+  // work".
+  final index = notifier.removeLocally(post.postId);
+  try {
+    await ref
+        .read(repositoryProvider)
+        .markNotInterested(
+          post.postId,
+          reason: choice == 'less_author' ? 'author' : 'post',
+        );
+  } catch (_) {
+    if (index >= 0) notifier.restoreLocally(post, index);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('That didn\u2019t save. Try again.')),
+    );
+    return;
+  }
+
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(
+        choice == 'less_author'
+            ? 'You\u2019ll see less from ${post.authorDisplayName}.'
+            : 'Thanks \u2014 fewer posts like that.',
+      ),
+      duration: const Duration(seconds: 6),
+      persist: false,
+      action: SnackBarAction(
+        label: 'Undo',
+        onPressed: () async {
+          await ref.read(repositoryProvider).undoNotInterested(post.postId);
+          if (index >= 0) notifier.restoreLocally(post, index);
+        },
+      ),
+    ),
+  );
+}
+
 class _VentlyFeedPostCard extends ConsumerWidget {
   const _VentlyFeedPostCard({
     required this.post,
@@ -1303,24 +1450,26 @@ class _VentlyFeedPostCard extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Container(
-                    constraints: const BoxConstraints(maxWidth: 124),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 11,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: VentlyColors.roseTint,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      '#${FeedCategories.label(post.categoryName)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: VentlyColors.roseDeep,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
+                  Flexible(
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 124),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: VentlyColors.roseTint,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        '#${FeedCategories.label(post.categoryName)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: VentlyColors.roseDeep,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ),
@@ -1416,9 +1565,10 @@ class _VentlyFeedPostCard extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 4),
+                  // 36, not 40: with two of these on the row a small Android
+                  // phone overflows the card by a few pixels.
                   SizedBox.square(
-                    dimension: 40,
+                    dimension: 36,
                     child: IconButton(
                       padding: EdgeInsets.zero,
                       icon: const Icon(Icons.ios_share_outlined, size: 20),
@@ -1426,6 +1576,23 @@ class _VentlyFeedPostCard extends ConsumerWidget {
                       onPressed: onShare,
                     ),
                   ),
+                  // Down here rather than beside the name: up there it is a
+                  // 19pt glyph in a row that already has an avatar, a name, a
+                  // timestamp and a category, and it was truncating people's
+                  // names to make room for itself.
+                  if (post.authorId != null &&
+                      post.authorId != ref.watch(sessionProvider)?.userId)
+                    SizedBox.square(
+                      dimension: 36,
+                      child: IconButton(
+                        key: ValueKey('feed-card-menu-${post.postId}'),
+                        padding: EdgeInsets.zero,
+                        tooltip: 'More',
+                        icon: const Icon(Icons.more_horiz_rounded, size: 20),
+                        color: context.ink.withOpacity(0.62),
+                        onPressed: () => _openPostActions(context, ref, post),
+                      ),
+                    ),
                 ],
               ),
             ],

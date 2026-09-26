@@ -3307,6 +3307,21 @@ class VentlyRepository implements MusicProvider {
     return live.whispersForMe(limit: limit);
   }
 
+  Future<void> markNotInterested(
+    String postId, {
+    String reason = 'post',
+  }) async {
+    final live = _live;
+    if (live == null) return;
+    await live.markNotInterested(postId, reason: reason);
+  }
+
+  Future<void> undoNotInterested(String postId) async {
+    final live = _live;
+    if (live == null) return;
+    await live.undoNotInterested(postId);
+  }
+
   /// Which posts actually reached the screen. Feeds demote what you have
   /// already been shown rather than hiding it.
   Future<void> noteFeedImpressions(List<String> postIds) async {

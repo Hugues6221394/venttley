@@ -1192,6 +1192,23 @@ class SupabaseBackend {
     );
   }
 
+  /// "Not interested", and "show me less of this person". Both are reversible
+  /// and neither is a block: the post stops competing for a place in this
+  /// reader's feed, and that is all.
+  Future<void> markNotInterested(
+    String postId, {
+    String reason = 'post',
+  }) async {
+    await _client.rpc(
+      'mark_not_interested',
+      params: {'p_post_id': postId, 'p_reason': reason},
+    );
+  }
+
+  Future<void> undoNotInterested(String postId) async {
+    await _client.rpc('undo_not_interested', params: {'p_post_id': postId});
+  }
+
   /// Tell the server which posts actually reached the screen, so the next page
   /// can show something else. Best-effort: a dropped batch costs a little
   /// repetition, never an error in front of somebody scrolling.

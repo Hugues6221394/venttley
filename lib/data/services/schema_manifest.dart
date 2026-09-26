@@ -129,4 +129,6 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261056090000': 'the_last_message_is_one_message',
   '20261057090000': 'an_at_sign_works_where_people_talk',
   '20261058090000': 'a_feed_that_moves',
+  '20261059090000': 'a_feed_you_can_talk_back_to',
+  '20261060090000': 'feed_health_for_the_console',
 };
