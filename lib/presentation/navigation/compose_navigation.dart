@@ -14,6 +14,7 @@ void openCompose(
   String? draft,
   bool story = false,
 }) {
+  ref.read(composeIntentTokenProvider.notifier).state++;
   ref.read(composeStoryModeProvider.notifier).state = story;
   ref.read(composeIncludePollProvider.notifier).state = format == 'poll';
   ref.read(composeInitialDraftProvider.notifier).state = draft;

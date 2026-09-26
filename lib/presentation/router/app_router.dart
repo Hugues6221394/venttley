@@ -692,10 +692,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Full-screen creators + story viewer stay immersive.
       GoRoute(
         path: '/compose/story',
+        // Root navigator, explicitly. Pushed from inside the compose tab this
+        // route landed in that tab's navigator, and the shell's floating nav
+        // bar sat on top of the source tiles while its offline banner covered
+        // the close button — a screen where nothing worked and there was no
+        // way out.
+        parentNavigatorKey: rootNavigatorKey,
         builder: (_, __) => const CreateStoryScreen(),
       ),
       GoRoute(
         path: '/whispers/new',
+        parentNavigatorKey: rootNavigatorKey,
         builder: (_, __) => const CreateWhisperScreen(),
       ),
       GoRoute(

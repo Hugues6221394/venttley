@@ -15,9 +15,12 @@ import '../../../data/services/outbox.dart';
 import '../../../data/services/analytics_service.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
+import '../../widgets/connection_banner.dart';
 import '../../widgets/music_track_card.dart';
 import '../../theme/glass_tokens.dart';
+import '../../theme/vently_tokens.dart';
 import '../../widgets/tagged_text.dart';
+import '../../widgets/vently_premium_background.dart';
 
 /// Create Vent Story screen — Image #9.
 ///
@@ -236,119 +239,128 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _Header(onClose: () => context.go('/feed')),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _LivePreview(
-                      mode: _mode,
-                      imageBytes: _imageBytes,
-                      caption: _caption.text,
-                      musicTrack: _selectedMusic,
-                    ),
-                    const SizedBox(height: 18),
-                    if (_mode == _StoryMode.text || _imageBytes != null)
-                      _CaptionField(
-                        controller: _caption,
-                        onChanged: (_) => setState(() {}),
-                        isImage: _imageBytes != null,
+      // Opaque, with the app's own background behind it. Transparent, this
+      // screen let the home shell show through: its floating navigation bar
+      // sat on top of the source tiles and its offline banner covered the
+      // close button, so the screen read as "nothing here works and I cannot
+      // get out".
+      backgroundColor: VentlyTokens.canvas,
+      body: VentlyPremiumBackground(
+        child: SafeArea(
+          child: Column(
+            children: [
+              const ConnectionBanner(),
+              _Header(onClose: () => context.go('/feed')),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _LivePreview(
+                        mode: _mode,
+                        imageBytes: _imageBytes,
+                        caption: _caption.text,
+                        musicTrack: _selectedMusic,
                       ),
-                    if (_mode == _StoryMode.text || _imageBytes != null)
                       const SizedBox(height: 18),
-                    _SourceGrid(
-                      mode: _mode,
-                      onCapturePhoto: _captureFromCamera,
-                      onGallery: _pickFromGallery,
-                      onTextOnly: _selectText,
-                      onAudioNote: () => context.push('/whispers/new'),
-                    ),
-                    if (flagEnabled(ref, 'vent_music', fallback: false)) ...[
-                      const SizedBox(height: 14),
-                      if (_selectedMusic == null)
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: _pickMusic,
-                            icon: const Icon(Icons.music_note_rounded),
-                            label: const Text('Add Music'),
-                          ),
-                        )
-                      else
-                        MusicTrackCard(
-                          track: _selectedMusic!,
-                          onChange: _pickMusic,
-                          onRemove: () {
-                            unawaited(
-                              AnalyticsService.instance.track(
-                                Events.musicRemoved,
-                              ),
-                            );
-                            setState(() => _selectedMusic = null);
-                          },
+                      if (_mode == _StoryMode.text || _imageBytes != null)
+                        _CaptionField(
+                          controller: _caption,
+                          onChanged: (_) => setState(() {}),
+                          isImage: _imageBytes != null,
                         ),
-                    ],
-                    const SizedBox(height: 18),
-                    _PrivacyDurationCard(
-                      friendsOnly: _friendsOnly,
-                      onFriendsToggle: (v) => setState(() => _friendsOnly = v),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: FilledButton(
-                  onPressed: _canShare ? _share : null,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: VentlyColors.berryMagenta,
-                    disabledBackgroundColor: VentlyColors.berryMagenta
-                        .withOpacity(0.32),
-                    // Without this the label falls back to Material's disabled
-                    // grey, which on a dim berry fill reads as a button that
-                    // failed to paint rather than one that is not ready yet.
-                    disabledForegroundColor: Colors.white.withOpacity(0.6),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                  ),
-                  child: _busy
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2.6,
-                          ),
-                        )
-                      : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Share to Story',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 15,
-                              ),
+                      if (_mode == _StoryMode.text || _imageBytes != null)
+                        const SizedBox(height: 18),
+                      _SourceGrid(
+                        mode: _mode,
+                        onCapturePhoto: _captureFromCamera,
+                        onGallery: _pickFromGallery,
+                        onTextOnly: _selectText,
+                        onAudioNote: () => context.push('/whispers/new'),
+                      ),
+                      if (flagEnabled(ref, 'vent_music', fallback: false)) ...[
+                        const SizedBox(height: 14),
+                        if (_selectedMusic == null)
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _pickMusic,
+                              icon: const Icon(Icons.music_note_rounded),
+                              label: const Text('Add Music'),
                             ),
-                            SizedBox(width: 6),
-                            Icon(Icons.send_rounded, size: 16),
-                          ],
-                        ),
+                          )
+                        else
+                          MusicTrackCard(
+                            track: _selectedMusic!,
+                            onChange: _pickMusic,
+                            onRemove: () {
+                              unawaited(
+                                AnalyticsService.instance.track(
+                                  Events.musicRemoved,
+                                ),
+                              );
+                              setState(() => _selectedMusic = null);
+                            },
+                          ),
+                      ],
+                      const SizedBox(height: 18),
+                      _PrivacyDurationCard(
+                        friendsOnly: _friendsOnly,
+                        onFriendsToggle: (v) =>
+                            setState(() => _friendsOnly = v),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: FilledButton(
+                    onPressed: _canShare ? _share : null,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: VentlyColors.berryMagenta,
+                      disabledBackgroundColor: VentlyColors.berryMagenta
+                          .withOpacity(0.32),
+                      // Without this the label falls back to Material's disabled
+                      // grey, which on a dim berry fill reads as a button that
+                      // failed to paint rather than one that is not ready yet.
+                      disabledForegroundColor: Colors.white.withOpacity(0.6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                    ),
+                    child: _busy
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.6,
+                            ),
+                          )
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Share to Story',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              SizedBox(width: 6),
+                              Icon(Icons.send_rounded, size: 16),
+                            ],
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -449,140 +461,150 @@ class _LivePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 9 / 14,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (imageBytes != null)
-              Image.memory(imageBytes!, fit: BoxFit.cover)
-            else
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFFFFD8E5),
-                      Color(0xFFFF91B7),
-                      Color(0xFFB91452),
-                    ],
+    // Capped, not just proportional. At 9:14 of a phone's width the preview
+    // was 563pt tall on an 874pt screen and pushed Text Only and Audio Note
+    // off the bottom, under the share button, where they read as missing.
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.42,
+        ),
+        child: AspectRatio(
+          aspectRatio: 9 / 14,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (imageBytes != null)
+                  Image.memory(imageBytes!, fit: BoxFit.cover)
+                else
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0xFFFFD8E5),
+                          Color(0xFFFF91B7),
+                          Color(0xFFB91452),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (imageBytes != null)
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.center,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, Color(0x66000000)],
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  left: 16,
+                  top: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 11,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.36),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: VentlyColors.berryMagenta,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'LIVE PREVIEW',
+                          style: TextStyle(
+                            color: context.ink,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            if (imageBytes != null)
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.center,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Color(0x66000000)],
-                  ),
-                ),
-              ),
-            Positioned(
-              left: 16,
-              top: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 11,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.36),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: VentlyColors.berryMagenta,
-                        shape: BoxShape.circle,
-                      ),
+                if (imageBytes == null)
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 92,
+                          height: 92,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.22),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.favorite_rounded,
+                            color: Colors.white,
+                            size: 38,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          caption.trim().isEmpty
+                              ? 'Share your mood today…'
+                              : caption.trim(),
+                          textAlign: TextAlign.center,
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'LIVE PREVIEW',
-                      style: TextStyle(
-                        color: context.ink,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (imageBytes == null)
-              Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 92,
-                      height: 92,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.22),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.favorite_rounded,
-                        color: Colors.white,
-                        size: 38,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      caption.trim().isEmpty
-                          ? 'Share your mood today…'
-                          : caption.trim(),
-                      textAlign: TextAlign.center,
+                  )
+                else if (caption.trim().isNotEmpty)
+                  Positioned(
+                    left: 18,
+                    right: 18,
+                    bottom: 18,
+                    child: Text(
+                      caption.trim(),
                       maxLines: 4,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
-                        fontSize: 15,
+                        fontSize: 14,
                         height: 1.4,
                       ),
                     ),
-                  ],
-                ),
-              )
-            else if (caption.trim().isNotEmpty)
-              Positioned(
-                left: 18,
-                right: 18,
-                bottom: 18,
-                child: Text(
-                  caption.trim(),
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                    height: 1.4,
                   ),
-                ),
-              ),
-            if (musicTrack != null)
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 18,
-                child: Material(
-                  color: Colors.transparent,
-                  child: MusicTrackCard(track: musicTrack!, compact: true),
-                ),
-              ),
-          ],
+                if (musicTrack != null)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 18,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: MusicTrackCard(track: musicTrack!, compact: true),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );

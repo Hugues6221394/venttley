@@ -85,6 +85,8 @@ class _QuickCreateSheet extends ConsumerWidget {
 
   void _pick(BuildContext context, WidgetRef ref, String id) {
     Navigator.of(context).pop();
+    // Says "this is a fresh ask", which setting an already-false flag cannot.
+    ref.read(composeIntentTokenProvider.notifier).state++;
     if (ref.read(sessionProvider) == null) {
       context.push('/onboarding');
       return;

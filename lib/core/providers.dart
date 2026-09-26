@@ -1353,6 +1353,15 @@ final composeTargetSpaceProvider = StateProvider<Space?>((ref) => null);
 
 /// When true, the next compose-screen open starts as a 24h Vent Story.
 /// Cleared by the compose screen after it reads the flag.
+/// Bumped every time somebody asks for the composer afresh.
+///
+/// The composer is a branch of the shell, so it is never rebuilt from scratch:
+/// going to /compose hands back the instance that is already there, holding
+/// whatever was last toggled on it. The one-shot intent providers cannot say
+/// "again" — setting story mode to false when it is already false changes
+/// nothing and notifies nobody. This can.
+final composeIntentTokenProvider = StateProvider<int>((ref) => 0);
+
 final composeStoryModeProvider = StateProvider<bool>((ref) => false);
 
 /// Optional category for the next compose-screen open.
