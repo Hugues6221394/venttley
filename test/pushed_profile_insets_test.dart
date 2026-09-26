@@ -37,12 +37,23 @@ void main() {
       reason: 'the two entry points must not disagree about the bar',
     );
 
-    // One inset, the status bar, so the hero starts in the same place however
-    // you arrived at the screen.
+    // And nothing reserving the status bar above the header.
+    //
+    // It used to sit there as a SizedBox, which was right when the header was
+    // a card floating on the page. The header is now a full-bleed cover that
+    // paints under the status bar — the same treatment the public profile
+    // uses — so reserving that height puts a white band across the top of
+    // somebody's photograph. What has to clear the clock is the two controls
+    // inside the cover, and they carry their own inset.
     expect(
       src,
-      contains('SizedBox(height: MediaQuery.of(ctx).padding.top + 8)'),
-      reason: 'the pushed profile should start where the tab profile starts',
+      isNot(contains('SizedBox(height: MediaQuery.of(ctx).padding.top + 8)')),
+      reason: 'the cover runs to the top of the screen now',
+    );
+    expect(
+      src,
+      contains('top: MediaQuery.of(context).padding.top + 2'),
+      reason: 'the back chip still has to clear the status bar',
     );
 
     // And the back affordance survived the bar being removed.

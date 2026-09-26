@@ -190,15 +190,21 @@ class _TopBar extends StatelessWidget {
                 // Studio is for, above four numbers that say how it is
                 // actually going. The tribe's name and member count sit here
                 // now instead, which is the thing that changes.
-                const Text(
+                //
+                // Set in ink at chrome size rather than 22pt magenta. It was
+                // the loudest thing on the page, and it is the one piece of
+                // text here that never changes and never needs acting on —
+                // the tribe's name directly under it is the subject, and the
+                // numbers under that are the news.
+                Text(
                   'Keeper Studio',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: VentlyColors.berryMagenta,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 22,
-                    letterSpacing: -0.4,
+                    color: context.ink.withOpacity(0.55),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    letterSpacing: 0.2,
                   ),
                 ),
               ],
@@ -339,7 +345,8 @@ class _ScopeRail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tribes = ref.watch(tribesIKeepProvider).valueOrNull ?? const <Tribe>[];
+    final tribes =
+        ref.watch(tribesIKeepProvider).valueOrNull ?? const <Tribe>[];
     if (tribes.isEmpty) return const SizedBox.shrink();
 
     final selectedId = ref.watch(studioTribeScopeProvider);
@@ -350,12 +357,16 @@ class _ScopeRail extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 2),
         child: Row(
           children: [
-            TribeAvatar(avatarUrl: only.avatarUrl, size: 34),
-            const SizedBox(width: 10),
+            TribeAvatar(avatarUrl: only.avatarUrl, size: 40),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // The page's headline. With the chrome title taken down to
+                  // 14pt ink, this is the subject of everything under it —
+                  // the numbers, the queue and the settings are all this
+                  // tribe's — so it is set at headline size.
                   Text(
                     only.name,
                     maxLines: 1,
@@ -363,7 +374,8 @@ class _ScopeRail extends ConsumerWidget {
                     style: TextStyle(
                       color: context.ink,
                       fontWeight: FontWeight.w900,
-                      fontSize: 16,
+                      fontSize: 22,
+                      letterSpacing: -0.3,
                     ),
                   ),
                   Text(
@@ -448,7 +460,12 @@ class _ScopeChip extends StatelessWidget {
             onTap: onTap,
             borderRadius: BorderRadius.circular(999),
             child: Container(
-              padding: EdgeInsets.fromLTRB(avatarUrl != null ? 6 : 14, 0, 14, 0),
+              padding: EdgeInsets.fromLTRB(
+                avatarUrl != null ? 6 : 14,
+                0,
+                14,
+                0,
+              ),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
@@ -648,19 +665,11 @@ class _StatColumn extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: GlassTokens.cardChip(context),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  stat.icon,
-                  size: 17,
-                  color: GlassTokens.cardGlyph(context),
-                ),
-              ),
+              // The glyph, not a filled disc holding the glyph. Four tinted
+              // circles across the top of the first card on the page were the
+              // loudest thing on it, and they label numbers that already have
+              // words under them.
+              Icon(stat.icon, size: 17, color: VentlyColors.berryMagenta),
               const SizedBox(height: 7),
               Text(
                 stat.value,
@@ -717,62 +726,91 @@ class _PrimaryManage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tribe = ref.watch(studioSelectedTribeProvider);
-    final tribes = ref.watch(tribesIKeepProvider).valueOrNull ?? const <Tribe>[];
+    final tribes =
+        ref.watch(tribesIKeepProvider).valueOrNull ?? const <Tribe>[];
     final named = tribe ?? (tribes.length == 1 ? tribes.single : null);
 
+    // A row on the page's own surface rather than a magenta billboard.
+    //
+    // It was a filled, full-width, 54pt bar in the brand colour — the single
+    // loudest element on a screen where the things that actually need a
+    // keeper (a report, a join request) are quiet numbers above it. Managing
+    // the tribe is the most-used destination here, not the most urgent one,
+    // and those are different jobs: the first wants to be easy to find, the
+    // second wants to be impossible to miss. This is the first, so it reads
+    // like the top of the list of places to go — which is what it is.
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-      child: SizedBox(
-        height: 54,
-        child: FilledButton(
-          key: const ValueKey('plug-studio-primary-manage-tribe'),
-          onPressed: () => _openForTribe(
+      child: Material(
+        key: const ValueKey('plug-studio-primary-manage-tribe'),
+        color: GlassTokens.card(context),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _openForTribe(
             context,
             ref,
             (slug) => '/tribe/$slug/manage/settings',
           ),
-          style: FilledButton.styleFrom(
-            backgroundColor: VentlyColors.berryMagenta,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
+          child: Container(
+            height: 60,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.tune_rounded, size: 21),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Manage Tribe',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    if (named != null)
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: GlassTokens.cardEdge(context)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: VentlyColors.berryMagenta.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: const Icon(
+                    Icons.tune_rounded,
+                    size: 19,
+                    color: VentlyColors.berryMagenta,
+                  ),
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        named.name,
+                        'Manage Tribe',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.78),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: GlassTokens.onCard(context),
                         ),
                       ),
-                  ],
+                      if (named != null)
+                        Text(
+                          named.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: GlassTokens.onCardMuted(context),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              const Icon(Icons.arrow_forward_rounded, size: 20),
-            ],
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 22,
+                  color: GlassTokens.onCardMuted(context),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -888,69 +926,35 @@ class _QuickLinks extends ConsumerWidget {
             ),
           ],
         ),
-        _LinkGroup(
+        // A list, not a third grid of the same tinted squares.
+        //
+        // The page had three of them stacked — Create, Run your tribe, Set up,
+        // eighteen identical tiles — so nothing on it had more weight than
+        // anything else, and "make a poll" looked exactly like "read the audit
+        // log". Making things is a launcher and wants a grid; running the
+        // place is a set of destinations and wants rows, where the name has
+        // room to be a sentence and the chevron says where it goes.
+        //
+        // Set up is gone entirely. Its six tiles — identity, rules, content,
+        // helpers, spaces, audit — are the six rows of the tribe's own
+        // settings screen, which is what Manage Tribe opens directly above
+        // this. The ones a keeper touches weekly are kept here; the ones they
+        // touch when they set the tribe up live where the setup lives.
+        _LinkRows(
           title: 'Run your tribe',
           links: [
-            // No badge on the queue. The Reports KPI above states that number
-            // already, larger and higher up, and repeating it here is the
-            // exact habit this screen was rebuilt to break.
             _Link(
               icon: Icons.gavel_rounded,
-              label: 'Queue',
+              label: 'Moderation queue',
               onTap: () => context.push('/keeper/moderation'),
             ),
             _Link(
-              icon: Icons.insights_rounded,
-              label: 'Insights',
-              onTap: () => context.push('/keeper/insights'),
-            ),
-            _Link(
-              icon: Icons.calendar_month_rounded,
-              label: 'Calendar',
-              badge: scheduled > 0 ? '$scheduled' : null,
-              onTap: () => context.push('/keeper/calendar'),
-            ),
-            _Link(
-              icon: Icons.forum_rounded,
-              label: 'Group chat',
-              onTap: () =>
-                  _openForTribe(context, ref, (slug) => '/tribe/$slug/chat'),
-            ),
-            _Link(
-              icon: Icons.rule_rounded,
-              label: 'Rules',
-              onTap: () => _openForTribe(
-                context,
-                ref,
-                (slug) => '/tribe/$slug/manage/settings/rules',
-              ),
-            ),
-            _Link(
-              icon: Icons.admin_panel_settings_rounded,
-              label: 'Co-mods',
-              onTap: () => context.push('/keeper/comod'),
-            ),
-          ],
-        ),
-        _LinkGroup(
-          title: 'Set up',
-          links: [
-            _Link(
               icon: Icons.people_alt_rounded,
-              label: 'Members',
+              label: 'Members and requests',
               onTap: () => _openForTribe(
                 context,
                 ref,
                 (slug) => '/tribe/$slug/manage/settings/members',
-              ),
-            ),
-            _Link(
-              icon: Icons.badge_rounded,
-              label: 'Identity',
-              onTap: () => _openForTribe(
-                context,
-                ref,
-                (slug) => '/tribe/$slug/manage/settings/identity',
               ),
             ),
             _Link(
@@ -963,31 +967,26 @@ class _QuickLinks extends ConsumerWidget {
               ),
             ),
             _Link(
-              icon: Icons.shield_moon_rounded,
-              label: 'Content',
-              onTap: () => _openForTribe(
-                context,
-                ref,
-                (slug) => '/tribe/$slug/manage/settings/content',
-              ),
+              icon: Icons.forum_rounded,
+              label: 'Group chat',
+              onTap: () =>
+                  _openForTribe(context, ref, (slug) => '/tribe/$slug/chat'),
             ),
             _Link(
-              icon: Icons.volunteer_activism_rounded,
-              label: 'Helpers',
-              onTap: () => _openForTribe(
-                context,
-                ref,
-                (slug) => '/tribe/$slug/manage/settings/helpers',
-              ),
+              icon: Icons.calendar_month_rounded,
+              label: 'Scheduled',
+              badge: scheduled > 0 ? '$scheduled' : null,
+              onTap: () => context.push('/keeper/calendar'),
             ),
             _Link(
-              icon: Icons.receipt_long_rounded,
-              label: 'Audit log',
-              onTap: () => _openForTribe(
-                context,
-                ref,
-                (slug) => '/tribe/$slug/manage/settings/audit',
-              ),
+              icon: Icons.insights_rounded,
+              label: 'Insights',
+              onTap: () => context.push('/keeper/insights'),
+            ),
+            _Link(
+              icon: Icons.admin_panel_settings_rounded,
+              label: 'Co-moderators',
+              onTap: () => context.push('/keeper/comod'),
             ),
           ],
         ),
@@ -1008,6 +1007,142 @@ class _Link {
   final String label;
   final VoidCallback onTap;
   final String? badge;
+}
+
+/// The destinations a keeper works through, as rows.
+///
+/// Same data as a [_LinkGroup], a different job: a grid is for choosing what
+/// to make, a list is for going somewhere. Rows also give a label room to say
+/// what it opens — "Members and requests" rather than "Members" — which is
+/// most of what made the old tiles ambiguous.
+class _LinkRows extends StatelessWidget {
+  const _LinkRows({required this.title, required this.links});
+
+  final String title;
+  final List<_Link> links;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 9),
+            child: Text(
+              title.toUpperCase(),
+              style: const TextStyle(
+                color: VentlyColors.berryMagenta,
+                fontWeight: FontWeight.w900,
+                fontSize: 11,
+                letterSpacing: 1.3,
+              ),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: GlassTokens.card(context),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: GlassTokens.cardEdge(context)),
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < links.length; i++) ...[
+                  if (i > 0)
+                    Divider(
+                      height: 1,
+                      thickness: 1,
+                      indent: 48,
+                      color: GlassTokens.cardEdge(context),
+                    ),
+                  _LinkRow(
+                    link: links[i],
+                    first: i == 0,
+                    last: i == links.length - 1,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LinkRow extends StatelessWidget {
+  const _LinkRow({required this.link, required this.first, required this.last});
+
+  final _Link link;
+  final bool first;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.vertical(
+      top: Radius.circular(first ? 19 : 0),
+      bottom: Radius.circular(last ? 19 : 0),
+    );
+    return Semantics(
+      button: true,
+      label: link.label,
+      child: InkWell(
+        borderRadius: radius,
+        onTap: () {
+          VentlyHaptics.light();
+          link.onTap();
+        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+          child: Row(
+            children: [
+              Icon(link.icon, size: 20, color: GlassTokens.cardGlyph(context)),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  link.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: GlassTokens.onCard(context),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14.5,
+                  ),
+                ),
+              ),
+              if (link.badge != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: VentlyColors.berryMagenta.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    link.badge!,
+                    style: const TextStyle(
+                      color: VentlyColors.berryMagenta,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: GlassTokens.onCardMuted(context),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _LinkGroup extends StatelessWidget {
@@ -1063,11 +1198,10 @@ class _LinkGroup extends StatelessWidget {
               // budget Android, every one of the eighteen tiles overflowed by
               // 1.5 pixels. mainAxisExtent is the same height everywhere and
               // cannot drift.
-              gridDelegate:
-                  const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    mainAxisExtent: 74,
-                  ),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisExtent: 74,
+              ),
               itemCount: links.length,
               itemBuilder: (context, i) => _LinkTile(link: links[i]),
             ),
@@ -1158,6 +1292,7 @@ class _LinkTile extends StatelessWidget {
     );
   }
 }
+
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({
     required this.title,

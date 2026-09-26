@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -38,14 +40,6 @@ class ProfileOverview extends ConsumerWidget {
 
   int _level() => (me.karmaPoints ~/ 250 + 1).clamp(1, 99);
 
-  // Derived from real signals — not a flat fake. Verified + karma + standing.
-  int _trust() {
-    var s = 72;
-    if (me.isVerified) s += 12;
-    s += (me.karmaPoints ~/ 20).clamp(0, 16);
-    return s.clamp(0, 100);
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final friends = ref.watch(myFriendsProvider).valueOrNull ?? const [];
@@ -63,61 +57,88 @@ class ProfileOverview extends ConsumerWidget {
         vents.where((p) => p.likesCount > 0 || p.commentsCount > 0).length +
         whispers.where((w) => w.likesCount > 0 || w.commentsCount > 0).length;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
-      child: Column(
-        children: [
-          _HeroCard(
-            me: me,
-            level: _level(),
-            trust: _trust(),
-            posts: postsTotal,
-            connections: friends.length,
-            hugs: hugsReceived,
-          ),
-          const SizedBox(height: 14),
-          const _QuickActionsBar(),
-          const SizedBox(height: 14),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: _FriendsCard(friends: friends)),
-                const SizedBox(width: 12),
-                const Expanded(child: _PersonasCard()),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _HighlightsCard(
-                    hearts: heartsReceived,
-                    replies: repliesShared,
-                    comforted: peopleComforted,
-                  ),
+    // The header runs to the edges of the screen; everything under it keeps
+    // the 14pt gutter the cards were built for.
+    return Column(
+      children: [
+        _HeroCard(
+          me: me,
+          level: _level(),
+          posts: postsTotal,
+          connections: friends.length,
+          hugs: hugsReceived,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 18, 14, 8),
+          child: Column(
+            children: [
+              const _QuickActionsBar(),
+              const SizedBox(height: 14),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: _FriendsCard(friends: friends)),
+                    const SizedBox(width: 12),
+                    const Expanded(child: _PersonasCard()),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(child: _BadgesCard(userId: me.userId)),
-              ],
-            ),
+              ),
+              const SizedBox(height: 14),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _HighlightsCard(
+                        hearts: heartsReceived,
+                        replies: repliesShared,
+                        comforted: peopleComforted,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: _BadgesCard(userId: me.userId)),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
 // ─────────────────────────────── hero ───────────────────────────────
 
-class _HeroCard extends StatelessWidget {
+/// The top of your own profile.
+///
+/// It was the same page as somebody else's, arranged differently — and worse:
+/// a glowing ring around the avatar, three badge pills stacked beside the
+/// name, a bio with two unrelated glyphs and an Edit button wrapped into its
+/// line, then four large metrics on circular tiles. Five competing weights
+/// before anything you could act on.
+///
+/// This is the arrangement the public profile now uses, for the plain reason
+/// that it is the same information about the same person: the background at
+/// full width, the avatar on the seam at the left, your three numbers in its
+/// row, then name, handle, bio on one margin, then what you can do.
+///
+/// What went, and why:
+///
+/// * the glow. A magenta ring with a coloured shadow is a notification, not a
+///   frame; your own face does not need announcing;
+/// * "Verified Anonymous" and "Level N Listener" as pills. The first restates
+///   the handle above it, the second is now one quiet chip;
+/// * the trust score. It was `72 + karma/20`, presented as a percentage with
+///   the caption "Building" — a number the app invents about you, shown at the
+///   same size as the posts you actually wrote. If it comes back it should
+///   come back as something with a definition;
+/// * "Apply for verified" as a badge. It is an action, so it became a button.
+class _HeroCard extends ConsumerWidget {
   const _HeroCard({
     required this.me,
     required this.level,
-    required this.trust,
     required this.posts,
     required this.connections,
     required this.hugs,
@@ -125,211 +146,227 @@ class _HeroCard extends StatelessWidget {
 
   final AppUser me;
   final int level;
-  final int trust;
   final int posts;
   final int connections;
   final int hugs;
 
+  static const double _avatar = 88;
+  static const double _overlap = 40;
+
   @override
-  Widget build(BuildContext context) {
-    final banner = me.profileBannerUrl?.trim() ?? '';
-    return GlassCard(
-      // Zero here so the banner can run to the card's edges; the old all-16
-      // padding moved onto the content below it. GlassCard already clips to its
-      // radius, so a full-bleed image keeps the rounded corners.
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Your own background, on your own profile.
-          //
-          // The public profile renders this in _HeroBanner, but self-viewing
-          // redirects to /profile — so without this the person who chose the
-          // image was the one person in the app who could never see it, which
-          // reads as an upload that silently failed.
-          if (banner.isNotEmpty)
-            // Presentational only. Editing lives in the avatar's sheet, which
-            // already carries the background options — a second entry point
-            // here would be a third way to reach one action.
-            _OwnProfileBanner(url: banner, offset: me.profileBannerOffset),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Stack(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _GlowAvatar(me: me),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      me.displayName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 21,
-                                        color: context.ink,
-                                      ),
-                                    ),
-                                  ),
-                                  if (me.isVerified) ...[
-                                    const SizedBox(width: 6),
-                                    const Icon(
-                                      Icons.verified_rounded,
-                                      color: VentlyColors.berryMagenta,
-                                      size: 20,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              Text(
-                                '@${me.anonymousPseudonym}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: context.ink.withOpacity(0.58),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 6,
-                                children: [
-                                  const _Pill(
-                                    icon: Icons.shield_outlined,
-                                    label: 'Verified Anonymous',
-                                  ),
-                                  _Pill(
-                                    icon: Icons.bar_chart_rounded,
-                                    label: 'Level $level Listener',
-                                  ),
-                                  if (!me.isVerified) _VerificationPill(),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bio = (me.bio ?? '').trim();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            _OwnProfileCover(me: me),
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 8,
+              right: 16,
+              child: _HeroSettingsButton(),
+            ),
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: -_overlap,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Flexible(
-                                child: TaggedText(
-                                  (me.bio?.trim().isNotEmpty ?? false)
-                                      ? me.bio!.trim()
-                                      : 'Here to listen, never to judge.',
-                                  style: TextStyle(
-                                    fontSize: 13.5,
-                                    height: 1.4,
-                                    fontWeight: FontWeight.w600,
-                                    color: context.ink.withOpacity(0.78),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Icon(
-                                Icons.monitor_heart_outlined,
-                                size: 16,
-                                color: VentlyColors.berryMagenta.withOpacity(
-                                  0.7,
-                                ),
-                              ),
-                            ],
+                    child: _GlowAvatar(me: me, size: _avatar),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        children: [
+                          _OwnStat(
+                            value: posts,
+                            label: 'Posts',
+                            onTap: () => context.push('/profile/posts'),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        _EditButton(),
-                      ],
+                          _OwnStat(
+                            value: connections,
+                            label: 'Connections',
+                            onTap: () => context.push('/friends'),
+                          ),
+                          _OwnStat(value: hugs, label: 'Hugs'),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    _StatsPanel(
-                      posts: posts,
-                      connections: connections,
-                      hugs: hugs,
-                      trust: trust,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: _overlap + 14),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      me.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.3,
+                        color: context.ink,
+                      ),
+                    ),
+                  ),
+                  if (me.isVerified) ...[
+                    const SizedBox(width: 6),
+                    const Icon(
+                      Icons.verified_rounded,
+                      color: VentlyColors.berryMagenta,
+                      size: 18,
                     ),
                   ],
+                ],
+              ),
+              const SizedBox(height: 2),
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    '@${me.anonymousPseudonym}',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: context.ink.withOpacity(0.58),
+                    ),
+                  ),
+                  _LevelChip(level: level),
+                ],
+              ),
+              if (bio.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                TaggedText(
+                  bio,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.42,
+                    color: context.ink.withOpacity(0.86),
+                  ),
                 ),
-                // Settings gear floats in the card's top-right corner so it
-                // never squeezes the username row.
-                Positioned(top: 0, right: 0, child: _HeroSettingsButton()),
               ],
-            ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: _EditButton()),
+                  if (!me.isVerified) ...[
+                    const SizedBox(width: 10),
+                    Expanded(child: _VerificationPill()),
+                  ],
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-/// The chosen background, shown on your own profile card.
-class _OwnProfileBanner extends ConsumerWidget {
-  const _OwnProfileBanner({required this.url, required this.offset});
-  final String url;
-
-  /// The anchor its owner chose, 0 = top … 1 = bottom.
-  final double offset;
+/// Your background, full width, fading into the page.
+///
+/// Same treatment as a visitor gets, which is the point: the one person who
+/// could not see their own chosen photo at a reasonable size was its owner.
+class _OwnProfileCover extends ConsumerWidget {
+  const _OwnProfileCover({required this.me});
+  final AppUser me;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final strip = SizedBox(
-      height: 104,
+    final banner = (me.profileBannerUrl ?? '').trim();
+    final photo = (me.profilePhotoUrl ?? '').trim();
+    final page = Theme.of(context).scaffoldBackgroundColor;
+
+    final Widget image;
+    if (banner.isNotEmpty) {
+      image = ProfileBannerImage(
+        url: banner,
+        alignment: Alignment(0, me.profileBannerOffset * 2 - 1),
+        fallback: const ColoredBox(color: VentlyColors.roseTint),
+        // Your own row is the only one you may repair. If the object is
+        // provably gone the column gets cleared, so the page stops claiming a
+        // background exists and Edit Profile offers "Add" rather than a
+        // "Replace / Move / Remove" that acts on nothing.
+        onGivenUp: () async {
+          final healed = await ref
+              .read(repositoryProvider)
+              .healMyProfileBannerIfMissing();
+          if (healed) await ref.read(sessionProvider.notifier).restore();
+        },
+      );
+    } else if (photo.isNotEmpty) {
+      image = ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+        child: ProfileBannerImage(
+          url: photo,
+          alignment: Alignment.center,
+          fallback: const ColoredBox(color: VentlyColors.roseTint),
+        ),
+      );
+    } else {
+      image = const DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              VentlyColors.berryMagenta,
+              Color(0xFFE0729A),
+              VentlyColors.softMauve,
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Shorter when there is nothing to look at. 190 is the right height for a
+    // photograph somebody chose; the same 190 of brand gradient is just a
+    // large pink area above the name.
+    final cover = SizedBox(
+      height: banner.isNotEmpty || photo.isNotEmpty ? 190 : 140,
       width: double.infinity,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          ProfileBannerImage(
-            url: url,
-            // Without this the strip is centred whatever the owner chose, and
-            // this card is 104pt against the public profile's 168 — the frame
-            // where a fixed crop diverges most from what they approved.
-            alignment: Alignment(0, offset * 2 - 1),
-            fallback: const ColoredBox(color: VentlyColors.roseTint),
-            // Your own row is the only one you may repair. If the object is
-            // provably gone the column gets cleared, so the card stops
-            // claiming a background exists and Edit Profile offers "Add"
-            // instead of a "Replace / Move / Remove" that acts on nothing.
-            onGivenUp: () async {
-              final healed = await ref
-                  .read(repositoryProvider)
-                  .healMyProfileBannerIfMissing();
-              // The backend refreshing its own copy of the user is not enough:
-              // this card reads the session, so without this the column is
-              // clear and the strip is still sitting there claiming otherwise
-              // until the next launch.
-              if (healed) await ref.read(sessionProvider.notifier).restore();
-            },
-          ),
-          // Fades into the card so the avatar below sits on a seamless
-          // surface rather than against a hard photo edge.
+          image,
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(0.10),
+                  Colors.black.withOpacity(0.22),
                   Colors.transparent,
-                  Theme.of(context).colorScheme.surface.withOpacity(0.55),
+                  page.withOpacity(0.55),
+                  page,
                 ],
-                stops: const [0.0, 0.55, 1.0],
+                stops: const [0.0, 0.35, 0.82, 1.0],
               ),
             ),
           ),
@@ -337,16 +374,7 @@ class _OwnProfileBanner extends ConsumerWidget {
       ),
     );
 
-    // Tap your own background to see it full size.
-    //
-    // This card crops the banner to a 104pt strip — less than two thirds of
-    // the height the public profile uses — so the owner never actually sees
-    // the photo they chose at full size anywhere in the app. Same viewer the
-    // public profile and the avatar already use.
-    //
-    // Only when a banner exists: the rose-tint fallback is not a photograph.
-    if (url.trim().isEmpty) return strip;
-
+    if (banner.isEmpty) return cover;
     return Semantics(
       button: true,
       label: 'View your profile background',
@@ -355,64 +383,127 @@ class _OwnProfileBanner extends ConsumerWidget {
         onTap: () => showMediaPreview(
           context,
           items: [
-            MediaPreviewItem(
-              url: url.trim(),
-              label: 'Your profile background',
-            ),
+            MediaPreviewItem(url: banner, label: 'Your profile background'),
           ],
           title: 'Profile background',
         ),
-        child: strip,
+        child: cover,
       ),
     );
   }
 }
 
+/// One of your three numbers.
+class _OwnStat extends StatelessWidget {
+  const _OwnStat({required this.value, required this.label, this.onTap});
+
+  final int value;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                PostCard.compactNumber(value),
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.3,
+                  color: context.ink,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: context.ink.withOpacity(0.55),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Your level, said once and quietly.
+class _LevelChip extends StatelessWidget {
+  const _LevelChip({required this.level});
+  final int level;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: VentlyColors.berryMagenta.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Text(
+        'Level $level',
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: VentlyColors.berryMagenta,
+        ),
+      ),
+    );
+  }
+}
+
+/// Your avatar, and the way to change it.
+///
+/// The name is a leftover: it used to wear a magenta gradient ring with a 22px
+/// coloured shadow, which on a header this size read as a notification rather
+/// than a frame. The page colour behind it does the separating now.
 class _GlowAvatar extends ConsumerWidget {
-  const _GlowAvatar({required this.me});
+  const _GlowAvatar({required this.me, this.size = 96});
   final AppUser me;
+  final double size;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: () => _showPhotoSheet(context, ref),
       child: SizedBox(
-        width: 96,
-        height: 96,
+        width: size,
+        height: size,
         child: Stack(
           children: [
-            // Pink glow ring.
             Container(
-              width: 96,
-              height: 96,
+              width: size,
+              height: size,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFF9FC4), Color(0xFFE05C93)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                color: scheme.surface,
+                border: Border.all(
+                  color: scheme.primary.withOpacity(0.45),
+                  width: 1.5,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: VentlyColors.berryMagenta.withOpacity(0.35),
-                    blurRadius: 22,
-                    spreadRadius: 1,
-                  ),
-                ],
               ),
-              padding: const EdgeInsets.all(4),
+              padding: const EdgeInsets.all(2),
               child: ClipOval(
-                child: ColoredBox(
-                  color: Colors.white,
-                  child: Padding(
-                    padding: const EdgeInsets.all(3),
-                    child: ProfileAvatar(
-                      avatarSeed: me.avatarSeed,
-                      label: me.anonymousPseudonym,
-                      profilePhotoUrl: me.profilePhotoUrl,
-                      size: 82,
-                    ),
-                  ),
+                child: ProfileAvatar(
+                  avatarSeed: me.avatarSeed,
+                  label: me.anonymousPseudonym,
+                  profilePhotoUrl: me.profilePhotoUrl,
+                  size: size - 4,
                 ),
               ),
             ),
@@ -654,41 +745,6 @@ class _GlowAvatar extends ConsumerWidget {
   }
 }
 
-class _Pill extends StatelessWidget {
-  const _Pill({required this.icon, required this.label});
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: context.glass(0.6),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: VentlyColors.softMauve.withOpacity(0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: VentlyColors.berryMagenta),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w800,
-              color: context.ink,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// "Apply for verified" pill (shown only for un-verified users). Reflects the
-/// caller's verification standing and opens an application sheet (migration 0109).
 class _VerificationPill extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -774,7 +830,7 @@ class _EditButton extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                'Edit Profile',
+                'Edit profile',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 12.5,
@@ -810,131 +866,6 @@ class _HeroSettingsButton extends StatelessWidget {
   }
 }
 
-class _StatsPanel extends StatelessWidget {
-  const _StatsPanel({
-    required this.posts,
-    required this.connections,
-    required this.hugs,
-    required this.trust,
-  });
-
-  final int posts;
-  final int connections;
-  final int hugs;
-  final int trust;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-      decoration: BoxDecoration(
-        color: context.glass(0.45),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: context.glassBorder),
-      ),
-      child: Row(
-        children: [
-          _Stat(
-            icon: Icons.article_rounded,
-            value: PostCard.compactNumber(posts),
-            label: 'Posts',
-            sub: 'Vents + Whispers',
-            filled: true,
-          ),
-          _Stat(
-            icon: Icons.people_alt_rounded,
-            value: PostCard.compactNumber(connections),
-            label: 'Connections',
-            sub: 'Your circle',
-          ),
-          _Stat(
-            icon: Icons.volunteer_activism_rounded,
-            value: PostCard.compactNumber(hugs),
-            label: 'Hugs',
-            sub: 'Received',
-          ),
-          _Stat(
-            icon: Icons.verified_user_rounded,
-            value: '$trust%',
-            label: 'Trust Score',
-            sub: trust >= 80 ? 'Safe & positive' : 'Building',
-            filled: true,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat({
-    required this.icon,
-    required this.value,
-    required this.label,
-    required this.sub,
-    this.filled = false,
-  });
-
-  final IconData icon;
-  final String value;
-  final String label;
-  final String sub;
-  final bool filled;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: filled ? VentlyGradients.brand : null,
-              color: filled ? null : context.glass(0.7),
-            ),
-            child: Icon(
-              icon,
-              size: 20,
-              color: filled ? Colors.white : VentlyColors.berryMagenta,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 18,
-              color: context.ink,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              color: context.ink.withOpacity(0.75),
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            sub,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w600,
-              color: context.ink.withOpacity(0.5),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────── quick actions ───────────────────────────
-
 class _QuickActionsBar extends StatelessWidget {
   const _QuickActionsBar();
 
@@ -955,7 +886,13 @@ class _QuickActionsBar extends StatelessWidget {
             label: 'Ask',
             onTap: () => context.push('/questions'),
           ),
-          const _CenterAction(),
+          // The glowing mark in the middle is gone.
+          //
+          // It opened /compose — the same screen as Drop, two controls to its
+          // left in the same row. So the row had four labelled actions and one
+          // unlabelled duplicate of the first, drawn as two vertical bars
+          // inside a glowing white disc, which on a row of buttons reads as a
+          // pause control. Four things that each do one thing.
           _Action(
             icon: Icons.menu_book_rounded,
             label: 'Story',
@@ -1015,55 +952,6 @@ class _Action extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The elevated, glowing centre button — the Venttly mark (two rounded bars).
-class _CenterAction extends StatelessWidget {
-  const _CenterAction();
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => context.go('/compose'),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 62,
-              height: 62,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.85),
-                boxShadow: [
-                  BoxShadow(
-                    color: VentlyColors.berryMagenta.withOpacity(0.35),
-                    blurRadius: 20,
-                    spreadRadius: 1,
-                  ),
-                ],
-                border: Border.all(color: Colors.white, width: 3),
-              ),
-              alignment: Alignment.center,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [_bar(), const SizedBox(width: 5), _bar()],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _bar() => Container(
-    width: 9,
-    height: 26,
-    decoration: BoxDecoration(
-      gradient: VentlyGradients.brand,
-      borderRadius: BorderRadius.circular(5),
-    ),
-  );
 }
 
 // ─────────────────────────── friends card ───────────────────────────
@@ -1166,7 +1054,7 @@ class _FriendsCard extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        'Find Friends',
+                        'Find friends',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1352,7 +1240,7 @@ class _PersonaCreate extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           Text(
-            'Create New',
+            'Create new',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(

@@ -281,20 +281,23 @@ void main() {
     for (final label in const [
       'Vent',
       'Announce',
-      'Queue',
+      'Moderation queue',
       'Insights',
-      'Co-mods',
+      'Co-moderators',
     ]) {
       expect(find.text(label), findsOne, reason: '$label went missing');
     }
   });
 
-  testWidgets('the panel stays at three groups', (tester) async {
-    // Thirty tiles in five labelled grids read as a directory; twelve in two
-    // was short of the tribe's own settings. Three groups of six covers
-    // publishing, running the place and setting it up — the three jobs — and
-    // the remaining twelve destinations live in the drawer. This fails if a
-    // fourth group grows back here rather than going there.
+  testWidgets('the panel is one grid and one list', (tester) async {
+    // It was three grids of identically tinted squares — Create, Run your
+    // tribe, Set up, eighteen tiles — so nothing on the page had more weight
+    // than anything else and "make a poll" looked exactly like "read the audit
+    // log". Making things is a launcher and keeps its grid; running the place
+    // is a set of destinations and became rows.
+    //
+    // Set up went entirely: its six tiles are the six rows of the tribe's own
+    // settings screen, which Manage Tribe opens directly above them.
     await _pumpStudio(
       tester,
       _FakeRepo(
@@ -303,9 +306,19 @@ void main() {
       ),
     );
 
-    for (final heading in const ['CREATE', 'RUN YOUR TRIBE', 'SET UP']) {
+    for (final heading in const ['CREATE', 'RUN YOUR TRIBE']) {
       expect(find.text(heading), findsOne);
     }
+    expect(
+      find.text('SET UP'),
+      findsNothing,
+      reason: 'setup lives behind Manage Tribe, which is right above it',
+    );
+    expect(
+      find.byKey(const ValueKey('plug-studio-primary-manage-tribe')),
+      findsOne,
+      reason: 'and that route has to still be on the page',
+    );
     for (final gone in const ['SAFETY', 'COMMUNITY', 'GROW']) {
       expect(
         find.text(gone),

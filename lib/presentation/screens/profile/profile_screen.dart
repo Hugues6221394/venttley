@@ -185,123 +185,126 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         children: [
           VentlyPremiumBackground(
             child: NestedScrollView(
-          headerSliverBuilder: (ctx, _) => [
-            // Just the status bar. The app bar is zero-height in both cases
-            // now, so there is nothing else to clear, and the hero starts in
-            // the same place however you arrived at it.
-            SliverToBoxAdapter(
-              child: SizedBox(height: MediaQuery.of(ctx).padding.top + 8),
-            ),
-            SliverToBoxAdapter(
-              key: _badgesKey,
-              child: ProfileOverview(
-                me: me,
-                vents: myVents,
-                whispers: myWhispers,
-                tribesCount: joinedTribes.length,
-              ),
-            ),
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _TabsHeader(
-                tabController: tabController,
-                tabs: tabLabels,
-                bg: isDark
-                    ? scheme.surface
-                    : Theme.of(context).scaffoldBackgroundColor,
-              ),
-            ),
-          ],
-          body: TabBarView(
-            controller: tabController,
-            children: tabs.map((t) {
-              switch (t.label) {
-                case 'Whispers':
-                  return myWhispersAsync.when(
-                    // Never swap content we still have for a skeleton; first load only.
-                    skipLoadingOnReload: true,
-                    data: (whispers) => _MyWhispersTab(whispers: whispers),
-                    loading: () => const _ProfileLoading(),
-                    error: (_, __) => _ProfileLoadError(
-                      label: "Couldn't load your whispers.",
-                      onRetry: () => ref.invalidate(myWhispersProvider),
-                    ),
-                  );
-                case 'Liked':
-                  if ((mySavedAsync.isLoading &&
-                          mySavedAsync.valueOrNull == null) ||
-                      (mySavedWhispersAsync.isLoading &&
-                          mySavedWhispersAsync.valueOrNull == null)) {
-                    return const _ProfileLoading();
+              headerSliverBuilder: (ctx, _) => [
+                // Nothing above the header any more.
+                //
+                // This reserved the status bar's height, which left a white
+                // band across the top and made the cover read as a floating
+                // strip rather than the top of the page. The cover is
+                // full-bleed now and paints under the status bar the way the
+                // public profile does; the settings button inside it carries
+                // its own inset so it never lands under the clock.
+                SliverToBoxAdapter(
+                  key: _badgesKey,
+                  child: ProfileOverview(
+                    me: me,
+                    vents: myVents,
+                    whispers: myWhispers,
+                    tribesCount: joinedTribes.length,
+                  ),
+                ),
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _TabsHeader(
+                    tabController: tabController,
+                    tabs: tabLabels,
+                    bg: isDark
+                        ? scheme.surface
+                        : Theme.of(context).scaffoldBackgroundColor,
+                  ),
+                ),
+              ],
+              body: TabBarView(
+                controller: tabController,
+                children: tabs.map((t) {
+                  switch (t.label) {
+                    case 'Whispers':
+                      return myWhispersAsync.when(
+                        // Never swap content we still have for a skeleton; first load only.
+                        skipLoadingOnReload: true,
+                        data: (whispers) => _MyWhispersTab(whispers: whispers),
+                        loading: () => const _ProfileLoading(),
+                        error: (_, __) => _ProfileLoadError(
+                          label: "Couldn't load your whispers.",
+                          onRetry: () => ref.invalidate(myWhispersProvider),
+                        ),
+                      );
+                    case 'Liked':
+                      if ((mySavedAsync.isLoading &&
+                              mySavedAsync.valueOrNull == null) ||
+                          (mySavedWhispersAsync.isLoading &&
+                              mySavedWhispersAsync.valueOrNull == null)) {
+                        return const _ProfileLoading();
+                      }
+                      if ((mySavedAsync.hasError &&
+                              mySavedAsync.valueOrNull == null) ||
+                          (mySavedWhispersAsync.hasError &&
+                              mySavedWhispersAsync.valueOrNull == null)) {
+                        return _ProfileLoadError(
+                          label: "Couldn't load your saved posts.",
+                          onRetry: () {
+                            ref.invalidate(mySavedProvider);
+                            ref.invalidate(mySavedWhispersProvider);
+                          },
+                        );
+                      }
+                      return _SavedTab(
+                        posts: mySavedAsync.valueOrNull ?? const <Post>[],
+                        whispers:
+                            mySavedWhispersAsync.valueOrNull ??
+                            const <Whisper>[],
+                      );
+                    case 'About':
+                      return _AboutTab(me: me);
+                    case 'Stories':
+                      return myStories.when(
+                        data: (posts) => _PostsTab(
+                          posts: posts,
+                          emptyText:
+                              'No active stories. Stories disappear after 24h.',
+                        ),
+                        loading: () => const Center(
+                          child: CircularProgressIndicator.adaptive(),
+                        ),
+                        error: (_, __) => _ProfileLoadError(
+                          label: "Couldn't load your stories.",
+                          onRetry: () => ref.invalidate(myStoriesProvider),
+                        ),
+                      );
+                    case 'Media':
+                      return myVentsAsync.when(
+                        // Never swap content we still have for a skeleton; first load only.
+                        skipLoadingOnReload: true,
+                        data: (posts) => _PostsTab(
+                          posts: posts.where((post) => post.hasImage).toList(),
+                          emptyText: 'Photos you post will show here.',
+                        ),
+                        loading: () => const _ProfileLoading(),
+                        error: (_, __) => _ProfileLoadError(
+                          label: "Couldn't load your media.",
+                          onRetry: () => ref.invalidate(myVentsProvider),
+                        ),
+                      );
+                    case 'Vents':
+                      return myVentsAsync.when(
+                        // Never swap content we still have for a skeleton; first load only.
+                        skipLoadingOnReload: true,
+                        data: (posts) => _PostsTab(
+                          posts: posts
+                              .where((post) => !post.isWhisper && !post.isStory)
+                              .toList(),
+                          emptyText: "You haven't vented yet.",
+                        ),
+                        loading: () => const _ProfileLoading(),
+                        error: (_, __) => _ProfileLoadError(
+                          label: "Couldn't load your vents.",
+                          onRetry: () => ref.invalidate(myVentsProvider),
+                        ),
+                      );
+                    default:
+                      return const SizedBox.shrink();
                   }
-                  if ((mySavedAsync.hasError &&
-                          mySavedAsync.valueOrNull == null) ||
-                      (mySavedWhispersAsync.hasError &&
-                          mySavedWhispersAsync.valueOrNull == null)) {
-                    return _ProfileLoadError(
-                      label: "Couldn't load your saved posts.",
-                      onRetry: () {
-                        ref.invalidate(mySavedProvider);
-                        ref.invalidate(mySavedWhispersProvider);
-                      },
-                    );
-                  }
-                  return _SavedTab(
-                    posts: mySavedAsync.valueOrNull ?? const <Post>[],
-                    whispers:
-                        mySavedWhispersAsync.valueOrNull ?? const <Whisper>[],
-                  );
-                case 'About':
-                  return _AboutTab(me: me);
-                case 'Stories':
-                  return myStories.when(
-                    data: (posts) => _PostsTab(
-                      posts: posts,
-                      emptyText:
-                          'No active stories. Stories disappear after 24h.',
-                    ),
-                    loading: () => const Center(
-                      child: CircularProgressIndicator.adaptive(),
-                    ),
-                    error: (_, __) => _ProfileLoadError(
-                      label: "Couldn't load your stories.",
-                      onRetry: () => ref.invalidate(myStoriesProvider),
-                    ),
-                  );
-                case 'Media':
-                  return myVentsAsync.when(
-                    // Never swap content we still have for a skeleton; first load only.
-                    skipLoadingOnReload: true,
-                    data: (posts) => _PostsTab(
-                      posts: posts.where((post) => post.hasImage).toList(),
-                      emptyText: 'Photos you post will show here.',
-                    ),
-                    loading: () => const _ProfileLoading(),
-                    error: (_, __) => _ProfileLoadError(
-                      label: "Couldn't load your media.",
-                      onRetry: () => ref.invalidate(myVentsProvider),
-                    ),
-                  );
-                case 'Vents':
-                  return myVentsAsync.when(
-                    // Never swap content we still have for a skeleton; first load only.
-                    skipLoadingOnReload: true,
-                    data: (posts) => _PostsTab(
-                      posts: posts
-                          .where((post) => !post.isWhisper && !post.isStory)
-                          .toList(),
-                      emptyText: "You haven't vented yet.",
-                    ),
-                    loading: () => const _ProfileLoading(),
-                    error: (_, __) => _ProfileLoadError(
-                      label: "Couldn't load your vents.",
-                      onRetry: () => ref.invalidate(myVentsProvider),
-                    ),
-                  );
-                default:
-                  return const SizedBox.shrink();
-              }
-            }).toList(),
+                }).toList(),
               ),
             ),
           ),
