@@ -21,6 +21,7 @@ class FriendActionButton extends ConsumerWidget {
     required this.otherUserId,
     this.otherPseudonym,
     this.dense = false,
+    this.expanded = false,
   });
 
   final String otherUserId;
@@ -28,6 +29,14 @@ class FriendActionButton extends ConsumerWidget {
 
   /// Drop the chip into a tighter visual footprint (post-detail header).
   final bool dense;
+
+  /// Fill the width it is given, at button height rather than chip height.
+  ///
+  /// On a profile header this is one of two equal actions rather than a chip
+  /// tucked beside a name, and a pill that hugs its label next to a
+  /// full-width Message button is the kind of mismatch that makes a page look
+  /// assembled rather than designed.
+  final bool expanded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,6 +47,7 @@ class FriendActionButton extends ConsumerWidget {
         otherUserId: otherUserId,
         otherPseudonym: otherPseudonym,
         dense: dense,
+        expanded: expanded,
       ),
       loading: () => const _Skeleton(),
       error: (_, __) => const SizedBox.shrink(),
@@ -66,12 +76,14 @@ class _ChipForStatus extends ConsumerWidget {
     required this.otherUserId,
     required this.otherPseudonym,
     required this.dense,
+    this.expanded = false,
   });
 
   final FriendStatus status;
   final String otherUserId;
   final String? otherPseudonym;
   final bool dense;
+  final bool expanded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -111,8 +123,9 @@ class _ChipForStatus extends ConsumerWidget {
       case FriendStatus.none:
         return _Pill(
           dense: dense,
+          expanded: expanded,
           icon: Icons.person_add_alt_1,
-          label: 'Add Friend',
+          label: 'Add friend',
           filled: true,
           onTap: () => wrap(
             () => repo.sendFriendRequest(otherUserId).then((_) {}),
@@ -123,6 +136,7 @@ class _ChipForStatus extends ConsumerWidget {
       case FriendStatus.pendingOutgoing:
         return _Pill(
           dense: dense,
+          expanded: expanded,
           icon: Icons.schedule,
           label: 'Requested',
           filled: false,
@@ -142,6 +156,7 @@ class _ChipForStatus extends ConsumerWidget {
           children: [
             _Pill(
               dense: dense,
+              expanded: expanded,
               icon: Icons.check,
               label: 'Accept',
               filled: true,
@@ -156,6 +171,7 @@ class _ChipForStatus extends ConsumerWidget {
             ),
             _Pill(
               dense: dense,
+              expanded: expanded,
               icon: Icons.close,
               label: 'Decline',
               filled: false,
@@ -174,6 +190,7 @@ class _ChipForStatus extends ConsumerWidget {
       case FriendStatus.friends:
         return _Pill(
           dense: dense,
+          expanded: expanded,
           icon: Icons.favorite,
           label: 'Friends',
           filled: false,
@@ -185,6 +202,7 @@ class _ChipForStatus extends ConsumerWidget {
       case FriendStatus.blockedByMe:
         return _Pill(
           dense: dense,
+          expanded: expanded,
           icon: Icons.block,
           label: 'Blocked',
           filled: false,
@@ -318,6 +336,7 @@ class _Pill extends StatelessWidget {
     required this.filled,
     required this.onTap,
     this.dense = false,
+    this.expanded = false,
     this.color,
   });
 
@@ -325,6 +344,7 @@ class _Pill extends StatelessWidget {
   final IconData icon;
   final bool filled;
   final bool dense;
+  final bool expanded;
   final Color? color;
   final VoidCallback onTap;
 
@@ -336,20 +356,28 @@ class _Pill extends StatelessWidget {
     final bg = filled ? accent : Colors.transparent;
     final padH = dense ? 10.0 : 14.0;
     final padV = dense ? 6.0 : 8.0;
+    // A squarer corner when it is a full-width button: a 20pt radius on a
+    // 40pt-tall bar is a lozenge, and two of them side by side look like
+    // toggles rather than actions.
+    final radius = BorderRadius.circular(expanded ? 12 : 20);
     return Material(
       color: bg,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: radius,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: radius,
         onTap: onTap,
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
+          height: expanded ? 40 : null,
+          padding: expanded
+              ? null
+              : EdgeInsets.symmetric(horizontal: padH, vertical: padV),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: radius,
             border: filled ? null : Border.all(color: accent.withOpacity(0.6)),
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, size: dense ? 13 : 15, color: fg),
               SizedBox(width: dense ? 4 : 6),

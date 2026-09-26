@@ -54,17 +54,17 @@ class ProfileStatsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final values = [for (final k in _kinds) _value(k)];
 
-    Widget cell(int i) => Expanded(
-      child: _StatCard(
-        kind: _kinds[i],
-        value: values[i],
-        suffix: _suffix(_kinds[i]),
-        onTap: () => _open(context, _kinds[i]),
-      ),
+    // _StatCard is its own Expanded: it sits inside a Row of four either way,
+    // and having the column own that keeps the divider arithmetic in one place.
+    Widget cell(int i) => _StatCard(
+      kind: _kinds[i],
+      value: values[i],
+      suffix: _suffix(_kinds[i]),
+      onTap: () => _open(context, _kinds[i]),
     );
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -81,22 +81,36 @@ class ProfileStatsPanel extends StatelessWidget {
           if (values.every((v) => v == 0))
             _JustGettingStarted(pseudonym: profile.pseudonym)
           else
-            // IntrinsicHeight so both cards in a row match the taller one — the
-            // streak card grows a line when it carries a "best N" suffix, and
-            // without this its neighbour would sit short beside it.
-            for (var row = 0; row < 2; row++) ...[
-              if (row > 0) const SizedBox(height: 10),
-              IntrinsicHeight(
+            // One card, four columns, hairlines between them.
+            //
+            // This was a two-by-two grid of large cards, each holding an icon,
+            // a chevron, a number and a label — four tall boxes whose contents
+            // were usually "0", taking half a screen to say very little. Four
+            // numbers in a row is the same information at a quarter of the
+            // height, and it stops the page reading like a dashboard somebody
+            // forgot to fill in.
+            GlassCard(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              borderRadius: 18,
+              child: IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    cell(row * 2),
-                    const SizedBox(width: 10),
-                    cell(row * 2 + 1),
+                    for (var i = 0; i < _kinds.length; i++) ...[
+                      if (i > 0)
+                        VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          indent: 4,
+                          endIndent: 4,
+                          color: context.ink.withOpacity(0.07),
+                        ),
+                      cell(i),
+                    ],
                   ],
                 ),
               ),
-            ],
+            ),
         ],
       ),
     );
@@ -204,82 +218,65 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     // A single zero among real numbers is honest, but it should not shout as
     // loudly as them — full-weight ink on a 0 reads as the loudest thing in the
-    // grid precisely when it is the least informative.
+    // row precisely when it is the least informative.
     final zero = value == 0;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: GlassCard(
-          padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
-          borderRadius: 18,
-          elevated: true,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: VentlyColors.berryMagenta.withOpacity(
-                        zero ? 0.06 : 0.10,
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _icon,
+                  size: 17,
+                  color: VentlyColors.berryMagenta.withOpacity(zero ? 0.4 : 1),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  PostCard.compactNumber(value),
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 19,
+                    height: 1,
+                    letterSpacing: -0.4,
+                    color: context.ink.withOpacity(zero ? 0.38 : 1),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  kind.title,
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 10.5,
+                    height: 1.2,
+                    color: context.ink.withOpacity(0.58),
+                  ),
+                ),
+                if (suffix != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      suffix!,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: VentlyColors.berryMagenta.withOpacity(0.85),
                       ),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      _icon,
-                      size: 16,
-                      color: VentlyColors.berryMagenta.withOpacity(
-                        zero ? 0.45 : 1,
-                      ),
                     ),
                   ),
-                  const Spacer(),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 18,
-                    color: context.ink.withOpacity(0.30),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                PostCard.compactNumber(value),
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 26,
-                  height: 1,
-                  letterSpacing: -0.5,
-                  color: context.ink.withOpacity(zero ? 0.35 : 1),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                kind.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 11.5,
-                  color: context.ink.withOpacity(0.62),
-                ),
-              ),
-              if (suffix != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 3),
-                  child: Text(
-                    suffix!,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: VentlyColors.berryMagenta.withOpacity(0.85),
-                    ),
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

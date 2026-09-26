@@ -179,10 +179,28 @@ class _FriendProfileBody extends StatelessWidget {
           SliverToBoxAdapter(child: _Hero(profile: profile)),
           if (profile.relation == FriendStatus.blockedByMe)
             const SliverToBoxAdapter(child: _BlockedNotice()),
-          SliverToBoxAdapter(child: ProfileStatsPanel(profile: profile)),
-          SliverToBoxAdapter(child: _StrangerCallout(profile: profile)),
+          // No activity grid for a stranger.
+          //
+          // The panel reads reactions, replies, streak and badges — four
+          // figures the server deliberately does not send to somebody who is
+          // not a friend. They arrived null and rendered as "0", so every
+          // stranger's profile showed four large zeros: a page that says this
+          // person has done nothing, about a person whose numbers are simply
+          // none of the visitor's business. What they can see is what they
+          // have in common, and that is what is here instead.
           if (profile.mutualTribes.isNotEmpty || profile.mutualFriendsCount > 0)
             SliverToBoxAdapter(child: _MutualsSection(profile: profile)),
+          if (profile.badges.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                child: BadgeShelf(
+                  userId: profile.userId,
+                  earnedBadges: profile.badges,
+                ),
+              ),
+            ),
+          SliverToBoxAdapter(child: _StrangerCallout(profile: profile)),
           // The profile renders inside the shell, so the floating nav pill
           // overlays it. 32 left the Mutuals section — the one real trust signal
           // a stranger gets — sitting under the bar.
@@ -544,289 +562,402 @@ class _VibeLevelBar extends StatelessWidget {
 /// overlapping avatar that opens a full-screen photo preview, and a clean
 /// identity block (name · pronouns/mood pills · joined) above the stat band
 /// and friend actions.
+/// The top of somebody's profile.
+///
+/// Reported as looking immature: a centred column of a circle, a name, a
+/// handle, a pill, a sentence, three shadowed boxes, a full-width button and a
+/// line of explanatory text — eight stacked things, each centred, each fighting
+/// for the same axis, and the person's own background photo reduced to a strip
+/// behind an avatar.
+///
+/// What it is now is the arrangement every social profile has settled on,
+/// because it answers the three questions a visitor actually has, in order and
+/// without scrolling: who is this (photo, name, handle), how much are they part
+/// of this place (three numbers), and what can I do about it (two buttons).
+///
+/// Specifically:
+///
+/// * the background is full width and 190 tall, so a chosen photo is a
+///   photograph rather than a sliver, and it fades into the page instead of
+///   ending on a line;
+/// * the avatar sits at the left on the seam, ringed in the page colour, and
+///   the three numbers share its row — that pairing is what makes a header read
+///   as a profile rather than as a card about a person;
+/// * everything below is left-aligned on one margin: name, handle, bio. Centred
+///   text reads as a poster; left-aligned reads as a page;
+/// * mood and pronouns are quiet inline metadata, not pills competing with the
+///   name;
+/// * the two actions are equal, side by side, at a real button height. The DM
+///   rule is one muted line under them rather than a sentence in the middle of
+///   the card.
 class _Hero extends StatelessWidget {
   const _Hero({required this.profile});
   final UserProfileView profile;
 
+  static const double _avatar = 88;
+  static const double _overlap = 40;
+
+  String _joined() {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    final at = profile.joinedAt.toLocal();
+    return 'Joined ${months[at.month - 1]} ${at.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final daysSince = DateTime.now()
-        .difference(profile.joinedAt)
-        .inDays
-        .clamp(0, 999999);
-    final joinedLabel = daysSince < 7
-        ? 'Just joined'
-        : daysSince < 365
-        ? 'Joined ${daysSince ~/ 7} weeks ago'
-        : 'Joined ${(daysSince / 365).toStringAsFixed(1)} years ago';
+    final mood = profile.currentMood;
+    final pronouns = (profile.pronouns ?? '').trim();
+    final bio = (profile.bio ?? '').trim();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-      child: Container(
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: scheme.primary.withOpacity(0.10)),
-          boxShadow: [
-            BoxShadow(
-              color: scheme.primary.withOpacity(0.12),
-              blurRadius: 30,
-              spreadRadius: -10,
-              offset: const Offset(0, 14),
-            ),
-          ],
-        ),
-        child: Column(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Background, avatar and numbers — one block, because they belong to
+        // each other.
+        Stack(
+          clipBehavior: Clip.none,
           children: [
-            // Banner with the avatar overlapping its lower edge.
-            Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.bottomCenter,
-              children: [
-                // The banner opens full screen too.
-                //
-                // The avatar has been tappable since it was built, and the
-                // banner — often the more personal of the two, and the only
-                // place a landscape photo is visible at all — was not. Same
-                // viewer, same gesture, so it behaves the way the avatar
-                // already taught people to expect.
-                //
-                // Only when there is a real banner: the brand gradient
-                // fallback is not a photograph, and opening a full-screen
-                // gradient would be a dead end.
-                if ((profile.profileBannerUrl ?? '').trim().isEmpty)
-                  _HeroBanner(
-                    photoUrl: (profile.profilePhotoUrl ?? '').trim(),
-                    bannerUrl: '',
-                    bannerOffset: profile.profileBannerOffset,
-                  )
-                else
-                  Semantics(
-                    button: true,
-                    label: 'View @${profile.pseudonym} profile background',
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => showMediaPreview(
-                        context,
-                        items: [
-                          MediaPreviewItem(
-                            url: profile.profileBannerUrl!.trim(),
-                            label: 'Profile background',
-                          ),
-                        ],
-                        title: '@${profile.pseudonym}',
-                      ),
-                      child: _HeroBanner(
-                        photoUrl: (profile.profilePhotoUrl ?? '').trim(),
-                        bannerUrl: profile.profileBannerUrl!.trim(),
-                        bannerOffset: profile.profileBannerOffset,
-                      ),
-                    ),
-                  ),
-                Positioned(bottom: -52, child: _HeroAvatar(profile: profile)),
-              ],
-            ),
-            const SizedBox(height: 60),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
+            _ProfileCover(profile: profile),
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: -_overlap,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          profile.displayName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -0.3,
-                              ),
-                        ),
-                      ),
-                      if (profile.isVerified) ...[
-                        const SizedBox(width: 6),
-                        Icon(Icons.verified, size: 20, color: scheme.primary),
-                      ],
-                    ],
+                  Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: _HeroAvatar(profile: profile, size: _avatar),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '@${profile.pseudonym}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: scheme.onSurface.withOpacity(0.60),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                  const SizedBox(width: 14),
+                  // Sits on the avatar's baseline, in the space the cover
+                  // leaves. Padding lifts it clear of the overlap.
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: _StatsBanner(profile: profile),
                     ),
                   ),
-                  if ((profile.pronouns ?? '').trim().isNotEmpty ||
-                      profile.currentMood != null) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [
-                        if ((profile.pronouns ?? '').trim().isNotEmpty)
-                          _MetaPill(text: profile.pronouns!.trim()),
-                        if (profile.currentMood != null)
-                          _MetaPill(
-                            text:
-                                '${Moods.emoji(profile.currentMood!)}  ${Moods.label(profile.currentMood!)}',
-                            tinted: true,
-                          ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  Text(
-                    joinedLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurface.withOpacity(0.5),
-                    ),
-                  ),
-                  if ((profile.bio ?? '').trim().isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 12, 4, 0),
-                      child: TaggedText(
-                        profile.bio!.trim(),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 14,
-                          height: 1.4,
-                          color: scheme.onSurface.withOpacity(0.82),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                  _StatsBanner(profile: profile),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      FriendActionButton(
-                        otherUserId: profile.userId,
-                        otherPseudonym: profile.pseudonym,
-                      ),
-                      if (profile.isFriend) ...[
-                        const SizedBox(width: 8),
-                        _MessageButton(profile: profile),
-                      ],
-                    ],
-                  ),
-                  if (!profile.isFriend &&
-                      profile.relation != FriendStatus.self)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Text(
-                        'Friends can DM. Send a request to unlock messaging.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: scheme.onSurface.withOpacity(0.5),
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
-            const SizedBox(height: 18),
           ],
+        ),
+        const SizedBox(height: _overlap + 14),
+
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      profile.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                  ),
+                  if (profile.isVerified) ...[
+                    const SizedBox(width: 6),
+                    Icon(Icons.verified, size: 18, color: scheme.primary),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 2),
+              // Handle, pronouns and mood on one line. Three separate rows of
+              // metadata is how a header becomes a list.
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    '@${profile.pseudonym}',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface.withOpacity(0.58),
+                    ),
+                  ),
+                  if (pronouns.isNotEmpty)
+                    Text(
+                      pronouns,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: scheme.onSurface.withOpacity(0.45),
+                      ),
+                    ),
+                  if (mood != null) _MoodTag(mood: mood),
+                ],
+              ),
+              if (bio.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _Bio(text: bio),
+              ],
+              const SizedBox(height: 10),
+              Text(
+                _joined(),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface.withOpacity(0.42),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _HeroActions(profile: profile),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The background photo, full width, fading into the page.
+class _ProfileCover extends StatelessWidget {
+  const _ProfileCover({required this.profile});
+  final UserProfileView profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final banner = (profile.profileBannerUrl ?? '').trim();
+    final photo = (profile.profilePhotoUrl ?? '').trim();
+    final page = Theme.of(context).scaffoldBackgroundColor;
+
+    final Widget image;
+    if (banner.isNotEmpty) {
+      image = ProfileBannerImage(
+        url: banner,
+        alignment: Alignment(0, profile.profileBannerOffset * 2 - 1),
+        fallback: const _BrandBanner(),
+      );
+    } else if (photo.isNotEmpty) {
+      // No chosen background, but there is a face: blur it and use it, so the
+      // header still belongs to this person rather than to the brand.
+      image = ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+        child: ProfileBannerImage(
+          url: photo,
+          alignment: Alignment.center,
+          fallback: const _BrandBanner(),
+        ),
+      );
+    } else {
+      image = const _BrandBanner();
+    }
+
+    final cover = SizedBox(
+      height: 190,
+      width: double.infinity,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          image,
+          // Two scrims doing different jobs: the top one keeps the floating
+          // back button legible over a bright photo, the bottom one hands the
+          // image to the page rather than cutting it off.
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(0.28),
+                  Colors.transparent,
+                  page.withOpacity(0.55),
+                  page,
+                ],
+                stops: const [0.0, 0.35, 0.82, 1.0],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Only a real background opens: the brand gradient is not a photograph and
+    // a full-screen gradient is a dead end.
+    if (banner.isEmpty) return cover;
+    return Semantics(
+      button: true,
+      label: 'View @${profile.pseudonym} profile background',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => showMediaPreview(
+          context,
+          items: [MediaPreviewItem(url: banner, label: 'Profile background')],
+          title: '@${profile.pseudonym}',
+        ),
+        child: cover,
+      ),
+    );
+  }
+}
+
+/// Mood, said quietly.
+///
+/// It used to be a filled pill on its own line, at the same weight as the
+/// name. Mood is something that changes by the hour; it belongs beside the
+/// handle, not above the person.
+class _MoodTag extends StatelessWidget {
+  const _MoodTag({required this.mood});
+  final String mood;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: scheme.primary.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Text(
+        '${Moods.emoji(mood)} ${Moods.label(mood)}',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: scheme.primary,
         ),
       ),
     );
   }
 }
 
-/// The blurred-photo (or brand-gradient) banner behind the hero avatar. Its
-/// lower edge fades into the card surface so the overlapping avatar sits on a
-/// seamless backdrop.
-class _HeroBanner extends StatelessWidget {
-  const _HeroBanner({
-    required this.photoUrl,
-    this.bannerUrl = '',
-    this.bannerOffset = 0.5,
-  });
+/// The bio, with a way to read the rest of it.
+///
+/// Four lines is where a profile stops being a header, and a bio that is
+/// silently cut is worse than one that says it was.
+class _Bio extends StatefulWidget {
+  const _Bio({required this.text});
+  final String text;
 
-  final String photoUrl;
+  @override
+  State<_Bio> createState() => _BioState();
+}
 
-  /// A background the person actually chose (migration 20260817100000).
-  ///
-  /// When absent this falls back to the old behaviour — the profile photo,
-  /// blurred — which was never really a banner: it was the same picture twice,
-  /// once sharp and once out of focus. A chosen banner renders sharp and
-  /// cropped, because the point of picking one is that it is seen.
-  final String bannerUrl;
-
-  /// The crop anchor its owner chose. Honoured here so a visitor sees the
-  /// framing the author picked rather than whatever BoxFit.cover lands on.
-  final double bannerOffset;
+class _BioState extends State<_Bio> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final hasBanner = bannerUrl.isNotEmpty;
-    final hasPhoto = photoUrl.isNotEmpty;
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      child: SizedBox(
-        // Taller when there is a real background to show. At 116 a chosen photo
-        // is a sliver with an avatar sitting on most of it — enough to prove
-        // the upload worked, not enough to be worth choosing. The blurred-photo
-        // and brand-gradient fallbacks stay at 116, because neither is an image
-        // anyone picked and giving them more room just pushes the name down.
-        height: hasBanner ? 168 : 116,
-        width: double.infinity,
-        child: Stack(
-          fit: StackFit.expand,
+    final style = TextStyle(
+      fontSize: 14,
+      height: 1.42,
+      color: scheme.onSurface.withOpacity(0.86),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: widget.text, style: style),
+          maxLines: 4,
+          textDirection: Directionality.of(context),
+        )..layout(maxWidth: constraints.maxWidth);
+        final overflows = painter.didExceedMaxLines;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (hasBanner)
-              // Sharp and cropped: a chosen background is meant to be seen.
-              ProfileBannerImage(
-                url: bannerUrl,
-                alignment: Alignment(0, bannerOffset * 2 - 1),
-                // No onGivenUp: this is somebody else's row and only its owner
-                // may touch it.
-                fallback: const _BrandBanner(),
-              )
-            else if (hasPhoto)
-              ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
-                child: ProfileBannerImage(
-                  url: photoUrl,
-                  alignment: Alignment.center,
-                  fallback: const _BrandBanner(),
-                ),
-              )
-            else
-              const _BrandBanner(),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(
-                      hasBanner ? 0.22 : (hasPhoto ? 0.12 : 0.0),
+            TaggedText(
+              widget.text,
+              style: style,
+              maxLines: _expanded ? null : 4,
+              overflow: _expanded ? null : TextOverflow.ellipsis,
+            ),
+            if (overflows)
+              GestureDetector(
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    _expanded ? 'less' : 'more',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurface.withOpacity(0.5),
                     ),
-                    scheme.surface.withOpacity(0.0),
-                    scheme.surface,
-                  ],
-                  stops: const [0.0, 0.5, 1.0],
+                  ),
                 ),
               ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Add friend and Message, equal and side by side.
+///
+/// They were a large filled pill and, for friends, a small outlined chip beside
+/// it — two different sizes and two different shapes for two actions of equal
+/// standing. Equal buttons are what every profile does, and for a good reason:
+/// the visitor is choosing between them, not being sold one.
+class _HeroActions extends StatelessWidget {
+  const _HeroActions({required this.profile});
+  final UserProfileView profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (profile.relation == FriendStatus.self) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: FriendActionButton(
+                otherUserId: profile.userId,
+                otherPseudonym: profile.pseudonym,
+                expanded: true,
+              ),
             ),
+            if (profile.isFriend) ...[
+              const SizedBox(width: 10),
+              Expanded(child: _MessageButton(profile: profile)),
+            ],
           ],
         ),
-      ),
+        if (!profile.isFriend)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Messages open once you are friends.',
+              style: TextStyle(
+                fontSize: 12,
+                color: scheme.onSurface.withOpacity(0.45),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -855,8 +986,16 @@ class _BrandBanner extends StatelessWidget {
 /// button that opens the full-screen, zoomable preview, and carries a small
 /// "expand" glyph so the affordance is obvious.
 class _HeroAvatar extends ConsumerWidget {
-  const _HeroAvatar({required this.profile});
+  const _HeroAvatar({required this.profile, this.size = 104});
   final UserProfileView profile;
+
+  /// The photograph's diameter, ring excluded.
+  ///
+  /// It was fixed at 104 and glowing — a magenta ring with a 26px coloured
+  /// shadow around it, which on a header this size read as a badge rather
+  /// than as a face. The page colour behind it does the separating now, and
+  /// the hairline is there to hold the edge, not to announce it.
+  final double size;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -865,18 +1004,11 @@ class _HeroAvatar extends ConsumerWidget {
     final hasPhoto = photoUrl.isNotEmpty;
 
     final ringed = Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         color: scheme.surface,
         shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: scheme.primary.withOpacity(0.38),
-            blurRadius: 26,
-            spreadRadius: 1,
-          ),
-        ],
-        border: Border.all(color: scheme.primary, width: 3),
+        border: Border.all(color: scheme.primary.withOpacity(0.45), width: 1.5),
       ),
       // ClipOval because the ring is circular but the fallback avatar is not:
       // ProfileAvatar clips uploaded photos to an oval and leaves the anonymous
@@ -887,7 +1019,7 @@ class _HeroAvatar extends ConsumerWidget {
           avatarSeed: profile.avatarSeed,
           label: profile.pseudonym,
           profilePhotoUrl: profile.profilePhotoUrl,
-          size: 104,
+          size: size,
         ),
       ),
     );
@@ -901,16 +1033,16 @@ class _HeroAvatar extends ConsumerWidget {
             right: 2,
             bottom: 2,
             child: Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.55),
                 shape: BoxShape.circle,
-                border: Border.all(color: scheme.surface, width: 2.5),
+                border: Border.all(color: scheme.surface, width: 2),
               ),
               child: const Icon(
                 Icons.zoom_out_map_rounded,
                 color: Colors.white,
-                size: 15,
+                size: 12,
               ),
             ),
           ),
@@ -925,7 +1057,8 @@ class _HeroAvatar extends ConsumerWidget {
     // that hid their story. Rather than pick for them — the photo and the
     // story are both things they might have meant — ask, and only when there
     // is actually something to choose between.
-    final storyId = ref.watch(activeStoryForUserProvider(profile.userId))
+    final storyId = ref
+        .watch(activeStoryForUserProvider(profile.userId))
         .valueOrNull;
 
     if (!hasPhoto && storyId == null) return withGlyph;
@@ -947,10 +1080,7 @@ class _HeroAvatar extends ConsumerWidget {
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
-                    colors: [
-                      VentlyColors.berryMagenta,
-                      VentlyColors.softMauve,
-                    ],
+                    colors: [VentlyColors.berryMagenta, VentlyColors.softMauve],
                   ),
                 ),
                 child: withGlyph,
@@ -1020,50 +1150,6 @@ class _HeroAvatar extends ConsumerWidget {
   }
 }
 
-/// A small rounded label used for pronouns and current-mood in the hero.
-class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.text, this.tinted = false});
-  final String text;
-  final bool tinted;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-      decoration: BoxDecoration(
-        color: scheme.primary.withOpacity(tinted ? 0.12 : 0.05),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.primary.withOpacity(0.14)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: tinted ? scheme.primary : scheme.onSurface.withOpacity(0.72),
-        ),
-      ),
-    );
-  }
-}
-
-/// The three headline numbers a stranger scans before deciding to add someone:
-/// how much this person shares, who already trusts them, and where they belong.
-/// Activity is what drives the add, so it sits above the fold, in the hero.
-///
-/// Each column is tappable and opens the same detail screen the Activity grid
-/// below opens. They used to be inert — a 20pt number that does nothing, sitting
-/// directly above an identical number that does, is a dead end users tap twice.
-///
-/// Deliberately unfilled, hairlines only: the Activity cards below carry the
-/// elevation. When this was a tinted, bordered box it read as a second card
-/// competing with them rather than as part of the identity block.
-///
-/// It shows Connections/Vents/Tribes and the grid below shows everything else —
-/// no number appears in both places. Previously Connections was in both, and
-/// "Posts" here (vents + whispers) sat above "Vents" there, so the same person
-/// appeared to have two different post counts.
 class _StatsBanner extends StatelessWidget {
   const _StatsBanner({required this.profile});
   final UserProfileView profile;
@@ -1084,19 +1170,72 @@ class _StatsBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        for (var i = 0; i < _kinds.length; i++) ...[
-          if (i > 0) const SizedBox(width: 8),
+        for (final kind in _kinds)
           Expanded(
-            child: _Kpi3DTile(
-              value: PostCard.compactNumber(_value(_kinds[i])),
-              label: _kinds[i].title,
+            child: _StatColumn(
+              value: PostCard.compactNumber(_value(kind)),
+              label: kind.title,
               onTap: () => context.push(
-                '/user/${profile.userId}/stat/${_kinds[i].routeSegment}',
+                '/user/${profile.userId}/stat/${kind.routeSegment}',
               ),
             ),
           ),
-        ],
       ],
+    );
+  }
+}
+
+/// One number and what it counts.
+///
+/// These were raised, gradient-filled, drop-shadowed tiles — three grey boxes
+/// across the widest part of the page, which is what made the header look like
+/// a dashboard. A profile's numbers are read, not operated: they want to be
+/// legible and quiet, and their tap target does not have to be drawn to exist.
+class _StatColumn extends StatelessWidget {
+  const _StatColumn({
+    required this.value,
+    required this.label,
+    required this.onTap,
+  });
+
+  final String value;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              value,
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.3,
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurface.withOpacity(0.55),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1304,18 +1443,18 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
           : 'Accounts registered as 13-17 cannot start new chats',
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(12),
           onTap: _busy ? null : _openOrCreateRoom,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            height: 40,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: accent.withOpacity(0.6)),
             ),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (_busy)
                   SizedBox(
