@@ -363,6 +363,10 @@ class _TrustPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: GlassTokens.panel(context),
         borderRadius: BorderRadius.circular(28),
+        // A hairline, so the card has an edge without needing a lighter fill.
+        // This is what lets the panel be a dark surface on a dark page
+        // instead of a grey slab announcing itself.
+        border: Border.all(color: GlassTokens.cardEdge(context)),
       ),
       child: const Column(
         children: [
