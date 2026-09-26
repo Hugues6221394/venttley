@@ -599,31 +599,26 @@ class _CompactGreeting extends StatelessWidget {
       // It was 16, which pushed the trailing icon 4px past the column every
       // other row aligns to — there is no IconButton padding here to absorb it.
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Text(
-              'Take a breath. You’re safe here.',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.2,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.1,
-                color: (isDark ? VentlyColors.softOffWhite : context.ink)
-                    .withOpacity(0.72),
-              ),
-            ),
+      // A line, and nothing beside it.
+      //
+      // There used to be an outlined heart on the right of this row. It did
+      // nothing — not a button, not a count, not a state — and it sat in the
+      // one place on the feed where a heart means "like". Somebody reading
+      // this screen has to work out what every mark on it is for, and a
+      // decoration shaped like a control costs them that for nothing.
+      child: Text(
+        'Take a breath. You’re safe here.',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 14,
+          height: 1.2,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.1,
+          color: (isDark ? VentlyColors.softOffWhite : context.ink).withOpacity(
+            0.72,
           ),
-          const SizedBox(width: 10),
-          const Icon(
-            Icons.favorite_border_rounded,
-            size: 20,
-            color: VentlyColors.berryMagenta,
-          ),
-        ],
+        ),
       ),
     );
   }

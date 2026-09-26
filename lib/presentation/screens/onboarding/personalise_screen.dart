@@ -32,8 +32,15 @@ class PersonaliseScreen extends ConsumerStatefulWidget {
 
 class _PersonaliseScreenState extends ConsumerState<PersonaliseScreen> {
   final _email = TextEditingController();
+  final _code = TextEditingController();
+  final _codeFocus = FocusNode();
   bool _busy = false;
   String? _emailError;
+  String? _codeError;
+
+  /// True once the address is confirmed. Until then a recovery email is an
+  /// address we have, not a way back into the account.
+  bool _recoveryVerified = false;
 
   // What has actually landed on the server, so the summary at the bottom
   // reports state rather than intent.
@@ -44,6 +51,8 @@ class _PersonaliseScreenState extends ConsumerState<PersonaliseScreen> {
   @override
   void dispose() {
     _email.dispose();
+    _code.dispose();
+    _codeFocus.dispose();
     super.dispose();
   }
 
@@ -154,9 +163,8 @@ class _PersonaliseScreenState extends ConsumerState<PersonaliseScreen> {
       final masked = await ref.read(repositoryProvider).setRecoveryEmail(value);
       if (mounted) {
         setState(() => _recoverySaved = masked ?? value);
-        _toast(
-          'Check $value for a confirmation code, then confirm it in Settings.',
-        );
+        _toast('We sent a six-digit code to $value.');
+        _codeFocus.requestFocus();
       }
     } catch (_) {
       if (mounted) {
@@ -170,13 +178,64 @@ class _PersonaliseScreenState extends ConsumerState<PersonaliseScreen> {
     }
   }
 
-  Future<void> _finish() async {
-    // A typed but unsaved address is the likeliest way to leave here thinking
-    // recovery is set up when it is not, so save it on the way out.
-    if (_email.text.trim().isNotEmpty && _recoverySaved == null) {
-      await _saveRecoveryEmail();
-      if (_emailError != null) return;
+  /// Confirm the code, here, on this screen.
+  ///
+  /// The address used to be saved on the way out with a note to finish it in
+  /// Settings. Nobody does. Driving a real signup on a simulator is what made
+  /// it obvious: the address landed in the database with
+  /// recovery_email_verified = false and a live code nobody would ever be
+  /// shown a box for, and the person left onboarding believing they had a way
+  /// back in. An unverified recovery email is not a way back in — it is an
+  /// address somebody typed.
+  Future<bool> _confirmCode() async {
+    final code = _code.text.trim();
+    if (code.isEmpty) {
+      setState(() => _codeError = 'Enter the code we emailed you.');
+      return false;
     }
+    setState(() {
+      _busy = true;
+      _codeError = null;
+    });
+    try {
+      final ok = await ref.read(repositoryProvider).confirmRecoveryEmail(code);
+      if (!mounted) return false;
+      setState(() {
+        _recoveryVerified = ok;
+        _codeError = ok ? null : 'That code is wrong or has expired.';
+      });
+      return ok;
+    } catch (_) {
+      if (mounted) {
+        setState(() => _codeError = 'Could not check that code. Try again.');
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _finish() async {
+    // Nothing typed: this step is optional and always was.
+    if (_email.text.trim().isEmpty) {
+      if (mounted) context.go('/feed');
+      return;
+    }
+
+    // An address that has not been sent a code yet. Send it and stay here —
+    // the code box appears, focused, and this button becomes Confirm.
+    if (_recoverySaved == null) {
+      await _saveRecoveryEmail();
+      return;
+    }
+
+    // Sent, not yet confirmed. Confirming is the whole point.
+    if (!_recoveryVerified) {
+      final ok = await _confirmCode();
+      if (!ok) return;
+      _toast('Recovery email confirmed.');
+    }
+
     if (mounted) context.go('/feed');
   }
 
@@ -246,21 +305,70 @@ class _PersonaliseScreenState extends ConsumerState<PersonaliseScreen> {
                         labelText: 'Recovery email (optional)',
                         hintText: 'you@example.com',
                         errorText: _emailError,
-                        suffixIcon: _recoverySaved != null
+                        // The tick is for confirmed, not for typed. It used
+                        // to appear as soon as the address was stored, which
+                        // is the moment it is least true.
+                        suffixIcon: _recoveryVerified
                             ? const Icon(
                                 Icons.check_circle,
                                 color: Colors.green,
                               )
                             : null,
                       ),
+                      onChanged: (_) => setState(() {}),
                       onSubmitted: (_) => _saveRecoveryEmail(),
                     ),
-                    if (_recoverySaved != null) ...[
-                      const SizedBox(height: 10),
+                    if (_recoverySaved != null && !_recoveryVerified) ...[
+                      const SizedBox(height: 14),
                       Text(
-                        'Saved. We sent a code to confirm it — until you confirm '
-                        'it in Settings, it cannot be used to recover the account.',
+                        'We sent a six-digit code to $_recoverySaved. Until it '
+                        'is confirmed, this address cannot get you back in.',
                         style: TextStyle(fontSize: 12, color: context.inkMuted),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _code,
+                        focusNode: _codeFocus,
+                        enabled: !_busy,
+                        keyboardType: TextInputType.number,
+                        autocorrect: false,
+                        maxLength: 6,
+                        decoration: InputDecoration(
+                          labelText: 'Confirmation code',
+                          hintText: '000000',
+                          counterText: '',
+                          errorText: _codeError,
+                        ),
+                        onSubmitted: (_) => _confirmCode(),
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: _busy ? null : _saveRecoveryEmail,
+                          child: const Text('Send it again'),
+                        ),
+                      ),
+                    ],
+                    if (_recoveryVerified) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle,
+                            size: 16,
+                            color: Colors.green,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Confirmed. $_recoverySaved can get you back in.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.inkMuted,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ],
@@ -283,9 +391,9 @@ class _PersonaliseScreenState extends ConsumerState<PersonaliseScreen> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2.4),
                       )
-                    : const Text(
-                        'Enter Venttly',
-                        style: TextStyle(fontWeight: FontWeight.w800),
+                    : Text(
+                        _finishLabel(),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
               ),
               const SizedBox(height: 12),
@@ -303,12 +411,26 @@ class _PersonaliseScreenState extends ConsumerState<PersonaliseScreen> {
     );
   }
 
+  /// What the button is about to do, rather than where it eventually goes.
+  ///
+  /// Three states, one button: send me a code, check this code, let me in.
+  String _finishLabel() {
+    if (_email.text.trim().isEmpty || _recoveryVerified) return 'Enter Venttly';
+    if (_recoverySaved == null) return 'Send me a code';
+    return 'Confirm and enter';
+  }
+
   String _summary() {
     final done = <String>[
       if (_photoSaved) 'photo',
       if (_bannerSaved) 'background',
-      if (_recoverySaved != null) 'recovery email',
+      // Saved is not the same as usable, and this line is the only place that
+      // says so before somebody walks away from the screen.
+      if (_recoveryVerified) 'recovery email',
     ];
+    if (_recoverySaved != null && !_recoveryVerified) {
+      return 'Your recovery email still needs its code. Skip leaves it unconfirmed.';
+    }
     if (done.isEmpty) return 'You can add all of this later from Settings.';
     return 'Saved: ${done.join(', ')}. The rest can wait.';
   }
