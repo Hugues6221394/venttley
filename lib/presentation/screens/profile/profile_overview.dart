@@ -276,7 +276,7 @@ class _HeroCard extends ConsumerWidget {
                 children: [
                   Expanded(child: _EditButton()),
                   if (!me.isVerified) ...[
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(child: _VerificationPill()),
                   ],
                 ],
@@ -756,32 +756,23 @@ class _VerificationPill extends ConsumerWidget {
     // of the two, which is what it is.
     final pending = status == 'pending';
     final pill = Container(
-      height: 40,
+      height: 34,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: VentlyColors.berryMagenta.withOpacity(pending ? 0.3 : 0.55),
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            pending ? Icons.hourglass_top_rounded : Icons.verified_outlined,
-            size: 13,
-            color: VentlyColors.berryMagenta,
-          ),
-          const SizedBox(width: 5),
-          Text(
-            pending ? 'Verification pending' : 'Apply for verified',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: VentlyColors.berryMagenta,
-            ),
-          ),
-        ],
+      child: Text(
+        pending ? 'Verification pending' : 'Apply for verified',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w700,
+          color: VentlyColors.berryMagenta,
+        ),
       ),
     );
     if (pending) return pill;
@@ -819,27 +810,20 @@ class _EditButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: VentlyColors.berryMagenta,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(10),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         onTap: () => context.push('/profile/edit'),
         child: Container(
-          height: 40,
+          height: 34,
           alignment: Alignment.center,
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.edit_outlined, size: 15, color: Colors.white),
-              SizedBox(width: 6),
-              Text(
-                'Edit profile',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
-                  color: Colors.white,
-                ),
-              ),
-            ],
+          child: const Text(
+            'Edit profile',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13.5,
+              color: Colors.white,
+            ),
           ),
         ),
       ),
@@ -1342,7 +1326,7 @@ class _MiniStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 3),
       // The light-grey slab, with ink on it.
       //
       // These were this grey once before and unreadable with it: white at 45%
@@ -1367,20 +1351,26 @@ class _MiniStat extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
-          // One word each. A two-word label inside a 60pt column wraps
-          // mid-word however it is broken — "Hearts Receiv ed" is what that
-          // looks like — and the card's title already says these are this
-          // week's.
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 10.5,
-              height: 1.2,
-              fontWeight: FontWeight.w700,
-              color: GlassTokens.onPanelMuted(context),
+          // One word each, and scaled to fit rather than clipped.
+          //
+          // These were "Hearts Received", "Replies Shared", "People
+          // Comforted" inside a column about 60pt wide, which wraps mid-word
+          // however it is broken — "Hearts Receiv ed" is in every screenshot
+          // of this screen. One word fixes the wrap; scaleDown fixes the
+          // longest of them on the narrowest phone, without shrinking the
+          // other two to match.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              maxLines: 1,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.2,
+                fontWeight: FontWeight.w700,
+                color: GlassTokens.onPanelMuted(context),
+              ),
             ),
           ),
         ],

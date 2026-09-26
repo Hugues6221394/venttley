@@ -950,7 +950,7 @@ class _HeroActions extends StatelessWidget {
               ),
             ),
             if (profile.isFriend) ...[
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(child: _MessageButton(profile: profile)),
             ],
           ],
@@ -1455,38 +1455,35 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
           : 'Accounts registered as 13-17 cannot start new chats',
       child: Material(
         color: accent,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           onTap: _busy ? null : _openOrCreateRoom,
           child: Container(
-            height: 40,
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
+            height: 34,
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (_busy)
+                // No glyph, like the button beside it: the label is the whole
+                // content of a 34pt button and an icon only crowds it.
+                if (_busy) ...[
                   const SizedBox(
-                    width: 14,
-                    height: 14,
+                    width: 13,
+                    height: 13,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       color: Colors.white,
                     ),
-                  )
-                else
-                  const Icon(
-                    Icons.chat_bubble_outline,
-                    size: 15,
-                    color: Colors.white,
                   ),
-                const SizedBox(width: 6),
+                  const SizedBox(width: 6),
+                ],
                 const Text(
                   'Message',
                   style: TextStyle(
                     color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
                   ),
                 ),
               ],

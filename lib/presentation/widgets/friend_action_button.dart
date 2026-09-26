@@ -363,10 +363,11 @@ class _Pill extends StatelessWidget {
     final bg = solid ? accent : Colors.transparent;
     final padH = dense ? 10.0 : 14.0;
     final padV = dense ? 6.0 : 8.0;
-    // A squarer corner when it is a full-width button: a 20pt radius on a
-    // 40pt-tall bar is a lozenge, and two of them side by side look like
-    // toggles rather than actions.
-    final radius = BorderRadius.circular(expanded ? 12 : 20);
+    // Instagram's proportions for the pair at the top of a profile: 34pt
+    // tall, a 10pt corner, no glyph. At 40 with an icon they were the tallest
+    // thing on the page, which reads as a call to action on a screen that is
+    // not selling anything — these are here to be available, not urgent.
+    final radius = BorderRadius.circular(expanded ? 10 : 20);
     return Material(
       color: bg,
       borderRadius: radius,
@@ -374,7 +375,7 @@ class _Pill extends StatelessWidget {
         borderRadius: radius,
         onTap: onTap,
         child: Container(
-          height: expanded ? 40 : null,
+          height: expanded ? 34 : null,
           padding: expanded
               ? null
               : EdgeInsets.symmetric(horizontal: padH, vertical: padV),
@@ -386,14 +387,23 @@ class _Pill extends StatelessWidget {
             mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: dense ? 13 : 15, color: fg),
-              SizedBox(width: dense ? 4 : 6),
+              // No glyph in the header pair. The label already says which
+              // state this is, and an icon inside a 34pt button is what makes
+              // two of them side by side feel cramped.
+              if (!expanded) ...[
+                Icon(icon, size: dense ? 13 : 15, color: fg),
+                SizedBox(width: dense ? 4 : 6),
+              ],
               Text(
                 label,
                 style: TextStyle(
                   color: fg,
-                  fontWeight: FontWeight.w800,
-                  fontSize: dense ? 12 : 13,
+                  fontWeight: expanded ? FontWeight.w700 : FontWeight.w800,
+                  fontSize: dense
+                      ? 12
+                      : expanded
+                      ? 13.5
+                      : 13,
                 ),
               ),
             ],
