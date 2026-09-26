@@ -757,21 +757,29 @@ class _PrimaryManage extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: GlassTokens.cardEdge(context)),
+              border: Border.all(
+                color: VentlyColors.berryMagenta.withOpacity(0.35),
+              ),
             ),
             child: Row(
               children: [
+                // Solid berry with a white glyph, in both themes.
+                //
+                // It was a 10% berry wash behind a berry icon: a soft pink
+                // chip on the light page and very nearly nothing on black —
+                // the most-used destination in the Studio, marked by a glyph
+                // you have to look for.
                 Container(
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: VentlyColors.berryMagenta.withOpacity(0.10),
+                    color: VentlyColors.berryMagenta,
                     borderRadius: BorderRadius.circular(11),
                   ),
                   child: const Icon(
                     Icons.tune_rounded,
                     size: 19,
-                    color: VentlyColors.berryMagenta,
+                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(width: 13),
@@ -1174,12 +1182,18 @@ class _LinkGroup extends StatelessWidget {
               ),
             ),
           ),
+          // The Create panel takes the light-grey slab on dark.
+          //
+          // It is the one block on this screen that is about making something
+          // rather than going somewhere, and it now looks like it: a light
+          // surface among near-black cards, with the six glyphs in solid
+          // berry on it. The rows below stay dark, which is the distinction
+          // the grid/list split was making anyway.
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
             decoration: BoxDecoration(
-              color: GlassTokens.card(context),
+              color: GlassTokens.panel(context),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: GlassTokens.cardEdge(context)),
             ),
             // GridView rather than Wrap, so the columns line up between one
             // group and the next. A Wrap sizes each tile to its own label and
@@ -1237,14 +1251,10 @@ class _LinkTile extends StatelessWidget {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: GlassTokens.cardChip(context),
+                    color: VentlyColors.berryMagenta,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(
-                    link.icon,
-                    size: 22,
-                    color: GlassTokens.cardGlyph(context),
-                  ),
+                  child: Icon(link.icon, size: 22, color: Colors.white),
                 ),
                 if (link.badge != null)
                   Positioned(
@@ -1280,7 +1290,7 @@ class _LinkTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: GlassTokens.onCard(context),
+                  color: GlassTokens.onPanel(context),
                   fontWeight: FontWeight.w800,
                   fontSize: 11.5,
                 ),

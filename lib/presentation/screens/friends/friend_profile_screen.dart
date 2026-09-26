@@ -509,12 +509,17 @@ class _VibeLevelBar extends StatelessWidget {
     final level = (profile.karma % 1000) / 1000.0;
     final tier = (profile.karma ~/ 1000) + 1;
     final mood = profile.currentMood;
+    // On the light-grey slab, which on dark is the one surface on this page
+    // that is not another near-black card. A progress bar is the right thing
+    // to put on it: the berry fill has somewhere to read against, and the
+    // grey marks this as the summary of the person rather than one more card
+    // of their content.
+    final onPanel = GlassTokens.onPanel(context);
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: scheme.surface,
+        color: GlassTokens.panel(context),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.primary.withOpacity(0.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -523,18 +528,22 @@ class _VibeLevelBar extends StatelessWidget {
             children: [
               Text(
                 'Vibe level $tier',
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 13,
+                  color: onPanel,
                 ),
               ),
               const Spacer(),
               if (mood != null)
+                // Ink, not berry. Berry text on the light grey measures about
+                // 2:1 — the fill of the bar below can be the accent because a
+                // graphic does not have to be read, and this does.
                 Text(
                   '${Moods.emoji(mood)} ${Moods.label(mood)}',
                   style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: scheme.primary,
+                    fontWeight: FontWeight.w800,
+                    color: onPanel.withOpacity(0.75),
                     fontSize: 12,
                   ),
                 ),
@@ -546,7 +555,7 @@ class _VibeLevelBar extends StatelessWidget {
             child: LinearProgressIndicator(
               value: level.clamp(0.05, 1.0),
               minHeight: 8,
-              backgroundColor: scheme.primary.withOpacity(0.12),
+              backgroundColor: onPanel.withOpacity(0.14),
               color: scheme.primary,
             ),
           ),

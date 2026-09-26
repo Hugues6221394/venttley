@@ -92,6 +92,20 @@ class GlassTokens {
       ? VentlyColors.softOffWhite.withOpacity(0.78)
       : VentlyColors.berryMagenta;
 
+  /// The light-grey slab, and the near-black type that goes on it.
+  ///
+  /// This pairing started on the welcome screen and is the one thing on dark
+  /// that is not another shade of near-black — which is exactly why it is
+  /// worth having more than once. It is used sparingly and always for the
+  /// same job: the block on a screen that says *here is what this place is
+  /// for*, as opposed to the cards around it that hold what is in it.
+  ///
+  /// Anything placed on it has to take its ink from [onPanel] and
+  /// [onPanelMuted], and any glyph on it wants a solid berry chip behind it
+  /// rather than the tinted chip that works on a dark card. A light surface
+  /// inverts everything that sits on it; that is the cost of using it and the
+  /// reason it stays rare.
+  ///
   /// The welcome panel: a light grey slab on the dark canvas.
   static Color panel(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark

@@ -866,13 +866,24 @@ class _HeroSettingsButton extends StatelessWidget {
   }
 }
 
+/// The four things you can make, on the light-grey slab.
+///
+/// On dark this is the one panel on the page that is not another shade of
+/// near-black — the same treatment the welcome screen uses, for the same
+/// reason: it is the block that says what this place is for, sitting among
+/// cards that hold what is in it. On light it is the white card it already
+/// was, so nothing about the light theme changes.
 class _QuickActionsBar extends StatelessWidget {
   const _QuickActionsBar();
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+      decoration: BoxDecoration(
+        color: GlassTokens.panel(context),
+        borderRadius: BorderRadius.circular(22),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -925,25 +936,25 @@ class _Action extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Column(
             children: [
+              // Solid berry with a white glyph. A tinted chip works on a
+              // dark card and disappears on a light one, and the panel under
+              // this is light in both themes.
               Container(
                 width: 46,
                 height: 46,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  color: context.glass(0.65),
-                  border: Border.all(
-                    color: VentlyColors.softMauve.withOpacity(0.4),
-                  ),
+                  color: VentlyColors.berryMagenta,
                 ),
-                child: Icon(icon, color: VentlyColors.berryMagenta, size: 22),
+                child: Icon(icon, color: Colors.white, size: 22),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 7),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: context.ink,
+                  color: GlassTokens.onPanel(context),
                 ),
               ),
             ],
