@@ -92,28 +92,16 @@ class GlassTokens {
       ? VentlyColors.softOffWhite.withOpacity(0.78)
       : VentlyColors.berryMagenta;
 
-  /// The welcome panel — the card of three promises under the logo.
-  ///
-  /// It was a mid-grey slab (#A1A0A1) with near-black type. The contrast was
-  /// fine and it was still wrong: on a black page the one card on screen read
-  /// as an unstyled grey block, and every other card in the app on dark is a
-  /// dark surface. The first screen anybody sees should look like the app
-  /// they are about to use.
-  ///
-  /// The earlier attempts here failed for a reason worth keeping: a berry
-  /// tint at 7% over near-black reads as maroon, because at that opacity the
-  /// hue is the only thing left. So this is the app's own dark card colour,
-  /// which is neutral, and the definition comes from a hairline rather than
-  /// from making the fill lighter.
+  /// The welcome panel: a light grey slab on the dark canvas.
   static Color panel(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
-      ? VentlyColors.cardDark
+      ? VentlyColors.panelLight
       : VentlyColors.cardBlush;
 
-  /// Type on [panel].
+  /// Type on [panel] — near-black on the light grey, 8.2:1.
   static Color onPanel(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
-      ? VentlyColors.softOffWhite
+      ? VentlyColors.onPanelLight
       : VentlyColors.deepBurgundy;
 
   /// Secondary type on [panel] — 5.3:1.
