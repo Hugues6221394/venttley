@@ -1442,6 +1442,9 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
             .watch(dmInitiationAllowedProvider(widget.profile.userId))
             .valueOrNull ??
         true;
+    // Filled berry, like the action beside it. The two are a pair — reply to
+    // this person, or manage the friendship — and an outlined chip next to a
+    // filled button reads as the lesser of the two when it is not.
     final accent = mayStartNew
         ? scheme.primary
         : scheme.onSurface.withOpacity(0.45);
@@ -1451,36 +1454,37 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
           ? null
           : 'Accounts registered as 13-17 cannot start new chats',
       child: Material(
-        color: Colors.transparent,
+        color: accent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: _busy ? null : _openOrCreateRoom,
           child: Container(
             height: 40,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: accent.withOpacity(0.6)),
-            ),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (_busy)
-                  SizedBox(
+                  const SizedBox(
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: accent,
+                      color: Colors.white,
                     ),
                   )
                 else
-                  Icon(Icons.chat_bubble_outline, size: 15, color: accent),
+                  const Icon(
+                    Icons.chat_bubble_outline,
+                    size: 15,
+                    color: Colors.white,
+                  ),
                 const SizedBox(width: 6),
-                Text(
+                const Text(
                   'Message',
                   style: TextStyle(
-                    color: accent,
+                    color: Colors.white,
                     fontWeight: FontWeight.w800,
                     fontSize: 13,
                   ),

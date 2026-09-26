@@ -599,14 +599,19 @@ class _KpiGrid extends ConsumerWidget {
     // Four columns in a single card is the shape the profile already uses for
     // exactly this job, and it fits in a third of the height without dropping
     // a number or a destination.
+    // The four numbers sit on the light-grey slab.
+    //
+    // This is the block that says how the tribe is doing, which is what the
+    // whole screen is about — so on dark it is the one surface that is not
+    // another near-black card, and it is the first thing the eye lands on
+    // under the tribe's name.
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: GlassTokens.card(context),
+          color: GlassTokens.panel(context),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: GlassTokens.cardEdge(context)),
         ),
         child: Row(
           children: [
@@ -617,7 +622,7 @@ class _KpiGrid extends ConsumerWidget {
                   child: VerticalDivider(
                     width: 1,
                     thickness: 1,
-                    color: GlassTokens.cardEdge(context),
+                    color: GlassTokens.onPanel(context).withOpacity(0.15),
                   ),
                 ),
               Expanded(child: _StatColumn(stat: stats[i])),
@@ -1182,18 +1187,12 @@ class _LinkGroup extends StatelessWidget {
               ),
             ),
           ),
-          // The Create panel takes the light-grey slab on dark.
-          //
-          // It is the one block on this screen that is about making something
-          // rather than going somewhere, and it now looks like it: a light
-          // surface among near-black cards, with the six glyphs in solid
-          // berry on it. The rows below stay dark, which is the distinction
-          // the grid/list split was making anyway.
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
             decoration: BoxDecoration(
-              color: GlassTokens.panel(context),
+              color: GlassTokens.card(context),
               borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: GlassTokens.cardEdge(context)),
             ),
             // GridView rather than Wrap, so the columns line up between one
             // group and the next. A Wrap sizes each tile to its own label and
@@ -1251,10 +1250,14 @@ class _LinkTile extends StatelessWidget {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: VentlyColors.berryMagenta,
+                    color: GlassTokens.cardChip(context),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(link.icon, size: 22, color: Colors.white),
+                  child: Icon(
+                    link.icon,
+                    size: 22,
+                    color: GlassTokens.cardGlyph(context),
+                  ),
                 ),
                 if (link.badge != null)
                   Positioned(
@@ -1290,7 +1293,7 @@ class _LinkTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: GlassTokens.onPanel(context),
+                  color: GlassTokens.onCard(context),
                   fontWeight: FontWeight.w800,
                   fontSize: 11.5,
                 ),

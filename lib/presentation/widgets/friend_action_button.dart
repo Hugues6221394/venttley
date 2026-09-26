@@ -352,8 +352,15 @@ class _Pill extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final accent = color ?? scheme.primary;
-    final fg = filled ? Colors.white : accent;
-    final bg = filled ? accent : Colors.transparent;
+    // A full-width pill on a profile is always filled.
+    //
+    // "Friends" and "Requested" are states rather than invitations, which is
+    // why they were outlined — but beside a filled Message button an outline
+    // reads as secondary, and neither of these is. Filled in the header,
+    // outlined everywhere the chip is still a chip.
+    final solid = filled || expanded;
+    final fg = solid ? Colors.white : accent;
+    final bg = solid ? accent : Colors.transparent;
     final padH = dense ? 10.0 : 14.0;
     final padV = dense ? 6.0 : 8.0;
     // A squarer corner when it is a full-width button: a 20pt radius on a
@@ -373,7 +380,7 @@ class _Pill extends StatelessWidget {
               : EdgeInsets.symmetric(horizontal: padH, vertical: padV),
           decoration: BoxDecoration(
             borderRadius: radius,
-            border: filled ? null : Border.all(color: accent.withOpacity(0.6)),
+            border: solid ? null : Border.all(color: accent.withOpacity(0.6)),
           ),
           child: Row(
             mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,

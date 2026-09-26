@@ -752,20 +752,20 @@ class _VerificationPill extends ConsumerWidget {
         ref.watch(myVerificationStatusProvider).valueOrNull ?? 'none';
     if (status == 'verified') return const SizedBox.shrink();
 
+    // Outlined, at the same height as Edit profile beside it — the secondary
+    // of the two, which is what it is.
     final pending = status == 'pending';
     final pill = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      height: 40,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: pending
-            ? VentlyColors.softMauve.withOpacity(0.25)
-            : VentlyColors.berryMagenta.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: VentlyColors.berryMagenta.withOpacity(pending ? 0.25 : 0.4),
+          color: VentlyColors.berryMagenta.withOpacity(pending ? 0.3 : 0.55),
         ),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             pending ? Icons.hourglass_top_rounded : Icons.verified_outlined,
@@ -776,8 +776,8 @@ class _VerificationPill extends ConsumerWidget {
           Text(
             pending ? 'Verification pending' : 'Apply for verified',
             style: const TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w900,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
               color: VentlyColors.berryMagenta,
             ),
           ),
@@ -809,32 +809,34 @@ class _VerificationPill extends ConsumerWidget {
   }
 }
 
+/// Edit profile — the filled one.
+///
+/// It is the action a person comes to their own profile to take, and it sat
+/// in translucent glass beside an outlined "Apply for verified", so the pair
+/// read as two secondary options. Filled berry says which one is the button.
 class _EditButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: context.glass(0.7),
-      borderRadius: BorderRadius.circular(20),
+      color: VentlyColors.berryMagenta,
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         onTap: () => context.push('/profile/edit'),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+        child: Container(
+          height: 40,
+          alignment: Alignment.center,
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.edit_outlined,
-                size: 15,
-                color: VentlyColors.berryMagenta,
-              ),
-              const SizedBox(width: 6),
+              Icon(Icons.edit_outlined, size: 15, color: Colors.white),
+              SizedBox(width: 6),
               Text(
                 'Edit profile',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  fontSize: 12.5,
-                  color: context.ink,
+                  fontSize: 13,
+                  color: Colors.white,
                 ),
               ),
             ],
@@ -866,24 +868,13 @@ class _HeroSettingsButton extends StatelessWidget {
   }
 }
 
-/// The four things you can make, on the light-grey slab.
-///
-/// On dark this is the one panel on the page that is not another shade of
-/// near-black — the same treatment the welcome screen uses, for the same
-/// reason: it is the block that says what this place is for, sitting among
-/// cards that hold what is in it. On light it is the white card it already
-/// was, so nothing about the light theme changes.
 class _QuickActionsBar extends StatelessWidget {
   const _QuickActionsBar();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-      decoration: BoxDecoration(
-        color: GlassTokens.panel(context),
-        borderRadius: BorderRadius.circular(22),
-      ),
+    return GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -936,25 +927,25 @@ class _Action extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Column(
             children: [
-              // Solid berry with a white glyph. A tinted chip works on a
-              // dark card and disappears on a light one, and the panel under
-              // this is light in both themes.
               Container(
                 width: 46,
                 height: 46,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: VentlyColors.berryMagenta,
+                  color: context.glass(0.65),
+                  border: Border.all(
+                    color: VentlyColors.softMauve.withOpacity(0.4),
+                  ),
                 ),
-                child: Icon(icon, color: Colors.white, size: 22),
+                child: Icon(icon, color: VentlyColors.berryMagenta, size: 22),
               ),
-              const SizedBox(height: 7),
+              const SizedBox(height: 6),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: GlassTokens.onPanel(context),
+                  color: context.ink,
                 ),
               ),
             ],
@@ -1048,18 +1039,23 @@ class _FriendsCard extends StatelessWidget {
             ),
           const Spacer(),
           const SizedBox(height: 12),
-          // The "Find Friends" grey, which was white at 70% with berry text on
-          // it: about 1.8:1, the washed-out pink-on-grey it always looked
-          // like. It reads in neither theme — in light it is a near-white pill
-          // on a white card, in dark it is a bright slab with faint type.
+          // The light-grey pill, with ink on it.
+          //
+          // It was this grey once with berry type — about 1.8:1, the
+          // washed-out pink-on-grey it always looked like. Same surface, ink
+          // for the words, berry kept for the arrow, which is a shape rather
+          // than something to read.
           Material(
-            color: GlassTokens.cardChip(context),
+            color: GlassTokens.panel(context),
             borderRadius: BorderRadius.circular(20),
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
               onTap: () => context.push('/friends'),
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 9,
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1071,12 +1067,12 @@ class _FriendsCard extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 12.5,
-                          color: VentlyColors.berryMagenta,
+                          color: GlassTokens.onPanel(context),
                         ),
                       ),
                     ),
-                    SizedBox(width: 5),
-                    Icon(
+                    const SizedBox(width: 5),
+                    const Icon(
                       Icons.arrow_forward_rounded,
                       size: 15,
                       color: VentlyColors.berryMagenta,
@@ -1297,7 +1293,7 @@ class _HighlightsCard extends StatelessWidget {
                 child: _MiniStat(
                   icon: Icons.favorite_rounded,
                   value: hearts,
-                  label: 'Hearts\nReceived',
+                  label: 'Hearts',
                 ),
               ),
               const SizedBox(width: 8),
@@ -1305,7 +1301,7 @@ class _HighlightsCard extends StatelessWidget {
                 child: _MiniStat(
                   icon: Icons.chat_bubble_outline_rounded,
                   value: replies,
-                  label: 'Replies\nShared',
+                  label: 'Replies',
                 ),
               ),
               const SizedBox(width: 8),
@@ -1313,7 +1309,7 @@ class _HighlightsCard extends StatelessWidget {
                 child: _MiniStat(
                   icon: Icons.auto_awesome_rounded,
                   value: comforted,
-                  label: 'People\nComforted',
+                  label: 'Comforted',
                 ),
               ),
             ],
@@ -1347,12 +1343,15 @@ class _MiniStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-      // The "This week" pillars: white at 45%, which lands on about #737373
-      // over a black page, carrying off-white type. That is 3.1:1 for the
-      // value and 2.0:1 for the label — the "Hearts Receiv ed" mush that has
-      // been in every screenshot of this screen.
+      // The light-grey slab, with ink on it.
+      //
+      // These were this grey once before and unreadable with it: white at 45%
+      // over black lands near #737373, and it carried the dark theme's
+      // off-white type — 3.1:1 on the value, 2.0:1 on the label, the
+      // "Hearts Receiv ed" mush. The grey was never the problem; keeping the
+      // dark theme's ink on a light surface was.
       decoration: BoxDecoration(
-        color: GlassTokens.cardChip(context),
+        color: GlassTokens.panel(context),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -1364,18 +1363,24 @@ class _MiniStat extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.w900,
               fontSize: 17,
-              color: GlassTokens.onCard(context),
+              color: GlassTokens.onPanel(context),
             ),
           ),
           const SizedBox(height: 2),
+          // One word each. A two-word label inside a 60pt column wraps
+          // mid-word however it is broken — "Hearts Receiv ed" is what that
+          // looks like — and the card's title already says these are this
+          // week's.
           Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 9.5,
+              fontSize: 10.5,
               height: 1.2,
               fontWeight: FontWeight.w700,
-              color: GlassTokens.onCardMuted(context),
+              color: GlassTokens.onPanelMuted(context),
             ),
           ),
         ],
@@ -1503,12 +1508,17 @@ class _CardTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
+        // The light-grey disc, which is where this page wears the slab.
+        //
+        // It is the mark on each card rather than the card itself: the grey
+        // reads as the app's own, and the berry glyph has a ground to sit on
+        // instead of floating on near-black.
         Container(
           width: 30,
           height: 30,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: GlassTokens.cardChip(context),
+            color: GlassTokens.panel(context),
           ),
           child: Icon(icon, size: 17, color: VentlyColors.berryMagenta),
         ),
