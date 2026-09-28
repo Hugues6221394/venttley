@@ -1,0 +1,92 @@
+BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+SELECT no_plan();
+SET session_replication_role=replica;
+INSERT INTO public.users(user_id,anonymous_pseudonym,avatar_seed,recovery_key_hash,display_name,display_name_normalized,username_normalized,user_role,account_status,birth_year)
+SELECT ('1a710000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'notifmod'||n,'notifmod'||n,'x','Notice Test','notice test','notifmod'||n,r::public.user_role_type,'active',1990
+FROM (VALUES(1,'super_admin'),(2,'admin'),(3,'moderator'),(4,'support'),(5,'analyst'),(6,'read_only_auditor')) roles(n,r);
+INSERT INTO auth.users(id,aud,role,created_at,updated_at) SELECT user_id,'authenticated','authenticated',now(),now() FROM public.users WHERE anonymous_pseudonym LIKE 'notifmod%';
+SET session_replication_role=origin;
+UPDATE private.staff_inbox_control SET enabled=true,audience_roles=ARRAY['super_admin','admin','moderator','support','analyst','read_only_auditor'];
+INSERT INTO public.moderation_cases(case_id,target_type,target_id,severity,status)
+VALUES('1a710000-1000-4000-8000-000000000001','profile','1a710000-0000-4000-8000-000000000002','normal','open');
+SELECT ok(NOT has_function_privilege('authenticated','private.prune_staff_inbox_deliveries(integer)','EXECUTE'),'clients cannot run retention');
+SELECT ok(NOT has_function_privilege('anon','public.admin_configure_staff_inbox_operations(uuid,boolean,boolean)','EXECUTE'),'anonymous cannot configure sources');
+SELECT ok(NOT has_table_privilege('authenticated','private.staff_inbox_runtime','SELECT'),'runtime telemetry is not a public table');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims','{"sub":"1a710000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}',true);
+SELECT throws_like($$SELECT public.admin_configure_staff_inbox_operations('1a710000-3000-4000-8000-000000000001',true,false)$$,'%aal2_required%','source enablement needs MFA');
+SELECT set_config('request.jwt.claims','{"sub":"1a710000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',true);
+SELECT public.admin_assign_case('1a710000-1000-4000-8000-000000000001','1a710000-0000-4000-8000-000000000003','fixture');
+RESET ROLE;
+SELECT is((SELECT count(*)::int FROM private.staff_event_outbox WHERE source_id='1a710000-1000-4000-8000-000000000001'),0,'new producers default off');
+SET LOCAL ROLE authenticated;
+SELECT lives_ok($$SELECT public.admin_configure_staff_inbox_operations('1a710000-3000-4000-8000-000000000001',true,false)$$,'explicit source enablement');
+SELECT lives_ok($$SELECT public.admin_configure_staff_inbox_operations('1a710000-3000-4000-8000-000000000001',true,false)$$,'configuration receipt replays');
+SELECT throws_like($$SELECT public.admin_configure_staff_inbox_operations('1a710000-3000-4000-8000-000000000001',false,false)$$,'%idempotency_payload_mismatch%','receipt cannot change rollout intent');
+SELECT public.admin_assign_case('1a710000-1000-4000-8000-000000000001','1a710000-0000-4000-8000-000000000002','private-sentinel');
+SELECT public.admin_assign_case('1a710000-1000-4000-8000-000000000001','1a710000-0000-4000-8000-000000000002','private-sentinel');
+RESET ROLE;
+SELECT is((SELECT count(*)::int FROM private.staff_event_outbox WHERE source_id='1a710000-1000-4000-8000-000000000001'),1,'repeat assignment to same owner produces no duplicate');
+SELECT ok(NOT EXISTS(SELECT 1 FROM private.staff_event_outbox o WHERE source_id='1a710000-1000-4000-8000-000000000001' AND to_jsonb(o)::text LIKE '%private-sentinel%'),'notes never enter outbox');
+SELECT private.process_staff_inbox(100);
+SELECT is((SELECT count(*)::int FROM private.staff_inbox_deliveries d JOIN private.staff_event_outbox o USING(event_id) WHERE o.source_id='1a710000-1000-4000-8000-000000000001'),1,'only intended current owner receives assignment');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims','{"sub":"1a710000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal2"}',true);
+SELECT is((SELECT count(*)::int FROM public.admin_staff_inbox_page('assigned','moderation') WHERE source_id='1a710000-1000-4000-8000-000000000001'),1,'moderation category and assigned filter work');
+SELECT is((SELECT destination FROM public.admin_staff_inbox() WHERE source_id='1a710000-1000-4000-8000-000000000001'),'/moderation/cases/1a710000-1000-4000-8000-000000000001','legacy RPC has exact case destination');
+SELECT public.admin_assign_case('1a710000-1000-4000-8000-000000000001','1a710000-0000-4000-8000-000000000003','fixture');
+SELECT is((SELECT count(*)::int FROM public.admin_staff_inbox_page('all','moderation') WHERE source_id='1a710000-1000-4000-8000-000000000001'),0,'reassignment hides prior-owner notices immediately');
+RESET ROLE;
+INSERT INTO private.staff_inbox_preferences(staff_id,assignment_notifications) VALUES('1a710000-0000-4000-8000-000000000003',false);
+SELECT private.process_staff_inbox(100);
+SELECT is((SELECT count(*)::int FROM private.staff_inbox_deliveries d JOIN private.staff_event_outbox o USING(event_id) WHERE o.source_id='1a710000-1000-4000-8000-000000000001' AND d.recipient_id='1a710000-0000-4000-8000-000000000003'),0,'optional assignment respects opt-out');
+UPDATE public.moderation_cases SET severity='critical' WHERE case_id='1a710000-1000-4000-8000-000000000001';
+SET LOCAL ROLE authenticated;
+SELECT public.admin_assign_case('1a710000-1000-4000-8000-000000000001',NULL,'fixture');
+SELECT public.admin_assign_case('1a710000-1000-4000-8000-000000000001','1a710000-0000-4000-8000-000000000003','fixture');
+SELECT set_config('request.jwt.claims','{"sub":"1a710000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',true);
+SELECT public.admin_set_case_status('1a710000-1000-4000-8000-000000000001','awaiting_second_review','private-sentinel');
+SELECT public.admin_set_case_status('1a710000-1000-4000-8000-000000000001','awaiting_second_review','private-sentinel');
+RESET ROLE;
+SELECT is((SELECT count(*)::int FROM private.staff_event_outbox WHERE source_id='1a710000-1000-4000-8000-000000000001' AND kind='moderation_review_requested'),1,'same-state review does not fan out twice');
+SELECT private.process_staff_inbox(100);
+SELECT is((SELECT count(*)::int FROM private.staff_inbox_deliveries d JOIN private.staff_event_outbox o USING(event_id) WHERE o.source_id='1a710000-1000-4000-8000-000000000001' AND o.kind='moderation_review_requested' AND d.recipient_id IN (SELECT user_id FROM public.users WHERE anonymous_pseudonym LIKE 'notifmod%')),2,'only independent eligible fixture reviewers receive review request');
+SELECT is((SELECT count(*)::int FROM private.staff_inbox_deliveries d JOIN private.staff_event_outbox o USING(event_id) WHERE o.source_id='1a710000-1000-4000-8000-000000000001' AND o.kind='moderation_assigned' AND d.recipient_id='1a710000-0000-4000-8000-000000000003'),1,'critical assignment bypasses opt-out');
+SELECT ok((SELECT delivered_events>0 AND max_delivery_lag_seconds>=0 AND batch_at IS NOT NULL FROM private.staff_inbox_runtime),'worker records bounded aggregate lag evidence');
+SET LOCAL ROLE authenticated;
+SELECT is((SELECT count(*)::int FROM public.admin_staff_inbox_page('all','moderation') WHERE source_id='1a710000-1000-4000-8000-000000000001'),0,'requester cannot read independent review notice');
+SELECT set_config('request.jwt.claims','{"sub":"1a710000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',true);
+SELECT is((SELECT count(*)::int FROM public.admin_staff_inbox_page('all','moderation') WHERE source_id='1a710000-1000-4000-8000-000000000001'),2,'moderator reads permitted case notices');
+SELECT throws_like($$SELECT public.admin_configure_staff_inbox_operations('1a710000-3000-4000-8000-000000000002',false,false)$$,'%not_authorized%','moderator cannot change rollout');
+RESET ROLE;
+UPDATE public.users SET account_status='suspended' WHERE user_id='1a710000-0000-4000-8000-000000000003';
+SET LOCAL ROLE authenticated;
+SELECT throws_like($$SELECT public.admin_staff_inbox_page('all','moderation')$$,'%not_authorized%','current suspension hides notices');
+RESET ROLE;
+UPDATE public.users SET account_status='active' WHERE user_id='1a710000-0000-4000-8000-000000000003';
+UPDATE private.staff_inbox_control SET moderation_events_enabled=false;
+SET LOCAL ROLE authenticated;
+SELECT is((SELECT count(*)::int FROM public.admin_staff_inbox_page('all','moderation')),0,'source rollback hides previously delivered notices');
+RESET ROLE;
+-- Old deliveries are disposable metadata; keys, sources and audit are not.
+INSERT INTO private.support_cases(support_case_id,source_kind,category,status,sla_due_at,created_by)
+VALUES('1a710000-1000-4000-8000-000000000002','other','technical','open',now()+interval '1 day','1a710000-0000-4000-8000-000000000001');
+INSERT INTO private.staff_event_outbox(event_id,event_key,kind,source_id,intended_recipient,severity,status,created_at)
+SELECT ('1a710000-2000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'retention-test-'||n,'support_sla_breached','1a710000-1000-4000-8000-000000000002','1a710000-0000-4000-8000-000000000001','critical',
+ CASE WHEN n=3 THEN 'failed' WHEN n=4 THEN 'pending' ELSE 'delivered' END,now()-interval '100 days' FROM generate_series(1,4)n;
+INSERT INTO private.staff_inbox_deliveries(event_id,recipient_id,delivered_at,read_at)
+SELECT event_id,'1a710000-0000-4000-8000-000000000001',now()-interval '100 days',now()-interval '99 days' FROM private.staff_event_outbox WHERE event_key LIKE 'retention-test-%';
+UPDATE private.staff_inbox_deliveries SET delivered_at=now()-interval '100 days' WHERE event_id IN(SELECT event_id FROM private.staff_event_outbox WHERE source_id='1a710000-1000-4000-8000-000000000001');
+SELECT is(private.prune_staff_inbox_deliveries(),0,'retention defaults off');
+UPDATE private.staff_inbox_control SET delivery_retention_enabled=true;
+SELECT is(private.prune_staff_inbox_deliveries(1),1,'retention batch bounded');
+SELECT is(private.prune_staff_inbox_deliveries(1000),1,'remaining terminal support delivery pruned');
+SELECT is((SELECT count(*)::int FROM private.staff_event_outbox WHERE event_key LIKE 'retention-test-%'),4,'durable deduplication keys preserved');
+SELECT is((SELECT count(*)::int FROM private.staff_inbox_deliveries d JOIN private.staff_event_outbox o USING(event_id) WHERE o.event_key LIKE 'retention-test-%'),2,'pending and failed read states retained');
+SELECT is((SELECT count(*)::int FROM private.staff_inbox_deliveries d JOIN private.staff_event_outbox o USING(event_id) WHERE o.source_id='1a710000-1000-4000-8000-000000000001' AND d.recipient_id IN (SELECT user_id FROM public.users WHERE anonymous_pseudonym LIKE 'notifmod%')),4,'all fixture moderation delivery evidence retained');
+SELECT throws_like('SELECT private.prune_staff_inbox_deliveries(1001)','%invalid_limit%','oversized cleanup rejected');
+UPDATE private.staff_inbox_control SET enabled=false;
+SELECT is(private.prune_staff_inbox_deliveries(),0,'global rollback also pauses retention');
+SELECT * FROM finish();
+ROLLBACK;

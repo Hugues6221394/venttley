@@ -36,6 +36,13 @@ SELECT throws_like('SELECT * FROM public.admin_staff_inbox()','%not_authorized%'
 SELECT throws_like('SELECT public.admin_staff_inbox_preferences(false)','%not_authorized%','members cannot change staff preferences');
 SELECT set_config('request.jwt.claims','{"sub":"1a440000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}',true);
 SELECT is((SELECT count(*)::INTEGER FROM public.admin_staff_inbox()),1,'recipient can read own metadata-only notification');
+SELECT is((SELECT count(*)::INTEGER FROM public.admin_staff_inbox_page('all','support','info')),1,'category and severity filter actual recipient rows');
+SELECT is((SELECT count(*)::INTEGER FROM public.admin_staff_inbox_page('all','legal','all')),0,'category cannot expose another source');
+SELECT throws_like($$SELECT * FROM public.admin_staff_inbox_page('all','invented','all')$$,'%invalid_inbox_query%','unknown category rejected');
+SELECT throws_like($$SELECT * FROM public.admin_staff_inbox_page('all','all','invented')$$,'%invalid_inbox_query%','unknown severity rejected');
+SELECT throws_like($$SELECT * FROM public.admin_staff_inbox_page('all','all','all',101)$$,'%invalid_inbox_query%','new page size bounded');
+SELECT is((SELECT count(*)::INTEGER FROM public.admin_support_case_queue_filtered('open','1a440000-1000-4000-8000-000000000001')),1,'source link resolves exact case');
+SELECT throws_like($$SELECT * FROM public.admin_legal_request_queue_filtered()$$,'%not_authorized%','support cannot open restricted source queue');
 SELECT is((public.admin_staff_attention()->>'unread_count')::INTEGER,1,'bell unread count uses personal unread deliveries');
 SELECT is((SELECT destination FROM public.admin_staff_inbox() LIMIT 1),'/support/cases','destination is server-derived');
 SELECT is(public.admin_staff_inbox_set_read(ARRAY[(SELECT event_id FROM public.admin_staff_inbox() LIMIT 1)],true),1,'mark read changes recipient state');
@@ -55,6 +62,15 @@ SELECT set_config('request.jwt.claims','{"sub":"1a440000-0000-4000-8000-00000000
 SELECT is((SELECT count(*)::INTEGER FROM public.admin_staff_inbox()),0,'super admin cannot read another recipient inbox');
 RESET role;
 SELECT is((SELECT status FROM private.support_cases WHERE support_case_id='1a440000-1000-4000-8000-000000000001'),'assigned','read state never resolves the case');
+SELECT is((SELECT open_count::INTEGER FROM private.staff_attention_snapshots WHERE queue_key='support'),1,'reading a notice does not decrement actionable queue');
+UPDATE private.support_cases SET status='resolved',resolved_at=now() WHERE support_case_id='1a440000-1000-4000-8000-000000000001';
+SELECT private.process_staff_inbox(100);
+SELECT is((SELECT open_count::INTEGER FROM private.staff_attention_snapshots WHERE queue_key='support'),0,'worker reconciles queue after source resolution');
+SET LOCAL role authenticated;
+SELECT set_config('request.jwt.claims','{"sub":"1a440000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}',true);
+SELECT is((SELECT count(*)::INTEGER FROM public.admin_staff_inbox_page('assigned')),0,'resolved case leaves assigned-to-me notices');
+SELECT is((SELECT count(*)::INTEGER FROM public.admin_support_case_queue_filtered('open')),0,'badge destination matches reconciled open queue');
+RESET role;
 
 INSERT INTO private.support_cases(support_case_id,source_kind,category,assigned_to,status,sla_due_at,created_by)
 VALUES ('1a440000-1000-4000-8000-000000000002','other','technical','1a440000-0000-4000-8000-000000000002','assigned',now()-interval '1 hour','1a440000-0000-4000-8000-000000000001');
@@ -110,6 +126,7 @@ SET session_replication_role=origin;
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims','{"sub":"1a440000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}',true);
 SELECT is((SELECT count(*)::INTEGER FROM public.admin_staff_inbox()),0,'role change removes access to previously delivered source');
+SELECT is((SELECT count(*)::INTEGER FROM public.admin_staff_inbox_page()),0,'filtered inbox also rechecks demoted source access');
 SELECT is((public.admin_staff_attention()->>'unread_count')::INTEGER,0,'badges recheck source access after demotion');
 SELECT is(jsonb_array_length(public.admin_staff_attention()->'queues'),0,'role change removes restricted queue aggregates');
 RESET role;
@@ -124,6 +141,7 @@ SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims','{"sub":"1a440000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',true);
 SELECT is(public.admin_staff_attention(),' {"enabled":false}'::JSONB,'kill switch disables attention without deleting data');
 SELECT is((SELECT count(*)::INTEGER FROM public.admin_staff_inbox()),0,'kill switch hides inbox');
+SELECT is((SELECT count(*)::INTEGER FROM public.admin_staff_inbox_page()),0,'kill switch hides filtered inbox');
 SELECT set_config('request.jwt.claims','{"sub":"1a440000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}',true);
 SELECT throws_like($$SELECT public.admin_configure_staff_inbox('1a440000-3000-4000-8000-000000000001',true)$$,'%aal2_required%','rollout needs step-up authentication');
 SELECT set_config('request.jwt.claims','{"sub":"1a440000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',true);

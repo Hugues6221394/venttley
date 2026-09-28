@@ -84,17 +84,18 @@ SELECT ok(
   ),
   'a user with no history receives global database posts'
 );
--- Asks for a generous page rather than the top 8. The claim is that a
--- cold-start user gets suggestions out of the database at all, not that this
--- particular fixture outranks everyone: with 8 or more other accounts present
--- — which the investor-demo seed alone provides — the fixture is pushed off a
--- top-8 list and this failed for reasons that had nothing to do with the
--- behaviour under test. Confirmed by measuring it both ways: 8 suggestions
--- and absent with the demo seed loaded, 4 and present without it.
+-- The RPC caps even a requested 100 rows at 20. A fixed candidate can lose
+-- that ranking legitimately on a populated local database. Verify cold-start
+-- discovery itself, and that every returned suggestion is a real eligible
+-- account, without requiring this fixture to outrank existing accounts.
 SELECT ok(
-  EXISTS (
-    SELECT 1 FROM public.friend_suggestions(100)
-     WHERE user_id = '71000000-0000-4000-8000-000000000001'
+  (SELECT count(*) FROM public.friend_suggestions(20)) BETWEEN 1 AND 20
+  AND NOT EXISTS (
+    SELECT 1 FROM public.friend_suggestions(20) s
+    LEFT JOIN public.users u ON u.user_id=s.user_id
+    WHERE u.user_id IS NULL OR u.user_id=auth.uid()
+      OR u.account_status<>'active' OR u.deactivated_at IS NOT NULL
+      OR COALESCE(u.safety_tier,'standard')='restricted_minor'
   ),
   'a user with no friends receives database-backed people suggestions'
 );

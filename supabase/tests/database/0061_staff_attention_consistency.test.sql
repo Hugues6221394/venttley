@@ -1,0 +1,87 @@
+BEGIN;
+SELECT no_plan();
+SET session_replication_role=replica;
+INSERT INTO auth.users(id) VALUES('1a610000-0000-4000-8000-000000000001');
+INSERT INTO public.users(user_id,anonymous_pseudonym,avatar_seed,recovery_key_hash,user_role,account_status,birth_year,display_name,display_name_normalized,username_normalized)
+VALUES('1a610000-0000-4000-8000-000000000001','attentiontest','x','x','super_admin','active',1990,'Attention Test','attention test','attentiontest');
+SET session_replication_role=origin;
+SELECT ok(NOT has_function_privilege('authenticated','private.refresh_staff_attention()','EXECUTE'),'client cannot reconcile counts');
+SELECT ok(NOT has_function_privilege('anon','public.admin_staff_attention()','EXECUTE'),'anonymous denied');
+SELECT ok(NOT has_table_privilege('authenticated','private.staff_attention_snapshots','SELECT'),'private aggregate table denied');
+SELECT ok(NOT has_table_privilege('authenticated','private.staff_attention_changes','INSERT'),'clients cannot manufacture change markers');
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid='private.staff_attention_changes'::regclass),'change log RLS enabled');
+SELECT is((SELECT count(*)::int FROM cron.job WHERE jobname='staff-inbox-dispatch'),1,'reuse one existing dispatcher');
+UPDATE private.staff_inbox_control SET enabled=true,audience_roles=ARRAY['super_admin','admin','moderator','support','analyst','read_only_auditor'];
+SELECT lives_ok($$SELECT private.process_staff_inbox(1)$$,'existing worker reconciles all queues');
+SELECT is((SELECT count(*)::int FROM private.staff_attention_snapshots WHERE NOT invalidated),5,'five reconciled queues, including independently gated incidents');
+SELECT is((SELECT open_count FROM private.staff_attention_snapshots WHERE queue_key='moderation'),(SELECT count(*) FROM public.reports WHERE NOT is_resolved),'report count equals canonical filter');
+SELECT is((SELECT open_count FROM private.staff_attention_snapshots WHERE queue_key='appeals'),(SELECT count(*) FROM public.moderation_appeals WHERE status='open'),'appeals count not capped by page size');
+SELECT is((SELECT open_count FROM private.staff_attention_snapshots WHERE queue_key='support'),(SELECT count(*) FROM private.support_cases WHERE status NOT IN ('closed','resolved')),'support count equals canonical filter');
+SELECT is((SELECT open_count FROM private.staff_attention_snapshots WHERE queue_key='legal'),(SELECT count(*) FROM private.legal_requests WHERE status='awaiting_approval'),'legal count equals canonical filter');
+
+-- Verify every role through the actual API function and current DB role, not claims.
+CREATE FUNCTION pg_temp.attention_role_count(r TEXT) RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE result INTEGER;
+BEGIN
+  UPDATE public.users SET user_role=r::public.user_role_type WHERE user_id='1a610000-0000-4000-8000-000000000001';
+  PERFORM set_config('request.jwt.claims','{"sub":"1a610000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+  SELECT jsonb_array_length(public.admin_staff_attention()->'queues') INTO result;
+  RETURN result;
+END;
+$$;
+SELECT is(pg_temp.attention_role_count('super_admin'),4,'super admin four queues');
+SELECT is(pg_temp.attention_role_count('admin'),3,'admin no restricted legal approval badge');
+SELECT is(pg_temp.attention_role_count('moderator'),2,'moderator reports and appeals only');
+SELECT is(pg_temp.attention_role_count('support'),1,'support its queue only');
+SELECT is(pg_temp.attention_role_count('analyst'),0,'analyst no triage queues');
+SELECT is(pg_temp.attention_role_count('read_only_auditor'),0,'auditor no triage queues');
+SELECT throws_like($$SELECT pg_temp.attention_role_count('normal')$$,'%not_authorized%','normal member denied');
+SELECT pg_temp.attention_role_count('super_admin');
+
+INSERT INTO private.support_cases(support_case_id,source_kind,category,status,sla_due_at,created_by)
+VALUES('1a610000-1000-4000-8000-000000000001','other','technical','open',now()+interval '1 day','1a610000-0000-4000-8000-000000000001');
+SELECT ok(EXISTS(SELECT 1 FROM private.staff_attention_changes WHERE queue_key='support'),'source insert invalidates snapshot');
+SET LOCAL ROLE authenticated;
+SELECT ok((SELECT (q->>'stale')::BOOLEAN FROM jsonb_array_elements(public.admin_staff_attention()->'queues')q WHERE q->>'key'='support'),'API reports changed snapshot as stale, not healthy');
+RESET ROLE;
+SELECT private.refresh_staff_attention();
+UPDATE private.support_cases SET status='resolved',resolved_at=now() WHERE support_case_id='1a610000-1000-4000-8000-000000000001';
+SELECT ok(EXISTS(SELECT 1 FROM private.staff_attention_changes WHERE queue_key='support'),'resolution invalidates snapshot');
+SELECT private.refresh_staff_attention();
+SELECT is((SELECT open_count FROM private.staff_attention_snapshots WHERE queue_key='support'),(SELECT count(*) FROM private.support_cases WHERE status NOT IN ('closed','resolved')),'resolution reconciles exactly');
+DELETE FROM private.support_cases WHERE support_case_id='1a610000-1000-4000-8000-000000000001';
+SELECT ok(EXISTS(SELECT 1 FROM private.staff_attention_changes WHERE queue_key='support'),'delete invalidates snapshot');
+SELECT private.refresh_staff_attention();
+UPDATE public.reports SET is_resolved=is_resolved WHERE false;
+UPDATE public.moderation_appeals SET status=status WHERE false;
+UPDATE private.legal_requests SET status=status WHERE false;
+SELECT is((SELECT count(*)::int FROM private.staff_attention_changes),3,'other three source statements invalidate safely');
+SELECT private.refresh_staff_attention();
+SELECT lives_ok($$SELECT private.refresh_staff_attention()$$,'refresh retry is safe');
+INSERT INTO private.staff_attention_changes(queue_key,transaction_id) SELECT 'moderation',-i FROM generate_series(1,1001)i;
+SELECT private.refresh_staff_attention();
+SELECT is((SELECT count(*)::int FROM private.staff_attention_changes WHERE queue_key='moderation'),1,'at most 1000 markers cleaned per queue per run');
+SET LOCAL ROLE authenticated;
+SELECT ok((SELECT (q->>'stale')::BOOLEAN FROM jsonb_array_elements(public.admin_staff_attention()->'queues')q WHERE q->>'key'='moderation'),'remaining reconciliation backlog cannot appear healthy');
+RESET ROLE;
+SELECT private.refresh_staff_attention();
+SELECT is((SELECT count(*)::int FROM private.staff_attention_changes),0,'subsequent run drains backlog idempotently');
+UPDATE private.staff_attention_snapshots SET measured_at=now()+interval '2 minutes' WHERE queue_key='moderation';
+SET LOCAL ROLE authenticated;
+SELECT ok((SELECT (q->>'stale')::BOOLEAN FROM jsonb_array_elements(public.admin_staff_attention()->'queues')q WHERE q->>'key'='moderation'),'future timestamp unknown');
+RESET ROLE;
+UPDATE public.users SET account_status='suspended' WHERE user_id='1a610000-0000-4000-8000-000000000001';
+SET LOCAL ROLE authenticated;
+SELECT throws_like($$SELECT public.admin_staff_attention()$$,'%not_authorized%','suspension denies existing JWT');
+RESET ROLE;
+UPDATE public.users SET account_status='active' WHERE user_id='1a610000-0000-4000-8000-000000000001';
+UPDATE private.staff_inbox_control SET enabled=false;
+SET LOCAL ROLE authenticated;
+SELECT is(public.admin_staff_attention(),'{"enabled":false}'::JSONB,'backend kill switch hides counts');
+RESET ROLE;
+UPDATE public.reports SET is_resolved=is_resolved WHERE false;
+SELECT is((SELECT count(*)::int FROM private.staff_attention_changes),0,'disabled pilot emits no markers');
+UPDATE private.staff_inbox_control SET enabled=true;
+SELECT is((SELECT count(*)::int FROM private.staff_attention_snapshots WHERE invalidated),5,'re-enabling invalidates old snapshots before first refresh');
+SELECT * FROM finish();
+ROLLBACK;
