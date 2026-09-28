@@ -1004,6 +1004,10 @@ class Persona {
   final String pseudonym;
   final String avatarSeed;
   final String? bio;
+
+  /// A picture chosen from the gallery. Null falls back to the generated
+  /// avatar, which every persona always has.
+  final String? profilePhotoUrl;
   final DateTime createdAt;
 
   const Persona({
@@ -1012,6 +1016,7 @@ class Persona {
     required this.avatarSeed,
     required this.createdAt,
     this.bio,
+    this.profilePhotoUrl,
   });
 }
 
@@ -3218,20 +3223,20 @@ class RecoveryMethod {
   String? get display => address ?? masked;
 
   factory RecoveryMethod.fromJson(Map<String, dynamic> json) => RecoveryMethod(
-        address: json['address'] as String?,
-        masked: json['masked'] as String?,
-        pendingAddress: json['pending_address'] as String?,
-        // Absent means not verified. The safe reading of a missing key for
-        // anything security-shaped is the one that grants nothing.
-        verified: json['verified'] == true,
-        pending: json['pending'] == true,
-        codeExpiresAt: json['code_expires_at'] == null
-            ? null
-            : DateTime.tryParse(json['code_expires_at'] as String)?.toLocal(),
-        addedAt: json['added_at'] == null
-            ? null
-            : DateTime.tryParse(json['added_at'] as String)?.toLocal(),
-      );
+    address: json['address'] as String?,
+    masked: json['masked'] as String?,
+    pendingAddress: json['pending_address'] as String?,
+    // Absent means not verified. The safe reading of a missing key for
+    // anything security-shaped is the one that grants nothing.
+    verified: json['verified'] == true,
+    pending: json['pending'] == true,
+    codeExpiresAt: json['code_expires_at'] == null
+        ? null
+        : DateTime.tryParse(json['code_expires_at'] as String)?.toLocal(),
+    addedAt: json['added_at'] == null
+        ? null
+        : DateTime.tryParse(json['added_at'] as String)?.toLocal(),
+  );
 }
 
 /// The recovery section of the Security Centre.
@@ -3294,16 +3299,16 @@ class PolicyDocument {
   bool get isPrivacy => kind == 'privacy';
 
   factory PolicyDocument.fromJson(Map<String, dynamic> json) => PolicyDocument(
-        kind: (json['kind'] as String?) ?? '',
-        version: (json['version'] as String?) ?? '',
-        title: (json['title'] as String?) ?? '',
-        bodyMarkdown: (json['body_markdown'] as String?) ?? '',
-        summary: json['summary'] as String?,
-        bodyUrl: json['body_url'] as String?,
-        effectiveAt: json['effective_at'] == null
-            ? null
-            : DateTime.tryParse(json['effective_at'] as String)?.toLocal(),
-      );
+    kind: (json['kind'] as String?) ?? '',
+    version: (json['version'] as String?) ?? '',
+    title: (json['title'] as String?) ?? '',
+    bodyMarkdown: (json['body_markdown'] as String?) ?? '',
+    summary: json['summary'] as String?,
+    bodyUrl: json['body_url'] as String?,
+    effectiveAt: json['effective_at'] == null
+        ? null
+        : DateTime.tryParse(json['effective_at'] as String)?.toLocal(),
+  );
 }
 
 /// The pair a person must agree to before the account is usable.
@@ -3378,9 +3383,7 @@ class VerificationState {
 
   /// The safe default for a client that could not reach the server: nothing
   /// claimed, nothing offered.
-  static const VerificationState unknown = VerificationState(
-    status: 'unknown',
-  );
+  static const VerificationState unknown = VerificationState(status: 'unknown');
 
   bool get isVerified => status == 'approved';
   bool get hasNeverApplied => status == 'not_applied';
@@ -3459,7 +3462,11 @@ class VerificationCategories {
       label: 'Public figure',
       blurb: 'You are known publicly and impersonation is a risk.',
     ),
-    (key: 'other', label: 'Something else', blurb: 'Tell us in your own words.'),
+    (
+      key: 'other',
+      label: 'Something else',
+      blurb: 'Tell us in your own words.',
+    ),
   ];
 
   static String labelFor(String? key) {
@@ -3503,7 +3510,7 @@ class FeedbackReport {
     status: (json['status'] as String?) ?? 'new',
     staffNote: json['staff_note'] as String?,
     createdAt:
-        DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
+        DateTime.tryParse(json['created_at'] as String? ?? '') ??
+        DateTime.now(),
   );
 }
-

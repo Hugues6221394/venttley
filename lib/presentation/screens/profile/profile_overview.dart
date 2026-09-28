@@ -1080,44 +1080,53 @@ class _PersonasCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final personas = ref.watch(myPersonasProvider).valueOrNull ?? const [];
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Expanded(
-                child: _CardTitle(
-                  icon: Icons.theater_comedy_outlined,
-                  title: 'Personas',
+    // The whole card opens the manager. That chevron has always been there
+    // promising somewhere to go, and there was nowhere: a persona could be
+    // made and then never renamed, re-photographed or deleted.
+    return GestureDetector(
+      onTap: () => context.push('/personas'),
+      child: GlassCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Expanded(
+                  child: _CardTitle(
+                    icon: Icons.theater_comedy_outlined,
+                    title: 'Personas',
+                  ),
                 ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: VentlyColors.softMauve),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Switch identities. Stay true to you.',
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.35,
-              color: context.ink.withOpacity(0.6),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: VentlyColors.softMauve,
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              for (final p in personas.take(3))
-                Expanded(child: _PersonaChip(persona: p)),
-              Expanded(
-                child: _PersonaCreate(
-                  onTap: () => _createPersona(context, ref),
-                ),
+            const SizedBox(height: 6),
+            Text(
+              'Switch identities. Stay true to you.',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                color: context.ink.withOpacity(0.6),
               ),
-            ],
-          ),
-        ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                for (final p in personas.take(3))
+                  Expanded(child: _PersonaChip(persona: p)),
+                Expanded(
+                  child: _PersonaCreate(
+                    onTap: () => _createPersona(context, ref),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1179,11 +1188,13 @@ class _PersonaChip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: () => ref.read(activePersonaProvider.notifier).state = persona,
+      onLongPress: () => context.push('/personas'),
       child: Column(
         children: [
           ProfileAvatar(
             avatarSeed: persona.avatarSeed,
             label: persona.pseudonym,
+            profilePhotoUrl: persona.profilePhotoUrl,
             size: 46,
           ),
           const SizedBox(height: 5),

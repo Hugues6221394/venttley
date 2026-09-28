@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
 import '../screens/compose/compose_screen.dart';
 import '../screens/compose/create_story_screen.dart';
+import '../screens/profile/personas_screen.dart';
 import '../screens/discover/discover_screen.dart';
 import '../screens/home/adaptive_shell_tabs.dart';
 import '../screens/feed/post_detail_screen.dart';
@@ -594,6 +595,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/settings',
                 builder: (_, __) => const SettingsScreen(),
+              ),
+              GoRoute(
+                path: '/personas',
+                builder: (_, __) => const PersonasScreen(),
               ),
             ],
           ),

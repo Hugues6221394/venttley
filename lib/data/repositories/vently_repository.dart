@@ -1302,6 +1302,7 @@ class VentlyRepository implements MusicProvider {
     required String pseudonym,
     required String avatarSeed,
     String? bio,
+    bool clearBio = false,
   }) {
     final live = _live;
     if (live != null) {
@@ -1310,6 +1311,7 @@ class VentlyRepository implements MusicProvider {
         pseudonym: pseudonym,
         avatarSeed: avatarSeed,
         bio: bio,
+        clearBio: clearBio,
       );
     }
     return _mock.updatePersona(
@@ -1318,6 +1320,28 @@ class VentlyRepository implements MusicProvider {
       avatarSeed: avatarSeed,
       bio: bio,
     );
+  }
+
+  Future<void> uploadPersonaPhoto({
+    required String personaId,
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) async {
+    final live = _live;
+    if (live == null) return;
+    await live.uploadPersonaPhoto(
+      personaId: personaId,
+      bytes: bytes,
+      extension: extension,
+      contentType: contentType,
+    );
+  }
+
+  Future<void> removePersonaPhoto(String personaId) async {
+    final live = _live;
+    if (live == null) return;
+    await live.removePersonaPhoto(personaId);
   }
 
   Future<bool> deletePersona(String personaId) {

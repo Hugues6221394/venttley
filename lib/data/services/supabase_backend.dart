@@ -1834,7 +1834,9 @@ class SupabaseBackend {
   Future<List<Persona>> myPersonas() async {
     final rows = await _client
         .from('personas')
-        .select('persona_id, pseudonym, avatar_seed, bio, created_at')
+        .select(
+          'persona_id, pseudonym, avatar_seed, bio, created_at, profile_photo_url',
+        )
         .filter('deleted_at', 'is', null)
         .order('created_at');
     return (rows as List)
@@ -1864,6 +1866,7 @@ class SupabaseBackend {
     required String pseudonym,
     required String avatarSeed,
     String? bio,
+    bool clearBio = false,
   }) async {
     final row = await _client.rpc(
       'update_persona',
@@ -1872,9 +1875,60 @@ class SupabaseBackend {
         'p_pseudonym': pseudonym,
         'p_avatar_seed': avatarSeed,
         'p_bio': bio,
+        // Passing null means "leave it alone", so emptying a bio needs to be
+        // said out loud.
+        'p_clear_bio': clearBio,
       },
     );
     return _personaFromRow(row as Map<String, dynamic>);
+  }
+
+  /// A picture for one persona. Same bucket and the same old-file cleanup as a
+  /// profile photo, because it is the same kind of thing.
+  Future<void> uploadPersonaPhoto({
+    required String personaId,
+    required List<int> bytes,
+    required String extension,
+    String contentType = 'image/jpeg',
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    final safeExt = extension
+        .replaceAll('.', '')
+        .toLowerCase()
+        .replaceAll(RegExp('[^a-z0-9]'), '');
+    final path =
+        '$uid/persona-$personaId-${const Uuid().v4()}.'
+        '${safeExt.isEmpty ? 'jpg' : safeExt}';
+    await _client.storage
+        .from('profile-photos')
+        .uploadBinary(
+          path,
+          _imageUploadBytes(bytes),
+          fileOptions: FileOptions(contentType: contentType, upsert: false),
+        );
+    final url = _client.storage.from('profile-photos').getPublicUrl(path);
+    final oldPath =
+        await _client.rpc(
+              'set_persona_photo',
+              params: {'p_persona_id': personaId, 'p_path': path, 'p_url': url},
+            )
+            as String?;
+    if (oldPath != null && oldPath.isNotEmpty && oldPath != path) {
+      unawaited(_client.storage.from('profile-photos').remove([oldPath]));
+    }
+  }
+
+  Future<void> removePersonaPhoto(String personaId) async {
+    final oldPath =
+        await _client.rpc(
+              'clear_persona_photo',
+              params: {'p_persona_id': personaId},
+            )
+            as String?;
+    if (oldPath != null && oldPath.isNotEmpty) {
+      unawaited(_client.storage.from('profile-photos').remove([oldPath]));
+    }
   }
 
   Future<bool> deletePersona(String personaId) async {
@@ -1890,6 +1944,7 @@ class SupabaseBackend {
     pseudonym: r['pseudonym'] as String,
     avatarSeed: r['avatar_seed'] as String,
     bio: r['bio'] as String?,
+    profilePhotoUrl: r['profile_photo_url'] as String?,
     createdAt: DateTime.parse(r['created_at'] as String),
   );
 
