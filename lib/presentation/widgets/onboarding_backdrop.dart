@@ -96,12 +96,17 @@ class _OnboardingBackdropState extends State<OnboardingBackdrop>
 
     return DecoratedBox(
       decoration: const BoxDecoration(
+        // Starts on the light theme's own scaffold colour rather than a
+        // pinker one. Measured off the two screens side by side: sign-in sat
+        // at a flat #FDF8FA while welcome reached #FDD3E2 at the top, and the
+        // gap read as red rather than warm — on the first screen anybody
+        // sees.
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Color(0xFFFFEEF3),
-            Color(0xFFFFF8F8),
+            VentlyColors.blushPink,
+            Color(0xFFFFFBFC),
             VentlyColors.cardBlush,
           ],
         ),
@@ -153,7 +158,10 @@ class _OrbPainter extends CustomPainter {
 
   final double t;
 
-  static const double _opacity = 0.13;
+  // Now that this number does something, it is set to what the screen should
+  // look like rather than what it was nominally set to before: enough to
+  // notice the drift, not enough to tint the page.
+  static const double _opacity = 0.16;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -185,15 +193,27 @@ class _OrbPainter extends CustomPainter {
     required double radius,
   }) {
     final rect = Rect.fromCircle(center: centre, radius: radius);
+    // The alpha lives in the gradient's own colours, not in a colour filter.
+    //
+    // This was ColorFilter.mode(white.withAlpha(_opacity), BlendMode.modulate),
+    // which is a no-op on Impeller: forcing _opacity to 0.0 and rebuilding
+    // still painted the orbs at full strength, which is how a wash meant to be
+    // 13% ended up covering the first screen anybody sees at 100% and reading
+    // as red rather than blush.
+    final faded = RadialGradient(
+      center: VentlyGradients.orb.center,
+      radius: VentlyGradients.orb.radius,
+      stops: VentlyGradients.orb.stops,
+      colors: [
+        for (final c in VentlyGradients.orb.colors)
+          c.withValues(alpha: _opacity),
+      ],
+    );
     canvas.drawCircle(
       centre,
       radius,
       Paint()
-        ..shader = VentlyGradients.orb.createShader(rect)
-        ..colorFilter = ColorFilter.mode(
-          Colors.white.withValues(alpha: _opacity),
-          BlendMode.modulate,
-        )
+        ..shader = faded.createShader(rect)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 110),
     );
   }
