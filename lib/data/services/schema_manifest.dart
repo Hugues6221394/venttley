@@ -145,4 +145,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261060090000': 'feed_health_for_the_console',
   '20261061090000': 'a_persona_you_can_change',
   '20261062090000': 'a_refresh_that_refreshes',
+  '20261063090000': 'a_badge_worth_having',
 };
