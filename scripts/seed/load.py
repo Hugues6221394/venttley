@@ -72,21 +72,29 @@ def fetch_avatars(api: str, key: str, out: Path) -> dict:
             if r.returncode != 0 or not png.exists() or png.stat().st_size < 200:
                 raise SystemExit(f"could not fetch avatar for {handle}: {r.stderr}")
         path = f"seed/{handle}.png"
-        req = urllib.request.Request(
-            f"{api}/storage/v1/object/{BUCKET}/{path}",
-            data=png.read_bytes(),
-            method="POST",
-            headers={
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "image/png",
-                "x-upsert": "true",
-            },
-        )
-        try:
-            urllib.request.urlopen(req, timeout=30).read()
-        except urllib.error.HTTPError as e:
-            if e.code not in (400, 409):      # already there
-                raise
+        # Retried: forty-five uploads over a mobile link will drop one, and
+        # losing the whole run to a single timeout is not worth the simplicity.
+        for attempt in range(1, 4):
+            up = subprocess.run(
+                [
+                    "curl", "-sS", "--max-time", "45", "-X", "POST",
+                    f"{api}/storage/v1/object/{BUCKET}/{path}",
+                    "-H", f"Authorization: Bearer {key}",
+                    "-H", "Content-Type: image/png",
+                    "-H", "x-upsert: true",
+                    "--data-binary", f"@{png}",
+                ],
+                capture_output=True, text=True,
+            )
+            body = (up.stdout or "") + (up.stderr or "")
+            # "already exists" is the idempotent case, not a failure.
+            ok = up.returncode == 0 and not (
+                "error" in body.lower() and "exists" not in body.lower()
+            )
+            if ok:
+                break
+            if attempt == 3:
+                raise SystemExit(f"upload failed for {handle}: {body[:300]}")
         urls[handle] = f"{api}/storage/v1/object/public/{BUCKET}/{path}"
         print(f"  avatar {i + 1}/{len(PEOPLE)} {handle}", end="\r")
     print()
@@ -139,10 +147,11 @@ SET session_replication_role = origin;
 """
 
 
-def sql_for_content(rng: random.Random) -> str:
+def sql_chunks(rng: random.Random) -> list:
     handles = [h for _, h, _, _ in PEOPLE]
-    out = []
+    chunks = []
     for i, p in enumerate(POSTS):
+        out = []
         pid, author = post_id(i), uid(p["a"])
         city = dict((h, c) for _, h, c, _ in PEOPLE)[p["a"]]
         out.append(
@@ -195,11 +204,12 @@ BEGIN
    WHERE comment_id = v_id;
   PERFORM set_config('request.jwt.claims', '', FALSE);
 END $seed$;""")
-    return "\n".join(out)
+        chunks.append("\n".join(out))
+    return chunks
 
 
 def run(db: str, sql: str, label: str) -> None:
-    print(f"  {label}…")
+    print(f"  {label}…", end="\r", flush=True)
     r = subprocess.run(
         ["psql", db, "-v", "ON_ERROR_STOP=1", "-q", "-f", "-"],
         input=sql, text=True, capture_output=True,
@@ -222,7 +232,12 @@ def main() -> None:
           f"{sum(len(p['k']) for p in POSTS)} replies")
     avatars = fetch_avatars(a.api, a.service_key, Path(a.cache))
     run(a.db, sql_for_people(avatars), "people")
-    run(a.db, sql_for_content(rng), "posts, likes and replies")
+    # One session per post. A single script with forty posts, twelve hundred
+    # likes and a hundred and twenty-seven threaded replies runs long enough
+    # that a pooled connection drops out from under it — which it did, halfway.
+    chunks = sql_chunks(rng)
+    for n, chunk in enumerate(chunks, start=1):
+        run(a.db, chunk, f"post {n}/{len(chunks)}")
     print("done")
 
 
