@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vently_app/presentation/screens/onboarding/welcome_screen.dart';
 import 'package:vently_app/presentation/theme/app_theme.dart';
+import 'package:vently_app/presentation/widgets/welcome_carousel.dart';
 
 /// The welcome screen, rendered in the black theme, sampled pixel by pixel.
 ///
@@ -67,10 +68,12 @@ void main() {
                 '${c.$3.toRadixString(16).padLeft(2, '0')}'
             .toUpperCase();
 
-    // Down the left gutter, well clear of any content. This is where the orb
-    // wash showed up worst: the build this replaced measured #1F0811 near the
-    // top and #3A1624 two thirds down. Both are unmistakably maroon.
-    for (final y in <double>[0.05, 0.2, 0.4, 0.6, 0.75, 0.95]) {
+    // Down the left gutter, well clear of any content — and now also clear of
+    // the carousel, which runs edge to edge on purpose and therefore owns both
+    // gutters for the band it occupies. This is where the orb wash showed up
+    // worst: the build this replaced measured #1F0811 near the top and #3A1624
+    // two thirds down. Both are unmistakably maroon.
+    for (final y in <double>[0.05, 0.45, 0.6, 0.75, 0.95]) {
       final c = at(0.015, y);
       expect(
         c,
@@ -79,7 +82,7 @@ void main() {
       );
     }
     // And the right gutter, which is where the second orb lived.
-    for (final y in <double>[0.2, 0.5, 0.8]) {
+    for (final y in <double>[0.5, 0.8]) {
       final c = at(0.985, y);
       expect(
         c,
@@ -87,6 +90,20 @@ void main() {
         reason: 'the page is ${hex(c)} at right y=$y, not pure black',
       );
     }
+
+    // The deck reaches both edges. It used to sit inside the page's 24pt
+    // gutter and the owner asked for the art to fill the width, so this is the
+    // assertion that keeps it there — the obvious way to undo it is to put the
+    // padding back and never notice.
+    //
+    // Measured as layout rather than as pixels: Image.asset does not decode
+    // under flutter test, so the card renders transparent and a colour probe
+    // would only ever see the page behind it.
+    expect(
+      tester.getSize(find.byType(WelcomeCarousel)).width,
+      tester.view.physicalSize.width / tester.view.devicePixelRatio,
+      reason: 'the carousel is inset — the art no longer fills the screen',
+    );
 
     // The trust panel. It has to be lighter than the page — at 52% opacity it
     // landed on #090708 and read as background rather than as a card.

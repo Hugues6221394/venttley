@@ -24,10 +24,11 @@ class WelcomeScreen extends StatelessWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               return SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 22,
-                ),
+                // No horizontal padding here. The deck runs edge to edge and
+                // everything else is padded below — an OverflowBox trying to
+                // escape this gutter collapsed the whole column into a heap at
+                // the top of the screen.
+                padding: const EdgeInsets.symmetric(vertical: 22),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     minHeight: constraints.maxHeight - 44,
@@ -36,15 +37,18 @@ class WelcomeScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       SizedBox(height: constraints.maxHeight < 760 ? 4 : 10),
-                      // Sized off the viewport. At a fixed 150 the mark ate a
-                      // third of a small phone before anybody had read a word,
-                      // and the button that matters fell below the fold.
-                      _WelcomeLogo(
-                        height: constraints.maxHeight < 700
-                            ? 76
-                            : constraints.maxHeight < 800
-                            ? 92
-                            : 108,
+                      _Gutter(
+                        child:
+                            // Sized off the viewport. At a fixed 150 the mark ate a
+                            // third of a small phone before anybody had read a word,
+                            // and the button that matters fell below the fold.
+                            _WelcomeLogo(
+                              height: constraints.maxHeight < 700
+                                  ? 76
+                                  : constraints.maxHeight < 800
+                                  ? 92
+                                  : 108,
+                            ),
                       ),
                       const SizedBox(height: 10),
                       // Sized off the viewport rather than fixed: a 4-inch
@@ -58,88 +62,102 @@ class WelcomeScreen extends StatelessWidget {
                             ? 238
                             : 268,
                       ),
-                      const SizedBox(height: 18),
-                      RichText(
-                        textAlign: TextAlign.center,
-                        text: TextSpan(
-                          style: Theme.of(context).textTheme.headlineMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                color: isDark
-                                    ? VentlyColors.softOffWhite
-                                    : context.ink,
-                              ),
-                          children: const [
-                            TextSpan(text: 'Welcome to '),
-                            // The name in berry, the way the brochure sets it:
-                            // "Why Venttly?", "Things You'll Wanna Try".
-                            TextSpan(
-                              text: 'Venttly',
-                              style: TextStyle(
-                                color: VentlyColors.berryMagenta,
+                      _Gutter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SizedBox(height: 18),
+                            RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                      color: isDark
+                                          ? VentlyColors.softOffWhite
+                                          : context.ink,
+                                    ),
+                                children: const [
+                                  TextSpan(text: 'Welcome to '),
+                                  // The name in berry, the way the brochure sets it:
+                                  // "Why Venttly?", "Things You'll Wanna Try".
+                                  TextSpan(
+                                    text: 'Venttly',
+                                    style: TextStyle(
+                                      color: VentlyColors.berryMagenta,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Say what you feel. Find people who understand.',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: scheme.onSurface.withOpacity(0.66),
-                          height: 1.42,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      const _Promises(),
-                      SizedBox(height: constraints.maxHeight < 760 ? 16 : 22),
-                      ElevatedButton(
-                        onPressed: () => context.push('/onboarding/identity'),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(58),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text('Step into the Circle'),
-                            SizedBox(width: 8),
-                            Icon(Icons.arrow_forward_rounded, size: 18),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Center(
-                        child: TextButton(
-                          onPressed: () => context.push('/onboarding/recover'),
-                          child: RichText(
-                            text: TextSpan(
-                              style: TextStyle(
-                                color: scheme.onSurface.withOpacity(0.72),
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                              children: [
-                                const TextSpan(
-                                  text: 'Already have an account?  ',
+                            const SizedBox(height: 12),
+                            Text(
+                              'Say what you feel. Find people who understand.',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(
+                                    color: scheme.onSurface.withOpacity(0.66),
+                                    height: 1.42,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                            const SizedBox(height: 20),
+                            const _Promises(),
+                            SizedBox(
+                              height: constraints.maxHeight < 760 ? 16 : 22,
+                            ),
+                            ElevatedButton(
+                              onPressed: () =>
+                                  context.push('/onboarding/identity'),
+                              style: ElevatedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(58),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
                                 ),
-                                TextSpan(
-                                  text: 'Log in',
-                                  style: TextStyle(
-                                    color: scheme.primary,
-                                    fontWeight: FontWeight.w900,
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text('Step into the Circle'),
+                                  SizedBox(width: 8),
+                                  Icon(Icons.arrow_forward_rounded, size: 18),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Center(
+                              child: TextButton(
+                                onPressed: () =>
+                                    context.push('/onboarding/recover'),
+                                child: RichText(
+                                  text: TextSpan(
+                                    style: TextStyle(
+                                      color: scheme.onSurface.withOpacity(0.72),
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                    children: [
+                                      const TextSpan(
+                                        text: 'Already have an account?  ',
+                                      ),
+                                      TextSpan(
+                                        text: 'Log in',
+                                        style: TextStyle(
+                                          color: scheme.primary,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 8),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 8),
                     ],
                   ),
                 ),
@@ -244,4 +262,20 @@ class _Promises extends StatelessWidget {
       ],
     );
   }
+}
+
+/// The page's 24pt side margin.
+///
+/// Applied per child rather than on the scroll view, because the carousel has
+/// to reach both edges and a child cannot escape its parent's padding.
+class _Gutter extends StatelessWidget {
+  const _Gutter({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 24),
+    child: child,
+  );
 }

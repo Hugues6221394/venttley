@@ -64,10 +64,11 @@ const _slides = <_Slide>[
 ];
 
 class _WelcomeCarouselState extends State<WelcomeCarousel> {
-  // 0.74 so the neighbours on both sides stay in frame. A card that fills the
-  // width reads as a banner; one with its siblings showing reads as a deck you
-  // can move.
-  final _pages = PageController(viewportFraction: 0.74);
+  // Full width. The art is 1:1 and the owner wants it edge to edge, so the
+  // card takes the whole viewport and the peeking neighbours go. Set this back
+  // to 0.74 to get the deck-you-can-move look, and _Card's horizontal padding
+  // with it.
+  final _pages = PageController();
   Timer? _tick;
   double _page = 0;
   // True while the controller is driving itself. onPageChanged cannot tell a
@@ -137,16 +138,7 @@ class _WelcomeCarouselState extends State<WelcomeCarousel> {
             onPageChanged: (_) {
               if (!_selfDriven) _tick?.cancel();
             },
-            itemBuilder: (context, i) {
-              final distance = (i - _page).abs().clamp(0.0, 1.0);
-              return Transform.scale(
-                scale: 1 - distance * 0.12,
-                child: Opacity(
-                  opacity: 1 - distance * 0.35,
-                  child: _Card(slide: _slides[i]),
-                ),
-              );
-            },
+            itemBuilder: (context, i) => _Card(slide: _slides[i]),
           ),
         ),
         const SizedBox(height: 14),
@@ -181,7 +173,7 @@ class _Card extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 7),
+      padding: EdgeInsets.zero,
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(28),
