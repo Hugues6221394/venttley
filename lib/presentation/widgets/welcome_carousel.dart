@@ -64,11 +64,21 @@ const _slides = <_Slide>[
 ];
 
 class _WelcomeCarouselState extends State<WelcomeCarousel> {
-  // Full width. The art is 1:1 and the owner wants it edge to edge, so the
-  // card takes the whole viewport and the peeking neighbours go. Set this back
-  // to 0.74 to get the deck-you-can-move look, and _Card's horizontal padding
-  // with it.
-  final _pages = PageController();
+  // 0.74 so the neighbours stay in frame on both sides. A card that fills the
+  // width reads as a banner; one with its siblings showing reads as a deck.
+  // The carousel itself still spans the whole screen, so those siblings are
+  // cut off by the screen edge rather than by a margin.
+  //
+  // The list is a thousand copies of five cards and it opens in the middle of
+  // them. That is what makes the ring close: at the first card the fifth is
+  // already sitting to its left, and past the fifth the first comes round
+  // again, with no end to reach and no empty gutter where a neighbour should
+  // be.
+  static const _ring = 1000;
+  final _pages = PageController(
+    viewportFraction: 0.74,
+    initialPage: _slides.length * (_ring ~/ 2),
+  );
   Timer? _tick;
   double _page = 0;
   // True while the controller is driving itself. onPageChanged cannot tell a
@@ -90,7 +100,7 @@ class _WelcomeCarouselState extends State<WelcomeCarousel> {
     _tick?.cancel();
     _tick = Timer.periodic(const Duration(milliseconds: 4200), (_) {
       if (!mounted || !_pages.hasClients) return;
-      final next = ((_pages.page ?? 0).round() + 1) % _slides.length;
+      final next = (_pages.page ?? 0).round() + 1;
       _selfDriven = true;
       _pages
           .animateToPage(
@@ -132,13 +142,22 @@ class _WelcomeCarouselState extends State<WelcomeCarousel> {
           height: widget.height,
           child: PageView.builder(
             controller: _pages,
-            itemCount: _slides.length,
+            itemCount: _slides.length * _ring,
             // A swipe stops the drift — the deck is the reader's from then on.
             // Its own advances are not a swipe.
             onPageChanged: (_) {
               if (!_selfDriven) _tick?.cancel();
             },
-            itemBuilder: (context, i) => _Card(slide: _slides[i]),
+            itemBuilder: (context, i) {
+              final distance = (i - _page).abs().clamp(0.0, 1.0);
+              return Transform.scale(
+                scale: 1 - distance * 0.12,
+                child: Opacity(
+                  opacity: 1 - distance * 0.35,
+                  child: _Card(slide: _slides[i % _slides.length]),
+                ),
+              );
+            },
           ),
         ),
         const SizedBox(height: 14),
@@ -173,7 +192,7 @@ class _Card extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(28),
