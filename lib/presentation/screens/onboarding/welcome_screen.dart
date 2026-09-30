@@ -9,6 +9,7 @@ import '../../theme/colors.dart';
 import '../../theme/glass_tokens.dart';
 import '../../widgets/onboarding_backdrop.dart';
 import '../../widgets/venttly_logo.dart';
+import '../../widgets/welcome_carousel.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -40,7 +41,15 @@ class WelcomeScreen extends StatelessWidget {
                     children: [
                       SizedBox(height: constraints.maxHeight < 760 ? 8 : 16),
                       const _WelcomeLogo(),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
+                      // Sized off the viewport rather than fixed: a 4-inch
+                      // Android phone has to fit the deck, the headline, the
+                      // three promises and two buttons without the first
+                      // screen anybody sees becoming a scroll.
+                      WelcomeCarousel(
+                        height: constraints.maxHeight < 760 ? 200 : 260,
+                      ),
+                      const SizedBox(height: 18),
                       Text(
                         'Welcome to Venttly',
                         textAlign: TextAlign.center,
