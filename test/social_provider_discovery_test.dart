@@ -19,7 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// turning Google off in Supabase removes the button on its own.
 void main() {
   final welcome = File(
-    'lib/presentation/screens/onboarding/welcome_screen.dart',
+    'lib/presentation/widgets/auth_entry_methods.dart',
   ).readAsStringSync();
 
   test('the pre-auth button does not depend on a post-auth flag', () {

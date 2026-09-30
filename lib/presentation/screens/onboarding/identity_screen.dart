@@ -14,6 +14,8 @@ import '../../../data/services/supabase_backend.dart'
     show UsernameTakenException, EmailConfirmationStillOnException;
 import '../../theme/colors.dart';
 import '../../theme/glass_tokens.dart';
+import '../../../core/constants.dart';
+import '../../widgets/auth_entry_methods.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/onboarding_backdrop.dart';
 import '../../widgets/username_availability.dart';
@@ -334,6 +336,19 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
                         ],
                       ),
               ),
+              // The other ways to sign up, same as on sign-in.
+              //
+              // Somebody who got this far wanted an account; making them go
+              // back to find the email or Google route is a step nobody
+              // benefits from.
+              const SizedBox(height: 20),
+              const AuthOrDivider(),
+              const SizedBox(height: 16),
+              const ContinueWithEmailButton(),
+              if (VentlyConfig.socialAuthEnabled) ...[
+                const SizedBox(height: 12),
+                const SocialAuthRow(),
+              ],
               const SizedBox(height: 16),
               Center(
                 child: Row(

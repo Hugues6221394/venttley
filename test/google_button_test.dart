@@ -12,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// reassurance a sign-in button exists to give.
 void main() {
   final welcome = File(
-    'lib/presentation/screens/onboarding/welcome_screen.dart',
+    'lib/presentation/widgets/auth_entry_methods.dart',
   ).readAsStringSync();
 
   test('the mark is the real one, not a Material letter', () {
@@ -40,9 +40,14 @@ void main() {
   test('the sign-in options sit together, above the footer', () {
     // The social block used to come after "Already have an account?", so the
     // page read: sign up, sign up, log in, and then another way to sign up —
-    // stranded under a line that reads as the end of the screen.
-    final social = welcome.indexOf('_SocialAuthRow()');
-    final footer = welcome.indexOf('Already have an account?');
+    // stranded under a line that reads as the end of the screen. They live on
+    // the sign-in and sign-up screens now, and the same rule holds there: a
+    // way in must not sit below the line that ends the screen.
+    final signIn = File(
+      'lib/presentation/screens/onboarding/recover_screen.dart',
+    ).readAsStringSync();
+    final social = signIn.indexOf('SocialAuthRow()');
+    final footer = signIn.indexOf('Start a new identity instead');
     expect(social, greaterThan(-1));
     expect(footer, greaterThan(-1));
     expect(
@@ -56,7 +61,7 @@ void main() {
     // The screen said it three times in a row: "Continue with email", "or
     // continue with", "Continue with Google". A label that only restates its
     // neighbours still costs a line of reading.
-    final divider = welcome.substring(welcome.indexOf('class _OrDivider'));
+    final divider = welcome.substring(welcome.indexOf('class AuthOrDivider'));
     expect(
       divider,
       contains("'or',"),

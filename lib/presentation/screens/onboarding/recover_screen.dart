@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../animation/widgets/animated_button.dart';
+import '../../../core/constants.dart';
 import '../../../core/providers.dart';
 import '../../../core/user_friendly_errors.dart';
 import '../../../data/services/identity_service.dart';
 import '../../../data/services/supabase_backend.dart'
     show InvalidCredentialsException, MfaChallengeRequiredException;
 import '../../theme/colors.dart';
+import '../../widgets/auth_entry_methods.dart';
 import '../../widgets/venttly_logo.dart';
 
 /// Returning-user entry: sign in with username + password, or recover with
@@ -235,6 +237,22 @@ class _RecoverScreenState extends ConsumerState<RecoverScreen> {
                     ),
                   ),
                 ),
+              // The other ways in, moved here off the welcome screen.
+              //
+              // Welcome was a hero, three promises and then four separate
+              // offers to get in, which made the first screen anybody sees a
+              // scroll. Somebody who wants an account tied to an email or a
+              // Google login is already looking at a sign-in form.
+              if (_mode == _Mode.signIn) ...[
+                const SizedBox(height: 22),
+                const AuthOrDivider(),
+                const SizedBox(height: 16),
+                const ContinueWithEmailButton(),
+                if (VentlyConfig.socialAuthEnabled) ...[
+                  const SizedBox(height: 12),
+                  const SocialAuthRow(),
+                ],
+              ],
               const SizedBox(height: 24),
               Center(
                 child: TextButton(

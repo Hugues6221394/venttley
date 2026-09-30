@@ -1,12 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
-import '../../../core/constants.dart';
-import '../../../core/providers.dart';
 import '../../theme/colors.dart';
-import '../../theme/glass_tokens.dart';
 import '../../widgets/onboarding_backdrop.dart';
 import '../../widgets/venttly_logo.dart';
 import '../../widgets/welcome_carousel.dart';
@@ -39,31 +34,56 @@ class WelcomeScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(height: constraints.maxHeight < 760 ? 8 : 16),
-                      const _WelcomeLogo(),
-                      const SizedBox(height: 14),
+                      SizedBox(height: constraints.maxHeight < 760 ? 4 : 10),
+                      // Sized off the viewport. At a fixed 150 the mark ate a
+                      // third of a small phone before anybody had read a word,
+                      // and the button that matters fell below the fold.
+                      _WelcomeLogo(
+                        height: constraints.maxHeight < 700
+                            ? 76
+                            : constraints.maxHeight < 800
+                            ? 92
+                            : 108,
+                      ),
+                      const SizedBox(height: 10),
                       // Sized off the viewport rather than fixed: a 4-inch
                       // Android phone has to fit the deck, the headline, the
                       // three promises and two buttons without the first
                       // screen anybody sees becoming a scroll.
                       WelcomeCarousel(
-                        height: constraints.maxHeight < 760 ? 200 : 260,
+                        height: constraints.maxHeight < 700
+                            ? 210
+                            : constraints.maxHeight < 800
+                            ? 238
+                            : 268,
                       ),
                       const SizedBox(height: 18),
-                      Text(
-                        'Welcome to Venttly',
+                      RichText(
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              color: isDark
-                                  ? VentlyColors.softOffWhite
-                                  : context.ink,
+                        text: TextSpan(
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: isDark
+                                    ? VentlyColors.softOffWhite
+                                    : context.ink,
+                              ),
+                          children: const [
+                            TextSpan(text: 'Welcome to '),
+                            // The name in berry, the way the brochure sets it:
+                            // "Why Venttly?", "Things You'll Wanna Try".
+                            TextSpan(
+                              text: 'Venttly',
+                              style: TextStyle(
+                                color: VentlyColors.berryMagenta,
+                              ),
                             ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'A social space for anonymous stories, 24h vents, tribes, and honest conversations.',
+                        'Say what you feel. Find people who understand.',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: scheme.onSurface.withOpacity(0.66),
@@ -71,9 +91,9 @@ class WelcomeScreen extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(height: 22),
-                      const _TrustPanel(),
-                      SizedBox(height: constraints.maxHeight < 760 ? 14 : 20),
+                      const SizedBox(height: 20),
+                      const _Promises(),
+                      SizedBox(height: constraints.maxHeight < 760 ? 16 : 22),
                       ElevatedButton(
                         onPressed: () => context.push('/onboarding/identity'),
                         style: ElevatedButton.styleFrom(
@@ -91,37 +111,6 @@ class WelcomeScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: () => context.push('/onboarding/email'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(54),
-                          side: BorderSide(
-                            color: scheme.primary.withOpacity(0.6),
-                          ),
-                          foregroundColor: scheme.primary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28),
-                          ),
-                        ),
-                        icon: const Icon(Icons.mail_outline_rounded, size: 18),
-                        label: const Text(
-                          'Continue with email',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                      // Ways in, together; the footer after them.
-                      //
-                      // The social block used to sit below "Already have an
-                      // account?", so the page ran: sign up, sign up, log in,
-                      // and then another way to sign up — stranded under a
-                      // line that reads as the end of the screen.
-                      if (VentlyConfig.socialAuthEnabled) ...[
-                        const SizedBox(height: 20),
-                        const _OrDivider(),
-                        const SizedBox(height: 16),
-                        const _SocialAuthRow(),
-                      ],
                       const SizedBox(height: 14),
                       Center(
                         child: TextButton(
@@ -162,179 +151,10 @@ class WelcomeScreen extends StatelessWidget {
   }
 }
 
-class _OrDivider extends StatelessWidget {
-  const _OrDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    // "or", not "or continue with".
-    //
-    // The screen said it three times in a row: Continue with email, or
-    // continue with, Continue with Google. The divider was repeating the
-    // sentence the buttons on either side of it were already making, and a
-    // label that adds nothing still costs a line of reading.
-    //
-    // The rules fade out rather than stopping. A hairline that runs to a hard
-    // stop draws attention to its own ends; one that dissolves reads as space
-    // between things, which is what a divider is for.
-    final edge = context.ink.withOpacity(0.18);
-
-    Widget rule({required bool fadeLeft}) => Expanded(
-      child: Container(
-        height: 1,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: fadeLeft
-                ? [Colors.transparent, edge]
-                : [edge, Colors.transparent],
-          ),
-        ),
-      ),
-    );
-
-    return Row(
-      children: [
-        rule(fadeLeft: true),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Text(
-            'or',
-            style: TextStyle(
-              color: context.ink.withOpacity(0.45),
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              letterSpacing: 0.6,
-            ),
-          ),
-        ),
-        rule(fadeLeft: false),
-      ],
-    );
-  }
-}
-
-class _SocialAuthRow extends ConsumerStatefulWidget {
-  const _SocialAuthRow();
-  @override
-  ConsumerState<_SocialAuthRow> createState() => _SocialAuthRowState();
-}
-
-class _SocialAuthRowState extends ConsumerState<_SocialAuthRow> {
-  bool _busy = false;
-
-  Future<void> _google() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await ref.read(sessionProvider.notifier).signInWithGoogle();
-      // The session arrives via the OAuth redirect; the router's refresh
-      // listener routes to /feed once it lands.
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Google sign-in unavailable: ${e.toString().replaceFirst('Exception: ', '')}',
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Asked of GoTrue, not of a feature flag.
-    //
-    // This read the google_sign_in flag with fallback: false. Flags come from
-    // my_feature_flags(), which is granted to `authenticated` only — and this
-    // screen is the one place in the app with no session. So the call was
-    // refused, the fallback won, and the button could not appear whatever the
-    // flag was set to. Turning the flag on changed nothing, which is exactly
-    // what happened.
-    final providers =
-        ref.watch(enabledAuthProvidersProvider).valueOrNull ?? const <String>{};
-    if (!providers.contains('google')) {
-      return const SizedBox.shrink();
-    }
-    return _GoogleButton(
-      label: _busy ? 'Opening Google…' : 'Continue with Google',
-      onTap: _busy ? null : _google,
-    );
-  }
-}
-
-/// Google's button, to Google's own spec.
-///
-/// It used to be a Material glyph tinted with the app's ink — a letter G,
-/// not the Google mark. Google's identity
-/// guidelines ask for the four-colour G, unmodified, and they are worth
-/// following here for a reason beyond compliance: a recoloured approximation
-/// of a logo everybody recognises reads as a knock-off, which is the opposite
-/// of the reassurance a sign-in button is for.
-///
-/// The surrounding colours are theirs too — #131314 on dark, white on light,
-/// with their border and text values. Every other button on this screen is
-/// Venttly's; this one is a guest, and guests keep their own face.
-class _GoogleButton extends StatelessWidget {
-  const _GoogleButton({required this.label, this.onTap});
-
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fill = isDark ? const Color(0xFF131314) : Colors.white;
-    final edge = isDark ? const Color(0xFF8E918F) : const Color(0xFF747775);
-    final ink = isDark ? const Color(0xFFE3E3E3) : const Color(0xFF1F1F1F);
-
-    return Semantics(
-      button: true,
-      label: label,
-      child: Material(
-        color: fill,
-        borderRadius: BorderRadius.circular(26),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(26),
-          child: Container(
-            height: 52,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(26),
-              border: Border.all(color: edge),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SvgPicture.asset(
-                  'assets/images/google_g.svg',
-                  width: 20,
-                  height: 20,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: ink,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                    letterSpacing: 0.1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _WelcomeLogo extends StatelessWidget {
-  const _WelcomeLogo();
+  const _WelcomeLogo({required this.height});
+
+  final double height;
 
   @override
   Widget build(BuildContext context) {
@@ -343,208 +163,74 @@ class _WelcomeLogo extends StatelessWidget {
     // card is exactly what made it read as a pasted image sitting on the page
     // rather than part of it. The backgrounds are cut out now, so the mark can
     // sit directly on the wash like every other element.
-    return const Center(
-      child: SizedBox(height: 150, child: VenttlyLogo(fit: BoxFit.contain)),
-    );
-  }
-}
-
-class _TrustPanel extends StatelessWidget {
-  const _TrustPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      // GlassTokens, not Colors.white. This panel was a flat white slab at 62%
-      // in every theme: on dark and black it rendered as a light grey card
-      // with dark text on it, which is unreadable, and the drifting orbs
-      // behind made it worse by lighting it unevenly. The tokens already know
-      // what a surface is in each theme -- nothing here needed inventing.
-      // A light grey slab, no tint and no border.
-      //
-      // The berry tint that was here read as maroon rather than as grey, which
-      // is fair — at 7% over a near-black surface the hue is the only thing
-      // you can see. And the grey that was wanted turned out to be the one
-      // this panel drew originally: a white wash at about 63%. It was never
-      // the grey that was wrong, it was that the panel kept its dark-theme
-      // contents, so an off-white title on a light card came out faint.
-      decoration: BoxDecoration(
-        color: GlassTokens.panel(context),
-        borderRadius: BorderRadius.circular(28),
-      ),
-      child: const Column(
-        children: [
-          _Bullet(
-            icon: Icons.lock_outline,
-            title: 'Pseudonymous by default',
-            text: 'No email or phone number needed to start.',
-          ),
-          _Bullet(
-            icon: Icons.auto_awesome_rounded,
-            title: 'Stories, feeds, and tribes',
-            text: 'Read what hits your vibe and join spaces that feel alive.',
-          ),
-          _Bullet(
-            icon: Icons.shield_outlined,
-            title: 'Safer social energy',
-            text: 'Server-enforced safety rules apply to every post.',
-          ),
-        ],
+    return Center(
+      child: SizedBox(
+        height: height,
+        child: const VenttlyLogo(fit: BoxFit.contain),
       ),
     );
   }
 }
 
-class _Bullet extends StatelessWidget {
-  const _Bullet({required this.icon, required this.title, required this.text});
+class _Promises extends StatelessWidget {
+  const _Promises();
 
-  final IconData icon;
-  final String title;
-  final String text;
+  // Three columns, not three stacked rows with a paragraph each.
+  //
+  // The panel below this used to be 200 points tall and pushed the only button
+  // that matters off the first screenful. Nobody reads three paragraphs before
+  // deciding whether to try an app; they check that it is safe and get on with
+  // it. Same three promises, a third of the height.
+  static const _items = [
+    (Icons.lock_outline_rounded, 'Pseudonymous', 'No email needed'),
+    (Icons.auto_awesome_outlined, 'Stories & tribes', 'Spaces that feel alive'),
+    (Icons.shield_outlined, 'Safety first', 'Rules the server keeps'),
+  ];
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          // A solid berry badge with a near-black glyph, rather than a berry
-          // wash with a berry glyph. A wash puts the accent behind and in
-          // front of itself at once, which is why the icons kept coming out
-          // faint however the opacity was tuned.
-          // Solid berry with a white glyph, which is the one thing on this
-          // panel that is allowed to be loud — it matches the button below it.
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: scheme.primary,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Icon(icon, color: Colors.white, size: 22),
-          ),
-          const SizedBox(width: 14),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (icon, title, sub) in _items)
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, size: 21, color: scheme.primary),
+                ),
+                const SizedBox(height: 8),
                 Text(
                   title,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: GlassTokens.onPanel(context),
-                    fontWeight: FontWeight.w900,
-                    fontSize: 15,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: context.ink,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
-                  text,
+                  sub,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: GlassTokens.onPanelMuted(context),
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
+                    fontSize: 11,
+                    height: 1.3,
+                    fontWeight: FontWeight.w600,
+                    color: context.ink.withValues(alpha: 0.55),
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
-}
-
-/// Replaced by the real EmailSignupScreen at /onboarding/email.
-/// Kept here only as a reference for the soon-state pattern.
-// ignore: unused_element
-void _legacyShowEmailSoonSheet(BuildContext context) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-    ),
-    builder: (ctx) {
-      final scheme = Theme.of(ctx).colorScheme;
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: VentlyColors.softMauve.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: scheme.primary.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.mail_lock_outlined,
-                  color: scheme.primary,
-                  size: 38,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                'Email signup shipping this week',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: context.ink,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Venttly is pseudonymous by default — username + recovery phrase accounts need no contact details. '
-                'Email signup with verification + handle picking lands next. '
-                'For today, the anonymous flow is the path forward.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: context.ink.withOpacity(0.65),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12.5,
-                  height: 1.45,
-                ),
-              ),
-              const SizedBox(height: 18),
-              FilledButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  GoRouter.of(context).push('/onboarding/identity');
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: VentlyColors.berryMagenta,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                ),
-                child: const Text(
-                  'Continue anonymously',
-                  style: TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
 }

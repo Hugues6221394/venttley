@@ -1,22 +1,22 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-
 import '../theme/colors.dart';
 
 /// The rotating cards on the welcome screen.
 ///
-/// Characters rather than photographs, and that is a decision rather than a
-/// budget. Photographs of laughing friends say "social app for extroverts" to
-/// somebody who opened this at 2am because they cannot say a thing out loud,
-/// and putting real faces on the first screen of an app whose next line is
-/// "pseudonymous by default" contradicts itself. These are the same drawn
-/// people who carry the avatars inside the app, so the door and the room match.
+/// CODAFRIQA's own character art, which is why this looks like the company it
+/// comes from. Characters rather than photographs, and that is a decision
+/// rather than a budget: photographs of laughing friends say "social app for
+/// extroverts" to somebody who opened this at 2am because they cannot say a
+/// thing out loud, and real faces on the first screen of an app whose next
+/// line is "pseudonymous by default" contradicts itself. A drawn person is
+/// anonymous by construction.
 ///
-/// They are vectors: four files, under fifteen kilobytes each, sharp at any
-/// size, and no network on the one screen that renders before anybody has an
-/// account.
+/// Five WebP cards, 276KB for the set — the art arrived at 1254px and is
+/// resampled to 900, which is 3x on the widest card we draw and nothing is
+/// gained above it. Bundled, so the one screen that renders before anybody has
+/// an account never waits on a network.
 class WelcomeCarousel extends StatefulWidget {
   const WelcomeCarousel({super.key, this.height = 300});
 
@@ -27,37 +27,39 @@ class WelcomeCarousel extends StatefulWidget {
 }
 
 class _Slide {
-  const _Slide(this.art, this.line, this.from, this.to);
+  const _Slide(this.art, this.line, this.sub);
   final String art;
   final String line;
-  final Color from;
-  final Color to;
+  final String sub;
 }
 
+// The brochure's voice, not a product manager's. Each line is written to the
+// pose it sits under.
 const _slides = <_Slide>[
   _Slide(
-    'assets/images/welcome/w1.svg',
-    'Say it here first',
-    Color(0xFFFFC2D6),
-    Color(0xFFE0518A),
+    'assets/images/welcome/w1.webp',
+    'Vent It Out',
+    'Get it off your chest',
   ),
   _Slide(
-    'assets/images/welcome/w2.svg',
-    'Nobody needs your name',
-    Color(0xFFFFD9B8),
-    Color(0xFFE08A5B),
+    'assets/images/welcome/w2.webp',
+    'Find Your Tribe',
+    'Spaces that feel like home',
   ),
   _Slide(
-    'assets/images/welcome/w3.svg',
-    'Vents feel lighter',
-    Color(0xFFD9D3F7),
-    Color(0xFF7C6BC4),
+    'assets/images/welcome/w3.webp',
+    'Late-Night Thoughts',
+    'For the overthinkers, always',
   ),
   _Slide(
-    'assets/images/welcome/w4.svg',
-    'Your tribe is awake',
-    Color(0xFFC6E6F2),
-    Color(0xFF4F9BBF),
+    'assets/images/welcome/w4.webp',
+    'Send Some Love',
+    'Lift somebody else up',
+  ),
+  _Slide(
+    'assets/images/welcome/w5.webp',
+    'Spill & Scroll',
+    'Real stories you will relate to',
   ),
 ];
 
@@ -68,6 +70,10 @@ class _WelcomeCarouselState extends State<WelcomeCarousel> {
   final _pages = PageController(viewportFraction: 0.74);
   Timer? _tick;
   double _page = 0;
+  // True while the controller is driving itself. onPageChanged cannot tell a
+  // swipe from an animateToPage, so without this the timer cancelled itself on
+  // its own first advance and the deck stopped after one card.
+  bool _selfDriven = false;
 
   @override
   void initState() {
@@ -83,11 +89,14 @@ class _WelcomeCarouselState extends State<WelcomeCarousel> {
     _tick = Timer.periodic(const Duration(milliseconds: 4200), (_) {
       if (!mounted || !_pages.hasClients) return;
       final next = ((_pages.page ?? 0).round() + 1) % _slides.length;
-      _pages.animateToPage(
-        next,
-        duration: const Duration(milliseconds: 750),
-        curve: Curves.easeInOutCubic,
-      );
+      _selfDriven = true;
+      _pages
+          .animateToPage(
+            next,
+            duration: const Duration(milliseconds: 900),
+            curve: Curves.easeInOutCubic,
+          )
+          .whenComplete(() => _selfDriven = false);
     });
   }
 
@@ -117,9 +126,11 @@ class _WelcomeCarouselState extends State<WelcomeCarousel> {
           child: PageView.builder(
             controller: _pages,
             itemCount: _slides.length,
-            // Touching the deck stops it moving under the thumb; it is theirs
-            // from then on.
-            onPageChanged: (_) => _tick?.cancel(),
+            // A swipe stops the drift — the deck is the reader's from then on.
+            // Its own advances are not a swipe.
+            onPageChanged: (_) {
+              if (!_selfDriven) _tick?.cancel();
+            },
             itemBuilder: (context, i) {
               final distance = (i - _page).abs().clamp(0.0, 1.0);
               return Transform.scale(
@@ -167,71 +178,75 @@ class _Card extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(26),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [slide.from, slide.to],
-          ),
+          borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: slide.to.withValues(alpha: 0.34),
-              blurRadius: 26,
-              offset: const Offset(0, 14),
+              color: VentlyColors.berryMagenta.withValues(alpha: 0.22),
+              blurRadius: 30,
+              spreadRadius: -6,
+              offset: const Offset(0, 16),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(28),
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // The character sits low and slightly large, so it is cropped by
-              // the card rather than floating inside it — the difference
-              // between a sticker and a portrait.
-              Positioned(
-                left: -12,
-                right: -12,
-                bottom: -18,
-                top: 18,
-                // Takes either. The drawn characters ship as vectors because
-                // they are a few kilobytes and sharp anywhere; rendered 3D art
-                // arrives as PNG with transparency. Dropping new files in and
-                // changing the paths above is the whole swap.
-                child: slide.art.endsWith('.svg')
-                    ? SvgPicture.asset(slide.art, fit: BoxFit.contain)
-                    : Image.asset(
-                        slide.art,
-                        fit: BoxFit.contain,
-                        filterQuality: FilterQuality.medium,
-                      ),
+              // Full bleed. The art carries its own blush background and the
+              // arch behind the figure, so laying a gradient over it would be
+              // painting over the design rather than framing it.
+              Image.asset(
+                slide.art,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium,
               ),
-              // Enough scrim for white text to survive whatever the drawing
-              // does underneath it.
+              // Just enough weight under the words to keep them legible over a
+              // pale background, and not a pixel more.
               const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.center,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Color(0x8C000000)],
+                    colors: [Colors.transparent, Color(0x6B3A0C1D)],
                   ),
                 ),
               ),
               Positioned(
                 left: 18,
                 right: 18,
-                bottom: 18,
-                child: Text(
-                  slide.line,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 19,
-                    height: 1.2,
-                    fontWeight: FontWeight.w800,
-                    fontStyle: FontStyle.italic,
-                    letterSpacing: -0.2,
-                    shadows: [Shadow(blurRadius: 12, color: Color(0x73000000))],
-                  ),
+                bottom: 15,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      slide.line,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 19,
+                        height: 1.15,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.3,
+                        shadows: [
+                          Shadow(blurRadius: 14, color: Color(0x8C000000)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      slide.sub,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 12.5,
+                        height: 1.25,
+                        fontWeight: FontWeight.w600,
+                        shadows: const [
+                          Shadow(blurRadius: 12, color: Color(0x73000000)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
