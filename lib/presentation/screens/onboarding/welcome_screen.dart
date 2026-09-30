@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../theme/colors.dart';
+import '../../theme/glass_tokens.dart';
 import '../../widgets/onboarding_backdrop.dart';
 import '../../widgets/venttly_logo.dart';
 import '../../widgets/welcome_carousel.dart';
@@ -190,6 +191,16 @@ class _Promises extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Berry on near-black reads as dim maroon — the tile all but disappears and
+    // the glyph inside it looks switched off. On a dark canvas the tile takes
+    // GlassTokens.panel, the same light grey slab the profile cards already use
+    // behind Find Friends, with the berry glyph on top of it. Not a white wash
+    // at low alpha, which on this canvas is still nearly black.
+    final tile = isDark
+        ? GlassTokens.panel(context)
+        : scheme.primary.withValues(alpha: 0.10);
+    final glyph = scheme.primary;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -201,10 +212,10 @@ class _Promises extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: scheme.primary.withValues(alpha: 0.10),
+                    color: tile,
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(icon, size: 21, color: scheme.primary),
+                  child: Icon(icon, size: 21, color: glyph),
                 ),
                 const SizedBox(height: 8),
                 Text(

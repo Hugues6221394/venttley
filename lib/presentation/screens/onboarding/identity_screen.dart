@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -267,23 +268,54 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
             children: [
+              // The face you are about to become, with the name under it.
+              //
+              // The avatar used to sit on its own above the words "Your
+              // emotional sanctuary", which described the app rather than
+              // anything on the screen. Showing the handle here means the
+              // shuffle button below has something visible to change.
               Center(
-                child: AnonymousAvatar(
-                  seed: _avatarSeed,
-                  label: _username.text,
-                  size: 88,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Center(
-                child: Text(
-                  'Your emotional sanctuary',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurface.withOpacity(0.6),
+                child: Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: scheme.primary.withValues(alpha: 0.07),
+                    border: Border.all(
+                      color: scheme.primary.withValues(alpha: 0.18),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: AnonymousAvatar(
+                    seed: _avatarSeed,
+                    label: _username.text,
+                    size: 84,
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
+              Center(
+                child: Text(
+                  _username.text.isEmpty ? 'your name' : _username.text,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    color: scheme.primary,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Center(
+                child: Text(
+                  'Nobody sees anything else. Not your email, not your phone.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurface.withValues(alpha: 0.6),
+                    height: 1.35,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
               _DobCard(birthDate: _birthDate, onTap: _pickDate),
               const SizedBox(height: 14),
               _UsernameCard(
@@ -298,6 +330,7 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
                 showPassword: _showPassword,
                 onToggleVisibility: () =>
                     setState(() => _showPassword = !_showPassword),
+                onChanged: () => setState(() {}),
               ),
               const SizedBox(height: 14),
               _ConsentCard(
@@ -612,60 +645,75 @@ class _DobCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Date of birth',
-              style: Theme.of(context).textTheme.titleSmall,
+    final set = birthDate != null;
+    final age = set
+        ? (DateTime.now().difference(birthDate!).inDays / 365.2425).floor()
+        : null;
+    return _FormCard(
+      label: 'Date of birth',
+      footnote:
+          'Used to keep you in the right age group. Never shown to '
+          'anyone, ever.',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+          decoration: BoxDecoration(
+            color: scheme.primary.withValues(alpha: 0.045),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: scheme.primary.withValues(alpha: set ? 0.32 : 0.12),
+              width: set ? 1.4 : 1,
             ),
-            const SizedBox(height: 10),
-            InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.cake_outlined,
+                size: 19,
+                color: scheme.primary.withValues(alpha: 0.75),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  set
+                      ? '${birthDate!.day.toString().padLeft(2, '0')} / '
+                            '${birthDate!.month.toString().padLeft(2, '0')} / '
+                            '${birthDate!.year}'
+                      : 'dd / mm / yyyy',
+                  style: TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: set ? FontWeight.w800 : FontWeight.w500,
+                    color: set
+                        ? context.ink
+                        : context.ink.withValues(alpha: 0.40),
+                  ),
                 ),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).inputDecorationTheme.fillColor,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: GlassTokens.border(context)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_today, size: 18),
-                    const SizedBox(width: 10),
-                    Text(
-                      birthDate == null
-                          ? 'dd / mm / yyyy'
-                          : DateFormat('dd / MM / yyyy').format(birthDate!),
-                      style: TextStyle(
-                        color: birthDate == null
-                            ? scheme.onSurface.withOpacity(0.5)
-                            : scheme.onSurface,
-                        fontWeight: FontWeight.w600,
-                      ),
+              ),
+              // The number they can check at a glance, rather than making
+              // them work out whether the date they tapped was right.
+              if (age != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$age',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: scheme.primary,
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'We use this to keep you in the right age group. '
-              'It is never shown to anyone.',
-              style: TextStyle(
-                fontSize: 11,
-                color: scheme.onSurface.withOpacity(0.6),
-                height: 1.4,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -686,59 +734,60 @@ class _UsernameCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final availability = ref.watch(usernameAvailabilityProvider);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Your anonymous identity',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Icon(Icons.person_outline, color: scheme.primary, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    onChanged: (value) {
-                      availability.check(value);
-                      onChanged();
-                    },
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      hintText: 'pick a name',
-                    ),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
+    return _FormCard(
+      label: 'Your anonymous name',
+      // Just the rule. UsernameAvailabilityHint below already says what
+      // the name is for, and the two sat under each other saying it twice.
+      footnote: 'Letters, numbers and _ only.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: controller,
+            textInputAction: TextInputAction.next,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9_]')),
+            ],
+            onChanged: (value) {
+              availability.check(value);
+              onChanged();
+            },
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5),
+            decoration: _filled(
+              context,
+              hint: 'pick a name',
+              icon: Icons.person_outline,
+              // The shuffle sits inside the field it changes, rather than
+              // beside it competing for the row.
+              suffix: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: TextButton.icon(
+                  onPressed: onShuffle,
+                  style: TextButton.styleFrom(
+                    foregroundColor: scheme.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    minimumSize: const Size(0, 36),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  icon: const Icon(Icons.casino_outlined, size: 16),
+                  label: const Text(
+                    'Shuffle',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
                   ),
                 ),
-                OutlinedButton.icon(
-                  onPressed: onShuffle,
-                  icon: const Icon(Icons.casino_outlined, size: 16),
-                  label: const Text('Shuffle'),
-                ),
-              ],
+              ),
             ),
-            const SizedBox(height: 8),
-            // Answered while they type, rather than after they have chosen a
-            // password, agreed to two policies and pressed the button. Until
-            // now the only signal that a name was gone came from the insert
-            // failing at the very end.
-            UsernameAvailabilityHint(
-              status: availability.status,
-              username: availability.describes,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          // Answered while they type, rather than after they have chosen a
+          // password, agreed to two policies and pressed the button. Until
+          // now the only signal that a name was gone came from the insert
+          // failing at the very end.
+          UsernameAvailabilityHint(
+            status: availability.status,
+            username: availability.describes,
+          ),
+        ],
       ),
     );
   }
@@ -750,50 +799,82 @@ class _PasswordCard extends StatelessWidget {
     required this.confirm,
     required this.showPassword,
     required this.onToggleVisibility,
+    required this.onChanged,
   });
   final TextEditingController password;
   final TextEditingController confirm;
   final bool showPassword;
   final VoidCallback onToggleVisibility;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Set a password',
-              style: Theme.of(context).textTheme.titleSmall,
+    final scheme = Theme.of(context).colorScheme;
+    final typed = confirm.text.isNotEmpty;
+    final matches = typed && confirm.text == password.text;
+    return _FormCard(
+      label: 'Set a password',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: password,
+            obscureText: !showPassword,
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => onChanged(),
+            decoration: _filled(
+              context,
+              hint: 'At least 8 characters',
+              icon: Icons.lock_outline,
+              suffix: IconButton(
+                icon: Icon(
+                  showPassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  size: 19,
+                  color: scheme.primary.withValues(alpha: 0.7),
+                ),
+                onPressed: onToggleVisibility,
+              ),
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: password,
-              obscureText: !showPassword,
-              decoration: InputDecoration(
-                hintText: 'At least 8 characters',
-                prefixIcon: const Icon(Icons.lock_outline),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    showPassword ? Icons.visibility : Icons.visibility_off,
-                  ),
-                  onPressed: onToggleVisibility,
+          ),
+          _PasswordStrength(password: password.text),
+          const SizedBox(height: 10),
+          TextField(
+            controller: confirm,
+            obscureText: !showPassword,
+            onChanged: (_) => onChanged(),
+            decoration: _filled(
+              context,
+              hint: 'Confirm password',
+              icon: Icons.lock_outline,
+              // Said the moment it is true, not after the button is pressed.
+              suffix: !typed
+                  ? null
+                  : Icon(
+                      matches
+                          ? Icons.check_circle_rounded
+                          : Icons.error_outline_rounded,
+                      size: 20,
+                      color: matches
+                          ? const Color(0xFF2E8B57)
+                          : const Color(0xFFE2504F),
+                    ),
+            ),
+          ),
+          if (typed && !matches)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'These two do not match yet.',
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFFE2504F),
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: confirm,
-              obscureText: !showPassword,
-              decoration: const InputDecoration(
-                hintText: 'Confirm password',
-                prefixIcon: Icon(Icons.lock_outline),
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -821,6 +902,158 @@ class _ErrorBanner extends StatelessWidget {
             child: Text(
               message,
               style: TextStyle(color: scheme.error, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One card, one question. Same shell for all three so the form reads as a
+/// sequence rather than three unrelated boxes.
+class _FormCard extends StatelessWidget {
+  const _FormCard({required this.label, required this.child, this.footnote});
+
+  final String label;
+  final Widget child;
+  final String? footnote;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      decoration: BoxDecoration(
+        color: context.isDark
+            ? Theme.of(context).colorScheme.surface
+            : Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.10)),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: 0.06),
+            blurRadius: 18,
+            spreadRadius: -6,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.9,
+              color: scheme.primary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          child,
+          if (footnote != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              footnote!,
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.4,
+                fontWeight: FontWeight.w500,
+                color: context.ink.withValues(alpha: 0.52),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A filled field. The theme's default is an outlined box on a white card,
+/// which reads as a form from 2014; filled on blush reads as a surface you
+/// type into.
+InputDecoration _filled(
+  BuildContext context, {
+  required String hint,
+  IconData? icon,
+  Widget? suffix,
+}) {
+  final scheme = Theme.of(context).colorScheme;
+  OutlineInputBorder border(Color c, double w) => OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: BorderSide(color: c, width: w),
+  );
+  return InputDecoration(
+    hintText: hint,
+    filled: true,
+    fillColor: scheme.primary.withValues(alpha: 0.045),
+    prefixIcon: icon == null
+        ? null
+        : Icon(icon, size: 19, color: scheme.primary.withValues(alpha: 0.75)),
+    suffixIcon: suffix,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+    border: border(Colors.transparent, 0),
+    enabledBorder: border(scheme.primary.withValues(alpha: 0.12), 1),
+    focusedBorder: border(scheme.primary, 1.5),
+  );
+}
+
+/// How strong the password is, while it is being typed.
+///
+/// The rules were only enforced on submit, so somebody could fill the whole
+/// form and then be told the password was the problem.
+class _PasswordStrength extends StatelessWidget {
+  const _PasswordStrength({required this.password});
+
+  final String password;
+
+  (int, String, Color) _score() {
+    final p = password;
+    if (p.isEmpty) return (0, '', Colors.transparent);
+    var score = 0;
+    if (p.length >= 8) score++;
+    if (p.length >= 12) score++;
+    if (RegExp(r'[A-Z]').hasMatch(p) && RegExp(r'[a-z]').hasMatch(p)) score++;
+    if (RegExp(r'[0-9]').hasMatch(p)) score++;
+    if (RegExp(r'[^A-Za-z0-9]').hasMatch(p)) score++;
+    if (p.length < 8) return (1, 'Too short', const Color(0xFFE2504F));
+    if (score <= 2) return (2, 'Could be stronger', const Color(0xFFE08A3C));
+    if (score == 3) return (3, 'Good', const Color(0xFF3E9B6B));
+    return (4, 'Strong', const Color(0xFF2E8B57));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (filled, label, colour) = _score();
+    if (password.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        children: [
+          for (var i = 0; i < 4; i++) ...[
+            Expanded(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                height: 4,
+                decoration: BoxDecoration(
+                  color: i < filled
+                      ? colour
+                      : context.ink.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+            if (i < 3) const SizedBox(width: 5),
+          ],
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              color: colour,
             ),
           ),
         ],

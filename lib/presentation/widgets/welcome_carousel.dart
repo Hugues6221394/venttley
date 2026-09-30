@@ -74,6 +74,7 @@ class _WelcomeCarouselState extends State<WelcomeCarousel> {
   // swipe from an animateToPage, so without this the timer cancelled itself on
   // its own first advance and the deck stopped after one card.
   bool _selfDriven = false;
+  bool _reduceMotion = false;
 
   @override
   void initState() {
@@ -93,7 +94,7 @@ class _WelcomeCarouselState extends State<WelcomeCarousel> {
       _pages
           .animateToPage(
             next,
-            duration: const Duration(milliseconds: 900),
+            duration: Duration(milliseconds: _reduceMotion ? 1 : 900),
             curve: Curves.easeInOutCubic,
           )
           .whenComplete(() => _selfDriven = false);
@@ -109,10 +110,15 @@ class _WelcomeCarouselState extends State<WelcomeCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    // A screen that drifts on its own is the kind of ambient motion
-    // reduce-motion exists for; the deck still swipes by hand.
-    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    if (!reduceMotion && _tick == null) {
+    // Reduce-motion changes how the deck advances, not whether it does.
+    //
+    // It used to skip the timer entirely, which meant anybody with the
+    // accessibility setting on — and it is on more often than people expect —
+    // saw a carousel that never moved and looked broken. Sliding a card across
+    // the screen is the motion that setting is about; changing what is on the
+    // card is not. So it still rotates, it just cuts instead of sliding.
+    _reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (_tick == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _startAutoAdvance();
       });
