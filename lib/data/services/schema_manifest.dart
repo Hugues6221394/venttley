@@ -146,4 +146,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261061090000': 'a_persona_you_can_change',
   '20261062090000': 'a_refresh_that_refreshes',
   '20261063090000': 'a_badge_worth_having',
+  '20261064090000': 'an_avatar_you_chose',
 };

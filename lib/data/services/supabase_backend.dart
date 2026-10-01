@@ -1192,6 +1192,26 @@ class SupabaseBackend {
     );
   }
 
+  /// The avatar somebody chose.
+  ///
+  /// Writes the config — which is what the layered builder will extend — and
+  /// points profile_photo_url at the shared preset file, because that is what
+  /// every feed row, comment and chat avatar already reads.
+  Future<void> setAvatarPreset({
+    required String preset,
+    required String photoUrl,
+    String? personaId,
+  }) async {
+    await _client.rpc(
+      'set_avatar_config',
+      params: {
+        'p_config': {'kind': 'preset', 'preset': preset},
+        'p_photo_url': photoUrl,
+        'p_persona_id': personaId,
+      },
+    );
+  }
+
   /// "Not interested", and "show me less of this person". Both are reversible
   /// and neither is a block: the post stops competing for a place in this
   /// reader's feed, and that is all.

@@ -3331,6 +3331,20 @@ class VentlyRepository implements MusicProvider {
     return live.whispersForMe(limit: limit);
   }
 
+  Future<void> setAvatarPreset({
+    required String preset,
+    required String photoUrl,
+    String? personaId,
+  }) async {
+    final live = _live;
+    if (live == null) return;
+    await live.setAvatarPreset(
+      preset: preset,
+      photoUrl: photoUrl,
+      personaId: personaId,
+    );
+  }
+
   Future<void> markNotInterested(
     String postId, {
     String reason = 'post',

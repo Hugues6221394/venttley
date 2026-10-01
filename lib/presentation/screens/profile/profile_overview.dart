@@ -557,6 +557,23 @@ class _GlowAvatar extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 8),
+            // First, because it is the one most people want and the only one
+            // that keeps them anonymous. A gallery photo on a pseudonymous app
+            // is the option that needs thinking about, not the default.
+            ListTile(
+              key: const ValueKey('profile-choose-avatar'),
+              leading: const Icon(
+                Icons.face_retouching_natural_outlined,
+                color: VentlyColors.berryMagenta,
+              ),
+              title: const Text(
+                'Choose an avatar',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: const Text('Pick a face that is not yours'),
+              onTap: () => Navigator.pop(ctx, 'avatar'),
+            ),
+            const Divider(height: 8),
             ListTile(
               leading: const Icon(
                 Icons.photo_library_outlined,
@@ -637,6 +654,10 @@ class _GlowAvatar extends ConsumerWidget {
       ),
     );
     if (action == null || !context.mounted) return;
+    if (action == 'avatar') {
+      await context.push('/avatar');
+      return;
+    }
 
     final messenger = ScaffoldMessenger.of(context);
     try {
