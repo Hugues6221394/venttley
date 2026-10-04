@@ -1,0 +1,78 @@
+-- PREPARED, NOT RUN. Requires promoted invitation draft on a disposable DB.
+BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+SELECT no_plan();
+SET session_replication_role=replica;
+INSERT INTO public.users(user_id,anonymous_pseudonym,avatar_seed,recovery_key_hash,display_name,display_name_normalized,username_normalized,user_role,account_status,birth_year)
+SELECT ('1a790000-0000-4000-8000-'||lpad(n::TEXT,12,'0'))::UUID,'invitepilot'||n,'invitepilot'||n,'x','Invite Operator','invite operator','invitepilot'||n,r::public.user_role_type,'active',1990
+FROM (VALUES(1,'super_admin'),(2,'super_admin'),(3,'moderator'),(4,'admin'),(5,'support'),(6,'analyst'),(7,'read_only_auditor'),(8,'normal'))t(n,r);
+INSERT INTO auth.users(id,aud,role,created_at,updated_at,invited_at) SELECT user_id,'authenticated','authenticated',now(),now(),now() FROM public.users WHERE anonymous_pseudonym LIKE 'invitepilot%';
+SET session_replication_role=origin;
+CREATE FUNCTION pg_temp.claim(n INT,aal TEXT DEFAULT 'aal2') RETURNS VOID LANGUAGE sql AS $$
+SELECT set_config('request.jwt.claims',jsonb_build_object('sub','1a790000-0000-4000-8000-'||lpad(n::TEXT,12,'0'),'role','authenticated','aal',aal)::TEXT,true)::TEXT;$$;
+CREATE FUNCTION pg_temp.reserve(op UUID DEFAULT '1a790000-1000-4000-8000-000000000001',role_name TEXT DEFAULT 'moderator') RETURNS JSONB LANGUAGE sql AS $$
+SELECT public.admin_begin_staff_invitation(op,repeat('a',64),'invitepilot8',role_name);$$;
+CREATE FUNCTION pg_temp.progress(stage TEXT,usr UUID DEFAULT '1a790000-0000-4000-8000-000000000008') RETURNS VOID LANGUAGE sql AS $$
+SELECT public.admin_record_staff_invitation(current_setting('test.invitation')::UUID,usr,stage);$$;
+SELECT ok(NOT has_table_privilege('authenticated','private.staff_invitation_attempts','SELECT'),'ledger not directly readable');
+SELECT ok(NOT has_table_privilege('authenticated','private.staff_invitation_events','INSERT'),'events cannot be forged');
+SELECT ok(NOT has_function_privilege('anon','public.admin_staff_invitation_register(timestamptz,uuid)','EXECUTE'),'anon denied');
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT is(public.admin_staff_invitation_register()->>'enabled','false','off by default');
+SELECT throws_like($$SELECT pg_temp.reserve()$$,'%invitation_ledger_disabled%','disabled mutation denied');
+SELECT pg_temp.claim(1,'aal1');
+SELECT throws_like($$SELECT public.admin_configure_invitation_ledger(gen_random_uuid(),true)$$,'%aal2_required%','configuration requires MFA');
+SELECT pg_temp.claim(1);
+SELECT public.admin_configure_invitation_ledger(gen_random_uuid(),true);
+SELECT throws_like($$SELECT pg_temp.reserve(gen_random_uuid(),'super_admin')$$,'%invalid_input%','direct super-admin invitations denied');
+SELECT pg_temp.claim(1,'aal1');
+SELECT throws_like($$SELECT pg_temp.reserve()$$,'%aal2_required%','reservation requires MFA');
+SELECT pg_temp.claim(1);
+SELECT set_config('test.reservation',pg_temp.reserve()::TEXT,true);
+SELECT set_config('test.invitation',(current_setting('test.reservation')::JSONB)->>'invitation_id',true);
+SELECT is(current_setting('test.reservation')::JSONB->>'dispatch_allowed','true','first reservation permits one provider attempt');
+SELECT is(pg_temp.reserve()->>'dispatch_allowed','false','same receipt never permits another send');
+SELECT throws_like($$SELECT pg_temp.reserve('1a790000-1000-4000-8000-000000000001','support')$$,'%idempotency_payload_mismatch%','changed replay denied');
+SELECT throws_like($$SELECT pg_temp.reserve(gen_random_uuid())$$,'%invitation_attempt_exists%','new key cannot resend same mailbox/handle');
+SELECT throws_like($$SELECT pg_temp.progress('provider_accepted','1a790000-0000-4000-8000-000000000003')$$,'%invitation_binding_mismatch%','arbitrary user binding denied');
+SELECT throws_like($$SELECT pg_temp.progress('access_assigned')$$,'%invitation_role_not_confirmed%','cannot skip provider confirmation');
+SELECT lives_ok($$SELECT pg_temp.progress('provider_accepted')$$,'Auth invitation and immutable handle bind progress');
+SELECT lives_ok($$SELECT pg_temp.progress('provider_accepted')$$,'duplicate progress idempotent');
+SELECT throws_like($$SELECT pg_temp.progress('access_assigned')$$,'%invitation_role_not_confirmed%','normal role cannot be claimed assigned');
+SELECT pg_temp.claim(2);
+SELECT throws_like($$SELECT pg_temp.progress('provider_accepted')$$,'%not_authorized%','other operator cannot forge initiating operator progress');
+RESET ROLE;
+SELECT is((SELECT user_role::TEXT FROM public.users WHERE anonymous_pseudonym='invitepilot8'),'normal','ledger never grants access');
+UPDATE public.users SET user_role='moderator' WHERE anonymous_pseudonym='invitepilot8';
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT lives_ok($$SELECT pg_temp.progress('access_assigned')$$,'current database role confirms assignment');
+SELECT lives_ok($$SELECT pg_temp.progress('provider_accepted')$$,'repeated earlier stage does not regress');
+SELECT is((SELECT item->>'state' FROM jsonb_array_elements(public.admin_staff_invitation_register()->'items')item WHERE item->>'invitation_id'=current_setting('test.invitation')),'access_assigned','monotonic progress');
+SELECT ok(NOT EXISTS(SELECT 1 FROM jsonb_array_elements(public.admin_staff_invitation_register()->'items')item WHERE item ?| ARRAY['mailbox_hmac','email','invited_user_id']),'read projection omits mailbox/digest/Auth ID');
+SELECT throws_like($$SELECT public.admin_staff_invitation_register(now(),NULL)$$,'%invalid_cursor%','partial cursor denied');
+SELECT pg_temp.claim(3);
+SELECT throws_like($$SELECT public.admin_staff_invitation_register()$$,'%not_authorized%','moderator denied');
+SELECT pg_temp.claim(4);
+SELECT throws_like($$SELECT public.admin_staff_invitation_register()$$,'%not_authorized%','admin denied');
+SELECT pg_temp.claim(5);
+SELECT throws_like($$SELECT public.admin_staff_invitation_register()$$,'%not_authorized%','support denied');
+SELECT pg_temp.claim(6);
+SELECT throws_like($$SELECT public.admin_staff_invitation_register()$$,'%not_authorized%','analyst denied');
+SELECT pg_temp.claim(7);
+SELECT throws_like($$SELECT public.admin_staff_invitation_register()$$,'%not_authorized%','auditor denied');
+RESET ROLE;
+UPDATE public.users SET account_status='suspended' WHERE anonymous_pseudonym='invitepilot1';
+SELECT throws_like($$DELETE FROM private.staff_invitation_events WHERE invitation_id=current_setting('test.invitation')::UUID$$,'%immutable_operational_record%','append-only events');
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT public.admin_staff_invitation_register()$$,'%not_authorized%','same JWT loses read access after suspension');
+SELECT pg_temp.claim(2);
+SELECT public.admin_configure_invitation_ledger(gen_random_uuid(),false);
+SELECT is(public.admin_staff_invitation_register()->>'enabled','false','rollback hides register');
+SELECT throws_like($$SELECT pg_temp.reserve(gen_random_uuid())$$,'%invitation_ledger_disabled%','rollback blocks attempts');
+RESET ROLE;
+SELECT is((SELECT count(*)::INT FROM private.staff_invitation_attempts WHERE invitation_id=current_setting('test.invitation')::UUID),1,'rollback preserves attempt');
+SELECT * FROM finish();
+ROLLBACK;

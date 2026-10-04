@@ -1,0 +1,77 @@
+-- PREPARED, NOT RUN. Execute against disposable local DB after promoting DDL.
+-- Kept outside the default pgTAP directory until its migration exists.
+BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+SELECT no_plan();
+SET session_replication_role=replica;
+INSERT INTO public.users(user_id,anonymous_pseudonym,avatar_seed,recovery_key_hash,display_name,display_name_normalized,username_normalized,user_role,account_status,birth_year)
+SELECT ('1a780000-0000-4000-8000-'||lpad(n::TEXT,12,'0'))::UUID,'reviewpilot'||n,'reviewpilot'||n,'x','Review Operator','review operator','reviewpilot'||n,r::public.user_role_type,'active',1990
+FROM (VALUES(1,'super_admin'),(2,'super_admin'),(3,'moderator'),(4,'admin'),(5,'support'),(6,'analyst'),(7,'read_only_auditor'),(8,'normal'))t(n,r);
+INSERT INTO auth.users(id,aud,role,created_at,updated_at) SELECT user_id,'authenticated','authenticated',now(),now() FROM public.users WHERE anonymous_pseudonym LIKE 'reviewpilot%';
+SET session_replication_role=origin;
+CREATE FUNCTION pg_temp.claim(n INT,aal TEXT DEFAULT 'aal2') RETURNS VOID LANGUAGE sql AS $$
+SELECT set_config('request.jwt.claims',jsonb_build_object('sub','1a780000-0000-4000-8000-'||lpad(n::TEXT,12,'0'),'role','authenticated','aal',aal)::TEXT,true)::TEXT;$$;
+CREATE FUNCTION pg_temp.command(command TEXT,version BIGINT DEFAULT 1,reason TEXT DEFAULT NULL,valid_until TIMESTAMPTZ DEFAULT NULL,subject UUID DEFAULT '1a780000-0000-4000-8000-000000000003') RETURNS VOID LANGUAGE sql AS $$
+SELECT public.admin_access_review_command(gen_random_uuid(),current_setting('test.review')::UUID,subject,version,command,reason,valid_until);$$;
+SELECT ok(NOT has_table_privilege('authenticated','private.access_review_items','SELECT'),'private items not directly readable');
+SELECT ok(NOT has_table_privilege('authenticated','private.access_review_events','INSERT'),'clients cannot forge review events');
+SELECT ok(NOT has_function_privilege('anon','public.admin_access_review_register(uuid,uuid,date)','EXECUTE'),'anon cannot read register');
+SELECT ok(NOT has_function_privilege('authenticated','private.require_access_reviewer(boolean)','EXECUTE'),'helper not publicly callable');
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT is(public.admin_access_review_register()->>'enabled','false','default-off backend');
+SELECT throws_like($$SELECT public.admin_create_access_review(gen_random_uuid(),'2090-01-01',now()+interval '7 days')$$,'%access_reviews_disabled%','disabled gate blocks direct mutation');
+SELECT pg_temp.claim(1,'aal1');
+SELECT throws_like($$SELECT public.admin_configure_access_reviews(gen_random_uuid(),true)$$,'%aal2_required%','configuration needs MFA');
+SELECT pg_temp.claim(1);
+SELECT public.admin_configure_access_reviews(gen_random_uuid(),true);
+SELECT pg_temp.claim(3);
+SELECT throws_like($$SELECT public.admin_access_review_register()$$,'%not_authorized%','moderator cannot read review ledger');
+SELECT pg_temp.claim(1);
+SELECT set_config('test.review',public.admin_create_access_review('1a780000-1000-4000-8000-000000000001','2090-01-01',now()+interval '7 days')::TEXT,true);
+SELECT is(public.admin_create_access_review('1a780000-1000-4000-8000-000000000001','2090-01-01',now()+interval '7 days')::TEXT,current_setting('test.review'),'exact creation retry returns same campaign');
+SELECT throws_like($$SELECT public.admin_create_access_review('1a780000-1000-4000-8000-000000000001','2090-02-01',now()+interval '7 days')$$,'%idempotency_payload_mismatch%','changed retry refused');
+SELECT throws_like($$SELECT public.admin_create_access_review(gen_random_uuid(),'2090-01-01',now()+interval '7 days')$$,'%review_period_exists%','duplicate period refused');
+SELECT throws_like($$SELECT pg_temp.command('retain',1,'business_need',now()+interval '30 days','1a780000-0000-4000-8000-000000000001')$$,'%independent_reviewer_required%','self attestation refused');
+SELECT pg_temp.claim(2);
+SELECT throws_like($$SELECT pg_temp.command('retain',1,'business_need',now()+interval '30 days')$$,'%reviewer_not_assigned%','unassigned super admin cannot decide');
+SELECT pg_temp.claim(1,'aal1');
+SELECT throws_like($$SELECT pg_temp.command('retain',1,'business_need',now()+interval '30 days')$$,'%aal2_required%','decision needs MFA');
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.command('retain',1,'business_need',now()+interval '91 days')$$,'%invalid_attestation%','expiry bounded');
+SELECT lives_ok($$SELECT public.admin_access_review_command('1a780000-1000-4000-8000-000000000002',current_setting('test.review')::UUID,'1a780000-0000-4000-8000-000000000003',1,'retain','business_need',now()+interval '30 days')$$,'assigned reviewer can attest');
+SELECT lives_ok($$SELECT public.admin_access_review_command('1a780000-1000-4000-8000-000000000002',current_setting('test.review')::UUID,'1a780000-0000-4000-8000-000000000003',1,'retain','business_need',now()+interval '30 days')$$,'exact decision retry accepted before version check');
+SELECT throws_like($$SELECT pg_temp.command('require_revocation',1,'no_business_need')$$,'%review_conflict%','stale decision refused');
+SELECT lives_ok($$SELECT pg_temp.command('require_revocation',2,'no_business_need')$$,'revocation follow-up can be recorded');
+SELECT throws_like($$SELECT pg_temp.command('confirm_revoked',3,'revocation_verified')$$,'%revocation_not_verified%','recording revocation work does not actually revoke');
+SELECT throws_like($$SELECT public.admin_access_review_command(gen_random_uuid(),current_setting('test.review')::UUID,NULL,(public.admin_access_review_register(current_setting('test.review')::UUID)->'campaign'->>'version')::BIGINT,'close')$$,'%review_incomplete%','unresolved campaign cannot close');
+RESET ROLE;
+SELECT is((SELECT user_role::TEXT FROM public.users WHERE user_id='1a780000-0000-4000-8000-000000000003'),'moderator','review decision never silently changes role');
+UPDATE public.users SET user_role='normal' WHERE user_id='1a780000-0000-4000-8000-000000000003';
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT lives_ok($$SELECT pg_temp.command('confirm_revoked',3,'revocation_verified')$$,'current database role establishes removal');
+SELECT is(public.admin_access_review_register(current_setting('test.review')::UUID)->'totals'->>'revocation_required','0','verified removal no longer counted as outstanding');
+RESET ROLE;
+SELECT throws_like($$UPDATE private.access_review_events SET reason_code='business_need' WHERE campaign_id=current_setting('test.review')::UUID$$,'%immutable_operational_record%','history immutable');
+UPDATE public.users SET account_status='suspended' WHERE user_id='1a780000-0000-4000-8000-000000000001';
+SET LOCAL ROLE authenticated;
+SELECT throws_like($$SELECT public.admin_access_review_register()$$,'%not_authorized%','same JWT loses access on suspension');
+SELECT pg_temp.claim(3);
+SELECT throws_like($$SELECT public.admin_access_review_register()$$,'%not_authorized%','member cannot read review ledger');
+SELECT pg_temp.claim(4);
+SELECT throws_like($$SELECT public.admin_access_review_register()$$,'%not_authorized%','admin denied');
+SELECT pg_temp.claim(5);
+SELECT throws_like($$SELECT public.admin_access_review_register()$$,'%not_authorized%','support denied');
+SELECT pg_temp.claim(6);
+SELECT throws_like($$SELECT public.admin_access_review_register()$$,'%not_authorized%','analyst denied');
+SELECT pg_temp.claim(7);
+SELECT throws_like($$SELECT public.admin_access_review_register()$$,'%not_authorized%','auditor denied');
+SELECT pg_temp.claim(2);
+SELECT public.admin_configure_access_reviews(gen_random_uuid(),false);
+SELECT is(public.admin_access_review_register()->>'enabled','false','rollback hides data');
+SELECT throws_like($$SELECT public.admin_create_access_review(gen_random_uuid(),'2090-02-01',now()+interval '7 days')$$,'%access_reviews_disabled%','rollback blocks commands');
+RESET ROLE;
+SELECT is((SELECT count(*)::INT FROM private.access_review_campaigns WHERE campaign_id=current_setting('test.review')::UUID),1,'rollback preserves campaign and audit history');
+SELECT * FROM finish();
+ROLLBACK;

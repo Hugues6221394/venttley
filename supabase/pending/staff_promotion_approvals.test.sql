@@ -1,0 +1,108 @@
+-- PREPARED, NOT RUN. Disposable local DB after promotion of the paired draft.
+BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+SELECT no_plan();
+SET session_replication_role=replica;
+INSERT INTO public.users(user_id,anonymous_pseudonym,avatar_seed,recovery_key_hash,display_name,display_name_normalized,username_normalized,user_role,account_status,birth_year)
+SELECT ('1a792000-0000-4000-8000-'||lpad(n::TEXT,12,'0'))::UUID,'promotionpilot'||n,'promotionpilot'||n,'x','Promotion Operator','promotion operator','promotionpilot'||n,r::public.user_role_type,'active',1990
+FROM (VALUES(1,'super_admin'),(2,'super_admin'),(3,'moderator'),(4,'admin'),(5,'support'),(6,'analyst'),(7,'read_only_auditor'),(8,'normal'))t(n,r);
+INSERT INTO auth.users(id,aud,role,created_at,updated_at,email_confirmed_at,raw_app_meta_data)
+SELECT user_id,'authenticated','authenticated',now(),now(),now(),'{}' FROM public.users WHERE anonymous_pseudonym LIKE 'promotionpilot%';
+INSERT INTO auth.mfa_factors(id,user_id,friendly_name,factor_type,status,created_at,updated_at,secret)
+SELECT gen_random_uuid(),user_id,'Synthetic factor','totp','verified',now(),now(),'synthetic-not-a-real-secret' FROM public.users WHERE anonymous_pseudonym LIKE 'promotionpilot%';
+INSERT INTO auth.sessions(id,user_id,created_at,updated_at,aal)
+SELECT user_id,user_id,now(),now(),'aal2' FROM public.users WHERE anonymous_pseudonym LIKE 'promotionpilot%';
+SET session_replication_role=origin;
+CREATE FUNCTION pg_temp.claim(n INT,aal TEXT DEFAULT 'aal2') RETURNS VOID LANGUAGE sql AS $$
+SELECT set_config('request.jwt.claims',jsonb_build_object('sub','1a792000-0000-4000-8000-'||lpad(n::TEXT,12,'0'),'session_id','1a792000-0000-4000-8000-'||lpad(n::TEXT,12,'0'),'role','authenticated','aal',aal)::TEXT,true)::TEXT;$$;
+CREATE FUNCTION pg_temp.request(target INT DEFAULT 3,op UUID DEFAULT gen_random_uuid()) RETURNS UUID LANGUAGE sql AS $$
+SELECT public.admin_request_staff_promotion(op,('1a792000-0000-4000-8000-'||lpad(target::TEXT,12,'0'))::UUID,'operational_coverage');$$;
+CREATE FUNCTION pg_temp.command(cmd TEXT,v BIGINT,op UUID DEFAULT gen_random_uuid()) RETURNS VOID LANGUAGE sql AS $$
+SELECT public.admin_staff_promotion_command(op,current_setting('test.promotion')::UUID,v,cmd);$$;
+SELECT ok(NOT has_table_privilege('authenticated','private.staff_promotion_permits','INSERT'),'clients cannot mint execution capabilities');
+SELECT ok(NOT has_function_privilege('authenticated','public.service_configure_promotion_approvals(uuid,boolean)','EXECUTE'),'operators cannot disable enforcement');
+SELECT ok(NOT has_function_privilege('anon','public.admin_staff_promotion_command(uuid,uuid,bigint,text)','EXECUTE'),'anonymous execution denied');
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT is(public.admin_staff_promotion_register()->>'enabled','false','default off');
+SELECT throws_like($$SELECT pg_temp.request()$$,'%promotion_approvals_disabled%','disabled gate');
+RESET ROLE;
+SELECT public.service_configure_promotion_approvals(gen_random_uuid(),true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1,'aal1');
+SELECT throws_like($$SELECT pg_temp.request()$$,'%aal2_required%','request needs MFA');
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT public.admin_set_user_role('1a792000-0000-4000-8000-000000000003','super_admin','Synthetic direct attempt')$$,'%promotion_approval_required%','existing direct role RPC cannot bypass approval');
+SELECT throws_like($$SELECT pg_temp.request(8)$$,'%promotion_target_ineligible%','normal member not eligible');
+SELECT set_config('test.promotion',pg_temp.request(3,'1a792000-1000-4000-8000-000000000001')::TEXT,true);
+SELECT pg_temp.claim(3);
+SELECT throws_like($$SELECT pg_temp.command('approve',1)$$,'%not_authorized%','moderator target cannot approve their own promotion');
+SELECT pg_temp.claim(1);
+SELECT is(pg_temp.request(3,'1a792000-1000-4000-8000-000000000001')::TEXT,current_setting('test.promotion'),'request receipt idempotent');
+SELECT throws_like($$SELECT pg_temp.request(4,'1a792000-1000-4000-8000-000000000001')$$,'%idempotency_payload_mismatch%','changed target cannot reuse authorization');
+SELECT throws_like($$SELECT pg_temp.command('approve',1)$$,'%independent_approver_required%','requester cannot approve');
+SELECT pg_temp.claim(2,'aal1');
+SELECT throws_like($$SELECT pg_temp.command('approve',1)$$,'%aal2_required%','approver needs MFA');
+SELECT pg_temp.claim(2);
+SELECT lives_ok($$SELECT pg_temp.command('approve',1)$$,'independent approval');
+SELECT throws_like($$SELECT pg_temp.command('execute',2)$$,'%promotion_not_executable%','approver cannot execute as requester');
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.command('execute',1)$$,'%promotion_conflict%','stale version');
+SELECT lives_ok($$SELECT pg_temp.command('execute',2,'1a792000-1000-4000-8000-000000000002')$$,'approved promotion executes');
+SELECT lives_ok($$SELECT pg_temp.command('execute',2,'1a792000-1000-4000-8000-000000000002')$$,'execution retry does not grant twice');
+RESET ROLE;
+SELECT is((SELECT user_role::TEXT FROM public.users WHERE anonymous_pseudonym='promotionpilot3'),'super_admin','role actually changed');
+SELECT is((SELECT count(*)::INT FROM private.staff_promotion_permits),0,'ephemeral permits removed');
+SELECT is((SELECT count(*)::INT FROM private.staff_promotion_events WHERE approval_id=current_setting('test.promotion')::UUID AND kind='execute'),1,'execution event once');
+SELECT throws_like($$DELETE FROM private.staff_promotion_events WHERE approval_id=current_setting('test.promotion')::UUID$$,'%immutable_operational_record%','history immutable');
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT set_config('test.promotion',pg_temp.request(4)::TEXT,true);
+SELECT pg_temp.claim(2);
+SELECT pg_temp.command('approve',1);
+RESET ROLE;
+UPDATE public.users SET user_role='support' WHERE anonymous_pseudonym='promotionpilot4';
+UPDATE public.users SET user_role='admin' WHERE anonymous_pseudonym='promotionpilot4';
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.command('execute',2)$$,'%promotion_target_changed%','role change and restoration invalidate prior approval');
+SELECT pg_temp.command('cancel',2);
+SELECT set_config('test.promotion',pg_temp.request(4)::TEXT,true);
+SELECT pg_temp.claim(2);
+SELECT pg_temp.command('approve',1);
+RESET ROLE;
+UPDATE public.users SET account_status='suspended' WHERE anonymous_pseudonym='promotionpilot2';
+UPDATE public.users SET account_status='active' WHERE anonymous_pseudonym='promotionpilot2';
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.command('execute',2)$$,'%promotion_authority_changed%','restored approver authority needs fresh approval');
+SELECT pg_temp.command('cancel',2);
+SELECT set_config('test.promotion',pg_temp.request(4)::TEXT,true);
+RESET ROLE;
+UPDATE private.staff_promotion_approvals SET expires_at=clock_timestamp()-interval '1 second' WHERE approval_id=current_setting('test.promotion')::UUID;
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(2);
+SELECT throws_like($$SELECT pg_temp.command('approve',1)$$,'%promotion_expired%','expired review cannot be approved');
+SELECT pg_temp.command('cancel',1);
+SELECT pg_temp.claim(4);
+SELECT throws_like($$SELECT public.admin_staff_promotion_register()$$,'%not_authorized%','admin denied');
+SELECT pg_temp.claim(5);
+SELECT throws_like($$SELECT public.admin_staff_promotion_register()$$,'%not_authorized%','support denied');
+SELECT pg_temp.claim(6);
+SELECT throws_like($$SELECT public.admin_staff_promotion_register()$$,'%not_authorized%','analyst denied');
+SELECT pg_temp.claim(7);
+SELECT throws_like($$SELECT public.admin_staff_promotion_register()$$,'%not_authorized%','auditor denied');
+RESET ROLE;
+SELECT public.service_configure_promotion_approvals(gen_random_uuid(),false);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.request(4)$$,'%promotion_approvals_disabled%','rollback stops producers');
+RESET ROLE;
+SELECT ok(EXISTS(SELECT 1 FROM private.staff_promotion_approvals WHERE approval_id=current_setting('test.promotion')::UUID),'rollback preserves history');
+DELETE FROM auth.sessions WHERE user_id='1a792000-0000-4000-8000-000000000001';
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT public.admin_staff_promotion_register()$$,'%promotion_session_unavailable%','otherwise valid JWT loses access when its session is deleted');
+RESET ROLE;
+SELECT * FROM finish();
+ROLLBACK;

@@ -1,0 +1,114 @@
+-- PREPARED, NOT RUN. Disposable local DB after both invitation drafts.
+BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+SELECT no_plan();
+SET session_replication_role=replica;
+INSERT INTO public.users(user_id,anonymous_pseudonym,avatar_seed,recovery_key_hash,display_name,display_name_normalized,username_normalized,user_role,account_status,birth_year)
+SELECT ('1a795000-0000-4000-8000-'||lpad(n::TEXT,12,'0'))::UUID,'setuppilot'||n,'setuppilot'||n,'x','Setup Operator','setup operator','setuppilot'||n,r::public.user_role_type,'active',1990
+FROM (VALUES(1,'super_admin'),(2,'normal'),(3,'moderator'),(4,'admin'),(5,'support'),(6,'analyst'),(7,'read_only_auditor'),(8,'normal'))t(n,r);
+INSERT INTO auth.users(id,aud,role,created_at,updated_at,invited_at,raw_app_meta_data)
+SELECT user_id,'authenticated','authenticated',now(),now(),now(),'{"provider":"email","synthetic_preserved":true}' FROM public.users WHERE anonymous_pseudonym LIKE 'setuppilot%';
+INSERT INTO auth.sessions(id,user_id,created_at,updated_at,aal)
+SELECT user_id,user_id,now(),now(),'aal2' FROM public.users WHERE anonymous_pseudonym LIKE 'setuppilot%' AND user_role::TEXT<>'normal';
+SET session_replication_role=origin;
+CREATE FUNCTION pg_temp.claim(n INT,aal TEXT DEFAULT 'aal2') RETURNS VOID LANGUAGE sql AS $$
+SELECT set_config('request.jwt.claims',jsonb_build_object('sub','1a795000-0000-4000-8000-'||lpad(n::TEXT,12,'0'),
+ 'session_id','1a795000-0000-4000-8000-'||lpad(n::TEXT,12,'0'),'role','authenticated','aal',aal)::TEXT,true)::TEXT;$$;
+CREATE FUNCTION pg_temp.repair(v BIGINT DEFAULT 2,op UUID DEFAULT gen_random_uuid()) RETURNS VOID LANGUAGE sql AS $$
+SELECT public.admin_repair_staff_invitation_setup(op,current_setting('test.invitation')::UUID,v);$$;
+SELECT ok(NOT has_function_privilege('anon','public.admin_repair_staff_invitation_setup(uuid,uuid,bigint)','EXECUTE'),'anonymous repair refused');
+SELECT ok(NOT has_function_privilege('service_role','public.admin_repair_staff_invitation_setup(uuid,uuid,bigint)','EXECUTE'),'no service-role repair endpoint');
+SELECT ok(NOT has_function_privilege('authenticated','private.require_invitation_setup_actor()','EXECUTE'),'internal helper not callable');
+SELECT is((SELECT setup_repair_enabled FROM private.staff_invitation_control),false,'repair defaults off');
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT public.admin_configure_invitation_ledger(gen_random_uuid(),true);
+SELECT set_config('test.invitation',public.admin_begin_staff_invitation(gen_random_uuid(),repeat('a',64),'setuppilot2','moderator')->>'invitation_id',true);
+SELECT public.admin_recover_staff_invitation(gen_random_uuid(),current_setting('test.invitation')::UUID,1,'reconcile');
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%invitation_setup_repair_disabled%','independent switch enforced');
+SELECT public.admin_configure_invitation_setup_repair(gen_random_uuid(),true);
+SELECT pg_temp.claim(1,'aal1');
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%aal2_required%','AAL1 refused');
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.repair(1)$$,'%invitation_conflict%','stale version refused');
+SELECT pg_temp.claim(3);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%not_authorized%','moderator refused');
+SELECT pg_temp.claim(4);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%not_authorized%','admin refused');
+SELECT pg_temp.claim(5);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%not_authorized%','support refused');
+SELECT pg_temp.claim(6);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%not_authorized%','analyst refused');
+SELECT pg_temp.claim(7);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%not_authorized%','auditor refused');
+SELECT pg_temp.claim(1);
+SELECT lives_ok($$SELECT pg_temp.repair(2,'1a795000-1000-4000-8000-000000000001')$$,'missing marker repaired');
+SELECT lives_ok($$SELECT pg_temp.repair(2,'1a795000-1000-4000-8000-000000000001')$$,'lost response can replay receipt without second mutation');
+SELECT throws_like($$SELECT pg_temp.repair(3,'1a795000-1000-4000-8000-000000000001')$$,'%idempotency_payload_mismatch%','changed replay payload refused');
+SELECT throws_like($$SELECT pg_temp.repair(3)$$,'%invitation_setup_ineligible%','existing marker never reopened');
+RESET ROLE;
+SELECT is((SELECT raw_app_meta_data->>'staff_invite_pending' FROM auth.users WHERE id='1a795000-0000-4000-8000-000000000002'),'true','marker set');
+SELECT is((SELECT raw_app_meta_data->>'synthetic_preserved' FROM auth.users WHERE id='1a795000-0000-4000-8000-000000000002'),'true','other metadata preserved');
+SELECT is((SELECT user_role::TEXT FROM public.users WHERE anonymous_pseudonym='setuppilot2'),'normal','repair never grants access');
+SELECT is((SELECT count(*)::INT FROM private.staff_invitation_events WHERE invitation_id=current_setting('test.invitation')::UUID AND stage='setup_repaired'),1,'one immutable repair event');
+SELECT ok((SELECT encrypted_password IS NULL AND email_confirmed_at IS NULL FROM auth.users WHERE id='1a795000-0000-4000-8000-000000000002'),'password and confirmation untouched');
+UPDATE auth.users SET raw_app_meta_data=jsonb_set(raw_app_meta_data,'{staff_invite_pending}','false') WHERE id='1a795000-0000-4000-8000-000000000002';
+SELECT throws_like($$UPDATE auth.users SET raw_app_meta_data=jsonb_set(raw_app_meta_data,'{staff_invite_pending}','true') WHERE id='1a795000-0000-4000-8000-000000000002'$$,'%invitation_setup_reopen_forbidden%','late provider callback cannot reopen completed repaired setup');
+
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT set_config('test.invitation',public.admin_begin_staff_invitation(gen_random_uuid(),repeat('b',64),'setuppilot8','support')->>'invitation_id',true);
+SELECT public.admin_recover_staff_invitation(gen_random_uuid(),current_setting('test.invitation')::UUID,1,'reconcile');
+RESET ROLE;
+-- Roll back each refusal fixture independently, preserving the same invitation.
+SAVEPOINT target;
+UPDATE auth.users SET raw_app_meta_data=jsonb_set(raw_app_meta_data,'{staff_invite_pending}','false') WHERE id='1a795000-0000-4000-8000-000000000008';
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%invitation_setup_ineligible%','completed setup cannot be reopened');
+RESET ROLE;
+ROLLBACK TO SAVEPOINT target;
+UPDATE auth.users SET encrypted_password='synthetic-existing-hash' WHERE id='1a795000-0000-4000-8000-000000000008';
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%invitation_setup_ineligible%','existing password blocks repair');
+RESET ROLE;
+ROLLBACK TO SAVEPOINT target;
+UPDATE auth.users SET last_sign_in_at=now(),email_confirmed_at=now() WHERE id='1a795000-0000-4000-8000-000000000008';
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%invitation_setup_ineligible%','accepted invitation blocks repair');
+RESET ROLE;
+ROLLBACK TO SAVEPOINT target;
+INSERT INTO auth.sessions(id,user_id,created_at,updated_at,aal) VALUES(gen_random_uuid(),'1a795000-0000-4000-8000-000000000008',now(),now(),'aal1');
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%invitation_setup_ineligible%','target session blocks repair');
+RESET ROLE;
+ROLLBACK TO SAVEPOINT target;
+UPDATE private.staff_invitation_attempts SET cancelled_at=now() WHERE invitation_id=current_setting('test.invitation')::UUID;
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%invitation_grant_closed%','cancellation wins');
+RESET ROLE;
+ROLLBACK TO SAVEPOINT target;
+UPDATE private.staff_invitation_attempts SET grant_expires_at=now()-interval '1 second' WHERE invitation_id=current_setting('test.invitation')::UUID;
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%invitation_grant_closed%','expiration enforced without worker');
+RESET ROLE;
+ROLLBACK TO SAVEPOINT target;
+DELETE FROM auth.sessions WHERE user_id='1a795000-0000-4000-8000-000000000001';
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%invitation_session_unavailable%','revoked actor session blocks repair');
+RESET ROLE;
+ROLLBACK TO SAVEPOINT target;
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.claim(1);
+SELECT public.admin_configure_invitation_setup_repair(gen_random_uuid(),false);
+SELECT throws_like($$SELECT pg_temp.repair()$$,'%invitation_setup_repair_disabled%','kill switch blocks new repairs');
+RESET ROLE;
+SELECT throws_like($$UPDATE auth.users SET raw_app_meta_data=jsonb_set(raw_app_meta_data,'{staff_invite_pending}','true') WHERE id='1a795000-0000-4000-8000-000000000002'$$,'%invitation_setup_reopen_forbidden%','rollback leaves replay protection intact');
+SELECT * FROM finish();
+ROLLBACK;
