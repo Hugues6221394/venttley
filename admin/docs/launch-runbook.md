@@ -88,8 +88,13 @@ The four `admin-overview-*` cron jobs ship inactive. Warm each panel with
 plans on production-sized data, then activate only those four jobs
 ([details](overview-batch-1.md)).
 
+## On-call
+
+Alerts go to **CODAFRIQA SUPPORT — support@codafriqa.rw**, monitored by the
+owner and the engineering team.
+
 ## Still open before launch
 
 - Supabase Pro (Free has no backups and limits realtime to ~200 connections).
-- A named on-call owner and backup for moderation and notification operations.
-- An external monitor for the notification and incident deadline workers.
+- External monitor (Better Stack): uptime checks plus a database heartbeat that
+  pings only while the background jobs are healthy, alerting the on-call address.
