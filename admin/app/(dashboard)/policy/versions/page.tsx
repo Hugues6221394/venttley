@@ -38,7 +38,7 @@ export default async function PolicyVersionsPage() {
   return (
     <div className="flex max-w-[1150px] flex-col gap-6">
       <PageHeader eyebrow="Control" title="Policy versions" subtitle="Effective, scheduled, and retired policy records. Body content is not rendered in the console, and no document URL is trusted as an operator-safe link." actions={<Link href="/moderation/policies" className="btn-secondary">Moderation policy center</Link>} />
-      <DataWarning title="Acceptance coverage is intentionally absent">
+      <DataWarning caveat title="Acceptance coverage is intentionally absent">
         Calculating acceptance separately for every version would create an N+1
         workload and misleading denominators. A database-owned aggregate must
         define eligible users, superseded versions, grace periods, and consent

@@ -5,6 +5,7 @@ import {
   createAdminClient,
   createSsrClient,
 } from "@/lib/supabase/server";
+import { POST_AUTHOR_EMBED, withAuthorPseudonym } from "@/lib/admin-posts";
 import { rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, Row as KV } from "@/components/ui/section";
@@ -138,7 +139,7 @@ export default async function TribeDetailPage({
     { data: keeper },
     { count: postCount30d },
     { data: topPosters },
-    { data: recentPosts },
+    { data: recentPostRows },
   ] = await Promise.all([
     tribe.keeper_id
       ? db
@@ -161,12 +162,13 @@ export default async function TribeDetailPage({
       .is("deleted_at", null)
       .limit(500),
     db
-      .from("feed_posts")
-      .select("post_id, content, author_pseudonym, created_at, likes_count, comments_count, crisis_level")
+      .from("posts")
+      .select(`post_id, content, created_at, likes_count, comments_count, crisis_level, ${POST_AUTHOR_EMBED}`)
       .eq("tribe_id", tribeId)
       .order("created_at", { ascending: false })
       .limit(10),
   ]);
+  const recentPosts = withAuthorPseudonym(recentPostRows);
 
   const posterCounts = new Map<string, number>();
   for (const p of ((topPosters ?? []) as { author_id: string }[])) {

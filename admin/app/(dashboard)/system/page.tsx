@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createSsrClient } from "@/lib/supabase/server";
 import { redis, isRedisConfigured, rateLimitingStatus } from "@/lib/redis";
 import { PageHeader, SectionHeader } from "@/components/ui/page-header";
 import { Card, Row as KV } from "@/components/ui/section";
@@ -310,7 +310,8 @@ async function probePgStats(): Promise<ProbeResult> {
 
 async function probeCron(): Promise<ProbeResult> {
   try {
-    const db = await createAdminClient();
+    // admin_hot_feed_health authorizes auth.uid(); a service-role call has none.
+    const db = await createSsrClient();
     const { data, error } = await db.rpc("admin_hot_feed_health");
     if (error) throw error;
     const rowCount =

@@ -295,7 +295,7 @@ export default async function UserDetailPage({
       .select("tribe_id", { count: "exact", head: true })
       .eq("user_id", userId),
     db
-      .from("feed_posts")
+      .from("posts")
       .select("post_id, content, created_at, likes_count, comments_count, crisis_level")
       .eq("author_id", userId)
       .order("created_at", { ascending: false })
@@ -319,9 +319,9 @@ export default async function UserDetailPage({
       .limit(12),
   ]);
 
-  // Sessions + IPs — super_admin only (the RPC self-gates; non-super_admins
-  // get an error and an empty list).
-  const { data: sessionsData } = await db.rpc("admin_user_sessions", {
+  // Sessions + IPs — super_admin only (the RPC self-gates on auth.uid(), so it
+  // needs the session client; non-super_admins get an error and an empty list).
+  const { data: sessionsData } = await (await createSsrClient()).rpc("admin_user_sessions", {
     p_target: userId,
   });
   const sessions = (sessionsData ?? []) as {

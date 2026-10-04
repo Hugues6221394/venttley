@@ -36,7 +36,7 @@ export default async function ReleasesPage() {
         subtitle="Database migration evidence, runtime rollout controls, and unresolved platform signals. This is not a deployment system."
         actions={<div className="flex gap-2"><Link href="/flags" className="btn-secondary">Feature flags</Link><Link href="/system" className="btn-secondary">System health</Link></div>}
       />
-      <DataWarning title="A migration ledger is not proof of a safe release">
+      <DataWarning caveat title="A migration ledger is not proof of a safe release">
         Venttly does not yet record build provenance, artifact signatures,
         environment promotion, approval gates, smoke-test results, rollback
         rehearsals, or crash-free sessions in one canonical release record.

@@ -47,7 +47,7 @@ export default async function PrivacyRequestDetailPage({ params }: { params: Pro
   return (
     <div className="flex max-w-[1150px] flex-col gap-6">
       <PageHeader eyebrow="Privacy request" title={user.display_name} subtitle={`@${user.anonymous_pseudonym} · data-minimized request dossier`} actions={<div className="flex gap-2"><Link href={`/users/${user.user_id}`} className="btn-secondary">Account</Link><Link href="/privacy" className="btn-secondary">All requests</Link></div>} />
-      {!user.deletion_requested_at && <DataWarning title="No active deletion request is recorded">This dossier remains available for investigation, but the account does not currently have a deletion-request timestamp.</DataWarning>}
+      {!user.deletion_requested_at && <DataWarning caveat title="No active deletion request is recorded">This dossier remains available for investigation, but the account does not currently have a deletion-request timestamp.</DataWarning>}
       {incomplete && <ErrorPanel title="Privacy inventory is incomplete" detail="One or more inventory sources could not be loaded. Refresh to retry." hint="Never fulfil a request while a required source is unknown." />}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card><p className="h-eyebrow">Request state</p><div className="mt-2"><Badge tone={user.deletion_requested_at ? "warn" : "neutral"}>{user.deletion_requested_at ? "pending" : "not requested"}</Badge></div>{user.deletion_requested_at && <p className="mt-2 text-xs text-ink-muted">{new Date(user.deletion_requested_at).toLocaleString()}</p>}</Card>

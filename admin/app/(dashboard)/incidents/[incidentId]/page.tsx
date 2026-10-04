@@ -86,7 +86,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
   return (
     <div className="flex max-w-[1100px] flex-col gap-6">
       <PageHeader eyebrow="Incident signal" title={definition.title} subtitle={`${definition.owner} · point-in-time operational dossier`} actions={<Link href="/incidents" className="btn-secondary">All incident signals</Link>} />
-      <DataWarning title="Signal group, not a persistent incident record">
+      <DataWarning caveat title="Signal group, not a persistent incident record">
         This URL identifies a live query, not an immutable incident ID. Assignment,
         acknowledgements, mitigation history, communications, and resolution do
         not yet exist as a canonical state machine.

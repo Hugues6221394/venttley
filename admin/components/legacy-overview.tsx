@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/server";
+import { POST_AUTHOR_EMBED, withAuthorPseudonym } from "@/lib/admin-posts";
 import { PageHeader, SectionHeader } from "@/components/ui/page-header";
 import { StatCard, Sparkline } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
@@ -60,9 +61,10 @@ export default async function LegacyOverview() {
     db.from("admin_reports_daily").select("day, reports"),
     db.from("admin_region_distribution").select("country, users").limit(8),
     db
-      .from("feed_posts")
-      .select("post_id, content, crisis_level, author_pseudonym, created_at")
+      .from("posts")
+      .select(`post_id, content, crisis_level, created_at, ${POST_AUTHOR_EMBED}`)
       .not("crisis_level", "is", null)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(5),
     db
@@ -131,7 +133,7 @@ export default async function LegacyOverview() {
 
   const regions = (regionsRes.data ?? []) as RegionRow[];
   const reports = (reportsDailyRes.data ?? []) as DailyReportRow[];
-  const incidents = (incidentsRes.data ?? []) as IncidentRow[];
+  const incidents = withAuthorPseudonym(incidentsRes.data) as IncidentRow[];
   const audit = (auditRes.data ?? []) as AuditRow[];
 
   return (

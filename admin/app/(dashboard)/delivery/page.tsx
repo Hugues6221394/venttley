@@ -43,7 +43,7 @@ export default async function DeliveryPage() {
         subtitle="Queue acceptance and application-level outcomes for push, email, and broadcasts. Recipient addresses, push tokens, authored content, and payloads are never rendered."
         actions={<div className="flex gap-2"><Link href="/jobs" className="btn-secondary">Failed jobs</Link><Link href="/broadcasts" className="btn-secondary">Broadcasts</Link></div>}
       />
-      <DataWarning title="Accepted by a provider is not received by a person">
+      <DataWarning caveat title="Accepted by a provider is not received by a person">
         These rates measure Venttly&apos;s terminal queue state. They do not prove
         device display, inbox placement, opening, reading, or downstream provider
         health.

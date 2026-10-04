@@ -128,7 +128,7 @@ export default async function StaffAccessReviewsPage({ searchParams }: { searchP
         subtitle="Least-privilege review candidates derived from current staff, account, and Auth state. Mailboxes, factors, recovery data, and session identifiers are not displayed."
         actions={<Link href="/staff" className="btn-secondary">Staff directory</Link>}
       />
-      <DataWarning title="This view identifies candidates; it does not certify access">
+      <DataWarning caveat title="This view identifies candidates; it does not certify access">
         The canonical review pilot is not active in this view. A green row only
         means that no current heuristic matched—not that access was independently
         approved. Formal review decisions must not be inferred from these checks.

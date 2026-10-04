@@ -44,7 +44,7 @@ export default async function EvidenceAccessPage() {
   return (
     <div className="flex max-w-[1200px] flex-col gap-6">
       <PageHeader eyebrow="Manage" title="Evidence access review" subtitle="Who disclosed restricted evidence, when, which fields, and why. Evidence values, media URLs, message bodies, and before/after snapshots are not rendered." actions={<Link href="/audit" className="btn-secondary">Full audit log</Link>} />
-      <DataWarning title="Access records are not the evidence">
+      <DataWarning caveat title="Access records are not the evidence">
         This page is safe for access review because it shows disclosure metadata
         only. Opening evidence remains a separate AAL2-gated, reason-required
         action inside the relevant case or child-safety workflow.

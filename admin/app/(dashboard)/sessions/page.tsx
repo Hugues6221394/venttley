@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createSsrClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,8 @@ export default async function SessionsPage({
   const sp = await searchParams;
   const q = (sp.q ?? "").trim().toLowerCase();
 
-  const db = await createAdminClient();
+  // admin_recent_ips authorizes auth.uid(); a service-role call has none.
+  const db = await createSsrClient();
   const { data, error } = await db.rpc("admin_recent_ips", { p_limit: 300 });
   const rows = ((data ?? []) as IpRow[]).filter(
     (r) =>

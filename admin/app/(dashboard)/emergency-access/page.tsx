@@ -39,7 +39,7 @@ export default async function EmergencyAccessPage() {
         subtitle="Restricted incident context for Super Admins. This page exposes no secret, bypass token, raw evidence, authored content, IP address, or device identifier."
         actions={<Link href="/incidents" className="btn-secondary">Incident command</Link>}
       />
-      <DataWarning title="No canonical break-glass system exists yet">
+      <DataWarning caveat title="No canonical break-glass system exists yet">
         There is currently no short-lived emergency grant, independent approval,
         scoped privilege, automatic expiry, or post-use certification. This page
         must not be interpreted as an emergency-access mechanism.

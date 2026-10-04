@@ -54,7 +54,7 @@ export default async function IntegrityPage() {
   return (
     <div className="flex max-w-[1200px] flex-col gap-6">
       <PageHeader eyebrow="Operate" title="Platform integrity" subtitle="Server-recorded enforcement and manipulation pressure. Raw IPs, device identifiers, message bodies, and private identity are omitted." actions={<Link href="/moderation/abuse" className="btn-secondary">Abuse controls</Link>} />
-      <DataWarning title="These signals do not prove coordinated abuse">
+      <DataWarning caveat title="These signals do not prove coordinated abuse">
         Suspensions, cooldowns, reports, and blocked logins are triage inputs.
         Treating them as automatic guilt would make coordinated false-reporting
         itself an effective attack.

@@ -111,7 +111,7 @@ export default async function StaffInvitationsPage({ searchParams }: { searchPar
   return (
     <div className="flex max-w-[1150px] flex-col gap-6">
       <PageHeader eyebrow="Manage" title="Staff invitations" subtitle="Auth/database reconciliation for staff invitations without exposing member recovery data or listing the general Auth population." actions={<Link href="/staff" className="btn-secondary">Staff directory</Link>} />
-      <DataWarning title="Canonical invitation tracking is not active">
+      <DataWarning caveat title="Canonical invitation tracking is not active">
         The view reconciles accounts already carrying a staff role. An Auth
         invitation whose role assignment failed cannot be discovered safely by
         scanning millions of unrelated users; that requires a dedicated ledger.

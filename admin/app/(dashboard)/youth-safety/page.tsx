@@ -38,7 +38,7 @@ export default async function YouthSafetyPage({ searchParams }: { searchParams: 
   return (
     <div className="flex max-w-[1150px] flex-col gap-6">
       <PageHeader eyebrow="Operate" title="Youth safety" subtitle="Age-completion and minimum-age control without displaying birth years, recovery contacts, locations, or authored content." />
-      <DataWarning title="Birth year is not age assurance">
+      <DataWarning caveat title="Birth year is not age assurance">
         The counts below are conservative year-based bands. They cannot prove
         identity or exact age and must not be represented as verified age.
       </DataWarning>

@@ -4,6 +4,7 @@ import { RefreshAttentionOnRender } from "@/components/staff-attention";
 import { QueueAttentionPanel } from "@/components/queue-attention-panel";
 import Link from "next/link";
 import { createAdminClient, createSsrClient, getRenderStaff } from "@/lib/supabase/server";
+import { POST_AUTHOR_EMBED, withAuthorPseudonym } from "@/lib/admin-posts";
 import { hasModernShell } from "@/lib/shell-rollout";
 import { workflowUIEnabled,dailyWorkflowQueue } from "@/lib/workflows";
 import { ModerationWorkflow } from "@/components/workflows/moderation-workspace";
@@ -363,15 +364,13 @@ export default async function ModerationPage({
     // already fetched above
   } else if (tab === "crisis") {
     const { data } = await db
-      .from("feed_posts")
-      .select(
-        "post_id, content, crisis_level, author_id, author_pseudonym, created_at"
-      )
+      .from("posts")
+      .select(`post_id, content, crisis_level, author_id, created_at, ${POST_AUTHOR_EMBED}`)
       .not("crisis_level", "is", null)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(200);
-    crisis = (data ?? []) as CrisisRow[];
+    crisis = withAuthorPseudonym(data) as CrisisRow[];
   } else {
     let q = db
       .from("reports")

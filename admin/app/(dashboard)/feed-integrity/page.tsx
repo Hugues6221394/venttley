@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createSsrClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -17,8 +17,10 @@ const FEED_TERMS = /(feed|discover|recommend|ranking|whisper|trending|hot)/i;
 
 export default async function FeedIntegrityPage() {
   const db = await createAdminClient();
+  // admin_hot_feed_health authorizes auth.uid(); a service-role call has none.
+  const session = await createSsrClient();
   const [healthResult, flagsResult, alertsResult, mediaPending, crisisTagged] = await Promise.all([
-    db.rpc("admin_hot_feed_health"),
+    session.rpc("admin_hot_feed_health"),
     db.from("feature_flags").select("flag_key, description, enabled, rollout_pct, environment, updated_at").order("updated_at", { ascending: false }).limit(100),
     db.from("platform_alerts").select("alert_id, subsystem, severity, problem, created_at").is("resolved_at", null).order("created_at", { ascending: false }).limit(100),
     db.from("posts").select("post_id", { count: "exact", head: true }).eq("media_status", "pending").is("deleted_at", null),
@@ -33,7 +35,7 @@ export default async function FeedIntegrityPage() {
   return (
     <div className="flex max-w-[1150px] flex-col gap-6">
       <PageHeader eyebrow="Operate" title="Feed integrity" subtitle="Operational state around the protected hot-feed cache, rollout controls, media quarantine, and crisis classification. No authored content or user identity is rendered." actions={<div className="flex gap-2"><Link href="/integrity" className="btn-secondary">Platform integrity</Link><Link href="/flags" className="btn-secondary">Feature flags</Link></div>} />
-      <DataWarning title="No ranking-fairness or manipulation telemetry exists yet">
+      <DataWarning caveat title="No ranking-fairness or manipulation telemetry exists yet">
         Cache population and feature flags do not prove relevance, diversity,
         freshness, creator fairness, safety, or resistance to coordinated
         engagement. This page must not label a post or account as manipulative.

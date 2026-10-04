@@ -52,7 +52,7 @@ export default async function TribeGovernancePage() {
   return (
     <div className="flex max-w-[1200px] flex-col gap-6">
       <PageHeader eyebrow="Operate" title="Tribe governance" subtitle="Bounded lifecycle, suspension, stewardship, and join-request queues. Member notes, message bodies, ban reasons, and private community content are omitted." actions={<Link href="/tribes" className="btn-secondary">Tribe directory</Link>} />
-      <DataWarning title="Returned rows are bounded samples, not platform totals">
+      <DataWarning caveat title="Returned rows are bounded samples, not platform totals">
         Each source stops at {LIMIT} rows to keep the page predictable. A value
         of {LIMIT}+ means the backend must provide an indexed aggregate before
         an operator can know the full backlog.

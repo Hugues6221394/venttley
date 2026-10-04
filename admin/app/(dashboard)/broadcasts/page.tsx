@@ -123,7 +123,7 @@ export default async function BroadcastsPage({searchParams}:{searchParams:Promis
         subtitle="Legacy publication register. A stored publication is not proof of delivery to devices."
       />
 
-      <DataWarning title="Legacy broadcast controls">
+      <DataWarning caveat title="Legacy broadcast controls">
         Targeted audience isolation and scheduled visibility require verification before use. The approval pilot is separately gated; hiding its UI does not disable database enforcement. When enforcement is enabled, legacy publication and message edits are refused, but deactivation remains available.
       </DataWarning>
 

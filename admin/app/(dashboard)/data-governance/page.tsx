@@ -44,7 +44,7 @@ export default async function DataGovernancePage() {
         subtitle="A minimum-data operational map for Venttly's sensitive stores and currently effective policy records. It deliberately contains no user-level personal data."
         actions={<div className="flex gap-2"><Link href="/privacy" className="btn-secondary">Privacy requests</Link><Link href="/policy/versions" className="btn-secondary">Policy versions</Link></div>}
       />
-      <DataWarning title="This is not yet a legal record of processing activities">
+      <DataWarning caveat title="This is not yet a legal record of processing activities">
         The repository can show intended technical boundaries, but it cannot
         prove production processor contracts, data residency, transfer basis,
         retention execution, subprocessor changes, or regional consent scope.

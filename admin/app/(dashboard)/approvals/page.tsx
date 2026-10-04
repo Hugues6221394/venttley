@@ -73,7 +73,7 @@ export default async function ApprovalsPage({searchParams}:{searchParams:Promise
         actions={<Link href="/audit" className="btn-secondary">Open audit log</Link>}
       />
 
-      <DataWarning title="The promotion approval pilot is not visible here">
+      <DataWarning caveat title="The promotion approval pilot is not visible here">
         This legacy view does not establish whether database promotion enforcement
         is enabled. The new queue is separately gated; hiding it does not disable
         backend enforcement. Other high-impact approvals remain a production gap.

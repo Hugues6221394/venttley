@@ -57,12 +57,13 @@ export async function checkAttentionBrowser({browser,cookies,origin,userId,dbUrl
     for(const[key,d]of Object.entries(queueDestinations)) {
       await visit(d.href);
       const data=await (await context.request.get(`${origin}/inbox/data?mode=attention`)).json();
-      if(key==='jobs') {
-        // Jobs has an independent producer switch, intentionally off here.
-        // Its enabled-state parity is covered by test-job-report-notices.
-        assert(!data.queues.some(q=>q.key==='jobs'));
-        assert.equal(await page.locator('[data-attention-panel="jobs"]').count(),0,'disabled Jobs source must not invent an actionable KPI');
-        assert.equal(await page.locator('aside a[href="/jobs"] .inbox-queue-badge').count(),0);
+      if(key==='jobs'||key==='incidents') {
+        // Jobs has an independent producer switch and incidents a server-side
+        // pilot audience, both intentionally off here. Enabled-state parity is
+        // covered by test-job-report-notices and test-incident-browser.
+        assert(!data.queues.some(q=>q.key===key));
+        assert.equal(await page.locator(`[data-attention-panel="${key}"]`).count(),0,`disabled ${key} source must not invent an actionable KPI`);
+        assert.equal(await page.locator(`aside a[href="${d.path}"] .inbox-queue-badge`).count(),0);
       } else {
         await page.locator(`[data-attention-panel="${key}"]`).waitFor();
         assert.equal(await page.locator(`[data-queue-value="${key}"]`).innerText(),data.queues.find(q=>q.key===key).count.toLocaleString('en-US'));
