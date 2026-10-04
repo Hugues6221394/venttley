@@ -88,7 +88,6 @@ const readOnlyPages = [
   "app/(dashboard)/evidence-access/page.tsx",
   "app/(dashboard)/emergency-access/page.tsx",
   "app/(dashboard)/feed-integrity/page.tsx",
-  "app/(dashboard)/incidents/page.tsx",
   "app/(dashboard)/integrity/page.tsx",
   "app/(dashboard)/jobs/page.tsx",
   "app/(dashboard)/moderation/abuse/page.tsx",
@@ -112,6 +111,14 @@ for (const page of readOnlyPages) {
   expect(source.includes("createAdminClient"), `${page} must use the self-gating admin data client`);
   expect(!/\.insert\s*\(|\.update\s*\(|\.delete\s*\(|\.upsert\s*\(/.test(source), `${page} must remain read-only until an audited mutation contract exists`);
 }
+
+const incidentPage=read('app/(dashboard)/incidents/page.tsx');
+expect(/export const dynamic\s*=\s*['"]force-dynamic['"]/.test(incidentPage),'incidents must never be statically cached');
+expect(incidentPage.includes('incidentUIEnabled')&&incidentPage.includes('LegacyIncidents'),'incident rollout preserves legacy routing');
+expect(read('components/legacy-incidents.tsx').includes('createAdminClient'),'legacy incident signals retain privileged data gate');
+const incidentActions=read('lib/incident-actions.ts');
+expect(incidentActions.includes('requireOperationalActor')&&incidentActions.includes('incidentUIEnabled'),'incident actions independently authorize staff and rollout');
+expect(incidentActions.includes("rpc('admin_incident_mutate'")&&!incidentActions.includes('createAdminClient'),'incident writes use actor-bound checked RPC, not service role');
 
 const controlPlanePages = [
   "app/(dashboard)/moderation/campaigns/page.tsx",
@@ -141,8 +148,9 @@ for (const [route, rpcNames] of operationalWorkflows) {
   const actions = read(`app/(dashboard)/${route}/actions.ts`);
   expect(page.includes('export const dynamic = "force-dynamic"'), `${route} must never be statically cached`);
   expect(page.includes('name="operation_id"'), `${route} must preserve a logical operation ID across transport retries`);
-  expect(actions.includes("requireOperationalActor"), `${route} actions must re-check active staff and rate-limit`);
-  expect(actions.includes('uuid(formData, "operation_id")'), `${route} actions must validate the retry key`);
+  const governed = ["legal-requests", "recovery-readiness"].includes(route);
+  expect(governed ? actions.includes('governanceAction(') && read('lib/governance-action.ts').includes('await requireOperationalActor(roles)') : actions.includes("requireOperationalActor"), `${route} actions must re-check active staff and rate-limit`);
+  expect(actions.includes(governed ? 'uuid(fd, "operation_id")' : 'uuid(formData, "operation_id")'), `${route} actions must validate the retry key`);
   expect(!/\.from\([^)]*\)\.(insert|update|delete|upsert)/.test(actions), `${route} writes must stay behind actor-bound RPCs`);
   for (const rpcName of rpcNames) {
     expect(actions.includes(`\"${rpcName}\"`), `${route} must invoke ${rpcName}`);
@@ -160,7 +168,7 @@ expect(
 );
 expect(
   impactActions.includes("activeStaffRole") &&
-    impactActions.includes('rpc<string>("admin_generate_impact_report"') &&
+    impactActions.includes('rpc<string>("admin_generate_impact_report_checked"') && impactActions.includes('p_operation:operation') &&
     !/\.from\([^)]*\)\.(insert|update|delete|upsert)/.test(impactActions),
   "impact report generation must stay behind the actor-bound audited RPC",
 );

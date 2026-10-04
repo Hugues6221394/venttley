@@ -31,7 +31,7 @@ export function ErrorPanel({
   hint?: string;
 }) {
   return (
-    <div className="surface p-4 border-danger/30 bg-danger/5">
+    <div data-console-state="unavailable" role="status" className="surface p-4 border-danger/30 bg-danger/5">
       <p className="text-sm font-bold text-danger">{title}</p>
       {detail && (
         <pre className="mt-1 text-xs whitespace-pre-wrap text-danger/85 font-mono">

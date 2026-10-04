@@ -9,6 +9,8 @@ import { Star, Search } from "lucide-react";
 import dynamic from "next/dynamic";
 import { activeNavigation, navigationGroups, safeFavorites, visibleNavigation } from "@/lib/navigation";
 import { containDialogTab } from "@/lib/dialog-focus";
+import { useStaffAttention } from "./staff-attention";
+import { attentionDestination } from "@/lib/inbox-model";
 
 const groupIcons = [LayoutDashboard, ShieldCheck, null, Database, Lock, LineChart];
 const PageSearch = dynamic(() => import("./page-search"), {
@@ -106,11 +108,13 @@ function ShellNavigation({ role, pathname, favorites, badges, mobile, onNavigate
 }) {
   const active = activeNavigation(role, pathname);
   const pages = visibleNavigation(role);
+  const { data: attention, queuesAvailable } = useStaffAttention();
+  const destination = (href: string) => attentionDestination(href, attention, queuesAvailable);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ [active?.group ?? "Command Center"]: true });
   useEffect(() => {
     if (active) setExpanded(previous => ({ ...previous, [active.group]: true }));
   }, [pathname, active?.group]);
-  const item = (href: string, label: string, badge = true) => <Link key={href} href={href} prefetch={false}
+  const item = (href: string, label: string, badge = true) => <Link key={href} href={badge ? destination(href) : href} prefetch={false}
     aria-current={active?.href === href ? "page" : undefined} onClick={onNavigate}
     className="operator-page-link"><span>{label}</span>{badge && badges[href]}<Pending /></Link>;
   return <nav className="operator-navigation" aria-label={mobile ? "Mobile pages" : "Pages"}>

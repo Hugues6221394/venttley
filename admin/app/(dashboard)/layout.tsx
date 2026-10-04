@@ -6,6 +6,10 @@ import { Suspense } from "react";
 import { QueueBadge, type QueueBadgePath } from "@/components/queue-badge";
 import OperatorShell from "@/components/operator-shell";
 import { hasModernShell } from "@/lib/shell-rollout";
+import { StaffAttentionProvider } from "@/components/staff-attention";
+import { AttentionQueueBadge } from "@/components/staff-inbox";
+import { canAccess } from "@/lib/roles";
+import { attentionQueueKeys, queueDestinations } from "@/lib/inbox-model";
 
 export const dynamic = "force-dynamic";
 
@@ -21,13 +25,22 @@ export default async function DashboardLayout({
   ]));
 
   const env = resolveEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const inboxUI = process.env.ADMIN_INBOX_UI === "true";
+  const queuesUI = process.env.ADMIN_ATTENTION_UI === "true" && hasModernShell(staff.role, process.env.ADMIN_SHELL_V2, process.env.ADMIN_SHELL_V2_ROLES);
+  if (inboxUI && canAccess(staff.role, "/support/cases")) badges["/support/cases"] = <AttentionQueueBadge queue="support" />;
+  if (inboxUI && staff.role === "super_admin") badges["/legal-requests"] = <AttentionQueueBadge queue="legal" />;
+  if (queuesUI) for (const queue of attentionQueueKeys) {
+    if (queue === 'incidents' && process.env.ADMIN_INCIDENTS_UI !== 'true') continue;
+    const path = queueDestinations[queue].path;
+    if (canAccess(staff.role, path) && (queue !== 'legal' || staff.role === 'super_admin')) badges[path] = <AttentionQueueBadge queue={queue} />;
+  }
 
   if (hasModernShell(staff.role, process.env.ADMIN_SHELL_V2, process.env.ADMIN_SHELL_V2_ROLES)) {
-    return <OperatorShell key={`${staff.userId}:${staff.role}`} role={staff.role} pseudonym={staff.pseudonym} env={env} badges={badges}>{children}</OperatorShell>;
+    return <StaffAttentionProvider key={`${staff.userId}:${staff.role}`} available={inboxUI} queuesAvailable={queuesUI}><OperatorShell role={staff.role} pseudonym={staff.pseudonym} env={env} badges={badges}>{children}</OperatorShell></StaffAttentionProvider>;
   }
 
   return (
-    <div className="min-h-screen flex bg-canvas">
+    <StaffAttentionProvider key={`${staff.userId}:${staff.role}`} available={inboxUI}><div className="min-h-screen flex bg-canvas">
       <Sidebar
         role={staff.role}
         badges={badges}
@@ -40,7 +53,7 @@ export default async function DashboardLayout({
         />
         <main className="flex-1 px-8 py-8 overflow-y-auto">{children}</main>
       </div>
-    </div>
+    </div></StaffAttentionProvider>
   );
 }
 

@@ -1,7 +1,15 @@
 import { revalidatePath } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { getOperationalRole } from "@/lib/governance";
+import { broadcastApprovalCursor } from "@/lib/broadcast-approval-model";
+import { BroadcastApprovalRegister } from "@/components/workflows/broadcast-approval-register";
+import { DataWarning } from "@/components/ui/operations";
+import { createAdminClient,createSsrClient } from "@/lib/supabase/server";
+import { requireOperationalActor } from "@/lib/operational-actions";
+import { governanceUtcTime } from "@/lib/governance-action";
 import { rpc } from "@/lib/audit";
-import { enumOf, optStr, optTimestamp, reqStr, uuid } from "@/lib/validate";
+import { enumOf, optStr, reqStr, uuid } from "@/lib/validate";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
@@ -29,8 +37,17 @@ type Row = {
 const URGENCIES = ["info", "warning", "critical", "crisis"] as const;
 const SCOPES = ["all", "region", "tribe", "role"] as const;
 
+async function requireBroadcastOperator() {
+  await requireOperationalActor(["super_admin","admin"]);
+  const db=await createSsrClient();
+  const {data,error}=await db.auth.mfa.getAuthenticatorAssuranceLevel();
+  if(error||data?.currentLevel!=="aal2")throw new Error("Complete MFA before changing broadcasts.");
+}
+
 async function sendBroadcastAction(formData: FormData) {
   "use server";
+  if (process.env.ADMIN_BROADCAST_APPROVALS_UI === "true") throw new Error("Use the broadcast approval workflow.");
+  await requireBroadcastOperator();
   // The composer caps title at 120 and body at 1000 with maxLength; those are
   // UI hints, so re-apply them here where they are actually enforceable. This
   // reaches every active member, so an oversized or malformed one is not a
@@ -39,6 +56,7 @@ async function sendBroadcastAction(formData: FormData) {
   const body = reqStr(formData, "body", 1000);
   const scope = enumOf(formData, "scope", SCOPES);
   const scopeValue = optStr(formData, "scope_value", 100);
+  if(scope!=="all"||scopeValue||optStr(formData,"scheduled_for",50))throw new Error("Only immediate global publication is supported. Targeting and scheduling are unavailable.");
 
   const audience: { scope: string; value?: string } = { scope };
   if (scope !== "all" && scopeValue) audience.value = scopeValue;
@@ -48,21 +66,30 @@ async function sendBroadcastAction(formData: FormData) {
     p_body: body,
     p_urgency: enumOf(formData, "urgency", URGENCIES),
     p_audience: audience,
-    p_scheduled_for: optTimestamp(formData, "scheduled_for"),
-    p_expires_at: optTimestamp(formData, "expires_at"),
+    p_scheduled_for: null,
+    p_expires_at: optStr(formData,"expires_at",16)?governanceUtcTime(formData,"expires_at"):null,
   });
   revalidatePath("/broadcasts");
 }
 
 async function deactivateAction(formData: FormData) {
   "use server";
+  await requireBroadcastOperator();
   await rpc("admin_deactivate_broadcast", {
     p_broadcast: uuid(formData, "broadcast_id"),
   });
   revalidatePath("/broadcasts");
 }
 
-export default async function BroadcastsPage() {
+export default async function BroadcastsPage({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}) {
+  const role = await getOperationalRole();
+  if (role !== "super_admin" && role !== "admin") notFound();
+  if (process.env.ADMIN_BROADCAST_APPROVALS_UI === "true") {
+    const cursor = broadcastApprovalCursor(await searchParams);
+    if (!cursor) return <div><DataWarning title="Invalid queue cursor">Restart the broadcast queue.</DataWarning><Link href="/broadcasts" className="btn-secondary">Reset filters</Link></div>;
+    return <BroadcastApprovalRegister cursor={cursor} superAdmin={role === "super_admin"}/>;
+  }
+  if((await searchParams).source!==undefined)return <DataWarning title="Approval interface unavailable">This request requires the separately enabled approval interface. No unrelated record is shown.</DataWarning>;
   const db = await createAdminClient();
   const { data, error } = await db
     .from("broadcasts")
@@ -71,6 +98,11 @@ export default async function BroadcastsPage() {
     )
     .order("created_at", { ascending: false })
     .limit(100);
+  if (error) return <div className="flex flex-col gap-6">
+    <PageHeader eyebrow="Operate" title="Broadcasts" subtitle="Legacy publication register"/>
+    <DataWarning title="Broadcast data unavailable">Counts are unknown, not zero. Reload to retry.</DataWarning>
+    <a href="/broadcasts" className="btn-secondary">Reload broadcasts</a>
+  </div>;
   const rows = (data ?? []) as Row[];
   const active = rows.filter(
     (r) =>
@@ -88,16 +120,12 @@ export default async function BroadcastsPage() {
       <PageHeader
         eyebrow="Operate"
         title="Broadcasts"
-        subtitle="Reach the whole platform, a region, a tribe, or a role. Crisis-tier broadcasts pin a banner at the top of the mobile app."
+        subtitle="Legacy publication register. A stored publication is not proof of delivery to devices."
       />
 
-      {error && (
-        <Card padded>
-          <p className="text-sm text-danger">
-            Could not load broadcasts: {error.message}
-          </p>
-        </Card>
-      )}
+      <DataWarning title="Legacy broadcast controls">
+        Targeted audience isolation and scheduled visibility require verification before use. The approval pilot is separately gated; hiding its UI does not disable database enforcement. When enforcement is enabled, legacy publication and message edits are refused, but deactivation remains available.
+      </DataWarning>
 
       <Card title="Compose" padded>
         <form action={sendBroadcastAction} className="grid grid-cols-1 gap-3">
@@ -138,31 +166,12 @@ export default async function BroadcastsPage() {
               <label className="h-eyebrow block mb-1">Audience</label>
               <select name="scope" className="select w-full" defaultValue="all">
                 <option value="all">Everyone</option>
-                <option value="region">Region (ISO code)</option>
-                <option value="tribe">Tribe (slug)</option>
-                <option value="role">Role</option>
               </select>
-            </div>
-            <div className="md:col-span-2">
-              <label className="h-eyebrow block mb-1">Audience value</label>
-              <input
-                name="scope_value"
-                className="input"
-                placeholder="e.g. RW, /healing, moderator"
-              />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="h-eyebrow block mb-1">Schedule for (optional)</label>
-              <input
-                type="datetime-local"
-                name="scheduled_for"
-                className="input"
-              />
-            </div>
-            <div>
-              <label className="h-eyebrow block mb-1">Expires at (optional)</label>
+              <label className="h-eyebrow block mb-1">Expires at (UTC, optional)</label>
               <input
                 type="datetime-local"
                 name="expires_at"
@@ -173,10 +182,10 @@ export default async function BroadcastsPage() {
           <div className="flex items-center gap-3 pt-2 border-t border-line mt-2">
             <button type="submit" className="btn-primary">
               <Megaphone size={14} />
-              Send
+              Publish
             </button>
             <p className="text-xs text-ink-muted">
-              Empty schedule = send immediately. Audited as <code className="font-mono">broadcast.send</code>.
+              Immediate global publication only, not proof of delivery. Audited as <code className="font-mono">broadcast.send</code>.
             </p>
           </div>
         </form>

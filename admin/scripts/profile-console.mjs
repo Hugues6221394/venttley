@@ -10,6 +10,20 @@ import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import assert from "node:assert/strict";
 import { canAccess, STAFF_ROLES } from "../lib/roles.ts";
+import { checkInboxBrowser } from "./test-inbox-browser.mjs";
+import { checkOverviewBrowser } from "./test-overview-browser.mjs";
+import { overviewFaultProxy } from "./overview-fault-proxy.mjs";
+import { checkAttentionBrowser } from "./test-attention-browser.mjs";
+import { checkWorkflowBrowser } from './test-workflow-browser.mjs';
+import { workflowFaultProxy } from './workflow-fault-proxy.mjs';
+import { checkRecoveryBrowser } from './test-recovery-browser.mjs';
+import { checkModerationNotices } from './test-moderation-notices.mjs';
+import { checkJobReportNotices } from './test-job-report-notices.mjs';
+import { checkIncidentBrowser } from './test-incident-browser.mjs';
+import { checkStaffBrowser } from './test-staff-browser.mjs';
+import { staffFaultProxy } from './staff-fault-proxy.mjs';
+import { checkAllRoutesBrowser } from './test-all-routes-browser.mjs';
+import { checkThemeBrowser } from './test-theme-browser.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
@@ -31,6 +45,35 @@ const env = { ...process.env, NEXT_PUBLIC_SUPABASE_URL: config.API_URL,
   NEXT_PUBLIC_ADMIN_ENV: "local", ADMIN_REQUIRE_MFA: "false",
   ADMIN_ORIGIN_SECRET: "", ADMIN_IP_ALLOWLIST: "", NEXT_TELEMETRY_DISABLED: "1",
   ADMIN_PROFILE_METRICS: "1" };
+if (process.env.ADMIN_INBOX_ASSERT === "1") env.ADMIN_INBOX_UI = "true";
+if(process.env.ADMIN_THEME_ASSERT) {
+  assert(['1','rollback'].includes(process.env.ADMIN_THEME_ASSERT),'invalid theme gate');
+  env.ADMIN_THEME_UI=process.env.ADMIN_THEME_ASSERT==='1'?'true':'false';
+  env.ADMIN_SHELL_V2='true';env.ADMIN_SHELL_V2_ROLES=STAFF_ROLES.join(',');
+  env.ADMIN_INBOX_UI='false';env.ADMIN_ATTENTION_UI='false';
+}
+if(process.env.ADMIN_INCIDENT_ASSERT==='1') {
+  env.ADMIN_ATTENTION_UI='true';
+  env.ADMIN_INCIDENTS_UI='true';env.ADMIN_INBOX_UI='true';env.ADMIN_SHELL_V2='true';env.ADMIN_SHELL_V2_ROLES=STAFF_ROLES.join(',');
+}
+if (process.env.ADMIN_MODERATION_NOTICES_ASSERT === '1') {
+  env.ADMIN_INBOX_UI='true';env.ADMIN_SHELL_V2='true';env.ADMIN_SHELL_V2_ROLES=STAFF_ROLES.join(',');
+}
+if(process.env.ADMIN_JOB_REPORT_ASSERT==='1') {
+  env.ADMIN_INBOX_UI='true';env.ADMIN_SHELL_V2='true';env.ADMIN_SHELL_V2_ROLES=STAFF_ROLES.join(',');
+  env.ADMIN_ATTENTION_UI='true';env.ADMIN_INBOX_RECOVERY_UI='true';
+}
+if(process.env.ADMIN_RECOVERY_ASSERT==='1') {
+  env.ADMIN_INBOX_RECOVERY_UI='true';env.ADMIN_SHELL_V2='true';env.ADMIN_SHELL_V2_ROLES=STAFF_ROLES.join(',');
+  env.ADMIN_INBOX_UI='false';env.ADMIN_ATTENTION_UI='false';
+}
+if (process.env.ADMIN_ATTENTION_ASSERT === "1") {
+  env.ADMIN_ATTENTION_UI = "true";
+  env.ADMIN_OVERVIEW_V2 = "true";
+  env.ADMIN_SHELL_V2 = "true";
+  env.ADMIN_SHELL_V2_ROLES = STAFF_ROLES.join(',');
+  env.ADMIN_INBOX_UI = "false"; // Independent UI rollback must not stop queue refresh.
+}
 if (process.env.ADMIN_MODERN_SHELL_ASSERT === "1") {
   env.ADMIN_SHELL_V2 = "true";
   env.ADMIN_SHELL_V2_ROLES = STAFF_ROLES.join(",");
@@ -44,7 +87,7 @@ const password = `Local-${randomUUID()}-Aa1!`;
 const pseudonym = `console${suffix}`;
 const outputDir = resolve(root, ".artifacts", process.env.ADMIN_PROFILE_LABEL ?? "baseline");
 await mkdir(outputDir, { recursive: true });
-let userId, server, browser;
+let userId, server, browser, overviewProxy;
 const timings = [];
 const run = (args) => new Promise((res, rej) => {
   const child = spawn(process.execPath, [require.resolve("next/dist/bin/next"), ...args], {
@@ -56,6 +99,25 @@ const run = (args) => new Promise((res, rej) => {
   child.on("exit", code => code === 0 ? res() : rej(new Error(`Next ${args[0]} failed (${code})`)));
 });
 try {
+  if(process.env.ADMIN_STAFF_ASSERT==='1') {
+    overviewProxy=await staffFaultProxy(config.API_URL);
+    env.NEXT_PUBLIC_SUPABASE_URL=overviewProxy.url;
+    env.ADMIN_SHELL_V2='true';env.ADMIN_SHELL_V2_ROLES=STAFF_ROLES.join(',');
+    env.ADMIN_INBOX_UI='false';env.ADMIN_ATTENTION_UI='false';
+  }
+  if(process.env.ADMIN_WORKFLOW_ASSERT==='1') {
+    overviewProxy=await workflowFaultProxy(config.API_URL);
+    env.NEXT_PUBLIC_SUPABASE_URL=overviewProxy.url;
+    env.ADMIN_WORKFLOWS_UI='true';env.ADMIN_SHELL_V2='true';env.ADMIN_SHELL_V2_ROLES=STAFF_ROLES.join(',');
+    env.ADMIN_ATTENTION_UI='false';env.ADMIN_INBOX_UI='false';env.ADMIN_OVERVIEW_V2='false';
+  }
+  if (process.env.ADMIN_OVERVIEW_ASSERT === "1") {
+    overviewProxy = await overviewFaultProxy(config.API_URL);
+    env.NEXT_PUBLIC_SUPABASE_URL = overviewProxy.url;
+    env.ADMIN_OVERVIEW_V2 = "true";
+    env.ADMIN_SHELL_V2 = "true";
+    env.ADMIN_SHELL_V2_ROLES = STAFF_ROLES.join(",");
+  }
   console.log("Building admin against local Supabase (production mode)…");
   if (process.env.ADMIN_PROFILE_SKIP_BUILD !== "1") await run(["build", "--webpack"]);
   server = spawn(process.execPath, [require.resolve("next/dist/bin/next"), "start", "-H", "127.0.0.1", "-p", String(port)], {
@@ -170,7 +232,7 @@ try {
     }
   }
   if (process.env.ADMIN_SHELL_ASSERT === "1") {
-    assert(rows.filter(row=>row.route!=="/login").every(row=>row.serverRoundTripsByCategory.auth===1),
+    assert(process.env.ADMIN_INBOX_ASSERT === "1" || rows.filter(row=>row.route!=="/login").every(row=>row.serverRoundTripsByCategory.auth===1),
       "shared data-access auth check should run once per measured render (proxy excluded)");
     const sql = statement => execFileSync("psql", [config.DB_URL,"-X","-v","ON_ERROR_STOP=1","-c",statement], { stdio: "ignore" });
     for (const role of STAFF_ROLES) {
@@ -181,7 +243,7 @@ try {
       await page.goto(`${origin}/overview`, {waitUntil:"networkidle"});
       assert.equal(new URL(page.url()).pathname,"/overview", `${role} has overview access`);
       const links = await page.locator("aside nav a").evaluateAll(links => links.map(a=>a.getAttribute("href")));
-      assert(links.every(href => canAccess(role,href)),`${role} navigation must be permission scoped`);
+      assert(links.every(href => canAccess(role,new URL(href,origin).pathname)),`${role} navigation must be permission scoped`);
       assert.equal(await page.getByRole("textbox",{name:"Search members and content (audited)"}).count(),canAccess(role,"/search")?1:0);
       await page.getByRole("button",{name:"Account menu"}).click();
       assert.equal(await page.locator("#staff-account-menu a[href='/settings']").count(),canAccess(role,"/settings")?1:0);
@@ -239,6 +301,17 @@ try {
     await context.close();
     console.log("PASS suspended account rejected with existing JWT");
   }
+  if (process.env.ADMIN_INBOX_ASSERT === "1") await checkInboxBrowser({ browser, cookies, origin, userId, dbUrl: config.DB_URL, outputDir });
+  if(process.env.ADMIN_THEME_ASSERT)await checkThemeBrowser({browser,cookies,origin,enabled:process.env.ADMIN_THEME_ASSERT==='1'});
+  if (process.env.ADMIN_OVERVIEW_ASSERT === "1") await checkOverviewBrowser({ browser, cookies, origin, userId, dbUrl: config.DB_URL, outputDir, proxy: overviewProxy });
+  if (process.env.ADMIN_ATTENTION_ASSERT === "1") await checkAttentionBrowser({ browser, cookies, origin, userId, dbUrl: config.DB_URL, outputDir });
+  if(process.env.ADMIN_WORKFLOW_ASSERT==='1')await checkWorkflowBrowser({browser,cookies,origin,userId,dbUrl:config.DB_URL,outputDir,auth,proxy:overviewProxy});
+  if(process.env.ADMIN_RECOVERY_ASSERT==='1')await checkRecoveryBrowser({browser,cookies,origin,userId,dbUrl:config.DB_URL,outputDir,auth});
+  if(process.env.ADMIN_MODERATION_NOTICES_ASSERT==='1')await checkModerationNotices({browser,cookies,origin,userId,dbUrl:config.DB_URL,auth});
+  if(process.env.ADMIN_JOB_REPORT_ASSERT==='1')await checkJobReportNotices({browser,cookies,origin,userId,dbUrl:config.DB_URL,auth});
+  if(process.env.ADMIN_INCIDENT_ASSERT==='1')await checkIncidentBrowser({browser,cookies,origin,userId,dbUrl:config.DB_URL,auth,outputDir,monitorEnv:{NOTIFICATION_MONITOR_URL:config.API_URL,NOTIFICATION_MONITOR_SERVICE_KEY:config.SERVICE_ROLE_KEY}});
+  if(process.env.ADMIN_STAFF_ASSERT==='1')await checkStaffBrowser({browser,cookies,origin,userId,dbUrl:config.DB_URL,proxy:overviewProxy});
+  if(process.env.ADMIN_ALL_ROUTES_ASSERT==='1')await checkAllRoutesBrowser({browser,cookies,origin,userId,dbUrl:config.DB_URL,outputDir,root,fixtures:JSON.parse(process.env.ADMIN_ROUTE_FIXTURES??'{}')});
   await writeFile(resolve(outputDir, "browser-baseline.json"), JSON.stringify({
     measuredAt: new Date().toISOString(), browser: await browser.version(), viewport: "1440x1000",
     network: "local loopback, unthrottled", data: "existing local fixture database; not production scale",
@@ -252,6 +325,7 @@ try {
     await browser?.close();
   } finally {
     server?.kill("SIGTERM");
+    await overviewProxy?.close();
     if (userId) {
       const removed = await service.auth.admin.deleteUser(userId);
       execFileSync("psql", [config.DB_URL, "-X", "-v", "ON_ERROR_STOP=1", "-c", `DELETE FROM public.users WHERE user_id='${userId}'`], { stdio: "ignore" });

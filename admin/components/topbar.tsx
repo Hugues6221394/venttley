@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { canAccess } from "@/lib/roles";
 import { Search, Bell, ChevronDown, LogOut, Globe2 } from "./ui/icons";
+import { NotificationBell } from "./staff-inbox";
+import { ThemePreferenceControl } from "./theme-preference";
 
 export default function Topbar({
   pseudonym,
@@ -77,15 +79,7 @@ export default function Topbar({
           {env}
         </span>
 
-        <button
-          className="icon-btn relative"
-          aria-label="Staff inbox is not available yet"
-          title="Staff inbox is being built. Check the operational queues for work requiring attention."
-          type="button"
-          disabled
-        >
-          <Bell size={16} />
-        </button>
+        <NotificationBell />
 
         <div ref={menuRoot} className="relative" onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMenu(false);
@@ -119,6 +113,7 @@ export default function Topbar({
                 @{pseudonym}
               </p>
               <div className="border-t border-line my-1" />
+              <ThemePreferenceControl />
               {canAccess(role, "/settings") && <Link href="/settings" prefetch={false} className="nav-item" onClick={() => setMenu(false)}>Settings</Link>}
               {canAccess(role, "/audit") && <Link href="/audit" prefetch={false} className="nav-item" onClick={() => setMenu(false)}>Recent audit entries</Link>}
               <form action="/api/auth/logout" method="post">

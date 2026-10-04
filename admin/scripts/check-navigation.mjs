@@ -19,7 +19,7 @@ assert.equal(new Set(all).size, all.length, "one canonical entry per page");
 // Preserve every existing sidebar destination while regrouping it. The number
 // is explicit so a regrouping that drops a page fails here; it goes up by one
 // when a page is genuinely added, which /feedback is.
-assert.equal(all.length, 57);
+assert.equal(all.length, 58);
 for (const role of STAFF_ROLES) {
   assert(visibleNavigation(role).every(page => canAccess(role, page.href)));
   assert(searchNavigation(role, "staff").every(page => canAccess(role, page.href)));

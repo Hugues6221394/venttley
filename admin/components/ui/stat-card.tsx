@@ -103,11 +103,11 @@ export function Sparkline({
     })
     .join(" ");
   const color =
-    tone === "ok" ? "#1F8F4D"
-    : tone === "warn" ? "#C77A1A"
-    : tone === "danger" || tone === "crisis" ? "#C1303D"
-    : tone === "info" ? "#3B6AB6"
-    : "#D12E65";
+    tone === "ok" ? "rgb(var(--console-ok,31 143 77))"
+    : tone === "warn" ? "rgb(var(--console-warn,199 122 26))"
+    : tone === "danger" || tone === "crisis" ? "rgb(var(--console-danger,193 48 61))"
+    : tone === "info" ? "rgb(var(--console-info,59 106 182))"
+    : "rgb(var(--console-accent,209 46 101))";
   return (
     <svg width={width} height={height} className="ml-auto opacity-80">
       <polyline

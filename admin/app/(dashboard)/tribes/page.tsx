@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { CatalogWorkspace } from "@/components/workflows/catalog-workspace";
+import { getOperationalRole } from "@/lib/governance";
+import { notFound } from "next/navigation";
+import { DataWarning } from "@/components/ui/operations";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
 import { rpc } from "@/lib/audit";
@@ -45,6 +49,15 @@ async function toggleFeaturedAction(formData: FormData) {
 }
 
 export default async function TribesPage({
+  searchParams,
+}: {searchParams:Promise<Record<string,string|string[]|undefined>>}) {
+  if(!["super_admin","admin","moderator"].includes(await getOperationalRole()??""))notFound();
+  if(process.env.ADMIN_CATALOG_WORKSPACES_UI==="true")return <CatalogWorkspace kind="tribes" searchParams={searchParams}/>;
+  if(Object.values(await searchParams).some(v=>v!==undefined&&typeof v!=="string"))return <DataWarning title="Invalid community filters">Use one value per filter.</DataWarning>;
+  return <LegacyTribesPage searchParams={searchParams as Promise<{q?:string;category?:string;featured?:string}>}/>;
+}
+
+async function LegacyTribesPage({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string; category?: string; featured?: string }>;

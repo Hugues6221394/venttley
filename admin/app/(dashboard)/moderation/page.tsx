@@ -1,6 +1,12 @@
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "node:crypto";
+import { RefreshAttentionOnRender } from "@/components/staff-attention";
+import { QueueAttentionPanel } from "@/components/queue-attention-panel";
 import Link from "next/link";
-import { createAdminClient, createSsrClient } from "@/lib/supabase/server";
+import { createAdminClient, createSsrClient, getRenderStaff } from "@/lib/supabase/server";
+import { hasModernShell } from "@/lib/shell-rollout";
+import { workflowUIEnabled,dailyWorkflowQueue } from "@/lib/workflows";
+import { ModerationWorkflow } from "@/components/workflows/moderation-workspace";
 import { rpc } from "@/lib/audit";
 import { limitAction } from "@/lib/guard";
 import { enumOf, optStr, uuid, uuidList } from "@/lib/validate";
@@ -277,7 +283,7 @@ async function setCaseStatusAction(formData: FormData) {
 export default async function ModerationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; reason?: string; reveal?: string }>;
+  searchParams: Promise<{ tab?: string; reason?: string; reveal?: string; cursor?:string }>;
 }) {
   const params = await searchParams;
   // Cases are the default view: a report now opens or joins one, so the case
@@ -286,11 +292,20 @@ export default async function ModerationPage({
   const tab = params.tab ?? "cases";
   const reasonFilter = params.reason ?? "";
 
+  if ((tab === 'cases' || tab === 'cases_resolved') && await workflowUIEnabled()) {
+    const page=await dailyWorkflowQueue<Omit<CaseRow,'evidence'>&{updated_at:string}>('admin_case_work_queue',{
+      p_status:tab==='cases'?'unresolved':'resolved',p_assignee:null,
+    },params.cursor);
+    return <ModerationWorkflow rows={page.rows} resolved={tab==='cases_resolved'} error={page.error} pagination={{path:'/moderation',filter:{tab},next:page.next,hasCursor:!!params.cursor}}/>;
+  }
+
   const db = await createAdminClient();
+  const staff = await getRenderStaff();
+  const sharedAttention = process.env.ADMIN_ATTENTION_UI === 'true' && hasModernShell(staff?.role, process.env.ADMIN_SHELL_V2, process.env.ADMIN_SHELL_V2_ROLES);
 
   // Pull what we need for the tab badges (separate counts so the page chrome
   // stays accurate regardless of which tab is selected).
-  const [pendingCountRes, resolvedCountRes, crisisCountRes] = await Promise.all([
+  const [pendingCountRes, resolvedCountRes, crisisCountRes] = sharedAttention ? [{count:null},{count:null},{count:null}] : await Promise.all([
     db
       .from("reports")
       .select("report_id", { count: "exact", head: true })
@@ -311,7 +326,7 @@ export default async function ModerationPage({
   let cases: CaseRow[] = [];
   let revealed: { caseId: string; body: string } | null = null;
 
-  const { count: openCaseCount } = await db
+  const { count: openCaseCount } = sharedAttention ? { count:null } : await db
     .from("moderation_cases")
     .select("case_id", { count: "exact", head: true })
     .neq("status", "resolved");
@@ -376,23 +391,23 @@ export default async function ModerationPage({
     {
       key: "cases",
       label: "Cases",
-      count: openCaseCount ?? 0,
+      count: openCaseCount ?? undefined,
       tone: (openCaseCount ?? 0) > 0 ? ("warn" as const) : ("neutral" as const),
     },
     {
       key: "pending",
       label: "Reports",
-      count: pendingCountRes.count ?? 0,
+      count: pendingCountRes.count ?? undefined,
       tone: (pendingCountRes.count ?? 0) > 0 ? ("warn" as const) : ("neutral" as const),
     },
     {
       key: "crisis",
       label: "Crisis-flagged",
-      count: crisisCountRes.count ?? 0,
+      count: crisisCountRes.count ?? undefined,
       tone: (crisisCountRes.count ?? 0) > 0 ? ("danger" as const) : ("neutral" as const),
     },
     { key: "cases_resolved", label: "Decided" },
-    { key: "resolved", label: "Resolved reports", count: resolvedCountRes.count ?? 0 },
+    { key: "resolved", label: "Resolved reports", count: resolvedCountRes.count ?? undefined },
     { key: "all", label: "All reports" },
   ];
 
@@ -415,6 +430,9 @@ export default async function ModerationPage({
         basePath="/moderation"
         extraParams={{ reason: reasonFilter }}
       />
+
+      <RefreshAttentionOnRender token={randomUUID()} />
+      <QueueAttentionPanel queue="moderation" />
 
       {tab !== "crisis" && tab !== "cases" && tab !== "cases_resolved" && (
         <ReasonFilter active={reasonFilter} basePath="/moderation" tab={tab} />

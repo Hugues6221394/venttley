@@ -20,7 +20,7 @@ export const controlPages = {
       "Keep person-level evidence inside the existing moderation case boundary.",
       "Escalate critical safety or CSAM indicators through their dedicated workflows.",
     ],
-    links: [{ href: "/moderation/cases", label: "Open case queue" }, { href: "/integrity", label: "Integrity signals" }],
+    links: [{ href: "/moderation", label: "Open case queue" }, { href: "/integrity", label: "Integrity signals" }],
   },
   support_cases: {
     section: "support_cases",

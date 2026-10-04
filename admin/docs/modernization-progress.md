@@ -2,8 +2,89 @@
 
 Branch: `codex/super-admin-improvements`. No production deployment or push.
 This is an incremental foundation, **not completion of the approved plan**.
+See the [single nine-batch completion checklist](modernization-completion.md)
+for the remaining implementation and operational release gates.
 
-## Implemented
+## Latest batch — daily operator workflows (locally verified; release gated)
+
+See [Batch 3 scope, database contracts and release gates](workflows-batch-3.md).
+The four daily queues now have opt-in queue/detail/action interfaces. Support
+includes eligible-staff/source selection, immutable metadata history and checked
+idempotent updates. All four modern queues now have backend cursor pagination.
+Moderation, appeals and safety use locked, retry-safe command wrappers. A real
+API test exposed a serialization-code retry loop; stale edits return HTTP 409.
+The focused admin suite passes 5 files / 171 assertions. The latest complete
+local run now passes **75 files / 1,417 assertions**. The previously reported
+feed contract/test mismatch was corrected separately in the current workspace.
+Production-build browser checks passed for all six roles, real MFA,
+stale edits, revoked access, pagination, service failure and keyboard/mobile
+drawers, plus persisted moderation/appeal/safety actions and source-bound support
+creation/history. A browser-discovered disappearing success message was corrected
+by retaining the result until explicit refresh. Original-reference comparison is documented: low DOM overlap means
+automated patches were not safe to apply wholesale; final visual acceptance,
+comprehensive accessibility and staging capacity evidence remain outstanding.
+No pilot enabled.
+
+## Batch 4 in progress — recovery and moderation notifications
+
+See [Batch 4 scope and remaining work](notifications-batch-4.md). Failed-event
+inspection and single-event recovery now have bounded, source-authorized RPCs,
+MFA, safe reason codes, rate limits and idempotent audit receipts. Recovery uses
+the worker lock order and preserves event identity and read state. Twenty-four
+transactional tests pass. `/inbox/operations` now supplies a gated, super-admin
+failure queue, truthful worker/backlog cards and a confirmed recovery drawer.
+Production-build browser coverage passes six-role access, actual MFA, retries,
+read-state preservation, conflicts, partial/failed reads, polling and narrow
+keyboard-accessible drawers. The next additive migration connects canonical
+moderation assignments and independent second-review notices, with exact case
+links, source-permission rechecks and a separate disabled source switch.
+Case locks prevent duplicate notices from simultaneous equal source requests;
+real-session contention/browser tests and 32 new pgTAP assertions pass.
+Support-only bounded delivery retention and aggregate lag telemetry are
+implemented but not presented as full archival or external alerting.
+The following migration now adds grouped push/email/stalled-scan notices,
+requester-only report-ready notices and retry-safe report generation. Jobs
+shares the existing KPI/badge summary. Recovery displays safe hourly delivery
+history, and an independent service-only monitor contract detects stale/failed
+delivery without relying on the delivery worker. Job/report browser checks pass
+real MFA, six-role access, exact links, matching badges, history failure and
+rollback. Incident sources, full archival policy and external alert ownership,
+visual/a11y acceptance and staging evidence remain unfinished. No rollout enabled.
+
+## Previous batch — cross-page KPIs and trustworthy badges
+
+See [Batch 2 scope, verification and rollout](attention-batch-2.md). Overview and
+four queue pages now consume the same role-filtered summary as their nav badges.
+Exact links, unknown/stale states, visible polling and transactional invalidation
+are locally implemented. Full local database regressions pass 62 files / 1,183
+assertions. The pilot remains disabled; other queues, workflow redesigns and
+production capacity evidence are not covered by that historical result. Batch 3
+is covered by the current checkpoint above.
+
+## Previous batch — shared page foundation and Overview
+
+See [Batch 1 implementation and release notes](overview-batch-1.md). The new
+Overview streams four independently authorized snapshot panels, shows truthful
+metric definitions/freshness, and supplies reusable page, table and drawer
+components. Local production-browser checks cover six roles, mobile/keyboard,
+failed/slow panels and revoked access. Flags and aggregation jobs remain off by
+default. Historical measurements and missing-interface notes below describe
+earlier checkpoints; they are not the current acceptance status of this batch.
+Batch 2 now extends these components; see the current checkpoint above.
+
+## Latest continuation — staff inbox
+
+The inbox and bell drawer are now implemented, connected, and verified locally.
+See [Staff inbox implementation and release gates](staff-inbox.md) for the current
+scope, tests, design provenance, refresh semantics, and remaining pilot gates.
+This supersedes the historical references below to an absent inbox interface.
+Production rollout remains disabled; incidents, broader workflows, and dark mode
+are still subsequent phases.
+
+## Earlier shell/foundation checkpoint (historical)
+
+The following describes the earlier implementation stage. Current inbox,
+Overview and attention behavior is documented in the linked batch notes above.
 
 - 12ui-connected, reference-driven light operator shell behind a server-only
   pilot flag. Six collapsible sections, role-filtered page search (Ctrl/Cmd+K),
@@ -171,7 +252,11 @@ return disabled/empty. Existing overdue support cases reconcile in bounded
 batches when enabled; historical assignments are not backfilled. Broader future
 audiences require an explicit audited configuration change.
 
-## Remaining approved work (not implemented)
+## Earlier gap inventory (historical; see current batch notes above)
+
+Items describing an absent inbox or shared badges below are superseded by the
+inbox and Batch 2 notes. Broader workflows, rollout and production evidence are
+still outstanding; this historical list is not the current completion checklist.
 
 1. Extend reference coverage to real workflow redesigns. Four 12ui candidates
    were inspected; A was explicitly selected and converted. Target-based

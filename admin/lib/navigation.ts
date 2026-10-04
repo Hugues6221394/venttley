@@ -4,7 +4,7 @@ import { canAccess } from "./roles";
 // case content, or database search results in navigation or browser preferences.
 export const navigationGroups = [
   { label: "Command Center", pages: [
-    ["/overview", "Control Center"], ["/queue-control", "Queue control"],
+    ["/overview", "Control Center"], ["/inbox", "Staff inbox"], ["/queue-control", "Queue control"],
     ["/incidents", "Incident command"],
   ] },
   { label: "Trust & Safety", pages: [

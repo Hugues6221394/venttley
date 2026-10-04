@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import ts from 'typescript';
+const source=await readFile(new URL('../lib/overview-model.ts',import.meta.url),'utf8');
+const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const m=await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
+assert.equal(m.percentChange(5,0),null);assert.equal(m.percentChange(0,0),null);
+assert.equal(m.percentChange(12,10),20);assert.equal(m.percentChange(0,10),-100);
+assert.equal(m.regionPercent(20,200),10);
+assert.equal(m.snapshotStale(null),true);assert.equal(m.snapshotStale('2026-01-01T00:00:00Z',Date.parse('2026-01-01T00:11:00Z')),true);
+const days=m.dailyReports([{day:'2026-09-24',count:5}],'2026-09-24T00:01:00Z');
+assert.equal(days.length,30);assert.deepEqual(days.at(-1),{day:'2026-09-24',count:5});assert.equal(days[0].day,'2026-08-26');
+assert.equal(m.parseSnapshot('queues',{state:'ready',measured_at:new Date().toISOString(),data:{unknown:12}}),null);
+assert.equal(m.parseSnapshot('activity',{state:'ready',measured_at:new Date().toISOString(),data:{total_members:0}}),null);
+assert.deepEqual(m.parseSnapshot('activity',{state:'unavailable'}),{state:'unavailable',measured_at:null,data:null});
+assert.equal(m.parseSnapshot('regions',{state:'ready',measured_at:new Date().toISOString(),data:{total_members:100,rows:[{country:'RW',count:9}]}}),null);
+console.log('check:overview — snapshot validation, zero baselines, UTC days, stale states and region denominators passed');

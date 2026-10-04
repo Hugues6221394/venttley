@@ -1,4 +1,8 @@
 import { revalidatePath } from "next/cache";
+import { CatalogWorkspace } from "@/components/workflows/catalog-workspace";
+import { getOperationalRole } from "@/lib/governance";
+import { notFound } from "next/navigation";
+import { DataWarning } from "@/components/ui/operations";
 import { createAdminClient } from "@/lib/supabase/server";
 import { rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
@@ -43,6 +47,15 @@ async function setStatusAction(formData: FormData) {
 }
 
 export default async function MediaPage({
+  searchParams,
+}: {searchParams:Promise<Record<string,string|string[]|undefined>>}) {
+  if(!["super_admin","admin","moderator"].includes(await getOperationalRole()??""))notFound();
+  if(process.env.ADMIN_CATALOG_WORKSPACES_UI==="true")return <CatalogWorkspace kind="media" searchParams={searchParams}/>;
+  if(Object.values(await searchParams).some(v=>v!==undefined&&typeof v!=="string"))return <DataWarning title="Invalid media filters">Use one value per filter.</DataWarning>;
+  return <LegacyMediaPage searchParams={searchParams as Promise<{status?:string}>}/>;
+}
+
+async function LegacyMediaPage({
   searchParams,
 }: {
   searchParams: Promise<{ status?: string }>;

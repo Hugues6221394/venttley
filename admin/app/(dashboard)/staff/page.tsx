@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { randomUUID } from "node:crypto";
 import { notFound } from "next/navigation";
 import { activeStaffRole } from "@/lib/staff";
-import { mapBounded } from "@/lib/bounded";
+import { reconcileBounded } from "@/lib/bounded";
+import { activeSuperAdminQuery, directoryFilters, directoryRoles, STAFF_PAGE_SIZE, staffDirectoryQuery } from "@/lib/staff-directory-model";
+import { StaffDirectoryFilters, StaffDirectoryPages } from "@/components/staff-directory-controls";
+import { WorkflowForm } from "@/components/workflows/workflow-form";
 import {
   createAdminClient,
   createRequiredAuthAdminClient,
@@ -23,14 +27,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const STAFF_ROLES = [
-  "super_admin",
-  "admin",
-  "moderator",
-  "support",
-  "analyst",
-  "read_only_auditor",
-] as const;
+const STAFF_ROLES = directoryRoles;
 
 const INVITABLE_STAFF_ROLES = STAFF_ROLES.filter(
   (role) => role !== "super_admin",
@@ -53,28 +50,12 @@ type AuthSummary = {
   lastSignIn: string | null;
 };
 
-const NOTICE: Record<string, { tone: "ok" | "warn" | "danger"; text: string }> = {
-  invited: { tone: "ok", text: "Invitation sent and staff access assigned." },
-  access_granted: { tone: "ok", text: "Staff access granted to the existing account." },
-  role_changed: { tone: "ok", text: "Staff role changed and existing sessions revoked." },
-  status_changed: { tone: "ok", text: "Staff account status changed and existing sessions revoked." },
-  access_removed: { tone: "ok", text: "Staff access removed. The member account and audit history were preserved." },
-  mfa_required: { tone: "warn", text: "Complete the MFA challenge before changing staff access." },
-  forbidden: { tone: "danger", text: "Only an active super admin can perform this action." },
-  already_exists: { tone: "warn", text: "That mailbox already has an Auth account. Use its immutable user ID to grant access, or inspect the existing account." },
-  handle_taken: { tone: "warn", text: "That handle is already in use. Handles are permanent, so no invitation was sent — pick another and try again." },
-  last_super_admin: { tone: "danger", text: "The last active super admin cannot be demoted or removed." },
-  self_change: { tone: "danger", text: "You cannot change or remove your own access from this page." },
-  invalid_input: { tone: "danger", text: "Check the submitted email, ID, role, confirmation, and reason." },
-  failed: { tone: "danger", text: "The staff operation did not complete. Review the audit log before retrying so an ambiguous network response is not mistaken for failure." },
-};
-
 export default async function StaffPage({
   searchParams,
 }: {
-  searchParams: Promise<{ result?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { result } = await searchParams;
+  const params = await searchParams;
   const ssr = await createSsrClient();
   const {
     data: { user: actor },
@@ -83,34 +64,39 @@ export default async function StaffPage({
   const role = await activeStaffRole(ssr, actor.id, ["super_admin"]);
   if (role !== "super_admin") notFound();
 
+  const filters = directoryFilters(params);
+  if (!filters) return <div><ErrorPanel title="Invalid staff filters" detail="Choose a supported role and account state, or restart the directory." /><Link href="/staff" className="btn-secondary">Reset staff filters</Link></div>;
+
   const db = await createAdminClient();
-  const staffResult = await db
-    .from("users")
-    .select(
-      "user_id, display_name, anonymous_pseudonym, user_role, account_status, deactivated_at, created_at, last_seen_at",
-    )
-    .in("user_role", STAFF_ROLES)
-    .order("user_role")
-    .order("created_at");
-  const staff = (staffResult.data ?? []) as Staff[];
+  const [staffResult, protectionResult] = await Promise.all([
+    staffDirectoryQuery(db, filters), activeSuperAdminQuery(db),
+  ]);
+  const staff = (staffResult.error ? [] : (staffResult.data ?? []).slice(0, STAFF_PAGE_SIZE)) as Staff[];
+  const hasMore = !staffResult.error && (staffResult.data?.length ?? 0) > STAFF_PAGE_SIZE;
+  const nextId = hasMore ? staff.at(-1)?.user_id : undefined;
 
   let authAvailable = true;
   let authError: string | null = null;
   const authById = new Map<string, AuthSummary>();
   try {
-    const authAdmin = createRequiredAuthAdminClient();
-    // Staff is intentionally a small set. Resolve only those immutable IDs
-    // rather than listing the first N Auth users, which stops working as soon
-    // as the social tenant grows beyond that arbitrary page.
-    const authRows = await mapBounded(
+    createRequiredAuthAdminClient(); // Credential readiness; no network request.
+    let authAdmin: ReturnType<typeof createRequiredAuthAdminClient> | undefined;
+    // Resolve only the visible page, never the lookahead row or tenant users.
+    const authRows = await reconcileBounded(
       staff,
-      10,
-      async (member) => ({
+      5,
+      6_000,
+      async (member, signal) => ({
         id: member.user_id,
-        result: await authAdmin.auth.admin.getUserById(member.user_id),
+        result: await (authAdmin ??= createRequiredAuthAdminClient(signal)).auth.admin.getUserById(member.user_id),
       }),
     );
-    for (const row of authRows) {
+    for (const lookup of authRows) {
+      if (lookup.status !== "fulfilled") {
+        authError = "Some Auth checks failed or exceeded the shared time budget. Their state is unknown; refresh to retry.";
+        continue;
+      }
+      const row = lookup.value;
       if (row.result.error || !row.result.data.user) {
         authError = "One or more staff Auth records could not be resolved.";
         continue;
@@ -130,14 +116,9 @@ export default async function StaffPage({
         : "Auth Admin directory unavailable.";
   }
 
-  const activeSuperAdmins = staff.filter(
-    (member) =>
-      member.user_role === "super_admin" &&
-      member.account_status === "active" &&
-      !member.deactivated_at,
-  ).length;
-  const notice = result ? NOTICE[result] : null;
+  const activeSuperAdmins = protectionResult.error ? null : protectionResult.data?.length ?? null;
   const inviteRedirectConfigured = !!process.env.ADMIN_INVITE_REDIRECT_URL?.trim();
+  const invitationsPaused = process.env.ADMIN_STAFF_INVITES_DISABLED === "true";
 
   return (
     <div className="flex max-w-[1250px] flex-col gap-6">
@@ -153,19 +134,13 @@ export default async function StaffPage({
         }
       />
 
-      {notice && (
-        <div className="surface-flat flex items-center gap-2 px-4 py-3">
-          <Badge tone={notice.tone}>{notice.tone === "ok" ? "complete" : "attention"}</Badge>
-          <p className="text-sm text-burgundy">{notice.text}</p>
-        </div>
-      )}
-
       {staffResult.error && (
         <ErrorPanel
           title="Staff directory could not be loaded"
-          detail={staffResult.error.message}
+          detail="Refresh to retry. No empty or healthy directory is inferred from this failure."
         />
       )}
+      {activeSuperAdmins === null && <ErrorPanel title="Super-admin safety count is unavailable" detail="Removal of super-admin access is disabled here until this check succeeds. The database still independently protects the last active super admin." />}
       {authError && (
         <ErrorPanel
           title={
@@ -187,10 +162,13 @@ export default async function StaffPage({
           title="Invite a new staff member"
           hint="Creates a real-mailbox Auth account, then grants an audited role"
         >
-          <form action={inviteStaff} className="flex flex-col gap-3">
+          {invitationsPaused && <p role="status" className="mb-3 text-sm text-ink-muted">New staff invitations are paused by the deployment owner. Existing records and access controls remain available.</p>}
+          <WorkflowForm action={inviteStaff} label="Send staff invitation" disabled={invitationsPaused || !authAvailable || !inviteRedirectConfigured} blockUncertainRetry confirmation="Verify the mailbox, permanent handle and initial role. This requests an Auth invitation and grants staff access; email delivery is not guaranteed. Inspect partial results before retrying.">
+            <input type="hidden" name="operation_id" value={randomUUID()} />
             <div>
-              <label className="h-eyebrow mb-1 block">Work email</label>
+              <label htmlFor="staff-invite-email" className="h-eyebrow mb-1 block">Work email</label>
               <input
+                id="staff-invite-email"
                 type="email"
                 name="email"
                 required
@@ -202,8 +180,9 @@ export default async function StaffPage({
               />
             </div>
             <div>
-              <label className="h-eyebrow mb-1 block">Handle</label>
+              <label htmlFor="staff-invite-handle" className="h-eyebrow mb-1 block">Handle</label>
               <input
+                id="staff-invite-handle"
                 name="pseudonym"
                 required
                 minLength={3}
@@ -221,8 +200,9 @@ export default async function StaffPage({
               </p>
             </div>
             <div>
-              <label className="h-eyebrow mb-1 block">Initial role</label>
+              <label htmlFor="staff-invite-role" className="h-eyebrow mb-1 block">Initial role</label>
               <select
+                id="staff-invite-role"
                 name="role"
                 className="select w-full"
                 defaultValue="moderator"
@@ -236,8 +216,9 @@ export default async function StaffPage({
               </select>
             </div>
             <div>
-              <label className="h-eyebrow mb-1 block">Business reason</label>
+              <label htmlFor="staff-invite-reason" className="h-eyebrow mb-1 block">Business reason</label>
               <input
+                id="staff-invite-reason"
                 name="reason"
                 required
                 maxLength={500}
@@ -246,13 +227,6 @@ export default async function StaffPage({
                 disabled={!authAvailable || !inviteRedirectConfigured}
               />
             </div>
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={!authAvailable || !inviteRedirectConfigured}
-            >
-              Send staff invitation
-            </button>
             {!inviteRedirectConfigured && (
               <p className="text-xs text-danger">
                 Configure ADMIN_INVITE_REDIRECT_URL before invitations can be
@@ -263,17 +237,18 @@ export default async function StaffPage({
               Super-admin access is never granted in the email invitation.
               Promote an accepted, MFA-capable staff account separately.
             </p>
-          </form>
+          </WorkflowForm>
         </Card>
 
         <Card
           title="Grant access to an existing account"
           hint="Recovery path for an existing invite or a pre-created member"
         >
-          <form action={grantExistingStaff} className="flex flex-col gap-3">
+          <WorkflowForm action={grantExistingStaff} label="Grant access" blockUncertainRetry confirmation="Verify this account and the requested role. The audited operation grants staff authority and may revoke existing sessions.">
             <div>
-              <label className="h-eyebrow mb-1 block">Immutable user ID</label>
+              <label htmlFor="staff-grant-id" className="h-eyebrow mb-1 block">Immutable user ID</label>
               <input
+                id="staff-grant-id"
                 name="user_id"
                 required
                 className="input w-full font-mono text-xs"
@@ -281,8 +256,8 @@ export default async function StaffPage({
               />
             </div>
             <div>
-              <label className="h-eyebrow mb-1 block">Role</label>
-              <select name="role" className="select w-full" defaultValue="moderator">
+              <label htmlFor="staff-grant-role" className="h-eyebrow mb-1 block">Role</label>
+              <select id="staff-grant-role" name="role" className="select w-full" defaultValue="moderator">
                 {STAFF_ROLES.map((value) => (
                   <option key={value} value={value}>
                     {value.replaceAll("_", " ")}
@@ -291,8 +266,9 @@ export default async function StaffPage({
               </select>
             </div>
             <div>
-              <label className="h-eyebrow mb-1 block">Business reason</label>
+              <label htmlFor="staff-grant-reason" className="h-eyebrow mb-1 block">Business reason</label>
               <input
+                id="staff-grant-reason"
                 name="reason"
                 required
                 maxLength={500}
@@ -300,23 +276,21 @@ export default async function StaffPage({
                 placeholder="Why this account needs staff access"
               />
             </div>
-            <button type="submit" className="btn-secondary">
-              Grant access
-            </button>
-          </form>
+          </WorkflowForm>
         </Card>
       </div>
 
       <Card
         title="Current staff"
-        hint={`${staff.length} accounts · ${activeSuperAdmins} active super admin${activeSuperAdmins === 1 ? "" : "s"}`}
+        hint={`${staffResult.error ? "Unknown number of" : staff.length} accounts on this page · ${activeSuperAdmins === null ? "unknown" : activeSuperAdmins === 2 ? "2+" : activeSuperAdmins} active super admins across the directory`}
         padded={false}
       >
-        {staff.length === 0 ? (
+        <StaffDirectoryFilters filters={filters} path="/staff" />
+        {staffResult.error ? null : staff.length === 0 ? (
           <EmptyState
             icon={<UserRoundCog size={34} />}
-            title="No staff accounts returned."
-            hint="If this page is visible, the directory query is likely degraded."
+            title="No staff accounts on this page."
+            hint="Change filters or return to the first page. Staff membership may have changed while you were browsing."
           />
         ) : (
           <ul className="divide-y divide-line">
@@ -324,7 +298,7 @@ export default async function StaffPage({
               const auth = authById.get(member.user_id);
               const isSelf = member.user_id === actor.id;
               const isLastSuperAdmin =
-                member.user_role === "super_admin" && activeSuperAdmins <= 1;
+                member.user_role === "super_admin" && (activeSuperAdmins === null || activeSuperAdmins <= 1);
               return (
                 <li key={member.user_id} className="px-5 py-5">
                   <div className="flex flex-wrap items-start gap-3">
@@ -350,16 +324,16 @@ export default async function StaffPage({
                           {member.user_role.replaceAll("_", " ")}
                         </Badge>
                         <Badge
-                          tone={member.account_status === "active" ? "ok" : "warn"}
+                          tone={member.account_status === "active" && !member.deactivated_at ? "ok" : "warn"}
                         >
-                          {member.account_status}
+                          {member.deactivated_at ? "deactivated" : member.account_status}
                         </Badge>
                         {isSelf && <Badge>you</Badge>}
                         {auth && !auth.confirmed && <Badge tone="warn">invite pending</Badge>}
                       </div>
                       <p className="mt-1 text-xs text-ink-muted">
                         {auth?.email ?? "mailbox hidden/unavailable"}
-                        {auth?.lastSignIn
+                        {!auth ? " · sign-in history unknown" : auth.lastSignIn
                           ? ` · last sign-in ${new Date(auth.lastSignIn).toLocaleString()}`
                           : " · never signed in"}
                       </p>
@@ -381,41 +355,35 @@ export default async function StaffPage({
                       </p>
                     ) : (
                       <div className="mt-3 grid grid-cols-1 gap-4 xl:grid-cols-3">
-                        <form action={changeStaffRole} className="surface-flat flex flex-col gap-2 p-3">
+                        <WorkflowForm action={changeStaffRole} label="Save role" blockUncertainRetry confirmation="Change this account's staff role and revoke its existing sessions. Verify the account and business reason before confirming.">
                           <input type="hidden" name="user_id" value={member.user_id} />
-                          <label className="h-eyebrow">Change role</label>
-                          <select name="role" className="select" defaultValue={member.user_role}>
+                          <label htmlFor={`staff-role-${member.user_id}`} className="h-eyebrow">Change role</label>
+                          <select id={`staff-role-${member.user_id}`} name="role" className="select" defaultValue={member.user_role}>
                             {STAFF_ROLES.map((value) => (
                               <option key={value} value={value}>
                                 {value.replaceAll("_", " ")}
                               </option>
                             ))}
                           </select>
-                          <input name="reason" required maxLength={500} className="input" placeholder="Required reason" />
-                          <button type="submit" className="btn-secondary">Save role</button>
-                        </form>
+                          <label>Business reason<input name="reason" required maxLength={500} className="input" placeholder="Required reason" /></label>
+                        </WorkflowForm>
 
-                        <form action={setStaffStatus} className="surface-flat flex flex-col gap-2 p-3">
+                        <WorkflowForm action={setStaffStatus} label="Apply status" blockUncertainRetry confirmation="Change this account's access status and revoke its existing sessions. This affects the member account as well as staff access.">
                           <input type="hidden" name="user_id" value={member.user_id} />
-                          <label className="h-eyebrow">Account access</label>
-                          <select name="status" className="select" defaultValue={member.account_status === "active" ? "suspended" : "active"}>
+                          <label htmlFor={`staff-status-${member.user_id}`} className="h-eyebrow">Account access</label>
+                          <select id={`staff-status-${member.user_id}`} name="status" className="select" defaultValue={member.account_status === "active" ? "suspended" : "active"}>
                             <option value="active">active</option>
                             <option value="suspended">suspended</option>
                           </select>
-                          <input name="reason" required maxLength={500} className="input" placeholder="Required reason" />
-                          <button type="submit" className="btn-secondary">Apply status</button>
-                        </form>
+                          <label>Business reason<input name="reason" required maxLength={500} className="input" placeholder="Required reason" /></label>
+                        </WorkflowForm>
 
-                        <form action={removeStaffAccess} className="surface-flat flex flex-col gap-2 border-danger/20 bg-danger/5 p-3">
+                        <WorkflowForm action={removeStaffAccess} label="Remove from staff" disabled={isLastSuperAdmin} blockUncertainRetry confirmation="Remove staff authority and revoke sessions. This does not erase the member account, authored content or audit history.">
                           <input type="hidden" name="user_id" value={member.user_id} />
-                          <label className="h-eyebrow text-danger">Remove staff access</label>
-                          <input name="reason" required maxLength={500} className="input" placeholder="Required reason" />
-                          <input name="confirm" required maxLength={20} className="input" placeholder="Type REMOVE" />
-                          <button type="submit" className="btn-secondary text-danger" disabled={isLastSuperAdmin}>
-                            Remove from staff
-                          </button>
-                          {isLastSuperAdmin && <p className="text-[11px] text-danger">The only active super admin cannot be removed.</p>}
-                        </form>
+                          <label>Business reason<input name="reason" required maxLength={500} className="input" placeholder="Required reason" /></label>
+                          <label>Removal confirmation<input name="confirm" required maxLength={20} className="input" placeholder="Type REMOVE" /></label>
+                          {isLastSuperAdmin && <p className="text-[11px] text-danger">{activeSuperAdmins === null ? "Super-admin safety count is unknown. Refresh before removing access." : "The last active super admin is protected."}</p>}
+                        </WorkflowForm>
                       </div>
                     )}
                   </details>
@@ -424,6 +392,7 @@ export default async function StaffPage({
             })}
           </ul>
         )}
+        <StaffDirectoryPages filters={filters} nextId={nextId} path="/staff" />
       </Card>
 
       <CapabilityNotice title="Removing staff access is intentionally not account erasure">

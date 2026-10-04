@@ -7,11 +7,11 @@ const config: Config = {
     extend: {
       colors: {
         // Brand pinks (kept in sync with lib/presentation/theme/colors.dart)
-        blush: "#FDECEF",
-        cardBlush: "#FFF5F7",
-        berry: "#D12E65",
+        blush: "rgb(var(--console-blush, 253 236 239) / <alpha-value>)",
+        cardBlush: "rgb(var(--console-card-blush, 255 245 247) / <alpha-value>)",
+        berry: "rgb(var(--console-accent, 209 46 101) / <alpha-value>)",
         berryDesat: "#D96B8A",
-        burgundy: "#4A0E17",
+        burgundy: "rgb(var(--console-heading, 74 14 23) / <alpha-value>)",
         mauve: "#E5A1B4",
         charcoal: "#120B0D",
         offwhite: "#E0D5D7",
@@ -21,16 +21,16 @@ const config: Config = {
         // Console-grade neutrals layered on top of the brand. A working
         // dashboard needs calm slate/canvas surfaces, not pure pink, so
         // information density reads cleanly at a glance.
-        canvas: "#FAF6F7",
-        line: "#EAD9DE",
-        ink: "#2A1B1F",
-        "ink-muted": "#7C5B62",
+        canvas: "rgb(var(--console-canvas, 250 246 247) / <alpha-value>)",
+        line: "rgb(var(--console-line, 234 217 222) / <alpha-value>)",
+        ink: "rgb(var(--console-ink, 42 27 31) / <alpha-value>)",
+        "ink-muted": "rgb(var(--console-muted, 124 91 98) / <alpha-value>)",
 
         // Status tones
-        ok: "#1F8F4D",
-        warn: "#C77A1A",
-        danger: "#C1303D",
-        info: "#3B6AB6",
+        ok: "rgb(var(--console-ok, 31 143 77) / <alpha-value>)",
+        warn: "rgb(var(--console-warn, 199 122 26) / <alpha-value>)",
+        danger: "rgb(var(--console-danger, 193 48 61) / <alpha-value>)",
+        info: "rgb(var(--console-info, 59 106 182) / <alpha-value>)",
       },
       fontFamily: {
         sans: [

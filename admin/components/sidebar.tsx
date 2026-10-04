@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { canAccess } from "@/lib/roles";
+import { useStaffAttention } from "./staff-attention";
+import { attentionDestination } from "@/lib/inbox-model";
 import {
   LayoutDashboard,
   ShieldAlert,
@@ -56,6 +58,7 @@ const groups: Group[] = [
     label: "Operate",
     items: [
       { href: "/overview",   label: "Control Center", icon: LayoutDashboard },
+      { href: "/inbox", label: "Staff inbox", icon: LifeBuoy },
       { href: "/queue-control", label: "Queue control", icon: ClipboardCheck },
       { href: "/safety",     label: "Safety & Crisis", icon: LifeBuoy },
       { href: "/csam",       label: "CSAM incidents", icon: AlertTriangle },
@@ -138,6 +141,7 @@ export default function Sidebar({
   badges?: Partial<Record<string, ReactNode>>;
 }) {
   const pathname = usePathname();
+  const { data: attention } = useStaffAttention();
   // Least-privilege: a role only sees the sections it may open. The middleware
   // is the hard gate; this just keeps the nav honest.
   const visibleGroups = groups
@@ -187,7 +191,7 @@ export default function Sidebar({
                 return (
                   <Link
                     key={it.href}
-                    href={it.href}
+                    href={attentionDestination(it.href, attention, false)}
                     prefetch={false}
                     aria-current={active ? "page" : undefined}
                     className={`nav-item relative ${active ? "nav-item-active" : ""}`}

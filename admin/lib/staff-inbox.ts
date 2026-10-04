@@ -1,32 +1,13 @@
 import "server-only";
 import { createSsrClient } from "@/lib/supabase/server";
+import type { StaffInboxFilter, StaffInboxItem, StaffInboxCursor, StaffAttention, InboxCategory, InboxSeverity } from "./inbox-model";
+import { parseAttention } from "./inbox-model";
 
 // Metadata-only staff API. Never hydrate member-authored source text here.
-export type StaffInboxKind = "support_assigned" | "support_sla_breached" | "legal_review_requested";
-export type StaffInboxFilter = "all" | "unread" | "urgent" | "assigned";
-export type StaffInboxItem = {
-  event_id: string;
-  kind: StaffInboxKind;
-  severity: "info" | "warning" | "critical";
-  source_id: string;
-  destination: "/support/cases" | "/legal-requests";
-  delivered_at: string;
-  read_at: string | null;
-};
-export type StaffInboxCursor = { beforeAt: string; beforeId: string };
-export type StaffAttention = { enabled: false } | {
-  enabled: true;
-  unread_count: number;
-  unread_more: boolean;
-  generated_at: string;
-  worker_at: string | null;
-  queues: { key: "support" | "legal"; count: number; measured_at: string; stale: boolean }[];
-};
-
-export async function readStaffInbox(filter: StaffInboxFilter = "all", cursor?: StaffInboxCursor) {
+export async function readStaffInbox(filter: StaffInboxFilter = "all", cursor?: StaffInboxCursor, category: InboxCategory = "all", severity: InboxSeverity = "all") {
   const db = await createSsrClient();
-  const { data, error } = await db.rpc("admin_staff_inbox", {
-    p_filter: filter, p_limit: 31,
+  const { data, error } = await db.rpc("admin_staff_inbox_page", {
+    p_filter: filter, p_category: category, p_severity: severity, p_limit: 31,
     p_before_at: cursor?.beforeAt ?? null, p_before_id: cursor?.beforeId ?? null,
   });
   if (error) return { items: [] as StaffInboxItem[], next: null, error: "The staff inbox could not be loaded. Please retry." };
@@ -38,7 +19,8 @@ export async function readStaffInbox(filter: StaffInboxFilter = "all", cursor?: 
 
 export async function readStaffAttention(): Promise<{ data: StaffAttention | null; error: string | null }> {
   const db = await createSsrClient();
-  const { data, error } = await db.rpc("admin_staff_attention");
-  return error ? { data: null, error: "Attention counts are unavailable." }
-    : { data: data as StaffAttention, error: null };
+  const { data, error } = await db.rpc("admin_staff_attention").abortSignal(AbortSignal.timeout(8_000));
+  const parsed = parseAttention(data);
+  return error || !parsed ? { data: null, error: "Attention counts are unavailable." }
+    : { data: parsed, error: null };
 }

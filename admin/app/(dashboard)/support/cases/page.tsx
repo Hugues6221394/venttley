@@ -5,17 +5,28 @@ import { Badge } from "@/components/ui/badge";
 import { CapabilityNotice, DataWarning } from "@/components/ui/operations";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
-import { getSupportCases } from "@/lib/governance";
+import { getSupportCases, getLinkedQueue, type SupportCase } from "@/lib/governance";
+import Link from "next/link";
+import { workflowUIEnabled } from '@/lib/workflows';
+import { SupportWorkspace } from '@/components/workflows/support-workspace';
+import { RefreshAttentionOnRender } from "@/components/staff-attention";
+import { QueueAttentionPanel } from "@/components/queue-attention-panel";
 
 export const dynamic = "force-dynamic";
 
 const statusTone = (status: string) => status === "closed" || status === "resolved" ? "ok" : "warn" as const;
 
-export default async function SupportCasesPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
-  const [{ result }, queue] = await Promise.all([searchParams, getSupportCases()]);
+export default async function SupportCasesPage({ searchParams }: { searchParams: Promise<Record<string,string|undefined>> }) {
+  const params = await searchParams;
+  if(await workflowUIEnabled())return <SupportWorkspace params={params}/>;
+  const { result, queue: queueFilter, source } = params;
+  const queue = queueFilter || source ? await getLinkedQueue<SupportCase>("support", queueFilter ?? "all", source) : await getSupportCases();
   return <div className="flex max-w-[1500px] flex-col gap-6">
+    <RefreshAttentionOnRender token={randomUUID()} />
     <PageHeader eyebrow="Member operations" title="Support cases" subtitle="Canonical metadata-only cases with SLA ownership, retry-safe mutations, and a complete operator audit trail. Never paste confession or message content here." />
+    <QueueAttentionPanel queue="support" />
     <OperationResult code={result} />
+    {(queueFilter || source) && <p className="text-sm text-ink-muted">{source ? "Notification source case" : "Open support cases"} · <Link className="underline" href="/support/cases" prefetch={false}>Show all cases</Link></p>}
     {queue.error && <DataWarning title="Support queue unavailable">{queue.error}</DataWarning>}
     <Card title="Open a case" hint="AAL2 required · source IDs are verified when bound to an appeal or verification request">
       <form action={createSupportCase} className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -29,7 +40,7 @@ export default async function SupportCasesPage({ searchParams }: { searchParams:
       </form>
     </Card>
     <Card title="Case queue" hint={`${queue.data.length} most recent cases · earliest SLA first`} padded={false}>
-      {queue.data.length === 0 ? <p className="p-5 text-sm text-ink-muted">No support cases are registered.</p> : <div className="overflow-x-auto"><table className="data-table"><thead><tr><th>Case</th><th>Owner / SLA</th><th>State</th><th>Update</th></tr></thead><tbody>
+      {queue.data.length === 0 ? <p className="p-5 text-sm text-ink-muted">{queue.error ? "Cases could not be verified." : "No cases match this view."}</p> : <div className="overflow-x-auto"><table className="data-table"><thead><tr><th>Case</th><th>Owner / SLA</th><th>State</th><th>Update</th></tr></thead><tbody>
         {queue.data.map((item) => <tr key={item.support_case_id}>
           <td><p className="font-semibold text-burgundy">{item.category.replaceAll("_", " ")}</p><p className="text-xs text-ink-muted">{item.source_kind}{item.member_id ? " · member bound" : ""}</p><p className="font-mono text-[10px] text-ink-muted">{item.support_case_id}</p></td>
           <td><p className="text-xs">{item.assignee_name ?? "Unassigned"}</p><p className="text-[11px] text-ink-muted">Due {new Date(item.sla_due_at).toLocaleString()}</p></td>

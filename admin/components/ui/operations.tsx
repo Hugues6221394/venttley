@@ -32,7 +32,7 @@ export function DataWarning({
   children?: ReactNode;
 }) {
   return (
-    <aside className="surface-flat border border-danger/25 bg-danger/5 px-4 py-3">
+    <aside data-console-state="warning" className="surface-flat border border-danger/25 bg-danger/5 px-4 py-3">
       <div className="flex items-start gap-2.5">
         <AlertTriangle size={15} className="mt-0.5 shrink-0 text-danger" />
         <div>

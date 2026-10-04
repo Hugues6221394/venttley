@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { CatalogWorkspace } from "@/components/workflows/catalog-workspace";
+import { getOperationalRole } from "@/lib/governance";
+import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
@@ -48,6 +51,15 @@ function licenseState(track: Track): "active" | "expiring" | "expired" | "inacti
 }
 
 export default async function MusicPage({
+  searchParams,
+}: {searchParams:Promise<Record<string,string|string[]|undefined>>}) {
+  if(!["super_admin","admin","moderator"].includes(await getOperationalRole()??""))notFound();
+  if(process.env.ADMIN_CATALOG_WORKSPACES_UI==="true")return <CatalogWorkspace kind="music" searchParams={searchParams}/>;
+  if(Object.values(await searchParams).some(v=>v!==undefined&&typeof v!=="string"))return <ErrorPanel title="Invalid music filters" detail="Use one value per filter."/>;
+  return <LegacyMusicPage searchParams={searchParams as Promise<{state?:string;provider?:string;q?:string;page?:string}>}/>;
+}
+
+async function LegacyMusicPage({
   searchParams,
 }: {
   searchParams: Promise<{
@@ -159,7 +171,7 @@ export default async function MusicPage({
       {errors.length > 0 && (
         <ErrorPanel
           title="Music catalog data is incomplete"
-          detail={errors.join("\n")}
+          detail="One or more catalog sources could not be verified. Missing data is unknown, not zero."
           hint="Track controls stay unavailable while catalog state cannot be proven."
         />
       )}

@@ -9,11 +9,18 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "typecheck": "node scripts/check-routes.mjs && node scripts/check-service-role-gates.mjs && node scripts/check-admin-operations.mjs && node scripts/check-navigation.mjs && tsc --noEmit",
+    "typecheck": "node scripts/check-routes.mjs && node scripts/check-service-role-gates.mjs && node scripts/check-admin-operations.mjs && node scripts/check-navigation.mjs && node scripts/check-inbox-model.mjs && node scripts/check-inbox-recovery.mjs && node scripts/check-overview-model.mjs && node scripts/check-workflow-model.mjs && node scripts/check-incident-model.mjs && node scripts/check-notification-monitor.mjs && node scripts/check-staff-reconciliation.mjs && node scripts/check-staff-directory.mjs && node scripts/check-staff-faults.mjs && node scripts/check-staff-actions.mjs && node scripts/check-workflow-form.mjs && node scripts/check-governance-actions.mjs && node scripts/check-governance-pages.mjs && node scripts/check-analytics.mjs && node scripts/check-theme.mjs && node scripts/check-verification-run.mjs && tsc --noEmit",
     "check:routes": "node scripts/check-routes.mjs",
+    "check:theme": "node scripts/check-theme.mjs",
+    "check:analytics": "node scripts/check-analytics.mjs",
+    "check:analytics-browser": "node scripts/check-analytics-browser.mjs",
+    "check:verification": "node scripts/check-verification-run.mjs && node scripts/check-verification-controls.mjs",
+    "check:catalog": "node scripts/check-catalog-workspaces.mjs && node scripts/check-control-workspaces.mjs",
     "check:gates": "node scripts/check-service-role-gates.mjs",
     "check:operations": "node scripts/check-admin-operations.mjs",
-    "profile:local": "node scripts/profile-console.mjs"
+    "check:governance-ledgers": "node scripts/check-access-reviews.mjs && node scripts/check-invitation-ledger.mjs && node scripts/check-invitation-recovery.mjs && node scripts/check-invitation-setup.mjs && node scripts/check-promotion-approvals.mjs && node scripts/check-broadcast-approvals.mjs && node scripts/check-governance-notices.mjs && node scripts/check-verification-controls.mjs && node scripts/check-staff-actions.mjs",
+    "profile:local": "node scripts/profile-console.mjs",
+    "verify:local": "node scripts/verify-modernization.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.1",

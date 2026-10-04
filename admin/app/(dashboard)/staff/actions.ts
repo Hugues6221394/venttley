@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { staffFailure, staffSuccess, type StaffSuccess } from "@/lib/staff-action-result";
 import { rpc } from "@/lib/audit";
 import { limitAction } from "@/lib/guard";
 import { activeStaffRole } from "@/lib/staff";
+import { prepareInvitation, reserveInvitation, recordInvitation, completeInvitationGrant } from "@/lib/staff-invitation-ledger";
 import {
   createAdminClient,
   createRequiredAuthAdminClient,
@@ -53,22 +54,12 @@ async function requireSuperAdminAal2(): Promise<Gate> {
   return { actorId: user.id };
 }
 
-function resultCode(error: unknown): string {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  if (message.includes("mfa") || message.includes("aal2")) return "mfa_required";
-  if (message.includes("not_authorized") || message.includes("forbidden")) return "forbidden";
-  if (message.includes("already") || message.includes("registered") || message.includes("exists")) return "already_exists";
-  if (message.includes("handle_taken")) return "handle_taken";
-  if (message.includes("last_super_admin")) return "last_super_admin";
-  if (message.includes("self_change")) return "self_change";
-  if (message.includes("email") || message.includes("required") || message.includes("must be")) return "invalid_input";
-  return "failed";
-}
-
-function finish(code: string): never {
+function finish(code: StaffSuccess) {
   revalidatePath("/staff");
+  revalidatePath("/staff/invitations");
+  revalidatePath("/staff/access-reviews");
   revalidatePath("/roles");
-  redirect(`/staff?result=${encodeURIComponent(code)}`);
+  return staffSuccess(code);
 }
 
 async function protectLastSuperAdmin(
@@ -95,10 +86,11 @@ async function protectLastSuperAdmin(
 }
 
 export async function inviteStaff(formData: FormData) {
-  let result = "invited";
+  let mutationStarted = false;
   try {
     await limitAction("destructive");
     await requireSuperAdminAal2();
+    if (process.env.ADMIN_STAFF_INVITES_DISABLED === "true") throw new Error("invitations_paused");
     const email = emailAddress(formData, "email");
     // A second super admin must be an explicit promotion of an already
     // accepted, MFA-capable account. Email possession alone is not enough for
@@ -138,6 +130,9 @@ export async function inviteStaff(formData: FormData) {
     }
 
     const authAdmin = createRequiredAuthAdminClient();
+    const invitationRequest = prepareInvitation(formData, email, handle, role);
+    mutationStarted = true;
+    const invitationId = invitationRequest ? await reserveInvitation(invitationRequest) : null;
     const { data, error } = await authAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo,
       data: {
@@ -148,6 +143,7 @@ export async function inviteStaff(formData: FormData) {
     if (error || !data.user) {
       throw new Error(error?.message ?? "invite_failed");
     }
+    if (invitationId) await recordInvitation(invitationId, data.user.id, "provider_accepted");
 
     const { error: metadataError } =
       await authAdmin.auth.admin.updateUserById(data.user.id, {
@@ -164,37 +160,44 @@ export async function inviteStaff(formData: FormData) {
     // the account is either still harmless `normal` or already has the intended
     // audited role; we deliberately do not issue an ambiguous compensating
     // delete across the Auth and Postgres systems.
-    await rpc("admin_set_user_role", {
-      p_target: data.user.id,
-      p_role: role,
-      p_reason: `Staff invitation: ${reason}`,
-    });
+    if (invitationId && invitationRequest) {
+      await completeInvitationGrant(invitationRequest.p_operation, invitationId, reason);
+    } else {
+      await rpc("admin_set_user_role", {
+        p_target: data.user.id,
+        p_role: role,
+        p_reason: `Staff invitation: ${reason}`,
+      });
+    }
   } catch (error) {
-    result = resultCode(error);
+    return staffFailure(error, mutationStarted);
   }
-  finish(result);
+  return finish("invited");
 }
 
 export async function grantExistingStaff(formData: FormData) {
-  let result = "access_granted";
+  let mutationStarted = false;
   try {
     await limitAction("destructive");
     const { actorId } = await requireSuperAdminAal2();
     const targetId = uuid(formData, "user_id");
     if (targetId === actorId) throw new Error("self_change");
+    const role = enumOf(formData, "role", ASSIGNABLE_STAFF_ROLES);
+    const reason = reqStr(formData, "reason", 500);
+    mutationStarted = true;
     await rpc("admin_set_user_role", {
       p_target: targetId,
-      p_role: enumOf(formData, "role", ASSIGNABLE_STAFF_ROLES),
-      p_reason: reqStr(formData, "reason", 500),
+      p_role: role,
+      p_reason: reason,
     });
   } catch (error) {
-    result = resultCode(error);
+    return staffFailure(error, mutationStarted);
   }
-  finish(result);
+  return finish("access_granted");
 }
 
 export async function changeStaffRole(formData: FormData) {
-  let result = "role_changed";
+  let mutationStarted = false;
   try {
     await limitAction("destructive");
     const { actorId } = await requireSuperAdminAal2();
@@ -202,37 +205,42 @@ export async function changeStaffRole(formData: FormData) {
     const nextRole = enumOf(formData, "role", ASSIGNABLE_STAFF_ROLES);
     if (targetId === actorId) throw new Error("self_change");
     await protectLastSuperAdmin(targetId, nextRole);
+    const reason = reqStr(formData, "reason", 500);
+    mutationStarted = true;
     await rpc("admin_set_user_role", {
       p_target: targetId,
       p_role: nextRole,
-      p_reason: reqStr(formData, "reason", 500),
+      p_reason: reason,
     });
   } catch (error) {
-    result = resultCode(error);
+    return staffFailure(error, mutationStarted);
   }
-  finish(result);
+  return finish("role_changed");
 }
 
 export async function setStaffStatus(formData: FormData) {
-  let result = "status_changed";
+  let mutationStarted = false;
   try {
     await limitAction("destructive");
     const { actorId } = await requireSuperAdminAal2();
     const targetId = uuid(formData, "user_id");
     if (targetId === actorId) throw new Error("self_change");
+    const status = enumOf(formData, "status", ["active", "suspended"] as const);
+    const reason = reqStr(formData, "reason", 500);
+    mutationStarted = true;
     await rpc("admin_set_user_status", {
       p_target: targetId,
-      p_status: enumOf(formData, "status", ["active", "suspended"] as const),
-      p_reason: reqStr(formData, "reason", 500),
+      p_status: status,
+      p_reason: reason,
     });
   } catch (error) {
-    result = resultCode(error);
+    return staffFailure(error, mutationStarted);
   }
-  finish(result);
+  return finish("status_changed");
 }
 
 export async function removeStaffAccess(formData: FormData) {
-  let result = "access_removed";
+  let mutationStarted = false;
   try {
     await limitAction("destructive");
     const { actorId } = await requireSuperAdminAal2();
@@ -242,13 +250,15 @@ export async function removeStaffAccess(formData: FormData) {
       throw new Error("confirm_required");
     }
     await protectLastSuperAdmin(targetId, "normal");
+    const reason = reqStr(formData, "reason", 500);
+    mutationStarted = true;
     await rpc("admin_set_user_role", {
       p_target: targetId,
       p_role: "normal",
-      p_reason: reqStr(formData, "reason", 500),
+      p_reason: reason,
     });
   } catch (error) {
-    result = resultCode(error);
+    return staffFailure(error, mutationStarted);
   }
-  finish(result);
+  return finish("access_removed");
 }

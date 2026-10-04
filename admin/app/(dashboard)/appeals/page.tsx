@@ -1,4 +1,9 @@
 import Link from "next/link";
+import { workflowUIEnabled,dailyWorkflowQueue } from '@/lib/workflows';
+import { AppealWorkflow } from '@/components/workflows/daily-queues';
+import { randomUUID } from "node:crypto";
+import { RefreshAttentionOnRender } from "@/components/staff-attention";
+import { QueueAttentionPanel } from "@/components/queue-attention-panel";
 import { revalidatePath } from "next/cache";
 import { rpc } from "@/lib/audit";
 import { limitAction } from "@/lib/guard";
@@ -12,7 +17,7 @@ import { Scale, CheckCircle2, Clock, EyeOff } from "@/components/ui/icons";
 
 export const dynamic = "force-dynamic";
 
-type AppealRow = {
+export type AppealRow = {
   appeal_id: string;
   case_id: string | null;
   subject_kind: "case" | "account" | "verification";
@@ -90,31 +95,26 @@ async function decideAppealAction(formData: FormData) {
 export default async function AppealsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; cursor?: string }>;
 }) {
   const params = await searchParams;
   const tab = params.tab ?? "open";
 
+  const modern = await workflowUIEnabled();
+  if(modern) {
+    const page=await dailyWorkflowQueue<AppealRow>('admin_appeal_work_queue',{p_status:tab==='all'?null:tab},params.cursor);
+    return <AppealWorkflow rows={page.rows} tab={tab} error={page.error} pagination={{path:'/appeals',filter:{tab},next:page.next,hasCursor:!!params.cursor}}/>;
+  }
   const rows =
     (await rpc<AppealRow[]>("admin_appeal_queue", {
       p_status: tab === "all" ? null : tab,
       p_limit: 200,
     })) ?? [];
 
-  const openCount =
-    tab === "open"
-      ? rows.length
-      : ((await rpc<AppealRow[]>("admin_appeal_queue", {
-          p_status: "open",
-          p_limit: 200,
-        })) ?? []).length;
-
   const tabs = [
     {
       key: "open",
       label: "Open",
-      count: openCount,
-      tone: openCount > 0 ? ("warn" as const) : ("neutral" as const),
     },
     { key: "overturned", label: "Overturned" },
     { key: "upheld", label: "Upheld" },
@@ -135,6 +135,9 @@ export default async function AppealsPage({
       />
 
       <Tabs tabs={tabs} active={tab} basePath="/appeals" />
+      <RefreshAttentionOnRender token={randomUUID()} />
+      <QueueAttentionPanel queue="appeals" />
+      <p className="text-sm text-ink-muted">Showing {rows.length} rows, up to 200 in this view. This is not the total backlog.</p>
 
       {rows.length === 0 ? (
         <Card padded={false}>

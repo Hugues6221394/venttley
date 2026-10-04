@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorPanel } from "@/components/ui/empty-state";
 import { CapabilityNotice } from "@/components/ui/operations";
 import { BriefcaseBusiness, ExternalLink } from "@/components/ui/icons";
+import { QueueAttentionPanel } from "@/components/queue-attention-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export default async function JobsPage() {
     db.from("media_scan_jobs").select("content_id", { count: "exact", head: true }).is("completed_at", null),
     db.from("push_delivery_outbox").select("delivery_id, event_kind, attempts, last_error_code, created_at").eq("status", "dead").order("created_at", { ascending: false }).limit(30),
     db.from("email_outbox").select("outbox_id, template, attempts, last_error, created_at").eq("status", "failed").order("created_at", { ascending: false }).limit(30),
-    db.from("media_scan_jobs").select("kind, content_id, attempts, lease_expires_at, created_at").is("completed_at", null).order("created_at", { ascending: true }).limit(30),
+    db.from("media_scan_jobs").select("kind, content_id, attempts, lease_expires_at, created_at").is("completed_at", null).lt("lease_expires_at", new Date(Date.now()-900_000).toISOString()).order("lease_expires_at", { ascending: true }).limit(30),
   ]);
   const results = [pushQueued, pushDead, emailQueued, emailFailed, mediaPending, pushRows, emailRows, mediaRows];
   const errors = results.flatMap((result) => result.error ? [result.error.message] : []);
@@ -32,6 +33,7 @@ export default async function JobsPage() {
   return (
     <div className="flex max-w-[1200px] flex-col gap-6">
       <PageHeader eyebrow="Insight" title="Jobs & delivery" subtitle="Outcome-oriented visibility for push, email, and media-scan work. Recipient addresses, message bodies, tokens, and notification payloads are never rendered here." actions={<Link href="/system" className="btn-secondary">System health <ExternalLink size={12} /></Link>} />
+      <QueueAttentionPanel queue="jobs" />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <Metric label="Push waiting" value={pushQueued.count} warn={(pushQueued.count ?? 0) > 0} />
         <Metric label="Push dead" value={pushDead.count} danger={(pushDead.count ?? 0) > 0} />
@@ -39,14 +41,14 @@ export default async function JobsPage() {
         <Metric label="Email failed" value={emailFailed.count} danger={(emailFailed.count ?? 0) > 0} />
         <Metric label="Media pending" value={mediaPending.count} warn={(mediaPending.count ?? 0) > 0} />
       </div>
-      {errors.length > 0 && <ErrorPanel title="Job health is incomplete" detail={errors.join("\n")} hint="Unknown is not treated as zero; investigate the failing source before declaring delivery healthy." />}
+      {errors.length > 0 && <ErrorPanel title="Job health is incomplete" detail="One or more job sources could not be read. Please retry." hint="Unknown is not treated as zero; investigate the failing source before declaring delivery healthy." />}
       {errors.length === 0 && failures === 0 ? (
-        <Card><EmptyState icon={<BriefcaseBusiness size={34} />} title="No failed or pending jobs are visible." hint="This is a point-in-time queue state, not proof that downstream providers delivered successfully." /></Card>
+        <Card><EmptyState icon={<BriefcaseBusiness size={34} />} title="No failed deliveries or stalled scans are visible." hint="Pending work may still exist. This is a point-in-time queue state, not proof that downstream providers delivered successfully." /></Card>
       ) : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-          <JobList title="Dead push deliveries" rows={(pushRows.data ?? []) as PushFailure[]} render={(row) => <><p className="font-semibold text-burgundy">{row.event_kind}</p><p className="text-xs text-ink-muted">{row.attempts} attempts · {row.last_error_code ?? "no error code"}</p></>} id={(row) => row.delivery_id} time={(row) => row.created_at} />
-          <JobList title="Failed email deliveries" rows={(emailRows.data ?? []) as EmailFailure[]} render={(row) => <><p className="font-semibold text-burgundy">{row.template}</p><p className="text-xs text-ink-muted">{row.attempts} attempts · {row.last_error ? row.last_error.slice(0, 140) : "no provider error"}</p></>} id={(row) => row.outbox_id} time={(row) => row.created_at} />
-          <JobList title="Pending media scans" rows={(mediaRows.data ?? []) as MediaJob[]} render={(row) => <><p className="font-semibold text-burgundy">{row.kind}</p><p className="text-xs text-ink-muted">{row.attempts} attempts · content {row.content_id.slice(0, 8)}…</p></>} id={(row) => `${row.kind}-${row.content_id}`} time={(row) => row.created_at} />
+          <div id="push-failures" className="scroll-mt-24"><JobList title="Dead push deliveries" rows={(pushRows.data ?? []) as PushFailure[]} render={(row) => <><p className="font-semibold text-burgundy">{row.event_kind}</p><p className="text-xs text-ink-muted">{row.attempts} attempts · {row.last_error_code ? "Provider error recorded" : "No error recorded"}</p></>} id={(row) => row.delivery_id} time={(row) => row.created_at} /></div>
+          <div id="email-failures" className="scroll-mt-24"><JobList title="Failed email deliveries" rows={(emailRows.data ?? []) as EmailFailure[]} render={(row) => <><p className="font-semibold text-burgundy">{row.template}</p><p className="text-xs text-ink-muted">{row.attempts} attempts · {row.last_error ? "Provider error recorded" : "No error recorded"}</p></>} id={(row) => row.outbox_id} time={(row) => row.created_at} /></div>
+          <div id="media-stalled" className="scroll-mt-24"><JobList title="Pending media scans" rows={(mediaRows.data ?? []) as MediaJob[]} render={(row) => <><p className="font-semibold text-burgundy">{row.kind}</p><p className="text-xs text-ink-muted">{row.attempts} attempts · {row.lease_expires_at && Date.parse(row.lease_expires_at) < Date.now()-900_000 ? "Lease overdue by more than 15 minutes" : "Lease not overdue by 15 minutes"}</p></>} id={(row) => `${row.kind}-${row.content_id}`} time={(row) => row.created_at} /></div>
         </div>
       )}
       <CapabilityNotice title="Replay controls require idempotent worker contracts">

@@ -7,6 +7,7 @@ import { limitAction } from "@/lib/guard";
 import { activeStaffRole } from "@/lib/staff";
 import { createSsrClient } from "@/lib/supabase/server";
 import { enumOf, optStr, reqStr } from "@/lib/validate";
+import { isUuid } from "@/lib/inbox-model";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -27,7 +28,10 @@ export async function generateImpactReport(formData: FormData) {
   const country=optStr(formData,"country_filter",80)?.toUpperCase() ?? null;
   if((source==="none") !== (country===null)) throw new Error("Country filter and country source must be supplied together.");
 
-  const id=await rpc<string>("admin_generate_impact_report",{
+  const operation=reqStr(formData,"operation_id",36);
+  if(!isUuid(operation))throw new Error("Reload the report form before submitting.");
+  const id=await rpc<string>("admin_generate_impact_report_checked",{
+    p_operation:operation,
     p_report_kind:kind,p_title:title,p_audience:audience,p_window_start:start,p_window_end:end,
     p_country_source:source,p_country_filter:country,p_notes:notes,
   });

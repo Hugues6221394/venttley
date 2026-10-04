@@ -1,5 +1,11 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { notFound } from "next/navigation";
 import { getControlSnapshot, type ControlSection } from "@/lib/control-plane";
+import { CONTROL_ROUTES, controlMetric, controlCapability } from "@/lib/control-plane-model";
+import { getOperationalRole } from "@/lib/governance";
+import { canAccess } from "@/lib/roles";
+import { PanelSkeleton } from "@/components/ui/operator-workspace";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, Row } from "@/components/ui/section";
 import { StatCard, type Tone } from "@/components/ui/stat-card";
@@ -29,8 +35,10 @@ export type ControlPageConfig = {
 };
 
 export async function ControlPlanePage({ config }: { config: ControlPageConfig }) {
-  const { snapshot, error } = await getControlSnapshot(config.section);
-  const values = snapshot?.data ?? {};
+  const role = await getOperationalRole();
+  if (!role || !canAccess(role, CONTROL_ROUTES[config.section])) notFound();
+  const links = config.links?.filter(link => canAccess(role, link.href));
+  const streaming = process.env.ADMIN_CONTROL_WORKSPACES_UI === "true";
 
   return (
     <div className="flex max-w-[1280px] flex-col gap-6">
@@ -39,10 +47,10 @@ export async function ControlPlanePage({ config }: { config: ControlPageConfig }
         title={config.title}
         subtitle={config.subtitle}
         actions={
-          config.links?.length ? (
+          links?.length ? (
             <div className="flex flex-wrap gap-2">
-              {config.links.map((link) => (
-                <Link key={link.href} href={link.href} className="btn-secondary">
+              {links.map((link) => (
+                <Link key={link.href} href={link.href} prefetch={false} className="btn-secondary">
                   {link.label}
                 </Link>
               ))}
@@ -51,10 +59,34 @@ export async function ControlPlanePage({ config }: { config: ControlPageConfig }
         }
       />
 
+      {streaming ? <Suspense fallback={<PanelSkeleton label="operational aggregates" />}>
+        <ControlSnapshotPanel config={config} />
+      </Suspense> : <ControlSnapshotPanel config={config} />}
+
+      <Card title="Operator checks" hint="Required before acting on this surface">
+        <ol className="flex list-decimal flex-col gap-3 pl-5 text-sm text-ink-muted">
+          {config.operatingChecks.map(check => <li key={check} className="pl-1 leading-relaxed">{check}</li>)}
+        </ol>
+      </Card>
+
+      <CapabilityNotice title="Aggregate-only control surface">
+        Counts and capability signals do not prove successful execution or production
+        readiness. Missing or unavailable signals remain unknown. This view does not
+        expose authored content, account details, credentials or storage object paths.
+      </CapabilityNotice>
+    </div>
+  );
+}
+
+async function ControlSnapshotPanel({ config }: { config: ControlPageConfig }) {
+  const { snapshot, error } = await getControlSnapshot(config.section);
+  const values = snapshot?.data ?? {};
+  return <section className="flex flex-col gap-6" aria-label="Operational aggregates">
+
       {error && (
         <DataWarning title="Live aggregate unavailable">
-          {error}. No stale or invented value is shown; retry after checking the
-          migration and Supabase health.
+          Live aggregates could not be verified. No zero or healthy state is inferred.
+          {" "}<a href={CONTROL_ROUTES[config.section]} className="underline">Reload this workspace</a>.
         </DataWarning>
       )}
 
@@ -63,27 +95,27 @@ export async function ControlPlanePage({ config }: { config: ControlPageConfig }
           <StatCard
             key={metric.key}
             label={metric.label}
-            value={formatValue(values[metric.key], metric.format)}
+            value={controlMetric(values[metric.key], metric.format)}
             sub={metric.sub}
             tone={metric.tone ?? "neutral"}
           />
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card title="Production capabilities" hint="Live contract status, not a roadmap claim">
           <div className="flex flex-col">
             {config.capabilities.map((capability) => {
-              const ready = values[capability.key] === true;
+              const state = controlCapability(values[capability.key]);
+              const ready = state === "available";
               return (
                 <Row
                   key={capability.key}
                   label={capability.label}
-                  hint={ready ? "Backed by a live data contract." : capability.consequence}
+                  hint={ready ? "Reported by the data contract; execution is not verified here." : state === "unknown" ? "This capability could not be verified." : capability.consequence}
                   value={
-                    <Badge tone={ready ? "ok" : "warn"}>
+                    <Badge tone={ready ? "ok" : state === "unknown" ? "neutral" : "warn"}>
                       {ready ? <CheckCircle2 size={11} /> : <Lock size={11} />}
-                      {ready ? "available" : "gap"}
+                      {state}
                     </Badge>
                   }
                 />
@@ -92,42 +124,9 @@ export async function ControlPlanePage({ config }: { config: ControlPageConfig }
           </div>
         </Card>
 
-        <Card title="Operator checks" hint="Required before acting on this surface">
-          <ol className="flex list-decimal flex-col gap-3 pl-5 text-sm text-ink-muted">
-            {config.operatingChecks.map((check) => (
-              <li key={check} className="pl-1 leading-relaxed">
-                {check}
-              </li>
-            ))}
-          </ol>
-        </Card>
-      </div>
-
-      <CapabilityNotice title="Aggregate-only control surface">
-        This page intentionally exposes counts and readiness signals only. It does
-        not return authored content, member identity, contact data, provider
-        credentials, storage object paths, or raw model explanations. Every
-        missing backend capability is labelled as a gap instead of being simulated
-        by a decorative button.
-      </CapabilityNotice>
-
       <p className="text-xs text-ink-muted">
-        Snapshot: {snapshot ? new Date(snapshot.generated_at).toLocaleString() : "unavailable"}
+        Snapshot: {snapshot ? controlMetric(snapshot.generated_at, "date") : "unavailable"}
         {snapshot ? " · privacy classification: aggregate only" : ""}
       </p>
-    </div>
-  );
-}
-
-function formatValue(
-  value: string | number | boolean | null | undefined,
-  format: Metric["format"] = "number",
-): string | number {
-  if (value === null || value === undefined || value === "") return "Unavailable";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (format === "date") return new Date(String(value)).toLocaleString();
-  const numeric = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(numeric)) return String(value);
-  if (format === "hours") return `${numeric.toLocaleString()}h`;
-  return numeric;
+    </section>;
 }

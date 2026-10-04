@@ -1,5 +1,8 @@
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
+import { workflowUIEnabled,dailyWorkflowQueue } from '@/lib/workflows';
+import { getRenderStaff } from '@/lib/supabase/server';
+import { SafetyWorkflow } from '@/components/workflows/daily-queues';
 import { rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
@@ -11,7 +14,7 @@ import { HeartPulse, LifeBuoy, ShieldAlert, CheckCircle2, Clock } from "lucide-r
 export const dynamic = "force-dynamic";
 
 // Rows come from the SECURITY DEFINER admin_safety_queue() RPC (migration 0082).
-type SafetyRow = {
+export type SafetyRow = {
   item_type:
     | "crisis_post"
     | "crisis_whisper"
@@ -87,13 +90,18 @@ async function clearCrisisAction(formData: FormData) {
 export default async function SafetyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ show?: string }>;
+  searchParams: Promise<{ show?: string; cursor?:string }>;
 }) {
   const params = await searchParams;
   const includeResolved = params.show === "resolved";
 
   // Read via the SSR (logged-in admin) client so is_staff(auth.uid()) passes —
   // the service-role client has no auth.uid() and would be rejected.
+  const modern = await workflowUIEnabled();
+  if(modern) {
+    const page=await dailyWorkflowQueue<SafetyRow>('admin_safety_work_queue',{p_include_resolved:includeResolved},params.cursor);
+    return <SafetyWorkflow items={page.rows} includeResolved={includeResolved} error={page.error} canReview={['super_admin','admin','moderator'].includes((await getRenderStaff())?.role??'')} pagination={{path:'/safety',filter:{show:includeResolved?'resolved':'open'},next:page.next,hasCursor:!!params.cursor}}/>;
+  }
   const rows = await rpc<SafetyRow[]>("admin_safety_queue", {
     p_include_resolved: includeResolved,
     p_limit: 200,

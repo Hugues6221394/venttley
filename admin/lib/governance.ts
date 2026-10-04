@@ -2,6 +2,7 @@ import "server-only";
 
 import { createSsrClient } from "@/lib/supabase/server";
 import { activeStaffRole } from "@/lib/staff";
+import { isUuid } from "./inbox-model";
 
 type Result<T> = { data: T[]; error: string | null };
 
@@ -41,6 +42,15 @@ async function rows<T>(fn: string, limit: number): Promise<Result<T>> {
 
 export const getSupportCases = (limit = 100) => rows<SupportCase>("admin_support_case_queue", limit);
 export const getLegalRequests = (limit = 100) => rows<LegalRequest>("admin_legal_request_queue", limit);
+export async function getLinkedQueue<T>(kind: "support" | "legal", queue: string, source?: string): Promise<Result<T>> {
+  if ((source !== undefined && !isUuid(source)) || !(kind === "support" ? ["all", "open"] : ["all", "awaiting_approval"]).includes(queue)) {
+    return { data: [], error: "This queue link is invalid. Return to the unfiltered queue." };
+  }
+  const db = await createSsrClient();
+  const { data, error } = await db.rpc(kind === "support" ? "admin_support_case_queue_filtered" : "admin_legal_request_queue_filtered",
+    { p_queue: queue, p_source: source ?? null, p_limit: 100 });
+  return error ? { data: [], error: "The requested queue could not be loaded. Please retry." } : { data: data as T[] ?? [], error: null };
+}
 export const getCrisisPlaybooks = (limit = 50) => rows<CrisisPlaybook>("admin_crisis_playbooks", limit);
 export const getRecoveryDrills = (limit = 50) => rows<RecoveryDrill>("admin_recovery_drills", limit);
 

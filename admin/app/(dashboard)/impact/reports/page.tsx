@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
 import { CapabilityNotice, DataWarning } from "@/components/ui/operations";
 import { getImpactReports } from "@/lib/impact";
+import { randomUUID } from "node:crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export default async function ImpactReportsPage({ searchParams }: { searchParams
     {result.error && <DataWarning title="Report register unavailable">{result.error}</DataWarning>}
     <Card title="Generate immutable snapshot" hint="Requires super admin/admin, MFA step-up, and a live aggregate window">
       <form action={generateImpactReport} className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <input type="hidden" name="operation_id" value={randomUUID()} />
         <label className="field-label">Title<input className="input mt-1" name="title" maxLength={160} required defaultValue={`Venttly impact report · ${today}`} /></label>
         <label className="field-label">Report type<select className="input mt-1" name="report_kind" defaultValue="monthly_impact"><option value="monthly_impact">Monthly impact</option><option value="community_health">Community health</option><option value="safety_transparency">Safety transparency</option><option value="country_summary">Country summary</option><option value="research_readiness">Research readiness</option></select></label>
         <label className="field-label">Audience<select className="input mt-1" name="audience" defaultValue="internal"><option value="internal">Internal</option><option value="external">External candidate</option></select></label>

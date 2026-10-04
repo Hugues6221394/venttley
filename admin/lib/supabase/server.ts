@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { activeStaffRole } from "@/lib/staff";
 import { cache } from "react";
 import { measuredSupabaseFetch } from "@/lib/performance";
+import { fetchWithDeadline } from "@/lib/bounded";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
@@ -137,7 +138,7 @@ export async function createAdminClient() {
  * to the caller's publishable-key session. Callers must still authorize the
  * acting staff member before requesting this client.
  */
-export function createRequiredAuthAdminClient() {
+export function createRequiredAuthAdminClient(signal?: AbortSignal) {
   if (!serviceRoleConfigured()) {
     throw new Error(
       "Auth administration is unavailable: configure SUPABASE_SERVICE_ROLE_KEY."
@@ -152,6 +153,7 @@ export function createRequiredAuthAdminClient() {
         autoRefreshToken: false,
         detectSessionInUrl: false,
       },
+      ...(signal ? { global: { fetch: fetchWithDeadline(signal) } } : {}),
     }
   );
 }

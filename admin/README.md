@@ -18,19 +18,150 @@ secrets, authentication keys, or unrelated personal data.
 
 ## What exists today
 
+**Latest local implementation checkpoint, 1 October 2026:** Batch 7 now has
+default-off tribe, media and music metadata workspaces
+(`ADMIN_CATALOG_WORKSPACES_UI`) and independently streamed shared operational
+panels (`ADMIN_CONTROL_WORKSPACES_UI`). Queries are bounded and unavailable data
+is not shown as zero. No full-console redesign or production speed result is
+claimed. `npm run check:catalog` tests these modules with synthetic adapters.
+Batch 9 has prepared local 82-route role coverage (`verify:local -- routes`) and
+a staging-only 100-staff attention load script; neither has been executed.
+See the [completion checklist](docs/modernization-completion.md) for scope,
+flags, prerequisites and remaining gates. New security SQL is still under
+`supabase/pending/`, not applied migrations. Do not enable pilots from these
+source checks alone.
+
+Batch 6 now also includes narrowly scoped invitation setup repair behind
+`ADMIN_INVITATION_SETUP_REPAIR_UI=false` and an independent database switch.
+It never grants a role or sends email; established accounts are refused.
+The SQL remains an unapplied draft and needs live Auth/database verification.
+See [governance implementation and remaining gaps](docs/governance-batch-6.md).
+
 The premium-console rollout is **in progress**, not complete. See
 [Modernization progress and verification](docs/modernization-progress.md) for
-the measured rendering changes, 12ui-derived operator shell, disabled staff-inbox
-backend, test commands, rollout precautions, and remaining design/workflow work.
+the measured rendering changes, 12ui-derived operator shell, gated staff-inbox
+implementation, test commands, rollout precautions, and remaining design/workflow work.
 The new six-section navigation, page-search palette, mobile drawer and session
 favorites require the server flag `ADMIN_SHELL_V2=true` (super-admin pilot by
 default). Disabling that flag restores the previous interface after reload.
-The current bell is
-explicitly unavailable; it no longer mislabels queue totals as unread messages.
+The new `/inbox` and bell drawer require `ADMIN_INBOX_UI=true` plus the independently
+authorized database rollout. Both remain off by default. See
+[Staff inbox implementation and release gates](docs/staff-inbox.md) for code
+ownership, verification, supported notification sources, and pilot prerequisites.
+The bell counts personal unread notices, never team queue totals.
+
+**Page-renovation Batch 1:** the redesigned Overview and reusable page/panel/KPI/
+table/drawer components are implemented and locally tested. Enable
+`ADMIN_OVERVIEW_V2=true` only inside the modern-shell pilot cohort. Its private
+aggregate workers ship disabled; missing or stale snapshots are explicit. See
+[Batch 1 implementation, metric definitions and rollout](docs/overview-batch-1.md)
+for code ownership and reproduction commands.
+This does not imply every console page has been renovated or production capacity
+has been established.
+
+**Page-renovation Batch 2:** Overview, moderation reports, appeals, support and
+legal approvals now share authorized queue KPIs and exact-destination badges
+behind `ADMIN_ATTENTION_UI=true` in the modern-shell cohort. Visible polling,
+freshness, invalidation and unknown states are shared; the bell remains personal
+unread notifications. See [Batch 2 scope, tests and rollout](docs/attention-batch-2.md).
+The database rollout stays independently gated; no production pilot is enabled.
+**Page-renovation Batch 3:** gated daily moderation, appeals, safety and support
+workflows have backend cursor pagination, MFA-protected checked commands and
+retry/conflict feedback. Support also includes scoped member/source selection
+and immutable metadata history. The focused admin database suite passes 171
+assertions; the latest complete local suite passes 75 files / 1,417 assertions
+after the separate feed-test correction. Final visual/accessibility
+acceptance and staging performance remain release gates. See
+[Batch 3 implementation and remaining release gates](docs/workflows-batch-3.md).
+`ADMIN_WORKFLOWS_UI` remains off by default. This is not an unrestricted release.
+
+**Batch 4 started:** failed staff-notification inspection and single-event
+recovery RPCs are implemented and locally tested, with current source access,
+MFA, idempotent audit receipts and preserved read states. `/inbox/operations`
+now adds a super-admin-only failure queue, health cards and confirmed retries,
+behind the independent `ADMIN_INBOX_RECOVERY_UI` flag in the modern-shell cohort.
+Canonical moderation assignments and independent second-review notices now
+extend the same inbox behind a separate disabled source switch. Per-case locks
+prevent duplicate notices from concurrent equal requests; real-session browser
+tests cover all six roles, revocation and rollback. Bounded old support-delivery
+cleanup remains disabled; last-batch metrics are extended by hourly history.
+Grouped job alerts, generated-report notices, retry-safe report generation,
+shared Jobs badges and hourly delivery history are now connected and locally
+tested. The service-only monitor contract is ready for independent monitoring,
+but no external alert route is configured. Incident sources, complete archival
+policy and staging release evidence remain pending; see
+[Batch 4 scope](docs/notifications-batch-4.md).
+Use the [nine-batch completion checklist](docs/modernization-completion.md) to
+track the unfinished Incident Command, governance, remaining-page, dark-mode
+and production-evidence batches. `npm run verify:local -- notifications` runs
+the implemented notification gates locally; it is not production certification.
+
+**Batch 6 reliability foundation:** staff accounts, invitations and access
+reviews now use 25-record cursor pages, role/status filters, bounded Auth
+reconciliation and explicit page-scoped/unknown KPI states. The directory's
+super-admin protection read is independent of those filters. Existing staff
+mutation authorization and audit paths remain in place. Earlier synthetic page
+tests and the production build passed for that foundation. Gated canonical
+invitation/review interfaces now have implementation code and **unapplied** SQL
+drafts in `supabase/pending/`; their runtime and database checks are deferred,
+not passed. `ADMIN_ACCESS_REVIEWS_UI` and `ADMIN_INVITATION_LEDGER_UI` default
+off. Tracked invitations also require a dedicated server-only
+`ADMIN_INVITATION_HMAC_KEY`; never expose it or rotate it casually. The separate
+`ADMIN_STAFF_INVITES_DISABLED=true` switch pauses both legacy and tracked sends
+and must precede an invitation rollback. The governance visual redesign,
+remaining workflow controls and live browser gates remain open. See
+[Batch 6 scope and verification](docs/governance-batch-6.md).
+
+The tracked invitation pilot now includes account-evidence reconciliation,
+pending-grant cancellation and atomic role completion with a 24-hour grant
+deadline. Those controls do **not** resend email, revoke Auth invitation links
+or remove existing staff access. Missing Auth setup metadata has a separate,
+disabled repair draft restricted to unused tracked invitations; it is not general
+account recovery. The updated SQL and regression checks are prepared but not applied
+or run; the documentation above explains the remaining provider/runtime gates.
+
+`ADMIN_PROMOTION_APPROVALS_UI=false` separately gates the new `/approvals`
+promotion workflow. Its SQL draft requires an AAL2 requester, an independent
+AAL2 approver and explicit one-time execution before the 24-hour expiry. It
+includes target/authority conflict checks and a table-level guard against direct
+promotion bypass. The service-only database control is independent: hiding the
+UI does not disable enforcement. It covers **super-admin promotions only** and
+remains unapplied/unverified; other sensitive action approvals are still gaps.
+
+`ADMIN_BROADCAST_APPROVALS_UI=false` separately gates exact-message review on
+`/broadcasts`. Admins or super admins can request an immediate global message;
+a different super admin approves and the requester explicitly publishes. The
+unapplied SQL draft adds immutable content, authority/version/expiry checks,
+retry receipts and a table guard covering legacy publication, edits and
+reactivation. Emergency deactivation remains separate. No push or mobile
+delivery is established by this workflow. Targeted audience isolation and
+scheduled visibility in the legacy path are unresolved release blockers, not
+supported pilot features. Both the UI and database control remain off pending
+verification; see the Batch 6 handoff for dependencies, rollback and tests.
+
+Governance notifications now have code and an **unapplied** SQL draft extending
+the existing inbox. They cover access-review assignment/deadlines and promotion/
+broadcast approval work, with safe fixed copy, current-source permission checks,
+duplicate-safe delivery and exact-request links. `ADMIN_GOVERNANCE_NOTICES_UI`
+defaults off; the separate audited database source control also defaults off.
+These notices do not execute approvals or create global queue KPIs. Synthetic
+checks passed; database, browser, cron-lag and rollback evidence remain pending.
+See [the governance notification handoff](docs/governance-batch-6.md#governance-notices-checkpoint-2-october-2026).
+
+`ADMIN_THEME_UI=false` separately gates the shared light/dark/system appearance
+pilot. When verified and enabled, the account menu offers a browser-local
+preference; only the appearance enum is stored. Shared surfaces, status colors,
+controls and navigation use semantic tokens. Preference and palette-contrast
+checks and the local enabled/rollback browser journeys pass. Analytics charts
+now use theme-aware colors and expandable value tables; full-route accessibility
+and deployed script-policy acceptance remain open. Rebuild/restart for enablement or rollback; no backend
+state changes. See [Batch 8 theme scope and gates](docs/themes-batch-8.md).
 
 | Route | Current capability | Roles admitted by `lib/roles.ts` |
 | --- | --- | --- |
 | `/overview` | Platform counts, recent safety signals, reports, regions, and privileged activity | all staff roles |
+| `/inbox` | Gated personal staff notifications, filters, preferences, read/unread, and authorized source links | all staff roles; rollout and source permissions restrict returned items |
+| `/inbox/operations` | Gated metadata-only failure queue, worker freshness and confirmed single-event retry; no rollout enablement or bulk resend | super admin only; MFA required for retry |
 | `/queue-control` | Unified counts for unassigned/breached moderation, appeals, CSAM, stale scanning, verification, privacy, and dead delivery work; unavailable sources remain unknown | super admin, admin, moderator |
 | `/safety` | Severity-ordered post, Whisper, Tribe-chat, DM, and self-harm safety queue with 15/60-minute UI targets | super admin, admin, moderator, support |
 | `/csam` | Quarantined child-safety incident ledger and resolution/report-reference recording; evidence withheld until a reveal with a stated reason, recorded in a separate append-only access ledger | super admin only |
@@ -61,14 +192,14 @@ explicitly unavailable; it no longer mislabels queue totals as unread messages.
 | `/appeals` | Review member appeals against enforcement decisions, with independent second review enforced in the database | super admin, admin, moderator |
 | `/search` | One search box across users, posts, Tribes, cases, and reports; every search is audited | super admin, admin, moderator, support |
 | `/slo` | Queue age, time to first action and resolution, appeal reversal rate, and pipeline health | super admin, admin, analyst, read-only auditor |
-| `/analytics` | Acquisition, activity, engagement, retention, geography, and report trends | super admin, admin, analyst, read-only auditor |
+| `/analytics` | Independently streamed activity/retention aggregates, privacy-thresholded region snapshots, and explicitly labelled bounded record samples; unknown source freshness is not presented as live | super admin, admin, analyst, read-only auditor |
 | `/ops` | Moderation-cache, media-scan, abuse-control, volume, and estimated-cost snapshots | super admin, admin, analyst, read-only auditor |
 | `/audit` | Filter and export the append-only privileged-action ledger | super admin, admin, read-only auditor |
 | `/system` | Environment and dependency health probes | super admin, admin |
 | `/jobs` | Push, email, and media-scan queue outcomes without recipient addresses, tokens, or payload contents | super admin, admin, analyst, read-only auditor |
 | `/delivery` | Push/email terminal outcomes, oldest waiting work, and broadcast counters; downstream receipt and safe replay remain backend gaps | super admin, admin, analyst, read-only auditor |
 | `/releases` | Migration ledger, feature rollouts, and unresolved alerts; scalable client-version adoption remains a backend aggregation gap | super admin, admin, analyst, read-only auditor |
-| `/incidents` | Cross-system incident-signal router for safety, CSAM, moderation SLA, delivery, scanning, and security pressure; not yet a full incident state machine | super admin, admin |
+| `/incidents` | Signal router by default; gated persistent incident queue, declaration, lifecycle and postmortem actions when enabled. Reconciled active-work badge and server-side pilot audience defaulting to super admins; see `docs/incidents-batch-5.md` | super admin, admin within configured pilot |
 | `/privacy` | Deletion requests and moderation legal holds without contact, recovery, device, or authored-content disclosure | super admin, admin |
 | `/privacy/requests/[userId]` | Per-account privacy dossier with request state, content/system counts, legal holds, and account-targeted audit metadata; fulfilment remains locked | super admin, admin |
 | `/data-governance` | Minimum-data technical inventory and current policy evidence; processor, retention, residency, and lineage registries remain missing | super admin, admin, read-only auditor |
@@ -1427,3 +1558,14 @@ bash supabase/tests/integration/impact_admin_postgrest.sh
 Record the exact command, commit SHA, database migration head, environment, and
 result for every staging/production gate. Do not translate scaffolding or a
 green source-contract test into a claim of live operational readiness.
+
+### Incident Command implementation
+
+The gated persistent incident lifecycle now supplements the legacy signal
+directory. It includes confirmed declarations, commander/responder selectors,
+version-checked coordination, immutable timelines, follow-ups and metadata-only
+inbox notices. No external paging or containment is executed by incident actions.
+See [Batch 5 implementation and remaining release gates](docs/incidents-batch-5.md)
+for routes, source structure, additive migrations, independent disabled rollout
+switches, rollback and local verification. `npm run verify:local -- incidents`
+exercises the local production build with disposable Auth/MFA fixtures.

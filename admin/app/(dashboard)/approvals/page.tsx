@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { getOperationalRole } from "@/lib/governance";
+import { promotionFilters } from "@/lib/promotion-model";
+import { PromotionRegister } from "@/components/workflows/promotion-register";
 import { createAdminClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
@@ -23,14 +27,21 @@ type AuditRow = {
 const HIGH_IMPACT = /delete|role|super_admin|broadcast|legal_hold|evidence|feature_flag|password_reset|csam/i;
 
 const REQUIRED_CONTROLS = [
-  { capability: "Super-admin promotion", current: "single authorized actor", target: "two independent AAL2 approvers", href: "/staff" },
+  { capability: "Super-admin promotion", current: "deployment-dependent enforcement", target: "AAL2 requester plus independent AAL2 approver", href: "/staff" },
   { capability: "Permanent member deletion", current: "single authorized actor", target: "approval plus legal-hold recheck", href: "/privacy" },
-  { capability: "Global broadcast", current: "single authorized actor", target: "preview, approval, idempotency key", href: "/broadcasts" },
+  { capability: "Global broadcast", current: "deployment-dependent enforcement", target: "exact preview, independent approval, idempotent publication", href: "/broadcasts" },
   { capability: "Sensitive evidence export", current: "reason and audit", target: "time-bound approval and download expiry", href: "/evidence-access" },
   { capability: "Critical kill-switch change", current: "single authorized actor", target: "four-eyes approval except emergency stop", href: "/flags" },
 ] as const;
 
-export default async function ApprovalsPage() {
+export default async function ApprovalsPage({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}) {
+  if(await getOperationalRole()!=="super_admin")notFound();
+  if(process.env.ADMIN_PROMOTION_APPROVALS_UI==="true") {
+    const filters=promotionFilters(await searchParams);
+    if(!filters)return <div><ErrorPanel title="Invalid approval filters" detail="Use a staff username prefix or restart the queue."/><Link href="/approvals" className="btn-secondary">Reset filters</Link></div>;
+    return <PromotionRegister filters={filters}/>;
+  }
+  if((await searchParams).source!==undefined)return <DataWarning title="Approval interface unavailable">This request requires the separately enabled approval interface. No unrelated record is shown.</DataWarning>;
   const db = await createAdminClient();
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const [auditResult, superAdmins] = await Promise.all([
@@ -50,7 +61,8 @@ export default async function ApprovalsPage() {
   const recent = ((auditResult.data ?? []) as AuditRow[])
     .filter((row) => HIGH_IMPACT.test(`${row.action} ${row.target_type}`))
     .slice(0, 50);
-  const errors = [auditResult.error, superAdmins.error].filter(Boolean).map((error) => error!.message);
+  const incomplete = Boolean(auditResult.error || superAdmins.error);
+  const activeSuperAdmins = superAdmins.error ? null : superAdmins.count;
 
   return (
     <div className="flex max-w-[1200px] flex-col gap-6">
@@ -61,27 +73,27 @@ export default async function ApprovalsPage() {
         actions={<Link href="/audit" className="btn-secondary">Open audit log</Link>}
       />
 
-      <DataWarning title="Two-person approval is not implemented yet">
-        There is no canonical approval request, independent approver, expiry, or
-        transactional consume-on-execution model in the database. The controls
-        below remain a production gate, not a functioning approval queue.
+      <DataWarning title="The promotion approval pilot is not visible here">
+        This legacy view does not establish whether database promotion enforcement
+        is enabled. The new queue is separately gated; hiding it does not disable
+        backend enforcement. Other high-impact approvals remain a production gap.
       </DataWarning>
 
-      {errors.length > 0 && <ErrorPanel title="Approval posture is incomplete" detail={errors.join("\n")} />}
+      {incomplete && <ErrorPanel title="Approval posture is incomplete" detail="One or more sources could not be loaded. Refresh to retry; missing evidence is not a healthy state." />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card>
           <p className="h-eyebrow">Active super admins</p>
           <div className="mt-2 flex items-center gap-2">
-            <p className="text-3xl font-extrabold text-burgundy">{superAdmins.count ?? "—"}</p>
-            <Badge tone={(superAdmins.count ?? 0) >= 2 ? "ok" : "danger"}>
-              {superAdmins.count === null ? "unknown" : (superAdmins.count ?? 0) >= 2 ? "redundant" : "single point"}
+              <p className="text-3xl font-extrabold text-burgundy">{activeSuperAdmins ?? "—"}</p>
+              <Badge tone={activeSuperAdmins === null ? "neutral" : activeSuperAdmins >= 2 ? "ok" : "danger"}>
+                {activeSuperAdmins === null ? "unknown" : activeSuperAdmins >= 2 ? "redundant" : "single point"}
             </Badge>
           </div>
         </Card>
         <Card>
           <p className="h-eyebrow">High-impact audit entries · 30d sample</p>
-          <p className="mt-2 text-3xl font-extrabold text-burgundy">{recent.length}</p>
+          <p className="mt-2 text-3xl font-extrabold text-burgundy">{auditResult.error ? "—" : recent.length}</p>
           <p className="mt-1 text-xs text-ink-muted">Latest 250 audit rows inspected; this is deliberately labelled a sample.</p>
         </Card>
       </div>
@@ -101,7 +113,7 @@ export default async function ApprovalsPage() {
 
       <Card title="Recent high-impact activity" hint="Metadata only; before/after snapshots are available in the restricted audit view" padded={false}>
         {recent.length === 0 ? (
-          <EmptyState icon={<Scale size={32} />} title="No matching audit activity returned." hint={errors.length ? "The source is incomplete." : "The latest audit sample contains no matching actions."} />
+          <EmptyState icon={<Scale size={32} />} title="No matching audit activity returned." hint={auditResult.error ? "The source is incomplete." : "The latest audit sample contains no matching actions."} />
         ) : (
           <ul className="divide-y divide-line">
             {recent.map((row) => (

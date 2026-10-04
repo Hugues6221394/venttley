@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { activeStaffRole } from "@/lib/staff";
-import { mapBounded } from "@/lib/bounded";
+import { reconcileBounded } from "@/lib/bounded";
+import { directoryFilters, directoryRoles, STAFF_PAGE_SIZE, staffDirectoryQuery } from "@/lib/staff-directory-model";
+import { StaffDirectoryFilters, StaffDirectoryPages } from "@/components/staff-directory-controls";
 import { createAdminClient, createRequiredAuthAdminClient, createSsrClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
@@ -9,10 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorPanel } from "@/components/ui/empty-state";
 import { CapabilityNotice, DataWarning } from "@/components/ui/operations";
 import { KeyRound } from "@/components/ui/icons";
+import { invitationCursor } from "@/lib/staff-invitation-model";
+import { StaffInvitationRegister } from "@/components/workflows/staff-invitation-register";
 
 export const dynamic = "force-dynamic";
 
-const STAFF_ROLES = ["super_admin", "admin", "moderator", "support", "analyst", "read_only_auditor"] as const;
+const STAFF_ROLES = directoryRoles;
 
 type StaffRow = {
   user_id: string;
@@ -39,35 +43,52 @@ function maskEmail(email: string | null): string {
   return `${visible}${"•".repeat(Math.max(3, Math.min(8, local.length - visible.length)))}@${domain}`;
 }
 
-export default async function StaffInvitationsPage() {
+export default async function StaffInvitationsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const ssr = await createSsrClient();
   const { data: { user: actor } } = await ssr.auth.getUser();
   if (!actor) notFound();
   const role = await activeStaffRole(ssr, actor.id, ["super_admin"]);
   if (role !== "super_admin") notFound();
+  const params = await searchParams;
+  if (process.env.ADMIN_INVITATION_LEDGER_UI === "true") {
+    const cursor = invitationCursor(params);
+    if (!cursor) return <div><ErrorPanel title="Invalid invitation cursor" detail="Restart the register to load recorded attempts." /><Link href="/staff/invitations" className="btn-secondary">Reset register</Link></div>;
+    return <StaffInvitationRegister cursor={cursor} />;
+  }
+  const filters = directoryFilters(params);
+  if (!filters) return <div><ErrorPanel title="Invalid staff filters" detail="Restart the invitation view with supported filters." /><Link href="/staff/invitations" className="btn-secondary">Reset staff filters</Link></div>;
 
   const db = await createAdminClient();
-  const staffResult = await db.from("users").select("user_id, display_name, anonymous_pseudonym, user_role, account_status, created_at", { count: "exact" }).in("user_role", STAFF_ROLES).order("created_at", { ascending: false }).limit(500);
-  const errors: string[] = staffResult.error ? [staffResult.error.message] : [];
+  const staffResult = await staffDirectoryQuery(db, filters);
+  const staff = (staffResult.error ? [] : (staffResult.data ?? []).slice(0, STAFF_PAGE_SIZE)) as StaffRow[];
+  const nextId = !staffResult.error && (staffResult.data?.length ?? 0) > STAFF_PAGE_SIZE ? staff.at(-1)?.user_id : undefined;
+  const errors: string[] = staffResult.error ? ["Staff records could not be loaded. Refresh to retry."] : [];
   const invitations: InviteRow[] = [];
 
   try {
-    const authAdmin = createRequiredAuthAdminClient();
-    const resolved = await mapBounded(
-      (staffResult.data ?? []) as StaffRow[],
-      10,
-      async (member) => ({
+    createRequiredAuthAdminClient(); // Credential readiness only.
+    let authAdmin: ReturnType<typeof createRequiredAuthAdminClient> | undefined;
+    const resolved = await reconcileBounded(
+      staff,
+      5,
+      6_000,
+      async (member, signal) => ({
         member,
-        auth: await authAdmin.auth.admin.getUserById(member.user_id),
+        auth: await (authAdmin ??= createRequiredAuthAdminClient(signal)).auth.admin.getUserById(member.user_id),
       }),
     );
-    for (const { member, auth } of resolved) {
+    for (const lookup of resolved) {
+      if (lookup.status !== "fulfilled") {
+        if (!errors.includes("Some Auth checks failed or timed out. Refresh to retry.")) errors.push("Some Auth checks failed or timed out. Refresh to retry.");
+        continue;
+      }
+      const { member, auth } = lookup.value;
       if (auth.error || !auth.data.user) {
         errors.push(`Auth record unavailable for staff ${member.user_id.slice(0, 8)}…`);
         continue;
       }
       const user = auth.data.user;
-      const pendingFlag = user.app_metadata.staff_invite_pending === true;
+      const pendingFlag = user.app_metadata?.staff_invite_pending === true;
       if (!pendingFlag && user.email_confirmed_at && user.last_sign_in_at) continue;
       invitations.push({
         ...member,
@@ -85,25 +106,27 @@ export default async function StaffInvitationsPage() {
   const pending = invitations.filter((row) => row.pendingFlag).length;
   const unconfirmed = invitations.filter((row) => !row.emailConfirmed).length;
   const acceptedNotCompleted = invitations.filter((row) => row.emailConfirmed && row.pendingFlag).length;
-  const truncated = (staffResult.count ?? 0) > 500;
+  const complete = errors.length === 0;
 
   return (
     <div className="flex max-w-[1150px] flex-col gap-6">
       <PageHeader eyebrow="Manage" title="Staff invitations" subtitle="Auth/database reconciliation for staff invitations without exposing member recovery data or listing the general Auth population." actions={<Link href="/staff" className="btn-secondary">Staff directory</Link>} />
-      <DataWarning title="This is not yet a canonical invitation ledger">
+      <DataWarning title="Canonical invitation tracking is not active">
         The view reconciles accounts already carrying a staff role. An Auth
         invitation whose role assignment failed cannot be discovered safely by
         scanning millions of unrelated users; that requires a dedicated ledger.
       </DataWarning>
-      {(errors.length > 0 || truncated) && <ErrorPanel title="Invitation picture is incomplete" detail={[...errors, ...(truncated ? ["Only the newest 500 staff records were inspected."] : [])].join("\n")} />}
+      <StaffDirectoryFilters filters={filters} path="/staff/invitations" />
+      <p className="text-xs text-ink-muted">The following KPIs cover only this page of inspected staff, not all invitations.</p>
+      {errors.length > 0 && <ErrorPanel title="Invitation picture is incomplete" detail={errors.join("\n")} />}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Metric label="Pending setup flag" value={pending} tone={pending > 0 ? "warn" : "ok"} />
-        <Metric label="Email unconfirmed" value={unconfirmed} tone={unconfirmed > 0 ? "warn" : "ok"} />
-        <Metric label="Accepted, setup incomplete" value={acceptedNotCompleted} tone={acceptedNotCompleted > 0 ? "danger" : "ok"} />
+        <Metric label="Pending setup flag" value={complete ? pending : null} tone={pending > 0 ? "warn" : "ok"} />
+        <Metric label="Email unconfirmed" value={complete ? unconfirmed : null} tone={unconfirmed > 0 ? "warn" : "ok"} />
+        <Metric label="Accepted, setup incomplete" value={complete ? acceptedNotCompleted : null} tone={acceptedNotCompleted > 0 ? "danger" : "ok"} />
       </div>
       <Card title="Incomplete staff onboarding" hint="Mailbox is masked; exact address remains available in the restricted staff directory" padded={false}>
         {invitations.length === 0 ? (
-          <EmptyState icon={<KeyRound size={32} />} title="No incomplete invitations returned." hint={errors.length || truncated ? "The reconciliation is incomplete, so this is not proof that none exist." : "Every resolved staff account has confirmed email, consumed setup state, and signed in."} />
+          <EmptyState icon={<KeyRound size={32} />} title="No incomplete invitations derived on this page." hint={errors.length ? "The reconciliation is incomplete, so this is not proof that none exist." : "Inspect subsequent pages for other staff. Accounts without an assigned staff role are not covered by this view."} />
         ) : (
           <ul className="divide-y divide-line">
             {invitations.map((row) => (
@@ -122,6 +145,7 @@ export default async function StaffInvitationsPage() {
           </ul>
         )}
       </Card>
+      <StaffDirectoryPages filters={filters} nextId={nextId} path="/staff/invitations" />
       <CapabilityNotice title="Resend, revoke, and reconcile controls remain unavailable">
         The backend phase must add an idempotency key, hashed invitation address,
         requested role, inviter, expiry, state transitions, cancellation,
@@ -133,6 +157,6 @@ export default async function StaffInvitationsPage() {
   );
 }
 
-function Metric({ label, value, tone }: { label: string; value: number; tone: "ok" | "warn" | "danger" }) {
-  return <Card><p className="h-eyebrow">{label}</p><div className="mt-1 flex items-center gap-2"><p className="text-3xl font-extrabold text-burgundy">{value}</p><Badge tone={tone}>{tone === "ok" ? "clear" : "review"}</Badge></div></Card>;
+function Metric({ label, value, tone }: { label: string; value: number | null; tone: "ok" | "warn" | "danger" }) {
+  return <Card><p className="h-eyebrow">{label} · this page</p><div className="mt-1 flex items-center gap-2"><p className="text-3xl font-extrabold text-burgundy">{value ?? "—"}</p><Badge tone={value === null ? "neutral" : tone}>{value === null ? "unknown" : tone === "ok" ? "none on this page" : "review"}</Badge></div></Card>;
 }
