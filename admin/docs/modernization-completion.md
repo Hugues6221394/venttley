@@ -26,6 +26,22 @@ but its operational release gates remain open. Do not turn “tests passed” in
 
 ## Verification commands
 
+### Local checkpoint 4 October 2026
+
+- The nine governance/security drafts are promoted to
+  `20261065090000`–`20261072090000` with pgTAP `0078`–`0086`.
+  `scripts/verify-migration-chain.sh`: 306 migrations, 1,858 assertions, 0 failed.
+- `verify:local -- all` reports `local_passed` with `controlsRestored: true`
+  across all 20 stages, including the first complete 82-route matrix
+  (656 role cases) with synthetic tribe and moderation-case fixtures.
+- The route matrix found staff reads that failed under the service role in
+  every environment: the moderation crisis tab, Control Center, user/tribe
+  post lists (`feed_posts`), and feed-integrity, system, session RPCs. Fixed.
+- Production steps and day-one scope: [launch runbook](launch-runbook.md).
+
+This is local evidence. Staging load, on-call ownership, external monitoring
+and production enablement remain open.
+
 ### Local checkpoint 2 October 2026
 
 Governance notice code and exact-request links are now implemented behind
