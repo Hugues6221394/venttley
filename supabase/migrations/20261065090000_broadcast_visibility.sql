@@ -1,4 +1,4 @@
--- UNAPPLIED SECURITY DRAFT. Generate an ordered CLI migration and verify first.
+-- Members only ever read global, active, sent, unexpired broadcasts.
 -- Independent of approval rollout: rollback must not reopen audience leakage.
 BEGIN;
 DROP POLICY IF EXISTS "broadcasts public read" ON public.broadcasts;

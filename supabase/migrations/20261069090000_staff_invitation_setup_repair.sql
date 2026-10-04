@@ -1,6 +1,6 @@
--- UNAPPLIED DRAFT. Requires staff_invitation_ledger.sql and existing receipt,
--- audit, current_auth_session_id and require_aal2 helpers. Promote via CLI only
--- after replay, grants, Auth compatibility and adversarial testing.
+-- Narrow repair for staff invitations whose setup stalled. Ships disabled.
+-- Requires 20261068090000_staff_invitation_ledger and the existing receipt,
+-- audit, current_auth_session_id and require_aal2 helpers.
 BEGIN;
 ALTER TABLE private.staff_invitation_control
   ADD COLUMN setup_repair_enabled BOOLEAN NOT NULL DEFAULT false;

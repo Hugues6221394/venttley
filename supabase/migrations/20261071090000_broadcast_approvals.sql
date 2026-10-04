@@ -1,5 +1,5 @@
--- UNAPPLIED DRAFT. CLI promotion, dependency review and runtime tests required.
--- Depends on operational governance receipts and staff_promotion_approvals.sql
+-- Two-person approval for global broadcasts. Ships disabled (broadcast_approval_control).
+-- Depends on operational governance receipts and 20261070090000_staff_promotion_approvals
 -- (authority revisions). No scheduling, targeted audiences or push delivery.
 BEGIN;
 CREATE TABLE private.broadcast_approval_control (
@@ -180,7 +180,8 @@ BEGIN
      -- Same canonical publication table, not a second delivery system. Do not
      -- reuse legacy admin_send_broadcast's content-bearing audit payload.
      INSERT INTO public.broadcasts(broadcast_id,title,body,urgency,audience,sent_at,expires_at,sent_by)
-     VALUES(publication,a.title,a.body,a.urgency,'{"scope":"all"}',clock_timestamp(),a.publication_expires_at,actor);
+     -- now(), not clock_timestamp(): the read policy compares sent_at with now().
+    VALUES(publication,a.title,a.body,a.urgency,'{"scope":"all"}',now(),a.publication_expires_at,actor);
      DELETE FROM private.broadcast_approval_permits WHERE transaction_id=txid_current();
      UPDATE private.broadcast_approvals SET state='published',broadcast_id=publication,published_at=clock_timestamp(),version=version+1 WHERE approval_id=p_approval;
    END IF;

@@ -37,7 +37,7 @@ for(const command of ['retain','require_revocation','confirm_revoked','refresh',
 }
 await assert.rejects(actions.commandAccessReview(fd({command:'delete'})),/command/);
 await assert.rejects(actions.commandAccessReview(fd({campaign_id:'hostile'})),/campaign_id/);
-const sql=await readFile(new URL('../../supabase/pending/access_review_ledger.sql',import.meta.url),'utf8');
+const sql=await readFile(new URL('../../supabase/migrations/20261067090000_access_review_ledger.sql',import.meta.url),'utf8');
 assert(sql.includes('DEFAULT false'));assert(sql.includes('private.admin_operation_existing'));
 assert(sql.includes('FOR UPDATE'));assert(sql.includes('i.version<>p_version'));
 assert(!sql.includes('UPDATE public.users'),'review records never pretend to perform staff revocation');

@@ -1,4 +1,4 @@
--- UNAPPLIED DRAFT. Promote with Supabase CLI and verify before enabling.
+-- Staff invitation ledger. Ships disabled; enable only after console verification.
 -- Requires 20261029090000_operational_governance_workflows. No email/token stored.
 BEGIN;
 CREATE TABLE private.staff_invitation_control(singleton BOOLEAN PRIMARY KEY DEFAULT true CHECK(singleton),enabled BOOLEAN NOT NULL DEFAULT false);

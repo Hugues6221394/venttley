@@ -1,5 +1,5 @@
--- UNAPPLIED DRAFT. Promote using `supabase migration new` only after local
--- verification. Must run AFTER 20261029090000_operational_governance_workflows.
+-- Staff access review ledger. Ships disabled (access_review_control.enabled).
+-- Must run AFTER 20261029090000_operational_governance_workflows.
 -- No Auth writes or privilege changes: revoke_required is work, not revocation.
 BEGIN;
 

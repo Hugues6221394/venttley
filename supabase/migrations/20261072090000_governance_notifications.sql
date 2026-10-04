@@ -1,6 +1,6 @@
--- UNAPPLIED DRAFT: promote with the CLI only after dependency/order review.
+-- Governance events in the staff inbox. Ships disabled (governance_events_enabled).
 -- Requires access_review_ledger, staff_promotion_approvals, broadcast_approvals,
--- and the latest active staff inbox migrations. No production enablement here.
+-- and the staff inbox migrations through 20261029090011_incident_notifications.
 BEGIN;
 ALTER TABLE private.staff_inbox_control ADD COLUMN governance_events_enabled BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE private.staff_event_outbox DROP CONSTRAINT staff_event_outbox_kind_check;

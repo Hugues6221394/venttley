@@ -1,4 +1,4 @@
--- UNAPPLIED DRAFT. Promote via CLI after dependency/order review and live tests.
+-- Two-person approval for staff promotions. Ships disabled (promotion_control).
 -- Requires operational governance receipts/audit and existing admin_set_user_role.
 BEGIN;
 CREATE TABLE private.promotion_control(singleton BOOLEAN PRIMARY KEY DEFAULT true CHECK(singleton),enabled BOOLEAN NOT NULL DEFAULT false);

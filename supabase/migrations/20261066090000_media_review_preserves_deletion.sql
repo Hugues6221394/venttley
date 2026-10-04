@@ -1,4 +1,4 @@
--- UNAPPLIED SECURITY DRAFT. Preserve existing RPC signature; no data rewrite.
+-- Media review can never resurrect deleted media. Same RPC signature; no data rewrite.
 -- Requires current_auth_session_id and require_aal2 from existing hardening.
 BEGIN;
 CREATE OR REPLACE FUNCTION public.admin_set_media_status(p_kind TEXT,p_id UUID,p_status TEXT,p_reason TEXT DEFAULT NULL)

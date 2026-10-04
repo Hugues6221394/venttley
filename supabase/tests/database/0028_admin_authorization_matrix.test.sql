@@ -37,7 +37,9 @@ SELECT is(
 -- ---------------------------------------------------------------------------
 -- 2. Every admin_* function decides for itself who may call it. A GRANT to
 --    `authenticated` is not authorization — every member of the app holds that
---    role — so the body must consult the caller's staff role.
+--    role — so the body must consult the caller's staff role, either directly
+--    or through a private.require_* guard whose own body does. The guard is
+--    inspected too: naming a helper require_* proves nothing on its own.
 -- ---------------------------------------------------------------------------
 SELECT is(
   (SELECT COALESCE(string_agg(p.proname, ', ' ORDER BY p.proname), '')
@@ -46,7 +48,13 @@ SELECT is(
       AND p.proname LIKE 'admin\_%'
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
       AND p.prosrc NOT ILIKE '%is_staff%'
-      AND p.prosrc NOT ILIKE '%user_role%'),
+      AND p.prosrc NOT ILIKE '%user_role%'
+      AND NOT EXISTS (
+        SELECT 1
+          FROM regexp_matches(p.prosrc, 'private\.(require_[a-z0-9_]+)\s*\(', 'gi') m
+          JOIN pg_proc g ON g.proname = lower(m[1])
+          JOIN pg_namespace gn ON gn.oid = g.pronamespace AND gn.nspname = 'private'
+         WHERE g.prosrc ILIKE '%is_staff%' OR g.prosrc ILIKE '%user_role%')),
   '', 'every admin_* function reachable by a signed-in caller checks the caller''s role'
 );
 
