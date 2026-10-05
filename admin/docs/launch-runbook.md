@@ -59,6 +59,7 @@ exactly as before.
 | `ADMIN_ORIGIN_SECRET` + `ADMIN_IP_ALLOWLIST` | set together, per DEPLOY.md |
 | `ADMIN_INVITATION_HMAC_KEY` | 64 hex characters, stable, never rotated casually |
 | `ADMIN_SHELL_V2`, `ADMIN_OVERVIEW_V2`, `ADMIN_THEME_UI` | `true` (owner-approved 5 Oct), `ADMIN_SHELL_V2_ROLES=super_admin` |
+| `ADMIN_INBOX_UI`, `ADMIN_ATTENTION_UI` | `true` (owner-approved 5 Oct); producers stay off until a super admin enables them on `/system` → Staff notifications (MFA, audited) |
 | Every other `ADMIN_*_UI` flag | `false` |
 
 ## 4. Smoke test after deploy (owner + engineering)
