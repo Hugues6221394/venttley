@@ -36,6 +36,7 @@ import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../widgets/user_link.dart';
 import '../../../data/services/whisper_recorder.dart';
+import '../../widgets/voice_note_composer.dart';
 import '../../theme/glass_tokens.dart';
 import '../../widgets/tagged_text.dart';
 
@@ -642,8 +643,18 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
         }
         return;
       }
+      // Same offer as a DM, and for a stronger reason: a voice note here is
+      // heard by a whole tribe rather than one person, so the voice goes
+      // further than any other thing a member posts.
+      final composed = await showVoiceNoteComposer(
+        context,
+        recorded: result.bytes,
+        seconds: result.duration.inSeconds.clamp(1, 300),
+      );
+      if (composed == null || !mounted) return;
       setState(() => _sending = true);
-      final durationSeconds = result.duration.inSeconds.clamp(1, 300);
+      final voiceBytes = composed.bytes;
+      final durationSeconds = composed.seconds;
       final operationId = OutboxService.newOperationId();
       final outbox = await ref.read(outboxProvider.future);
       StagedOutboxMedia? stagedMedia;
@@ -652,7 +663,7 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
       try {
         stagedMedia = await outbox.stageMedia(
           operationId: operationId,
-          bytes: result.bytes,
+          bytes: voiceBytes,
           extension: 'm4a',
           contentType: 'audio/mp4',
           mediaType: 'audio',
@@ -660,7 +671,7 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
         );
         final upload = await ref
             .read(repositoryProvider)
-            .uploadTribeChatAudio(bytes: result.bytes);
+            .uploadTribeChatAudio(bytes: voiceBytes);
         audioPath = upload.path;
         audioUrl = upload.url;
         await ref

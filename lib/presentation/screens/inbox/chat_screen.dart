@@ -18,6 +18,7 @@ import '../../../data/services/moderation_service.dart';
 import '../../../data/services/outbox.dart';
 import '../../../data/services/whisper_recorder.dart';
 import '../../widgets/chat_audio_bubble.dart';
+import '../../widgets/voice_note_composer.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/report_reason_sheet.dart';
@@ -216,7 +217,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       setState(() => _recordingVoice = false);
       final result = await WhisperRecorder.instance.stop();
       if (result == null || !mounted) return;
-      final durationSeconds = result.duration.inSeconds.clamp(1, 300);
+      final recordedSeconds = result.duration.inSeconds.clamp(1, 300);
+
+      // Offered before it is sent, not after. A voice note is the one thing in
+      // here that cannot be pseudonymous — a handle can be anything and a face
+      // can be drawn, and then thirty seconds of audio hands over gender, age,
+      // accent and region to somebody met an hour ago. The filter is applied
+      // on the device, so what gets uploaded is already the disguised version
+      // and the original never leaves.
+      final composed = await showVoiceNoteComposer(
+        context,
+        recorded: result.bytes,
+        seconds: recordedSeconds,
+      );
+      // Dismissed means "not this one". Nothing is sent, and nothing was
+      // uploaded on the way to asking.
+      if (composed == null || !mounted) return;
+      final voiceBytes = composed.bytes;
+      final durationSeconds = composed.seconds;
       final operationId = OutboxService.newOperationId();
       final outbox = await ref.read(outboxProvider.future);
       StagedOutboxMedia? stagedMedia;
@@ -224,7 +242,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       try {
         stagedMedia = await outbox.stageMedia(
           operationId: operationId,
-          bytes: result.bytes,
+          bytes: voiceBytes,
           extension: 'm4a',
           contentType: 'audio/mp4',
           mediaType: 'audio',
@@ -234,7 +252,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             .read(repositoryProvider)
             .uploadChatAudio(
               roomId: widget.roomId,
-              bytes: result.bytes,
+              bytes: voiceBytes,
               durationSeconds: durationSeconds,
             );
         mediaPath = up.path;

@@ -99,7 +99,14 @@ class WhisperVoiceProcessor {
         'acrusher=bits=6:mix=0.65,'
         'chorus=0.5:0.9:35:0.35:0.25:2',
     'echo': 'aecho=0.8:0.7:70|140:0.35|0.2',
-    'synth': 'chorus=0.6:0.9:20|40:0.35|0.25:0.25|0.4',
+    // chorus takes in_gain:out_gain:delays:decays:speeds:depths — six fields,
+    // and every list among them the same length. This shipped with five:
+    // depths was missing outright, so ffmpeg answered "Error initializing
+    // filters" and the processor turned that into "Voice processing failed".
+    // Synth has never produced audio, here or in a whisper, since the day it
+    // was added — nothing exercised it, because the filters only run on a
+    // device and nothing ran them there.
+    'synth': 'chorus=0.6:0.9:20|40:0.35|0.25:0.25|0.4:2|2.5',
     'dark':
         'asetrate=44100*0.70,aresample=44100,atempo=1.4285714,'
         'lowpass=f=3000,aecho=0.8:0.65:55:0.18',
