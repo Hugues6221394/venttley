@@ -63,6 +63,66 @@ class _PersonaliseScreenState extends ConsumerState<PersonaliseScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Tapping the face asks what kind of face.
+  ///
+  /// Designing one comes first and a photograph second, which is the order
+  /// this app is in: it is pseudonymous, and the whole point of the avatar
+  /// studio is that somebody can look like themselves without being
+  /// identifiable. A gallery picker offered on its own quietly suggests the
+  /// opposite.
+  Future<void> _chooseFace() async {
+    if (_busy) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const ValueKey('personalise-design-avatar'),
+              leading: const Icon(Icons.face_retouching_natural_rounded),
+              title: const Text('Design your avatar'),
+              subtitle: const Text('Skin, hair, beard and what you wear'),
+              onTap: () => Navigator.pop(ctx, 'design'),
+            ),
+            ListTile(
+              key: const ValueKey('personalise-ready-made'),
+              leading: const Icon(Icons.auto_awesome_rounded),
+              title: const Text('Pick a ready-made face'),
+              subtitle: const Text('Ten to choose from'),
+              onTap: () => Navigator.pop(ctx, 'preset'),
+            ),
+            ListTile(
+              key: const ValueKey('personalise-upload-photo'),
+              leading: const Icon(Icons.photo_outlined),
+              title: const Text('Upload a photo'),
+              onTap: () => Navigator.pop(ctx, 'photo'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case 'design':
+        await context.push('/avatar/design');
+      case 'preset':
+        await context.push('/avatar');
+      case 'photo':
+        await _pickPhoto();
+    }
+    if (!mounted) return;
+    // Both avatar routes write through the session controller, so the row this
+    // screen draws from is already current — but the screen is rebuilt from a
+    // provider that was read before the push.
+    await ref.read(sessionProvider.notifier).restore();
+    if (mounted && (ref.read(sessionProvider)?.profilePhotoUrl ?? '').isNotEmpty) {
+      setState(() => _photoSaved = true);
+    }
+  }
+
   Future<void> _pickPhoto() async {
     if (_busy) return;
     final picked = await ImagePicker().pickImage(
@@ -280,7 +340,7 @@ class _PersonaliseScreenState extends ConsumerState<PersonaliseScreen> {
               _BannerAndAvatar(
                 me: me,
                 busy: _busy,
-                onPickPhoto: _pickPhoto,
+                onPickPhoto: _chooseFace,
                 onPickBanner: _pickBanner,
               ),
 

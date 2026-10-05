@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/providers.dart';
@@ -347,6 +348,26 @@ class _PersonaEditorState extends ConsumerState<_PersonaEditor> {
     return !_busy && n.length >= 2 && RegExp(r'^[A-Za-z0-9_]+$').hasMatch(n);
   }
 
+  /// Design this persona's own face.
+  ///
+  /// The studio writes through set_avatar_config with the persona id, so the
+  /// face and the config land on the persona row rather than the account's.
+  Future<void> _designAvatar() async {
+    final persona = widget.persona;
+    if (persona == null || _busy) return;
+    await context.push('/avatar/design?persona=${persona.personaId}');
+    if (!mounted) return;
+    ref.invalidate(myPersonasProvider);
+    final fresh = await ref.read(myPersonasProvider.future);
+    if (!mounted) return;
+    setState(() {
+      _photoUrl = fresh
+          .where((p) => p.personaId == persona.personaId)
+          .firstOrNull
+          ?.profilePhotoUrl;
+    });
+  }
+
   Future<void> _pickPhoto() async {
     final persona = widget.persona;
     if (persona == null) {
@@ -419,12 +440,18 @@ class _PersonaEditorState extends ConsumerState<_PersonaEditor> {
     try {
       final repo = ref.read(repositoryProvider);
       final bio = _bio.text.trim();
+      String? designFor;
       if (_isNew) {
-        await repo.createPersona(
+        // A persona is a different person, so it wants a different face. The
+        // studio opens on the one just created rather than being something to
+        // find later — a persona that looks identical to the account is the
+        // failure mode worth designing against.
+        final created = await repo.createPersona(
           pseudonym: name,
           avatarSeed: _seed,
           bio: bio.isEmpty ? null : bio,
         );
+        designFor = created.personaId;
       } else {
         await repo.updatePersona(
           personaId: widget.persona!.personaId,
@@ -436,6 +463,10 @@ class _PersonaEditorState extends ConsumerState<_PersonaEditor> {
       }
       ref.invalidate(myPersonasProvider);
       navigator.pop();
+      if (designFor != null && mounted) {
+        await context.push('/avatar/design?persona=$designFor');
+        ref.invalidate(myPersonasProvider);
+      }
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
@@ -491,6 +522,16 @@ class _PersonaEditorState extends ConsumerState<_PersonaEditor> {
                       spacing: 8,
                       runSpacing: 6,
                       children: [
+                        if (!_isNew)
+                          OutlinedButton.icon(
+                            key: const ValueKey('persona-design-avatar'),
+                            onPressed: _busy ? null : _designAvatar,
+                            icon: const Icon(
+                              Icons.face_retouching_natural_rounded,
+                              size: 17,
+                            ),
+                            label: const Text('Design avatar'),
+                          ),
                         OutlinedButton.icon(
                           key: const ValueKey('persona-photo'),
                           onPressed: _busy ? null : _pickPhoto,

@@ -139,6 +139,101 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a persona carries its own face, not the account’s', (
+    tester,
+  ) async {
+    await Supabase.initialize(url: _url, anonKey: _anonKey, debug: false);
+    final client = Supabase.instance.client;
+    await client.auth.signInWithPassword(email: _email, password: _password);
+    final uid = client.auth.currentUser!.id;
+
+    // Letters and digits only — the pseudonym column refuses anything else.
+    final persona = await client.rpc(
+      'create_persona',
+      params: {
+        'p_pseudonym': 'facetest${DateTime.now().millisecondsSinceEpoch % 100000}',
+        'p_avatar_seed': 'persona-facetest',
+        'p_bio': null,
+      },
+    );
+    final personaId = (persona as Map)['persona_id'] as String;
+    addTearDown(() async {
+      await client.rpc('delete_persona', params: {'p_persona_id': personaId});
+    });
+
+    // Deliberately nothing like the look the account wears, so "the persona
+    // got its own face" cannot pass by the two simply being equal.
+    const look = AvatarLook(
+      skin: 's06',
+      hair: 'hair_04',
+      hairTint: 'grey',
+      beard: null,
+      top: 'top_01',
+      topTint: 'moss',
+    );
+    final png = await AvatarBaker.bake(look);
+    final path = '$uid/persona-$personaId.png';
+    await client.storage
+        .from('profile-photos')
+        .uploadBinary(
+          path,
+          png,
+          fileOptions: const FileOptions(
+            contentType: 'image/png',
+            upsert: true,
+          ),
+        );
+    await client.rpc(
+      'set_avatar_config',
+      params: {
+        'p_config': look.toConfig(),
+        'p_photo_url': client.storage.from('profile-photos').getPublicUrl(path),
+        'p_persona_id': personaId,
+        'p_avatar_path': path,
+      },
+    );
+
+    final row = await client
+        .from('personas')
+        .select('avatar_config, profile_photo_url')
+        .eq('persona_id', personaId)
+        .single();
+    expect(AvatarLook.tryParse(row['avatar_config']), look);
+    expect(row['profile_photo_url'], contains(personaId));
+
+    // And the account's own face is untouched by it.
+    final me = await client
+        .from('users')
+        .select('avatar_config')
+        .eq('user_id', uid)
+        .single();
+    expect(
+      AvatarLook.tryParse(me['avatar_config']),
+      isNot(look),
+      reason: 'designing a persona overwrote the account’s own avatar',
+    );
+  });
+
+  testWidgets('a persona belonging to somebody else cannot be dressed', (
+    tester,
+  ) async {
+    await Supabase.initialize(url: _url, anonKey: _anonKey, debug: false);
+    final client = Supabase.instance.client;
+    await client.auth.signInWithPassword(email: _email, password: _password);
+    try {
+      await client.rpc(
+        'set_avatar_config',
+        params: {
+          'p_config': const AvatarLook(skin: 's01').toConfig(),
+          'p_persona_id': '00000000-0000-0000-0000-000000000000',
+        },
+      );
+      fail('dressed a persona that is not ours');
+    } on PostgrestException catch (e) {
+      expect(e.message, contains('persona not found'));
+    }
+  });
+
   testWidgets('the server refuses a look the app would never build', (
     tester,
   ) async {

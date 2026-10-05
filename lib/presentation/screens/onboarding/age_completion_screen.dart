@@ -50,7 +50,21 @@ class _AgeCompletionScreenState extends ConsumerState<AgeCompletionScreen> {
       await ref
           .read(sessionProvider.notifier)
           .completeAgeVerification(birthDate);
-      if (mounted) context.go('/feed');
+      if (!mounted) return;
+      // Finish signing up rather than landing straight in the feed.
+      //
+      // This screen is only ever shown to an account with no birth year, which
+      // is a brand new one that arrived through Google, Apple or a phone
+      // number — the handle-and-password routes collect it in the form. Those
+      // routes then pass through /onboarding/personalise and are offered a
+      // face; these went to the homepage and were never asked, so everybody
+      // who signed in with a provider met the feed as a letter on a colour.
+      //
+      // Guarded on actually having no face, so it cannot catch somebody who
+      // already has one, and personalise is skippable either way.
+      final me = ref.read(sessionProvider);
+      final hasFace = (me?.profilePhotoUrl ?? '').isNotEmpty;
+      context.go(hasFace ? '/feed' : '/onboarding/personalise');
     } catch (error) {
       final raw = error.toString().toLowerCase();
       if (!mounted) return;

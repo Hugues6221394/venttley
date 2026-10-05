@@ -119,7 +119,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Consent is still enforced: if the acceptance write genuinely failed,
       // these two screens pass and /feed catches it.
       final finishingSignup =
-          path == '/onboarding/key' || path == '/onboarding/personalise';
+          path == '/onboarding/key' ||
+          path == '/onboarding/personalise' ||
+          path == '/avatar/design';
       if (pendingMfa != null && !onMfa && !legalRoute) {
         return '/onboarding/mfa';
       }
@@ -271,6 +273,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding/personalise',
         builder: (_, __) => const PersonaliseScreen(),
+      ),
+      // The studio again, outside the tab shell.
+      //
+      // /profile/avatar sits in the profile branch, so pushing it from signup
+      // would mount the whole tabbed app underneath — a bottom navigation bar
+      // appearing behind a screen somebody reaches before they have an
+      // account is not a shell being clever, it is a signup flow leaking. The
+      // persona editor is a bottom sheet and wants the same thing.
+      //
+      // ?persona=<id> designs that persona's face instead of the account's.
+      GoRoute(
+        path: '/avatar/design',
+        builder: (ctx, st) => AvatarStudioScreen(
+          personaId: st.uri.queryParameters['persona'],
+        ),
       ),
       GoRoute(
         path: '/onboarding/consent',
