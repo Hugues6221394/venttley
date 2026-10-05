@@ -296,7 +296,7 @@
   --operator-ink: var(--theme-heading);
   --operator-muted: var(--theme-muted);
   --operator-active: var(--theme-active);
-  --shell-sidebar-width: 256px;
+  --shell-sidebar-width: 268px;
   display: flex; min-height: 100dvh;
   background: var(--theme-sidebar); color: var(--theme-copy);
 }
@@ -746,3 +746,6 @@
    immature at operator densities. Semibold carries hierarchy instead. */
 .font-extrabold { font-weight: 650; }
 .text-burgundy.font-bold { font-weight: 600; }
+.surface.border-l-4, .card.border-l-4 { border-left-width: 3px; }
+.operator-metric p { color: var(--theme-muted); }
+.operator-group-button { gap: 9px; }
