@@ -122,8 +122,8 @@ function CaseCard({
   const resolved = row.status === "resolved";
 
   return (
-    <article className="surface p-5">
-      <header className="flex flex-wrap items-center gap-2 mb-3">
+    <article className="surface case-card">
+      <header className="case-card-header">
         <Badge tone={SEVERITY_TONE[row.severity] ?? "neutral"} icon={<ShieldAlert size={11} />}>
           {row.severity}
         </Badge>
@@ -136,9 +136,9 @@ function CaseCard({
         )}
         {row.legal_hold && <Badge tone="danger">legal hold</Badge>}
         {row.subject_pseudonym && (
-          <span className="text-xs text-ink-muted">@{row.subject_pseudonym}</span>
+          <span className="case-card-author">@{row.subject_pseudonym}</span>
         )}
-        <SlaBadge row={row} />
+        <span className="case-card-sla"><SlaBadge row={row} /></span>
       </header>
 
       <Evidence
@@ -149,22 +149,23 @@ function CaseCard({
         revealHref={revealHref}
       />
 
-      <p className="text-[11px] text-ink-muted mt-2">
-        opened {new Date(row.opened_at).toLocaleString()}
-        {row.assignee_pseudonym
-          ? ` · assigned to @${row.assignee_pseudonym}`
-          : " · unassigned"}
-      </p>
-
-      <div className="mt-3">
+      <div className="case-card-meta">
+        <p>
+          Opened {new Date(row.opened_at).toLocaleString()}
+          {row.assignee_pseudonym
+            ? ` · assigned to @${row.assignee_pseudonym}`
+            : " · unassigned"}
+        </p>
         <Link href={`/moderation/cases/${row.case_id}`} className="btn-ghost">
           Open case dossier
         </Link>
       </div>
 
       {!resolved && (
-        <div className="mt-4 flex flex-col gap-2 pt-4 border-t border-line">
-          <div className="flex flex-wrap gap-2">
+        <section className="case-decide" aria-label="Decide">
+          <div className="case-decide-head">
+            <h3 className="h-eyebrow">Decide</h3>
+            <div className="flex flex-wrap gap-2">
             {!row.assignee_id && (
               <form action={onClaim}>
                 <input type="hidden" name="case_id" value={row.case_id} />
@@ -187,11 +188,12 @@ function CaseCard({
                 Escalate
               </button>
             </form>
+            </div>
           </div>
 
           {/* One decision form. The decision is recorded AND carried out by
               admin_decide_case in a single transaction. */}
-          <form action={onDecide} className="flex flex-wrap items-end gap-2">
+          <form action={onDecide} className="case-decide-form">
             <input type="hidden" name="case_id" value={row.case_id} />
             <div>
               <label className="h-eyebrow block mb-1">Decision</label>
@@ -239,7 +241,7 @@ function CaseCard({
             them. Suspend, shadow-restrict, ban, and remove take effect in the
             same database transaction as the recorded decision.
           </p>
-        </div>
+        </section>
       )}
     </article>
   );
