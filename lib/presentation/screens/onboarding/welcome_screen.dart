@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../theme/colors.dart';
-import '../../theme/glass_tokens.dart';
+import '../../widgets/auth_entry_methods.dart';
 import '../../widgets/onboarding_backdrop.dart';
 import '../../widgets/venttly_logo.dart';
 import '../../widgets/welcome_carousel.dart';
@@ -104,7 +104,7 @@ class WelcomeScreen extends StatelessWidget {
                                   ),
                             ),
                             const SizedBox(height: 20),
-                            const _Promises(),
+                            const WelcomeAuthMarks(),
                             SizedBox(
                               height: constraints.maxHeight < 760 ? 16 : 22,
                             ),
@@ -191,83 +191,6 @@ class _WelcomeLogo extends StatelessWidget {
   }
 }
 
-class _Promises extends StatelessWidget {
-  const _Promises();
-
-  // Three columns, not three stacked rows with a paragraph each.
-  //
-  // The panel below this used to be 200 points tall and pushed the only button
-  // that matters off the first screenful. Nobody reads three paragraphs before
-  // deciding whether to try an app; they check that it is safe and get on with
-  // it. Same three promises, a third of the height.
-  static const _items = [
-    (Icons.lock_outline_rounded, 'Pseudonymous', 'No email needed'),
-    (Icons.auto_awesome_outlined, 'Stories & tribes', 'Spaces that feel alive'),
-    (Icons.shield_outlined, 'Safety first', 'Rules the server keeps'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Berry on near-black reads as dim maroon — the tile all but disappears and
-    // the glyph inside it looks switched off. On a dark canvas the tile takes
-    // GlassTokens.panel, the same light grey slab the profile cards already use
-    // behind Find Friends, with the berry glyph on top of it. Not a white wash
-    // at low alpha, which on this canvas is still nearly black.
-    final tile = isDark
-        ? GlassTokens.panel(context)
-        : scheme.primary.withValues(alpha: 0.10);
-    final glyph = scheme.primary;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (icon, title, sub) in _items)
-          Expanded(
-            child: Column(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: tile,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(icon, size: 21, color: glyph),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    color: context.ink,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  sub,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 11,
-                    height: 1.3,
-                    fontWeight: FontWeight.w600,
-                    color: context.ink.withValues(alpha: 0.55),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// The page's 24pt side margin.
-///
-/// Applied per child rather than on the scroll view, because the carousel has
-/// to reach both edges and a child cannot escape its parent's padding.
 class _Gutter extends StatelessWidget {
   const _Gutter({required this.child});
 

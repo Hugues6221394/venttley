@@ -308,3 +308,171 @@ class _GoogleButton extends StatelessWidget {
     );
   }
 }
+
+/// The three ways in, as marks rather than rows.
+///
+/// The welcome screen used to spend this space on three promises —
+/// Pseudonymous, Stories & tribes, Safety first. They were true and nobody
+/// needed them there: somebody on the first screen of an app they have just
+/// installed is deciding whether to start, not reading a feature list, and the
+/// ways to actually start were one screen further in.
+///
+/// Marks, not full-width buttons, because three stacked bars here would push
+/// "Step into the Circle" under the fold on a small phone — and that button is
+/// the one this app is for. The full-width versions still live on sign-in and
+/// sign-up, where somebody has already decided which door they want.
+class WelcomeAuthMarks extends ConsumerStatefulWidget {
+  const WelcomeAuthMarks({super.key});
+
+  @override
+  ConsumerState<WelcomeAuthMarks> createState() => _WelcomeAuthMarksState();
+}
+
+class _WelcomeAuthMarksState extends ConsumerState<WelcomeAuthMarks> {
+  String? _busy;
+
+  Future<void> _start(
+    String provider,
+    Future<bool> Function(SessionController session) begin,
+    String name,
+  ) async {
+    if (_busy != null) return;
+    setState(() => _busy = provider);
+    try {
+      await begin(ref.read(sessionProvider.notifier));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '$name sign-in unavailable: '
+              '${e.toString().replaceFirst('Exception: ', '')}',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // The same question the full-width row asks, so the two can never offer
+    // different providers.
+    final providers =
+        ref.watch(enabledAuthProvidersProvider).valueOrNull ?? const <String>{};
+
+    final marks = <Widget>[
+      if (providers.contains('google'))
+        _AuthMark(
+          id: 'google',
+          label: 'Continue with Google',
+          busy: _busy == 'google',
+          disabled: _busy != null,
+          onTap: () => _start('google', (s) => s.signInWithGoogle(), 'Google'),
+          child: SvgPicture.asset(
+            'assets/images/google_g.svg',
+            width: 24,
+            height: 24,
+          ),
+        ),
+      if (providers.contains('apple'))
+        _AuthMark(
+          id: 'apple',
+          label: 'Continue with Apple',
+          busy: _busy == 'apple',
+          disabled: _busy != null,
+          onTap: () => _start('apple', (s) => s.signInWithApple(), 'Apple'),
+          child: SvgPicture.asset(
+            'assets/images/apple_logo.svg',
+            width: 21,
+            height: 25,
+            colorFilter: ColorFilter.mode(
+              Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white
+                  : Colors.black,
+              BlendMode.srcIn,
+            ),
+          ),
+        ),
+      // Always offered. It is the one door that does not depend on anybody
+      // else's service being configured, or reachable.
+      _AuthMark(
+        id: 'email',
+        label: 'Continue with email',
+        busy: false,
+        disabled: _busy != null,
+        onTap: () => context.push('/onboarding/email'),
+        child: Icon(
+          Icons.mail_outline_rounded,
+          size: 24,
+          color: context.ink.withValues(alpha: 0.82),
+        ),
+      ),
+    ];
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (final (i, mark) in marks.indexed) ...[
+          if (i > 0) const SizedBox(width: 18),
+          mark,
+        ],
+      ],
+    );
+  }
+}
+
+class _AuthMark extends StatelessWidget {
+  const _AuthMark({
+    required this.id,
+    required this.label,
+    required this.child,
+    required this.onTap,
+    required this.busy,
+    required this.disabled,
+  });
+
+  final String id;
+  final String label;
+  final Widget child;
+  final VoidCallback onTap;
+  final bool busy;
+  final bool disabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      // The mark alone says it to anybody who can see it. A screen reader gets
+      // the whole sentence.
+      label: label,
+      child: Material(
+        color: scheme.primary.withValues(alpha: 0.05),
+        shape: CircleBorder(
+          side: BorderSide(color: scheme.primary.withValues(alpha: 0.18)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: ValueKey('welcome-auth-$id'),
+          onTap: disabled ? null : onTap,
+          customBorder: const CircleBorder(),
+          child: SizedBox.square(
+            dimension: 58,
+            child: Center(
+              child: busy
+                  ? const SizedBox(
+                      width: 19,
+                      height: 19,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
