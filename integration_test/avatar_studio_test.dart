@@ -28,6 +28,19 @@ import 'package:vently_app/presentation/widgets/avatar_look_view.dart';
 const _url = String.fromEnvironment('SUPABASE_URL');
 const _anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
+/// Which account to sign in as. Defaults to the local seeded tester; pass
+/// --dart-define=TEST_EMAIL/TEST_PASSWORD to run the same checks against the
+/// production project, where the seeded community has different handles.
+const _email = String.fromEnvironment(
+  'TEST_EMAIL',
+  defaultValue: 'tester_user@id.venttly.app',
+);
+const _password = String.fromEnvironment(
+  'TEST_PASSWORD',
+  defaultValue: 'TestPass123!',
+);
+
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -45,8 +58,8 @@ void main() {
     await Supabase.initialize(url: _url, anonKey: _anonKey, debug: false);
     final client = Supabase.instance.client;
     await client.auth.signInWithPassword(
-      email: 'tester_user@id.venttly.app',
-      password: 'TestPass123!',
+      email: _email,
+      password: _password,
     );
     final uid = client.auth.currentUser?.id;
     expect(uid, isNotNull, reason: 'signed in');
@@ -132,8 +145,8 @@ void main() {
     await Supabase.initialize(url: _url, anonKey: _anonKey, debug: false);
     final client = Supabase.instance.client;
     await client.auth.signInWithPassword(
-      email: 'tester_user@id.venttly.app',
-      password: 'TestPass123!',
+      email: _email,
+      password: _password,
     );
 
     Future<void> expectRefused(Map<String, dynamic> config, String code) async {
