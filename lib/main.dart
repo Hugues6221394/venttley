@@ -280,6 +280,7 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
         await ref.read(sessionProvider.notifier).restore();
+        _settleAuthGate();
         return;
       } catch (error, stack) {
         final lastTry = attempt == 1;
@@ -289,11 +290,34 @@ class _VentlyAppState extends ConsumerState<VentlyApp>
           error: error,
           stack: lastTry ? stack : null,
         );
-        if (lastTry) return;
+        if (lastTry) {
+          _settleAuthGate();
+          return;
+        }
         await Future<void>.delayed(const Duration(milliseconds: 1500));
         if (!mounted) return;
       }
     }
+  }
+
+  /// Say which of the two answers it was, so the router can stop waiting.
+  ///
+  /// A stored token outranks a failed profile fetch. restore() reaching for
+  /// the network and missing — aeroplane mode, a dead tunnel, a cold start on
+  /// a train — is not somebody signing out, and treating it as one logs out a
+  /// person who still holds a valid session and does it precisely when they
+  /// are least able to sign back in. Supabase keeps the refresh token across
+  /// launches; if it is still there, they are still signed in, and the app
+  /// waits for the profile rather than throwing away the session.
+  void _settleAuthGate() {
+    if (!mounted) return;
+    final hasProfile = ref.read(sessionProvider) != null;
+    final hasToken = VentlyConfig.useMockBackend
+        ? hasProfile
+        : Supabase.instance.client.auth.currentSession != null;
+    ref.read(authGateProvider.notifier).state = hasProfile || hasToken
+        ? AuthGate.signedIn
+        : AuthGate.signedOut;
   }
 
   void _startPresenceHeartbeat() {

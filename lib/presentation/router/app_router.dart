@@ -30,6 +30,7 @@ import '../screens/onboarding/password_reset_screen.dart';
 import '../screens/onboarding/recover_screen.dart';
 import '../screens/onboarding/recovery_key_screen.dart';
 import '../screens/onboarding/phone_signin_screen.dart';
+import '../screens/onboarding/launching_screen.dart';
 import '../screens/onboarding/personalise_screen.dart';
 import '../screens/onboarding/policy_consent_screen.dart';
 import '../screens/onboarding/policy_reader_screen.dart';
@@ -81,9 +82,14 @@ final rootNavigatorKey = GlobalKey<NavigatorState>();
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: '/onboarding',
+    // Every launch starts here, not on the welcome screen. Where somebody
+    // belongs is not knowable until the session restore comes back, and
+    // guessing "signed out" meanwhile showed a sign-up screen to people who
+    // were already signed in.
+    initialLocation: '/launching',
     redirect: (context, state) {
       final session = ref.read(sessionProvider);
+      final gate = ref.read(authGateProvider);
       final pendingMfa = ref.read(pendingMfaFactorIdProvider);
       final path = state.matchedLocation;
       final onboardingRoute = path.startsWith('/onboarding');
@@ -122,6 +128,21 @@ final routerProvider = Provider<GoRouter>((ref) {
           path == '/onboarding/key' ||
           path == '/onboarding/personalise' ||
           path == '/avatar/design';
+      // Hold the splash only while we genuinely do not know — which means no
+      // session AND no answer yet. A session arriving by any route lifts it
+      // without that route having to remember to, which is what makes sign-in,
+      // sign-up and the OAuth redirect all work without their own handling.
+      //
+      // The legal documents stay reachable throughout: somebody who followed a
+      // link to the Terms should not wait on an auth check to read them.
+      if (gate == AuthGate.restoring && session == null) {
+        return legalRoute || path == '/launching' ? null : '/launching';
+      }
+      // And leave it the moment it is: the splash is a waiting room, not a
+      // screen anybody should be able to sit on.
+      if (path == '/launching') {
+        return session == null ? '/onboarding' : '/feed';
+      }
       if (pendingMfa != null && !onMfa && !legalRoute) {
         return '/onboarding/mfa';
       }
@@ -270,6 +291,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // from Settings by an account that signed up long ago — and they must
       // stay reachable without a session, since somebody has to be able to
       // read the Terms before deciding to create one.
+      GoRoute(
+        path: '/launching',
+        builder: (_, __) => const LaunchingScreen(),
+      ),
       GoRoute(
         path: '/onboarding/personalise',
         builder: (_, __) => const PersonaliseScreen(),
@@ -751,6 +776,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(this.ref) {
     ref.listen(sessionProvider, (_, __) => notifyListeners());
+    // Without this the splash never lifts: the gate settles, and nothing asks
+    // the router to look again.
+    ref.listen(authGateProvider, (_, __) => notifyListeners());
     ref.listen(pendingMfaFactorIdProvider, (_, __) => notifyListeners());
   }
   final Ref ref;

@@ -156,6 +156,33 @@ final moderationServiceProvider = Provider<ModerationService>((ref) {
 });
 
 /// Reactive session — null when logged out.
+/// Whether the app has finished asking who is signed in.
+///
+/// A session survives the app being closed — Supabase persists the refresh
+/// token — but restoring the profile behind it is a network call, and it runs
+/// after the first frame. So for the first moment of every launch the session
+/// is null, which is indistinguishable from signed out unless somebody says
+/// so. The router used to read that moment as "signed out" and open the
+/// welcome screen, then bounce to the feed when the answer arrived: every
+/// returning person was shown a sign-up screen on the way into an app they
+/// were already signed into.
+///
+/// [AuthGate.restoring] is the honest third state, and it is where every
+/// launch begins.
+enum AuthGate {
+  /// We have not asked yet, or the answer has not come back.
+  restoring,
+
+  /// There is a session and a profile behind it.
+  signedIn,
+
+  /// Nobody is signed in, and that is settled rather than merely unknown.
+  signedOut,
+}
+
+/// Set once the restore has actually resolved — never optimistically.
+final authGateProvider = StateProvider<AuthGate>((ref) => AuthGate.restoring);
+
 final sessionProvider = StateNotifierProvider<SessionController, AppUser?>((
   ref,
 ) {
@@ -347,6 +374,10 @@ class SessionController extends StateNotifier<AppUser?> {
     } finally {
       _setPendingMfa(null);
       state = null;
+      // Settled, not unknown: an explicit sign-out is the one time the app
+      // should put somebody back on the welcome screen, and leaving the gate
+      // in `restoring` would hold them on the splash instead.
+      _ref?.read(authGateProvider.notifier).state = AuthGate.signedOut;
       await AnalyticsService.instance.reset();
     }
   }
@@ -470,6 +501,10 @@ class SessionController extends StateNotifier<AppUser?> {
     } finally {
       _setPendingMfa(null);
       state = null;
+      // Settled, not unknown: signing out is the one time the app should put
+      // somebody back on the welcome screen, and a gate left in `restoring`
+      // would hold them on the splash instead.
+      _ref?.read(authGateProvider.notifier).state = AuthGate.signedOut;
       await AnalyticsService.instance.reset();
     }
   }
