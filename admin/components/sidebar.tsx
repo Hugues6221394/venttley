@@ -7,6 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import { canAccess } from "@/lib/roles";
 import { useStaffAttention } from "./staff-attention";
 import { attentionDestination } from "@/lib/inbox-model";
+import { BrandMark } from "./brand-mark";
 import {
   LayoutDashboard,
   ShieldAlert,
@@ -23,7 +24,6 @@ import {
   Flag,
   KeyRound,
   SettingsIcon,
-  Heart,
   LifeBuoy,
   Sparkles,
   Scale,
@@ -106,7 +106,7 @@ const groups: Group[] = [
     label: "Insight",
     items: [
       { href: "/analytics", label: "Analytics", icon: LineChart },
-      { href: "/impact", label: "Impact Center", icon: Heart },
+      { href: "/impact", label: "Impact Center", icon: LifeBuoy },
       { href: "/slo",       label: "Service levels", icon: LineChart },
       { href: "/ops",       label: "Ops & cost", icon: TrendingUp },
       { href: "/audit",     label: "Audit log", icon: ScrollText },
@@ -166,11 +166,9 @@ export default function Sidebar({
         href="/overview"
         className="flex items-center gap-3 px-5 h-16 border-b border-line"
       >
-        <div className="h-9 w-9 rounded-xl bg-berry text-white flex items-center justify-center shadow-soft">
-          <Heart size={18} fill="currentColor" />
-        </div>
+        <BrandMark size={36} />
         <div className="leading-tight">
-          <p className="text-[15px] font-extrabold text-burgundy">Venttly</p>
+          <p className="text-[15px] font-semibold text-burgundy tracking-tight">Venttly</p>
           {/* The operator's own role, not a fixed wordmark. This read
               "Super Admin" for everyone, so a moderator's sidebar overstated
               their authority while the topbar correctly showed MODERATOR. On a

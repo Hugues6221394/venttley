@@ -1,5 +1,6 @@
 import { createAdminClient, createSsrClient, getRenderStaff } from "@/lib/supabase/server";
-import { StaffInboxRollout, type InboxRolloutHealth } from "@/components/staff-inbox-rollout";
+import { StaffInboxRollout } from "@/components/staff-inbox-rollout";
+import { loadInboxRollout } from "@/lib/staff-inbox-health";
 import { redis, isRedisConfigured, rateLimitingStatus } from "@/lib/redis";
 import { PageHeader, SectionHeader } from "@/components/ui/page-header";
 import { Card, Row as KV } from "@/components/ui/section";
@@ -68,17 +69,13 @@ export default async function SystemHealthPage() {
         }
       />
 
+      {inboxHealth !== undefined && <StaffInboxRollout health={inboxHealth} />}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {probes.map((p) => (
           <ProbeCard key={p.name} probe={p} />
         ))}
       </div>
-
-      {inboxHealth !== undefined && (
-        <Card title="Staff notifications" hint="Bell notifications and queue badges. Super admins only; requires MFA." padded>
-          <StaffInboxRollout health={inboxHealth} />
-        </Card>
-      )}
 
       <Card title="Environment" hint="What the dashboard is connected to" padded>
         <KV
@@ -341,26 +338,6 @@ async function probeCron(): Promise<ProbeResult> {
       status: "degraded",
       detail: (e as Error).message,
     };
-  }
-}
-
-async function loadInboxRollout(): Promise<InboxRolloutHealth | null> {
-  try {
-    // admin_staff_inbox_health authorizes auth.uid(); a service-role call has none.
-    const db = await createSsrClient();
-    const { data, error } = await db.rpc("admin_staff_inbox_health");
-    if (error || !data || typeof data !== "object") return null;
-    const h = data as Record<string, unknown>;
-    if (typeof h.enabled !== "boolean" || !Array.isArray(h.audience_roles)) return null;
-    return {
-      enabled: h.enabled,
-      audience_roles: h.audience_roles.filter((r): r is string => typeof r === "string"),
-      worker_at: typeof h.worker_at === "string" ? h.worker_at : null,
-      worker_stale: h.worker_stale === true,
-      pending: Number(h.pending) || 0,
-    };
-  } catch {
-    return null;
   }
 }
 

@@ -3,7 +3,8 @@ import { activeStaffRole } from "@/lib/staff";
 import { createSsrClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
-import { Heart, KeyRound } from "@/components/ui/icons";
+import { BrandMark } from "@/components/brand-mark";
+import { KeyRound } from "@/components/ui/icons";
 import { completeStaffInvite } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -28,8 +29,8 @@ export default async function InvitePage({ searchParams }: { searchParams: Promi
     <main className="min-h-screen bg-canvas px-4 py-12">
       <div className="mx-auto flex max-w-md flex-col gap-6">
         <div className="flex items-center justify-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-berry text-white"><Heart size={19} fill="currentColor" /></div>
-          <div><p className="font-extrabold text-burgundy">Venttly</p><p className="h-eyebrow">Staff invitation</p></div>
+          <BrandMark size={40} />
+          <div><p className="font-semibold tracking-tight text-burgundy">Venttly</p><p className="h-eyebrow">Staff invitation</p></div>
         </div>
         <Card title="Secure your staff account" hint="Set a unique password, then enroll or challenge MFA">
           {error && <div className="mb-4 rounded-xl bg-danger/8 px-3 py-2 text-sm font-semibold text-danger">{ERROR[error] ?? "The invitation could not be completed."}</div>}

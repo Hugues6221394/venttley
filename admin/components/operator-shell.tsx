@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import Topbar from "./topbar";
-import { ShieldCheck, ChevronRight, Heart, Menu, X } from "./ui/icons";
+import { BrandMark } from "./brand-mark";
+import { ShieldCheck, ChevronRight, Menu, X } from "./ui/icons";
 import { Star, Search, Rows3 } from "lucide-react";
 import { groupIcon } from "./navigation-icons";
 import dynamic from "next/dynamic";
@@ -100,7 +101,7 @@ export default function OperatorShell({ role, pseudonym, env, badges, children }
 
 function Brand({ role }: { role: string }) {
   return <Link href="/overview" prefetch={false} className="operator-brand">
-    <span className="operator-brand-mark" aria-hidden="true"><Heart size={15} fill="currentColor" strokeWidth={0} /></span>
+    <BrandMark size={32} />
     <span><strong>Venttly</strong><small>{role.replaceAll("_", " ")} console</small></span>
   </Link>;
 }

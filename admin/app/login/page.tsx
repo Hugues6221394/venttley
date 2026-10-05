@@ -1,6 +1,7 @@
 import Link from "next/link";
 import LoginForm from "@/components/login-form";
 import PasswordResetForm from "@/components/password-reset-form";
+import { BrandMark } from "@/components/brand-mark";
 
 /**
  * Sign in, and recover.
@@ -23,17 +24,15 @@ export default async function LoginPage({
   const justReset = reset === "done";
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blush to-cardBlush px-6">
-      <div className="card w-full max-w-sm p-8">
-        <div className="flex flex-col items-center mb-6">
-          <div className="h-14 w-14 rounded-2xl bg-berry flex items-center justify-center text-white text-2xl shadow-card">
-            ♡
-          </div>
-          <h1 className="mt-4 text-xl font-extrabold text-burgundy">
-            Venttly Admin
+    <main className="min-h-screen flex items-center justify-center bg-canvas px-6">
+      <div className="card w-full max-w-sm p-8 shadow-lift">
+        <div className="flex flex-col items-center mb-7 text-center">
+          <BrandMark size={56} />
+          <h1 className="mt-4 text-[22px] font-semibold tracking-tight text-burgundy">
+            Venttly
           </h1>
-          <p className="text-xs text-burgundy/60 mt-1">
-            {resetting ? "Reset your password." : "Super-admin access only."}
+          <p className="text-[13px] text-ink-muted mt-1">
+            {resetting ? "Reset your password." : "Operator console"}
           </p>
         </div>
 

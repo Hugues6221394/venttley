@@ -3,15 +3,9 @@
 import { useState } from 'react';
 import { WorkflowForm } from './workflows/workflow-form';
 import { configureStaffInbox } from '@/lib/staff-inbox-rollout-actions';
-import { audienceFor, inboxAudiences } from '@/lib/staff-inbox-rollout';
+import { audienceFor, inboxAudiences, type InboxRolloutHealth } from '@/lib/staff-inbox-rollout';
 
-export type InboxRolloutHealth = {
-  enabled: boolean;
-  audience_roles: string[];
-  worker_at: string | null;
-  worker_stale: boolean;
-  pending: number;
-};
+export type { InboxRolloutHealth };
 
 const when = (at: string | null) => at ? new Date(at).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : 'never';
 
@@ -23,7 +17,12 @@ export function StaffInboxRollout({ health }: { health: InboxRolloutHealth | nul
   const next = !health.enabled;
   const current = audienceFor(health.audience_roles);
   return (
-    <div className="flex flex-col gap-4" data-inbox-rollout={health.enabled ? 'on' : 'off'}>
+    <section id="staff-notifications" className="inbox-rollout-panel" data-inbox-rollout={health.enabled ? 'on' : 'off'} aria-labelledby="staff-notifications-title">
+      <header>
+        <p className="h-eyebrow">Release control</p>
+        <h2 id="staff-notifications-title">Staff notifications</h2>
+        <p>The bell and the queue badges stay empty until this is on. Turning it on requires MFA and is written to the audit log.</p>
+      </header>
       <dl className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
         <div><dt className="text-ink-muted text-xs">Status</dt><dd className="font-semibold">{health.enabled ? 'On' : 'Off'}</dd></div>
         <div><dt className="text-ink-muted text-xs">Audience</dt><dd>{current ? inboxAudiences[current].label : health.audience_roles.join(', ')}</dd></div>
@@ -45,6 +44,6 @@ export function StaffInboxRollout({ health }: { health: InboxRolloutHealth | nul
           </select>
         </label>
       </WorkflowForm>
-    </div>
+    </section>
   );
 }

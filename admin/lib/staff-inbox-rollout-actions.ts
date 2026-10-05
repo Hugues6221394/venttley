@@ -19,6 +19,8 @@ export async function configureStaffInbox(form:FormData):Promise<WorkflowResult>
     }).abortSignal(AbortSignal.timeout(12_000));
     if(error)return workflowFailure(operationalResult(new Error(error.message)));
     revalidatePath('/system');
+    revalidatePath('/inbox');
+    revalidatePath('/overview');
     return {status:'success',message:enabled==='true'
       ?'Staff notifications are on for the selected roles. New events are delivered by the next worker run (within a minute).'
       :'Staff notifications are off. Existing notices are kept; no new ones are produced.'};
