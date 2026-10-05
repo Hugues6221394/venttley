@@ -165,7 +165,7 @@
 .queue-open:hover { background: var(--theme-panel-subtle); text-decoration:none !important; }
 .operator-shortcuts { display:grid; gap:2px; margin:4px -8px 0; }
 .operator-shortcuts a { display:flex; align-items:center; gap:12px; min-height:44px; padding:6px 8px; border-radius: var(--ds-radius-md); color: var(--theme-heading); font-size: var(--ds-text-sm); font-weight:500; transition: background-color .12s var(--ds-ease); }
-.operator-shortcuts a > span:first-of-type { flex:1; }
+.operator-shortcuts a > span:nth-of-type(2) { flex:1; }
 .operator-shortcuts a > [aria-hidden="true"]:last-child { color: var(--theme-faint); transition: transform .15s var(--ds-ease), color .15s; }
 .operator-shortcuts a:hover { background: var(--theme-hover); }
 .operator-shortcuts a:hover > [aria-hidden="true"]:last-child { color: var(--theme-heading); transform: translateX(2px); }

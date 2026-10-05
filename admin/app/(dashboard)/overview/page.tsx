@@ -9,6 +9,7 @@ import { OperatorPage, OperatorPanel, PanelSkeleton } from '@/components/ui/oper
 import { OperatorDrawer, RefreshOverview } from '@/components/ui/operator-controls';
 import { ActivityPanel, AttentionPanel, ReportsPanel, RegionsPanel } from '@/components/overview-panels';
 import { overviewDefinitions } from '@/lib/overview-model';
+import { Inbox, ScrollText, Siren, LifeBuoy, LineChart, ChevronRight } from 'lucide-react';
 
 export const dynamic='force-dynamic';
 export default async function OverviewPage() {
@@ -21,7 +22,7 @@ export default async function OverviewPage() {
     <div className="operator-priority-grid">
       <Suspense fallback={<PanelSkeleton label="queue snapshots" className="operator-queue-panel"/>}><AttentionPanel/></Suspense>
       <OperatorPanel title="Your workspace" hint="Only destinations allowed by your role appear."><nav aria-label="Overview workspace" className="operator-shortcuts">
-        {([['/inbox','Staff inbox'],['/audit','Audit log'],['/incidents','Incident command'],['/safety','Safety & crisis'],['/analytics','Analytics']] as const).filter(([href])=>canAccess(staff.role,href)).map(([href,label])=><Link key={href} href={href} prefetch={false}>{label}<span aria-hidden="true">→</span></Link>)}
+        {([['/inbox','Staff inbox',Inbox],['/audit','Audit log',ScrollText],['/incidents','Incident command',Siren],['/safety','Safety & crisis',LifeBuoy],['/analytics','Analytics',LineChart]] as const).filter(([href])=>canAccess(staff.role,href)).map(([href,label,Icon])=><Link key={href} href={href} prefetch={false}><span className="operator-shortcut-icon" aria-hidden="true"><Icon size={15}/></span><span>{label}</span><ChevronRight size={15} aria-hidden="true"/></Link>)}
       </nav><p className="operator-note">Overview contains aggregates only. Member content stays in its authorized workflow.</p></OperatorPanel>
     </div>
     <div className="operator-context-grid"><Suspense fallback={<PanelSkeleton label="report volume" className="operator-context-panel"/>}><ReportsPanel/></Suspense><Suspense fallback={<PanelSkeleton label="member regions" className="operator-context-panel"/>}><RegionsPanel/></Suspense></div>
