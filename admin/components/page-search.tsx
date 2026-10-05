@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Compass, ChevronRight, ArrowLeft, ShieldCheck, Users, Lock, LineChart, Keyboard } from "lucide-react";
+import { Compass, ChevronRight, ArrowLeft, Users, Keyboard, X } from "lucide-react";
+import { groupIcon } from "./navigation-icons";
 import { canAccess } from "@/lib/roles";
 import { navigationGroups, searchNavigation, visibleNavigation } from "@/lib/navigation";
 import { containDialogTab } from "@/lib/dialog-focus";
@@ -45,10 +46,10 @@ export default function PageSearch({ role, onClose }: { role: string; onClose: (
       buttons[next].focus();
     }}>
     <div className="operator-search-heading">
-      <span className="operator-search-symbol"><Compass size={28} /></span>
+      <span className="operator-search-symbol" aria-hidden="true"><Compass size={17} /></span>
       <div><h2 id="page-search-title">Page navigation search</h2><p>Jump to a section in this workspace. No member data is searched here.</p></div>
       <button className="icon-btn" type="button" onClick={onClose} aria-label="Close page search">
-        <img src="/design/operator-shell/cutout-20-43ca88ea32cb.png" alt="" width={20} height={18} />
+        <X size={16} aria-hidden="true" />
       </button>
     </div>
     <div className="operator-search-controls">
@@ -56,7 +57,7 @@ export default function PageSearch({ role, onClose }: { role: string; onClose: (
         maxLength={100} onChange={event => { setQuery(event.target.value); setGroup(null); }}
         onKeyDown={event => { if (event.key === "Enter" && rows[0]) { event.preventDefault(); select(rows[0]); } }} />
       {canAccess(role, "/search") && <Link href="/search" prefetch={false} onClick={onClose} className="operator-audited-search">
-        <Users size={18} /><span>Search members<small>Audited search</small></span><ChevronRight size={16} />
+        <Users size={15} aria-hidden="true" /><span>Search members<small>Audited search</small></span><ChevronRight size={14} aria-hidden="true" />
       </Link>}
     </div>
     {group && <button className="btn-ghost" type="button" onClick={() => { setGroup(null); input.current?.focus(); }}><ArrowLeft size={16} />All sections</button>}
@@ -67,18 +68,15 @@ export default function PageSearch({ role, onClose }: { role: string; onClose: (
         <span className="operator-result-label"><strong>{row.label}</strong>
           {!row.href && <span className="operator-result-count"> · {row.pages.length} pages</span>}
           <small>{row.href ? row.group : row.pages.slice(0, 4).map(page => page.label).join(", ")}</small>
-        </span><ChevronRight size={18} />
+        </span><ChevronRight size={15} aria-hidden="true" />
       </button></li>)}
     </ul>
     {!rows.length && <p className="empty">No matching pages. Try a section or page name.</p>}
-    <p className="operator-search-help"><Keyboard size={20} />Use ↑ ↓ to move, Enter to select, and Esc to close.</p>
+    <p className="operator-search-help"><Keyboard size={14} aria-hidden="true" />Use ↑ ↓ to move, Enter to select, and Esc to close.</p>
   </dialog>;
 }
 
 function SearchGroupIcon({ group }: { group: string }) {
-  const index = navigationGroups.findIndex(section => section.label === group);
-  if (index === 0 || index === 3) return <img className="operator-result-icon" alt="" width={44} height={44}
-    src={`/design/operator-shell/${index === 0 ? "cutout-27-1c8fd16dd3f1" : "cutout-47-f7ff1061d285"}.png`} />;
-  const Icon = [Compass, ShieldCheck, Users, Compass, Lock, LineChart][index] ?? Compass;
-  return <span className="operator-result-icon"><Icon size={24} /></span>;
+  const Icon = groupIcon(group);
+  return <span className="operator-result-icon" aria-hidden="true"><Icon size={16} /></span>;
 }
