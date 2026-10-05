@@ -1,0 +1,41 @@
+{
+  "canvas": 768,
+  "skins": [
+    "s01",
+    "s02",
+    "s03",
+    "s04",
+    "s05",
+    "s06"
+  ],
+  "hair": [
+    "hair_01",
+    "hair_02",
+    "hair_03",
+    "hair_04",
+    "hair_05",
+    "hair_06",
+    "hair_07",
+    "hair_08",
+    "hair_09",
+    "hair_10",
+    "hair_11",
+    "hair_12"
+  ],
+  "beards": [
+    "beard_01",
+    "beard_02",
+    "beard_03",
+    "beard_04",
+    "beard_05",
+    "beard_06",
+    "beard_07",
+    "beard_08",
+    "beard_09",
+    "beard_10"
+  ],
+  "tops": [
+    "top_01",
+    "top_02"
+  ]
+}

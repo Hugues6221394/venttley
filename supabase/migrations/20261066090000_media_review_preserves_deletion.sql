@@ -33,3 +33,9 @@ END $$;
 REVOKE ALL ON FUNCTION public.admin_set_media_status(TEXT,UUID,TEXT,TEXT) FROM PUBLIC,anon,service_role;
 GRANT EXECUTE ON FUNCTION public.admin_set_media_status(TEXT,UUID,TEXT,TEXT) TO authenticated;
 COMMIT;
+
+-- Every migration records itself, so the app can tell a database that is
+-- behind the build from one that is current. Added after the fact: this file
+-- shipped without it, and the copy already applied to production is
+-- back-filled by 20261075090000_the_ledger_catches_up.sql.
+SELECT public.record_migration('20261066090000', 'media_review_preserves_deletion');

@@ -77,3 +77,12 @@ venttly-prod-backup-*/
 *-prod-backup-*/
 *.dump
 supabase/**/prodbackup/
+
+# The designer's drop folder. The twenty-five layer files the avatar build
+# script reads are committed by name; the rest of what lands here is phone
+# screenshots and flattened sheets — 56MB of reference that nothing reads and
+# that Flutter does not bundle (asset globs do not recurse into it).
+assets/images/avatars/avatarsfiles/*
+!assets/images/avatars/avatarsfiles/Asset Layer*.png
+!assets/images/avatars/avatarsfiles/Asset2*.png
+!assets/images/avatars/avatarsfiles/Asset3*.png

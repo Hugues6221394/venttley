@@ -115,3 +115,9 @@ REVOKE ALL ON FUNCTION public.admin_configure_invitation_setup_repair(UUID,BOOLE
 GRANT EXECUTE ON FUNCTION public.admin_configure_invitation_setup_repair(UUID,BOOLEAN),
   public.admin_repair_staff_invitation_setup(UUID,UUID,BIGINT) TO authenticated;
 COMMIT;
+
+-- Every migration records itself, so the app can tell a database that is
+-- behind the build from one that is current. Added after the fact: this file
+-- shipped without it, and the copy already applied to production is
+-- back-filled by 20261075090000_the_ledger_catches_up.sql.
+SELECT public.record_migration('20261069090000', 'staff_invitation_setup_repair');

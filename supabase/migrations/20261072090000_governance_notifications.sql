@@ -289,3 +289,9 @@ REVOKE ALL ON FUNCTION public.admin_staff_inbox_failures(TIMESTAMPTZ,UUID,INT),p
 GRANT EXECUTE ON FUNCTION public.admin_staff_inbox_failures(TIMESTAMPTZ,UUID,INT),public.admin_retry_staff_notification(UUID,UUID,TEXT) TO authenticated;
 NOTIFY pgrst,'reload schema';
 COMMIT;
+
+-- Every migration records itself, so the app can tell a database that is
+-- behind the build from one that is current. Added after the fact: this file
+-- shipped without it, and the copy already applied to production is
+-- back-filled by 20261075090000_the_ledger_catches_up.sql.
+SELECT public.record_migration('20261072090000', 'governance_notifications');

@@ -1212,6 +1212,77 @@ class SupabaseBackend {
     );
   }
 
+  /// What somebody chose last time, so the studio opens where they left off.
+  ///
+  /// Its own one-column read rather than another rung on the user select —
+  /// that select is a deliberate ladder of fallbacks for databases a migration
+  /// or two behind, and widening it to pre-fill a form is not a trade worth
+  /// making. Returns null on any failure, including a database that has not
+  /// got the column yet, because "start from the default look" is a fine
+  /// answer and an error dialog is not.
+  Future<Map<String, dynamic>?> myAvatarConfig({String? personaId}) async {
+    final uid = _uid;
+    if (uid == null) return null;
+    try {
+      final row = personaId == null
+          ? await _client
+                .from('users')
+                .select('avatar_config')
+                .eq('user_id', uid)
+                .maybeSingle()
+          : await _client
+                .from('personas')
+                .select('avatar_config')
+                .eq('persona_id', personaId)
+                .maybeSingle();
+      final config = row?['avatar_config'];
+      return config is Map ? config.cast<String, dynamic>() : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The avatar somebody built in the studio.
+  ///
+  /// The flattened PNG goes up first and the config second, in that order on
+  /// purpose: a config pointing at an object that does not exist yet would
+  /// show a broken avatar to every reader in the window between the two, while
+  /// an object nobody references yet is invisible and gets cleaned up on the
+  /// next save.
+  Future<void> setCustomAvatar({
+    required Map<String, dynamic> config,
+    required List<int> png,
+    String? personaId,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw StateError('Not signed in');
+    final path = '$uid/avatar-${const Uuid().v4()}.png';
+    await _client.storage
+        .from('profile-photos')
+        .uploadBinary(
+          path,
+          _imageUploadBytes(png),
+          fileOptions: const FileOptions(contentType: 'image/png'),
+        );
+    final url = _client.storage.from('profile-photos').getPublicUrl(path);
+    final oldPath =
+        await _client.rpc(
+              'set_avatar_config',
+              params: {
+                'p_config': config,
+                'p_photo_url': url,
+                'p_persona_id': personaId,
+                'p_avatar_path': path,
+              },
+            )
+            as String?;
+    // Best-effort: a stranded object costs a few kilobytes, and failing the
+    // save over one would lose the avatar somebody just made.
+    if (oldPath != null && oldPath.isNotEmpty && oldPath != path) {
+      unawaited(_client.storage.from('profile-photos').remove([oldPath]));
+    }
+  }
+
   /// "Not interested", and "show me less of this person". Both are reversible
   /// and neither is a block: the post stops competing for a place in this
   /// reader's feed, and that is all.

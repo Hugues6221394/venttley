@@ -203,3 +203,9 @@ END $$;
 REVOKE ALL ON FUNCTION public.admin_configure_access_reviews(UUID,BOOLEAN),public.admin_create_access_review(UUID,DATE,TIMESTAMPTZ),public.admin_access_review_command(UUID,UUID,UUID,BIGINT,TEXT,TEXT,TIMESTAMPTZ,UUID),public.admin_access_review_register(UUID,UUID,DATE),public.admin_access_review_reviewers() FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.admin_configure_access_reviews(UUID,BOOLEAN),public.admin_create_access_review(UUID,DATE,TIMESTAMPTZ),public.admin_access_review_command(UUID,UUID,UUID,BIGINT,TEXT,TEXT,TIMESTAMPTZ,UUID),public.admin_access_review_register(UUID,UUID,DATE),public.admin_access_review_reviewers() TO authenticated;
 COMMIT;
+
+-- Every migration records itself, so the app can tell a database that is
+-- behind the build from one that is current. Added after the fact: this file
+-- shipped without it, and the copy already applied to production is
+-- back-filled by 20261075090000_the_ledger_catches_up.sql.
+SELECT public.record_migration('20261067090000', 'access_review_ledger');

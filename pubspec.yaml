@@ -139,4 +139,5 @@ flutter:
     - assets/images/
     - assets/images/welcome/
     - assets/images/avatars/
+    - assets/images/avatars/layers/
     - assets/audio/

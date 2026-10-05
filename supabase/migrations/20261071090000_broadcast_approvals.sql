@@ -233,3 +233,9 @@ GRANT EXECUTE ON FUNCTION public.admin_request_broadcast_approval(UUID,TEXT,TEXT
  public.admin_broadcast_approval_command(UUID,UUID,BIGINT,TEXT),public.admin_broadcast_approval_register(TIMESTAMPTZ,UUID,UUID),
  public.admin_stop_approved_broadcast(UUID,UUID) TO authenticated;
 COMMIT;
+
+-- Every migration records itself, so the app can tell a database that is
+-- behind the build from one that is current. Added after the fact: this file
+-- shipped without it, and the copy already applied to production is
+-- back-filled by 20261075090000_the_ledger_catches_up.sql.
+SELECT public.record_migration('20261071090000', 'broadcast_approvals');

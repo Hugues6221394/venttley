@@ -3345,6 +3345,22 @@ class VentlyRepository implements MusicProvider {
     );
   }
 
+  Future<Map<String, dynamic>?> myAvatarConfig({String? personaId}) async {
+    final live = _live;
+    if (live == null) return null;
+    return live.myAvatarConfig(personaId: personaId);
+  }
+
+  Future<void> setCustomAvatar({
+    required Map<String, dynamic> config,
+    required List<int> png,
+    String? personaId,
+  }) async {
+    final live = _live;
+    if (live == null) return;
+    await live.setCustomAvatar(config: config, png: png, personaId: personaId);
+  }
+
   Future<void> markNotInterested(
     String postId, {
     String reason = 'post',

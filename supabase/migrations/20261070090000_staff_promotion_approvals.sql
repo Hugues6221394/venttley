@@ -203,3 +203,9 @@ END $$;
 REVOKE ALL ON FUNCTION public.admin_request_staff_promotion(UUID,UUID,TEXT),public.admin_staff_promotion_command(UUID,UUID,BIGINT,TEXT),public.admin_staff_promotion_register(TIMESTAMPTZ,UUID,UUID),public.admin_staff_promotion_candidates(TEXT) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.admin_request_staff_promotion(UUID,UUID,TEXT),public.admin_staff_promotion_command(UUID,UUID,BIGINT,TEXT),public.admin_staff_promotion_register(TIMESTAMPTZ,UUID,UUID),public.admin_staff_promotion_candidates(TEXT) TO authenticated;
 COMMIT;
+
+-- Every migration records itself, so the app can tell a database that is
+-- behind the build from one that is current. Added after the fact: this file
+-- shipped without it, and the copy already applied to production is
+-- back-filled by 20261075090000_the_ledger_catches_up.sql.
+SELECT public.record_migration('20261070090000', 'staff_promotion_approvals');

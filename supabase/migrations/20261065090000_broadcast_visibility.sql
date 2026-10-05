@@ -20,3 +20,9 @@ USING (
    AND (expires_at IS NULL OR expires_at>now()))
 );
 COMMIT;
+
+-- Every migration records itself, so the app can tell a database that is
+-- behind the build from one that is current. Added after the fact: this file
+-- shipped without it, and the copy already applied to production is
+-- back-filled by 20261075090000_the_ledger_catches_up.sql.
+SELECT public.record_migration('20261065090000', 'broadcast_visibility');

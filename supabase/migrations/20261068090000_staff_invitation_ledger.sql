@@ -179,3 +179,9 @@ GRANT EXECUTE ON FUNCTION public.admin_configure_invitation_ledger(UUID,BOOLEAN)
 REVOKE ALL ON FUNCTION public.admin_recover_staff_invitation(UUID,UUID,BIGINT,TEXT,TEXT) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.admin_recover_staff_invitation(UUID,UUID,BIGINT,TEXT,TEXT) TO authenticated;
 COMMIT;
+
+-- Every migration records itself, so the app can tell a database that is
+-- behind the build from one that is current. Added after the fact: this file
+-- shipped without it, and the copy already applied to production is
+-- back-filled by 20261075090000_the_ledger_catches_up.sql.
+SELECT public.record_migration('20261068090000', 'staff_invitation_ledger');

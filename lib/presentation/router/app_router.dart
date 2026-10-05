@@ -38,7 +38,7 @@ import '../screens/notifications/notifications_screen.dart';
 import '../screens/onboarding/welcome_screen.dart';
 import '../screens/plugz/plug_profile_screen.dart';
 import '../screens/profile/active_devices_screen.dart';
-import '../screens/profile/avatar_builder_screen.dart';
+import '../screens/profile/avatar_studio_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/profile/profile_stat_detail_screen.dart';
@@ -571,7 +571,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
               GoRoute(
                 path: '/profile/avatar',
-                builder: (_, __) => const AvatarBuilderScreen(),
+                builder: (ctx, st) => AvatarStudioScreen(
+                  personaId: st.uri.queryParameters['persona'],
+                ),
               ),
               GoRoute(
                 path: '/profile/edit',

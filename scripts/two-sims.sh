@@ -33,11 +33,13 @@ done
 # The simulator shares the Mac's loopback, so 127.0.0.1 reaches the stack
 # directly. (An Android emulator would need 10.0.2.2 — it has its own.)
 #
-# --prod builds against the real project instead. Some things can only be
-# tested there: the local stack only advertises email as a sign-in method, so
-# Continue with Google hides itself on a local build — the button asks GoTrue
-# what is enabled, and locally nothing is. That is a deployment difference,
-# not a missing feature, and this flag is how you see it.
+# --prod builds against the real project instead, for the things only the real
+# project has: a populated database, real storage, and OAuth that completes.
+# Continue with Google now appears on a local build too — supabase/config.toml
+# enables the provider with placeholder credentials, because the button asks
+# GoTrue which providers are on and a local stack that answered "email only"
+# made a wired-up feature look deleted. The round trip still cannot finish
+# locally; the button being there is the point.
 if [[ "$TARGET" == "prod" ]]; then
   SUPABASE_URL=""
   SUPABASE_ANON_KEY=""
