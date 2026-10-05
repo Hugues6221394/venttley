@@ -389,22 +389,12 @@ export default async function UserDetailPage({
 
       {/* Metrics strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card padded>
-          <p className="h-eyebrow mb-1">Live posts</p>
-          <p className="tabular text-2xl font-extrabold text-burgundy">{postCount ?? 0}</p>
-        </Card>
-        <Card padded>
-          <p className="h-eyebrow mb-1">Comments</p>
-          <p className="tabular text-2xl font-extrabold text-burgundy">{commentCount ?? 0}</p>
-        </Card>
-        <Card padded>
-          <p className="h-eyebrow mb-1">Reports against</p>
-          <p className="tabular text-2xl font-extrabold text-burgundy">{reportsAgainst ?? 0}</p>
-        </Card>
-        <Card padded>
-          <p className="h-eyebrow mb-1">Tribes joined</p>
-          <p className="tabular text-2xl font-extrabold text-burgundy">{tribeCount ?? 0}</p>
-        </Card>
+        {([["Live posts", postCount], ["Comments", commentCount], ["Reports against", reportsAgainst], ["Tribes joined", tribeCount]] as const).map(([label, count]) => (
+          <div key={label} className="kpi">
+            <p className="kpi-label">{label}</p>
+            <p className={`kpi-value ${(count ?? 0) === 0 ? "is-zero" : ""}`}>{count ?? 0}</p>
+          </div>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

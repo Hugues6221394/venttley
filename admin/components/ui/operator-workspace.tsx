@@ -18,7 +18,7 @@ export function OperatorMetric({ label, value, description, comparison, icon, de
   return <section className="operator-metric" aria-label={label}>
     <div className="operator-metric-top"><h3>{label}</h3>{icon && <span className="operator-metric-icon" aria-hidden="true">{icon}</span>}</div>
     <div className="operator-metric-value"><strong className={value===0?'is-zero':undefined}>{value.toLocaleString('en-US')}</strong>
-      {delta!==undefined&&delta!==null&&<span className={`delta ${delta>0?'delta-up':delta<0?'delta-down':'delta-flat'}`} aria-hidden="true">{delta>0?'↑':delta<0?'↓':'→'} {Math.abs(delta)}%</span>}</div>
+      {!!delta&&<span className={`delta ${delta>0?'delta-up':delta<0?'delta-down':'delta-flat'}`} aria-hidden="true">{delta>0?'↑':delta<0?'↓':'→'} {Math.abs(delta)}%</span>}</div>
     <p>{description}</p>{comparison && <small>{comparison}</small>}
   </section>;
 }

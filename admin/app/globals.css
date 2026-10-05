@@ -161,8 +161,8 @@
 .queue-count { display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:24px; padding:0 8px; border-radius: var(--ds-radius-sm); font-weight:600; font-variant-numeric:tabular-nums; color: var(--theme-heading); background: var(--theme-active); }
 .queue-count.is-zero { color: var(--theme-faint); background: transparent; box-shadow: inset 0 0 0 1px var(--theme-line); }
 .queue-count.is-open { color: var(--theme-danger); background: var(--theme-danger-bg); }
-.queue-open { display:inline-flex; align-items:center; gap:4px; min-height:28px; padding:0 10px; border-radius: var(--ds-radius-sm); border:1px solid var(--theme-line-strong); background: var(--theme-panel); color: var(--theme-heading) !important; font-size: var(--ds-text-xs); font-weight:550; box-shadow: var(--theme-shadow-xs); }
-.queue-open:hover { background: var(--theme-panel-subtle); text-decoration:none !important; }
+.operator-table .queue-open, .queue-open { display:inline-flex; align-items:center; gap:4px; min-height:28px; padding:0 10px; border-radius: var(--ds-radius-sm); border:1px solid var(--theme-line-strong); background: var(--theme-panel); color: var(--theme-heading) !important; font-size: var(--ds-text-xs); font-weight:550; box-shadow: var(--theme-shadow-xs); }
+.operator-table .queue-open:hover, .queue-open:hover { background: var(--theme-panel-subtle); text-decoration:none !important; }
 .operator-shortcuts { display:grid; gap:2px; margin:4px -8px 0; }
 .operator-shortcuts a { display:flex; align-items:center; gap:12px; min-height:44px; padding:6px 8px; border-radius: var(--ds-radius-md); color: var(--theme-heading); font-size: var(--ds-text-sm); font-weight:500; transition: background-color .12s var(--ds-ease); }
 .operator-shortcuts a > span:nth-of-type(2) { flex:1; }
@@ -320,6 +320,7 @@
 .operator-group-button:hover { background: var(--theme-hover); color: var(--theme-heading); }
 .operator-group-button.is-current { color: var(--theme-heading); font-weight: 600; }
 .operator-group-button.is-current > svg:first-child { color: var(--theme-accent-strong); }
+.operator-group-button > .operator-group-count { flex: none; }
 .operator-group-count { font-size: var(--ds-text-2xs); font-weight: 500; color: var(--theme-faint); font-variant-numeric: tabular-nums; }
 .operator-group-chevron { flex: none; color: var(--theme-faint); transition: transform .18s var(--ds-ease); }
 .operator-group-button[aria-expanded="true"] .operator-group-chevron { transform: rotate(90deg); }
@@ -740,3 +741,8 @@
 .recovery-drawer .workflow-form select { min-height:44px; padding:10px 12px; font-size:14px; font-weight:400; border:1px solid var(--operator-panel-border); border-radius:8px; background:var(--operator-panel,var(--theme-panel,#fffdfb)); }
 @media(max-width:1200px) { .recovery-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:520px) { .recovery-metrics { grid-template-columns:minmax(0,1fr); gap:10px; }.recovery-detail { padding:14px; }.recovery-pagination { gap:8px; } }
+
+/* Console-wide weight calibration: 800-weight headings read as heavy and
+   immature at operator densities. Semibold carries hierarchy instead. */
+.font-extrabold { font-weight: 650; }
+.text-burgundy.font-bold { font-weight: 600; }
