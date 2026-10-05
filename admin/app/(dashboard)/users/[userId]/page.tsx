@@ -9,15 +9,17 @@ import {
 import { rpc } from "@/lib/audit";
 import { limitAction } from "@/lib/guard";
 import { enumOf, optStr, uuid } from "@/lib/validate";
-import { PageHeader } from "@/components/ui/page-header";
 import { Card, Row as KV } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
+import { Tabs } from "@/components/ui/tabs";
+import { MemberContact, type ContactChannel, type ContactOptions } from "@/components/member-contact";
 import {
-  Ban,
   CheckCircle2,
   ChevronLeft,
-  EyeOff,
   KeyRound,
+  Mail,
+  OctagonAlert,
+  Send,
   ShieldAlert,
   Trash2,
 } from "@/components/ui/icons";
@@ -239,17 +241,55 @@ async function deleteUser(formData: FormData) {
   redirect("/users");
 }
 
+const TABS = ["overview", "communications", "account", "security"] as const;
+type MemberTab = (typeof TABS)[number];
+
+type Communication = {
+  communication_id: string;
+  channel: "message" | "warning" | "email";
+  subject: string;
+  body: string;
+  policy_code: string | null;
+  appealable: boolean | null;
+  actor_pseudonym: string | null;
+  actor_role: string;
+  email_hint: string | null;
+  delivery_status: string;
+  rescinded_at: string | null;
+  created_at: string;
+};
+
+const CHANNEL_LABEL: Record<Communication["channel"], string> = {
+  message: "In-app message",
+  warning: "Formal warning",
+  email: "Email",
+};
+
+const DELIVERY_LABEL: Record<string, string> = {
+  delivered: "Delivered",
+  read: "Read",
+  removed_by_member: "Dismissed by member",
+  queued: "Queued",
+  sending: "Sending",
+  sent: "Sent",
+  failed: "Failed",
+  skipped: "Not deliverable",
+  unknown: "",
+};
+
 export default async function UserDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ userId: string }>;
-  searchParams: Promise<{ result?: string }>;
+  searchParams: Promise<{ result?: string; tab?: string; compose?: string }>;
 }) {
   const { userId } = await params;
-  const { result } = await searchParams;
+  const { result, tab: rawTab, compose } = await searchParams;
+  const tab: MemberTab = (TABS as readonly string[]).includes(rawTab ?? "") ? (rawTab as MemberTab) : "overview";
   const notice = result ? NOTICE[result] ?? NOTICE.failed : null;
   const db = await createAdminClient();
+  const session = await createSsrClient();
 
   const { data: user } = await db
     .from("users")
@@ -270,6 +310,8 @@ export default async function UserDetailPage({
     { data: badges },
     { data: streaks },
     { data: timeline },
+    { data: contactData },
+    { data: communicationsData },
   ] = await Promise.all([
     db
       .from("posts")
@@ -285,7 +327,6 @@ export default async function UserDetailPage({
       .select("report_id", { count: "exact", head: true })
       .in(
         "post_id",
-        // posts authored by this user
         (
           await db.from("posts").select("post_id").eq("author_id", userId)
         ).data?.map((p) => p.post_id) ?? []
@@ -316,14 +357,24 @@ export default async function UserDetailPage({
       .eq("target_type", "user")
       .eq("target_id", userId)
       .order("created_at", { ascending: false })
-      .limit(12),
+      .limit(20),
+    // Both self-gate on the operator's role; a role that cannot contact
+    // members gets an error and the composer explains why.
+    session.rpc("admin_member_contact_options", { p_member: userId }),
+    session.rpc("admin_member_communications", { p_member: userId, p_limit: 50 }),
   ]);
 
-  // Sessions + IPs — super_admin only (the RPC self-gates on auth.uid(), so it
-  // needs the session client; non-super_admins get an error and an empty list).
-  const { data: sessionsData } = await (await createSsrClient()).rpc("admin_user_sessions", {
-    p_target: userId,
-  });
+  const contact = contactData as ContactOptions | null;
+  const communications = (communicationsData ?? []) as Communication[];
+  const warnings = communications.filter((c) => c.channel === "warning" && !c.rescinded_at).length;
+  const lastContact = communications[0]?.created_at ?? null;
+  const initialChannel: ContactChannel =
+    compose === "warning" || compose === "email" ? compose : "message";
+
+  const { data: sessionsData } =
+    tab === "security"
+      ? await session.rpc("admin_user_sessions", { p_target: userId })
+      : { data: null };
   const sessions = (sessionsData ?? []) as {
     session_id: string;
     ip: string | null;
@@ -334,352 +385,113 @@ export default async function UserDetailPage({
     not_after: string | null;
   }[];
 
+  const handle = `@${user.anonymous_pseudonym}`;
+  const base = `/users/${user.user_id}`;
+  const composeHref = (channel: ContactChannel) => `${base}?tab=communications&compose=${channel}#contact`;
+  const statusTone =
+    user.account_status === "active" ? "ok" : user.account_status === "suspended" ? "danger" : "warn";
+
   return (
-    <div className="flex flex-col gap-6 max-w-[1200px]">
+    <div className="member-profile">
       {notice && (
-        <div className="surface-flat flex items-start gap-2 px-4 py-3">
-          <Badge tone={notice.tone}>
-            {notice.tone === "ok" ? "complete" : "attention"}
-          </Badge>
-          <p className="text-sm text-burgundy">{notice.text}</p>
+        <div className={`member-notice is-${notice.tone}`} role="status">
+          <p>{notice.text}</p>
         </div>
       )}
 
-      <div>
-        <Link href="/users" className="btn-ghost mb-3">
-          <ChevronLeft size={14} /> Users
-        </Link>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="h-14 w-14 rounded-2xl bg-berry text-white flex items-center justify-center text-xl font-extrabold shadow-soft">
-              {user.anonymous_pseudonym.slice(0, 2).toUpperCase()}
-            </div>
-            <div>
-              <h1 className="h-page">@{user.anonymous_pseudonym}</h1>
-              <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                <Badge tone={user.user_role === "super_admin" ? "danger" : user.user_role === "admin" || user.user_role === "moderator" ? "info" : "neutral"}>
-                  {user.user_role}
-                </Badge>
-                <Badge
-                  tone={
-                    user.account_status === "active"
-                      ? "ok"
-                      : user.account_status === "suspended"
-                        ? "warn"
-                        : "danger"
-                  }
-                  icon={user.account_status === "shadow_banned" ? <EyeOff size={11} /> : undefined}
-                >
-                  {user.account_status}
-                </Badge>
-                <span className="text-xs text-ink-muted">
-                  joined {new Date(user.created_at).toLocaleDateString()}
-                </span>
-              </div>
-            </div>
+      <Link href="/users" className="member-back">
+        <ChevronLeft size={14} /> All members
+      </Link>
+
+      <header className="member-header">
+        <div className="member-identity">
+          <div className="member-avatar" aria-hidden="true">
+            {user.anonymous_pseudonym.slice(0, 2).toUpperCase()}
           </div>
-          <div className="text-right">
-            <p className="h-eyebrow">User ID</p>
-            <p className="font-mono text-xs text-ink-muted select-all">
-              {user.user_id}
-            </p>
+          <div className="min-w-0">
+            <h1>{handle}</h1>
+            <div className="member-meta">
+              <Badge tone={statusTone}>
+                {user.account_status}
+              </Badge>
+              <span>{user.user_role.replaceAll("_", " ")}</span>
+              {user.is_verified && (
+                <span className="inline-flex items-center gap-1">
+                  <CheckCircle2 size={12} /> Verified
+                </span>
+              )}
+              <span>Joined {new Date(user.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+              <span className="font-mono select-all member-id" title="Member ID">
+                {user.user_id.slice(0, 8)}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+        <div className="member-actions">
+          {contact && !contact.is_self && (
+            <>
+              <Link href={composeHref("message")} className="btn-primary">
+                <Send size={15} /> Message
+              </Link>
+              {contact.can_warn && (
+                <Link href={composeHref("warning")} className="btn-secondary">
+                  <OctagonAlert size={15} /> Warn
+                </Link>
+              )}
+              {contact.email_available ? (
+                <Link href={composeHref("email")} className="btn-secondary" title={`Email ${contact.email_hint}`}>
+                  <Mail size={15} /> Email
+                </Link>
+              ) : (
+                <button type="button" className="btn-secondary" disabled title="No verified email address on this account">
+                  <Mail size={15} /> Email
+                </button>
+              )}
+            </>
+          )}
+          <Link href={`${base}?tab=account`} className="btn-ghost">
+            <ShieldAlert size={15} /> Account actions
+          </Link>
+        </div>
+      </header>
 
-      {/* Metrics strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {([["Live posts", postCount], ["Comments", commentCount], ["Reports against", reportsAgainst], ["Tribes joined", tribeCount]] as const).map(([label, count]) => (
-          <div key={label} className="kpi">
-            <p className="kpi-label">{label}</p>
-            <p className={`kpi-value ${(count ?? 0) === 0 ? "is-zero" : ""}`}>{count ?? 0}</p>
+      <section className="operator-metrics member-metrics" aria-label="Member summary">
+        {(
+          [
+            ["Live posts", postCount ?? 0, null],
+            ["Comments", commentCount ?? 0, null],
+            ["Reports against", reportsAgainst ?? 0, (reportsAgainst ?? 0) > 0 ? "is-alert" : null],
+            ["Active warnings", warnings, warnings > 0 ? "is-alert" : null],
+            ["Tribes", tribeCount ?? 0, null],
+          ] as const
+        ).map(([label, value, tone]) => (
+          <div key={label} className={`operator-metric ${tone ?? ""}`}>
+            <h3>{label}</h3>
+            <div className="operator-metric-value">
+              <strong className={value === 0 ? "is-zero" : ""}>{value.toLocaleString()}</strong>
+            </div>
           </div>
         ))}
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT: actions + facts */}
-        <div className="flex flex-col gap-6">
-          <Card title="Account actions" hint="Every action is audit-logged.">
-            <div className="flex flex-col gap-4">
-              <form action={setStatus} className="flex flex-col gap-2">
-                <input type="hidden" name="user_id" value={user.user_id} />
-                <label className="h-eyebrow">Account status</label>
-                <div className="flex gap-2">
-                  <select name="status" className="select flex-1" defaultValue={user.account_status}>
-                    <option value="active">active</option>
-                    <option value="suspended">suspended</option>
-                    <option value="restricted">restricted</option>
-                  </select>
-                  <input
-                    type="text"
-                    name="reason"
-                    placeholder="reason"
-                    className="input flex-1"
-                  />
-                  <button type="submit" className="btn-secondary">
-                    Apply
-                  </button>
-                </div>
-              </form>
+      <Tabs
+        basePath={base}
+        active={tab}
+        tabs={[
+          { key: "overview", label: "Overview" },
+          { key: "communications", label: "Communications", count: communications.length || undefined },
+          { key: "account", label: "Account" },
+          { key: "security", label: "Security & audit" },
+        ]}
+      />
 
-              <form action={setRole} className="flex flex-col gap-2">
-                <input type="hidden" name="user_id" value={user.user_id} />
-                <label className="h-eyebrow flex items-center gap-1">
-                  <KeyRound size={11} /> Role (super_admin only)
-                </label>
-                <div className="flex gap-2">
-                  <select name="role" className="select flex-1" defaultValue={user.user_role}>
-                    {ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    name="reason"
-                    placeholder="reason"
-                    className="input flex-1"
-                  />
-                  <button type="submit" className="btn-secondary">
-                    Assign
-                  </button>
-                </div>
-              </form>
-
-              <form action={resetPassword} className="flex flex-col gap-2">
-                <input type="hidden" name="user_id" value={user.user_id} />
-                <label className="h-eyebrow flex items-center gap-1">
-                  <KeyRound size={11} /> Reset password (super_admin only)
-                </label>
-                <p className="text-xs text-muted">
-                  Phrase-protected accounts must use their recovery phrase; an
-                  admin reset cannot safely reseal it.
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    name="password"
-                    placeholder="new password (12+ chars)"
-                    minLength={12}
-                    required
-                    className="input flex-1"
-                    autoComplete="off"
-                  />
-                  <input
-                    type="text"
-                    name="reason"
-                    placeholder="reason"
-                    className="input flex-1"
-                  />
-                  <button type="submit" className="btn-secondary">
-                    Set
-                  </button>
-                </div>
-              </form>
-
-              <form action={setVerified} className="flex flex-col gap-2">
-                <input type="hidden" name="user_id" value={user.user_id} />
-                <label className="h-eyebrow flex items-center gap-1">
-                  <CheckCircle2 size={11} /> Verified badge — currently{" "}
-                  {user.is_verified ? "ON" : "OFF"} (super_admin)
-                </label>
-                <input
-                  type="text"
-                  name="reason"
-                  placeholder="reason"
-                  className="input"
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    name="verified"
-                    value="true"
-                    className="btn-secondary flex-1"
-                  >
-                    Verify
-                  </button>
-                  <button
-                    type="submit"
-                    name="verified"
-                    value="false"
-                    className="btn-secondary flex-1"
-                  >
-                    Unverify
-                  </button>
-                  <button
-                    type="submit"
-                    name="verified"
-                    value="clear"
-                    className="btn-ghost flex-1"
-                    title="Clear the manual override — let the automatic milestone system decide."
-                  >
-                    Auto
-                  </button>
-                </div>
-              </form>
-            </div>
-          </Card>
-
-          <Card title="Edit profile" hint="Overwrites the user's public fields. Audited.">
-            <form action={editProfile} className="flex flex-col gap-3">
-              <input type="hidden" name="user_id" value={user.user_id} />
-              {/* Shown, never sent. `users_identity_guard` raises
-                  username_changes_disabled on any UPDATE that changes
-                  anonymous_pseudonym, so an editable box here could only ever
-                  fail — and it failed as an opaque React #441, because the
-                  action lets the database error escape into the Server
-                  Components render. Same class of bug as the "banned" /
-                  "shadow_banned" options removed from the status dropdown
-                  above: a control the database will always refuse. Handles are
-                  permanent by design; changing one is how impersonation and
-                  reputation-shedding start. */}
-              <div className="flex flex-col gap-1">
-                <label className="h-eyebrow">Pseudonym</label>
-                <input
-                  type="text"
-                  value={user.anonymous_pseudonym}
-                  className="input opacity-60 cursor-not-allowed"
-                  readOnly
-                  disabled
-                />
-                <p className="text-xs text-burgundy/60">
-                  Permanent. Handles cannot be changed after the account exists.
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex flex-col gap-1">
-                  <label className="h-eyebrow">Verified</label>
-                  <select name="is_verified" className="select" defaultValue="">
-                    <option value="">no change</option>
-                    <option value="true">verified</option>
-                    <option value="false">unverified</option>
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="h-eyebrow">Safety tier</label>
-                  <input
-                    type="text"
-                    name="safety_tier"
-                    defaultValue={user.safety_tier}
-                    className="input"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex flex-col gap-1">
-                  <label className="h-eyebrow">City</label>
-                  <input
-                    type="text"
-                    name="home_city"
-                    defaultValue={user.home_city ?? ""}
-                    className="input"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="h-eyebrow">Country</label>
-                  <input
-                    type="text"
-                    name="home_country"
-                    defaultValue={user.home_country ?? ""}
-                    className="input"
-                  />
-                </div>
-              </div>
-              <input
-                type="text"
-                name="reason"
-                placeholder="reason (optional)"
-                className="input"
-              />
-              <button type="submit" className="btn-secondary self-start">
-                Save profile
-              </button>
-            </form>
-          </Card>
-
-          <Card title="Danger zone" hint="Permanent. Deletes the login + all their content.">
-            <form action={deleteUser} className="flex flex-col gap-2">
-              <input type="hidden" name="user_id" value={user.user_id} />
-              <input
-                type="text"
-                name="reason"
-                placeholder="reason"
-                className="input"
-              />
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  name="confirm"
-                  placeholder="type DELETE to confirm"
-                  className="input flex-1"
-                  autoComplete="off"
-                />
-                <button
-                  type="submit"
-                  className="btn-secondary is-destructive"
-                >
-                  <Trash2 size={13} /> Delete user
-                </button>
-              </div>
-            </form>
-          </Card>
-
-          <Card title="Profile facts" padded>
-            <KV label="Pseudonym" value={`@${user.anonymous_pseudonym}`} />
-            <KV label="Karma" value={user.karma_points.toLocaleString()} />
-            <KV label="Mood" value={user.current_mood ?? "—"} />
-            <KV label="Verified" value={user.is_verified ? "yes" : "no"} />
-            <KV label="Safety tier" value={user.safety_tier} />
-            <KV
-              label="Location"
-              value={
-                [user.home_city, user.home_campus, user.home_country]
-                  .filter(Boolean)
-                  .join(", ") || "—"
-              }
-            />
-          </Card>
-
-          {Array.isArray(badges) && badges.length > 0 && (
-            <Card title="Badges" padded>
-              <div className="flex flex-wrap gap-1.5">
-                {badges.map((b: { badge_key: string }) => (
-                  <Badge key={b.badge_key} tone="info">
-                    {b.badge_key}
-                  </Badge>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {Array.isArray(streaks) && streaks.length > 0 && (
-            <Card title="Streaks" padded>
-              {(streaks as { streak_kind: string; current_count: number; longest_count: number }[]).map((s) => (
-                <KV
-                  key={s.streak_kind}
-                  label={s.streak_kind}
-                  value={`${s.current_count} cur · ${s.longest_count} best`}
-                />
-              ))}
-            </Card>
-          )}
-        </div>
-
-        {/* RIGHT: timeline + recent posts */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          <Card
-            title="Recent posts"
-            hint="Last 8 live posts by this user. Tap → /moderation for action."
-            padded={false}
-          >
+      {tab === "overview" && (
+        <div className="member-grid">
+          <Card title="Recent posts" hint="Last 8 posts. Act on content from Moderation." padded={false}>
             {(recentPosts ?? []).length === 0 ? (
-              <div className="px-5 py-10 text-sm text-ink-muted italic">
-                No posts yet.
-              </div>
+              <p className="member-empty">No posts yet.</p>
             ) : (
-              <ul className="divide-y divide-line">
+              <ul className="member-list">
                 {(recentPosts ?? []).map(
                   (p: {
                     post_id: string;
@@ -689,20 +501,14 @@ export default async function UserDetailPage({
                     comments_count: number;
                     crisis_level: string | null;
                   }) => (
-                    <li key={p.post_id} className="px-5 py-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        {p.crisis_level && (
-                          <Badge tone="crisis">crisis · {p.crisis_level}</Badge>
-                        )}
-                        <p className="text-[11px] text-ink-muted ml-auto">
-                          {new Date(p.created_at).toLocaleString()}
-                        </p>
+                    <li key={p.post_id}>
+                      <div className="member-list-head">
+                        {p.crisis_level && <Badge tone="crisis">crisis · {p.crisis_level}</Badge>}
+                        <time>{new Date(p.created_at).toLocaleString()}</time>
                       </div>
-                      <p className="text-sm text-burgundy line-clamp-2">
-                        {p.content}
-                      </p>
-                      <p className="text-[11px] text-ink-muted mt-1">
-                        ♡ {p.likes_count} · 💬 {p.comments_count}
+                      <p className="member-list-body line-clamp-2">{p.content}</p>
+                      <p className="member-list-foot tabular">
+                        {p.likes_count} hugs · {p.comments_count} comments
                       </p>
                     </li>
                   )
@@ -711,85 +517,235 @@ export default async function UserDetailPage({
             )}
           </Card>
 
-          <Card
-            title="Admin timeline"
-            hint="Audit entries scoped to this user — bans, role changes, status flips."
-            padded={false}
-          >
-            {(timeline ?? []).length === 0 ? (
-              <div className="px-5 py-10 text-sm text-ink-muted italic">
-                No admin actions taken on this user yet.
-              </div>
-            ) : (
-              <ul className="divide-y divide-line">
-                {(timeline ?? []).map(
-                  (t: {
-                    audit_id: string;
-                    action: string;
-                    actor_pseudonym: string;
-                    reason: string | null;
-                    created_at: string;
-                  }) => (
-                    <li
-                      key={t.audit_id}
-                      className="px-5 py-3 flex items-start gap-3"
-                    >
-                      <Badge tone={timelineTone(t.action)}>{t.action}</Badge>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-burgundy">
-                          by{" "}
-                          <span className="font-semibold">
-                            @{t.actor_pseudonym}
-                          </span>
-                        </p>
-                        {t.reason && (
-                          <p className="text-xs text-ink-muted italic">
-                            “{t.reason}”
-                          </p>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-ink-muted whitespace-nowrap">
-                        {new Date(t.created_at).toLocaleString()}
-                      </p>
-                    </li>
-                  )
-                )}
-              </ul>
+          <div className="member-side">
+            <Card title="Profile" padded>
+              <KV label="Karma" value={user.karma_points.toLocaleString()} />
+              <KV label="Mood" value={user.current_mood ?? "—"} />
+              <KV label="Safety tier" value={user.safety_tier} />
+              <KV
+                label="Location"
+                value={[user.home_city, user.home_campus, user.home_country].filter(Boolean).join(", ") || "—"}
+              />
+              <KV label="Last contacted" value={lastContact ? new Date(lastContact).toLocaleDateString() : "Never"} />
+            </Card>
+            {Array.isArray(badges) && badges.length > 0 && (
+              <Card title="Badges" padded>
+                <div className="flex flex-wrap gap-1.5">
+                  {badges.map((b: { badge_key: string }) => (
+                    <Badge key={b.badge_key} tone="neutral">
+                      {b.badge_key.replaceAll("_", " ")}
+                    </Badge>
+                  ))}
+                </div>
+              </Card>
             )}
-          </Card>
+            {Array.isArray(streaks) && streaks.length > 0 && (
+              <Card title="Streaks" padded>
+                {(streaks as { streak_kind: string; current_count: number; longest_count: number }[]).map((s) => (
+                  <KV key={s.streak_kind} label={s.streak_kind} value={`${s.current_count} now · ${s.longest_count} best`} />
+                ))}
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
 
-          <Card
-            title="Sessions & IP addresses"
-            hint="Active GoTrue sessions with device + IP. super_admin only."
-            padded={false}
-          >
-            {sessions.length === 0 ? (
-              <div className="px-5 py-8 text-sm text-ink-muted italic">
-                No active sessions (or you lack super_admin to view them).
-              </div>
+      {tab === "communications" && (
+        <div className="member-grid">
+          <Card title="History" hint="Everything staff have sent this member. Kept even if the member dismisses it." padded={false}>
+            {communications.length === 0 ? (
+              <p className="member-empty">Nobody has contacted this member from the console yet.</p>
             ) : (
-              <ul className="divide-y divide-line">
-                {sessions.map((s) => (
-                  <li key={s.session_id} className="px-5 py-3 flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-mono text-sm text-burgundy select-all">
-                        {s.ip ?? "—"}
-                      </p>
-                      <p className="text-[11px] text-ink-muted truncate">
-                        {s.user_agent ?? "unknown device"}
-                      </p>
+              <ol className="member-list">
+                {communications.map((c) => (
+                  <li key={c.communication_id} className={c.rescinded_at ? "is-rescinded" : undefined}>
+                    <div className="member-list-head">
+                      <span className={`contact-channel is-${c.channel}`}>{CHANNEL_LABEL[c.channel]}</span>
+                      <span className="contact-status">
+                        {c.rescinded_at ? "Rescinded on appeal" : DELIVERY_LABEL[c.delivery_status] ?? c.delivery_status}
+                      </span>
+                      <time>{new Date(c.created_at).toLocaleString()}</time>
                     </div>
-                    {s.aal && <Badge tone="neutral">{s.aal}</Badge>}
-                    <p className="text-[11px] text-ink-muted whitespace-nowrap">
-                      {new Date(s.updated_at).toLocaleString()}
+                    <p className="member-list-title">
+                      {c.subject}
+                      {c.policy_code && <span className="contact-policy">{c.policy_code}</span>}
+                    </p>
+                    <p className="member-list-body whitespace-pre-wrap">{c.body}</p>
+                    <p className="member-list-foot">
+                      By @{c.actor_pseudonym ?? "former staff"} · {c.actor_role.replaceAll("_", " ")}
+                      {c.email_hint && <> · to {c.email_hint}</>}
+                      {c.channel === "warning" && <> · {c.appealable ? "appealable" : "not appealable"}</>}
                     </p>
                   </li>
                 ))}
-              </ul>
+              </ol>
             )}
           </Card>
+          <div className="member-side" id="contact">
+            <Card title="Contact this member" hint="Requires MFA. Every send is audit-logged.">
+              {contact ? (
+                <MemberContact memberId={user.user_id} handle={handle} options={contact} initial={initialChannel} />
+              ) : (
+                <p className="operator-note">Your role can view this member but cannot contact them.</p>
+              )}
+            </Card>
+          </div>
         </div>
-      </div>
+      )}
+
+      {tab === "account" && (
+        <div className="member-account">
+          <Card title="Status and access" hint="Status changes notify the member and revoke their sessions.">
+            <div className="member-forms">
+              <form action={setStatus} className="member-form">
+                <input type="hidden" name="user_id" value={user.user_id} />
+                <label className="member-form-label">Account status</label>
+                <div className="member-form-row">
+                  <select name="status" className="select" defaultValue={user.account_status}>
+                    {STATUSES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <input type="text" name="reason" placeholder="Reason, shown to the member" className="input" />
+                  <button type="submit" className="btn-secondary">Apply</button>
+                </div>
+              </form>
+
+              <form action={setRole} className="member-form">
+                <input type="hidden" name="user_id" value={user.user_id} />
+                <label className="member-form-label"><KeyRound size={12} /> Role <small>super admin only</small></label>
+                <div className="member-form-row">
+                  <select name="role" className="select" defaultValue={user.user_role}>
+                    {ROLES.map((r) => (
+                      <option key={r} value={r}>{r.replaceAll("_", " ")}</option>
+                    ))}
+                  </select>
+                  <input type="text" name="reason" placeholder="Reason" className="input" />
+                  <button type="submit" className="btn-secondary">Assign</button>
+                </div>
+              </form>
+
+              <form action={setVerified} className="member-form">
+                <input type="hidden" name="user_id" value={user.user_id} />
+                <label className="member-form-label">
+                  <CheckCircle2 size={12} /> Verified badge <small>currently {user.is_verified ? "on" : "off"}</small>
+                </label>
+                <div className="member-form-row">
+                  <input type="text" name="reason" placeholder="Reason" className="input" />
+                  <button type="submit" name="verified" value="true" className="btn-secondary">Verify</button>
+                  <button type="submit" name="verified" value="false" className="btn-secondary">Unverify</button>
+                  <button type="submit" name="verified" value="clear" className="btn-ghost" title="Let the automatic milestone system decide.">Auto</button>
+                </div>
+              </form>
+
+              <form action={resetPassword} className="member-form">
+                <input type="hidden" name="user_id" value={user.user_id} />
+                <label className="member-form-label"><KeyRound size={12} /> Reset password <small>super admin only</small></label>
+                <p className="member-form-hint">Phrase-protected accounts must use their recovery phrase; an admin reset cannot safely reseal it.</p>
+                <div className="member-form-row">
+                  <input type="text" name="password" placeholder="New password, 12+ characters" minLength={12} required className="input" autoComplete="off" />
+                  <input type="text" name="reason" placeholder="Reason" className="input" />
+                  <button type="submit" className="btn-secondary">Set</button>
+                </div>
+              </form>
+            </div>
+          </Card>
+
+          <Card title="Public profile" hint="Overwrites the member's public fields. Audited.">
+            <form action={editProfile} className="member-form-grid">
+              <input type="hidden" name="user_id" value={user.user_id} />
+              {/* Handles are permanent: users_identity_guard refuses any change. */}
+              <label className="member-field">
+                <span>Handle</span>
+                <input type="text" value={handle} className="input" readOnly disabled />
+              </label>
+              <label className="member-field">
+                <span>Verified</span>
+                <select name="is_verified" className="select" defaultValue="">
+                  <option value="">No change</option>
+                  <option value="true">Verified</option>
+                  <option value="false">Unverified</option>
+                </select>
+              </label>
+              <label className="member-field">
+                <span>Safety tier</span>
+                <input type="text" name="safety_tier" defaultValue={user.safety_tier} className="input" />
+              </label>
+              <label className="member-field">
+                <span>City</span>
+                <input type="text" name="home_city" defaultValue={user.home_city ?? ""} className="input" />
+              </label>
+              <label className="member-field">
+                <span>Country</span>
+                <input type="text" name="home_country" defaultValue={user.home_country ?? ""} className="input" />
+              </label>
+              <label className="member-field">
+                <span>Reason</span>
+                <input type="text" name="reason" placeholder="Optional" className="input" />
+              </label>
+              <div className="member-form-submit">
+                <button type="submit" className="btn-secondary">Save profile</button>
+              </div>
+            </form>
+          </Card>
+
+          <Card title="Delete account" hint="Permanent. Deletes the login and all of the member's content." className="member-danger">
+            <form action={deleteUser} className="member-form-row">
+              <input type="hidden" name="user_id" value={user.user_id} />
+              <input type="text" name="reason" placeholder="Reason" className="input" />
+              <input type="text" name="confirm" placeholder="Type DELETE to confirm" className="input" autoComplete="off" />
+              <button type="submit" className="btn-danger">
+                <Trash2 size={15} /> Delete account
+              </button>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {tab === "security" && (
+        <div className="member-grid">
+          <Card title="Admin timeline" hint="Audit entries for this member." padded={false}>
+            {(timeline ?? []).length === 0 ? (
+              <p className="member-empty">No admin actions on this member yet.</p>
+            ) : (
+              <ol className="member-list">
+                {(timeline ?? []).map(
+                  (t: { audit_id: string; action: string; actor_pseudonym: string; reason: string | null; created_at: string }) => (
+                    <li key={t.audit_id}>
+                      <div className="member-list-head">
+                        <Badge tone={timelineTone(t.action)}>{t.action}</Badge>
+                        <time>{new Date(t.created_at).toLocaleString()}</time>
+                      </div>
+                      {t.reason && <p className="member-list-body">“{t.reason}”</p>}
+                      <p className="member-list-foot">By @{t.actor_pseudonym}</p>
+                    </li>
+                  )
+                )}
+              </ol>
+            )}
+          </Card>
+          <div className="member-side">
+            <Card title="Sessions" hint="Active sessions with device and IP. Super admin only." padded={false}>
+              {sessions.length === 0 ? (
+                <p className="member-empty">No active sessions, or your role cannot view them.</p>
+              ) : (
+                <ul className="member-list">
+                  {sessions.map((s) => (
+                    <li key={s.session_id}>
+                      <div className="member-list-head">
+                        <span className="font-mono select-all">{s.ip ?? "—"}</span>
+                        {s.aal && <Badge tone="neutral">{s.aal}</Badge>}
+                        <time>{new Date(s.updated_at).toLocaleString()}</time>
+                      </div>
+                      <p className="member-list-foot truncate">{s.user_agent ?? "Unknown device"}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -797,6 +753,7 @@ export default async function UserDetailPage({
 function timelineTone(action: string): "ok" | "warn" | "danger" | "info" | "neutral" {
   if (action.includes("delete") || action.includes("ban") || action.includes("suspend"))
     return "danger";
+  if (action.includes("warning")) return "warn";
   if (action.includes("restore") || action.includes("reactivate") || action === "user.set_status")
     return "info";
   if (action.includes("role")) return "info";

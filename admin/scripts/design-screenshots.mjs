@@ -63,12 +63,12 @@ try {
     setAll: values => values.forEach(({ name, value }) => cookies.set(name, value)),
   } });
   if ((await auth.auth.signInWithPassword({ email, password })).error) throw new Error("Local fixture sign in failed");
-  const detailId = sql(`SELECT user_id FROM public.users WHERE anonymous_pseudonym LIKE 'design%' ORDER BY anonymous_pseudonym LIMIT 1`, "pipe").trim();
+  const detailId = process.env.DESIGN_MEMBER ?? sql(`SELECT user_id FROM public.users WHERE anonymous_pseudonym LIKE 'design%' ORDER BY anonymous_pseudonym LIMIT 1`, "pipe").trim();
   browser = await chromium.launch({ channel: process.env.ADMIN_BROWSER_CHANNEL ?? "chrome", headless: true });
   const shots = [
     ["overview", "/overview"], ["safety", "/safety"], ["moderation", "/moderation"], ["users", "/users"],
     ["inbox", "/inbox"], ["system", "/system"],
-    ...(detailId ? [["user-detail", `/users/${detailId}`]] : []),
+    ...(detailId ? [["user-detail", `/users/${detailId}`], ["user-contact", `/users/${detailId}?tab=communications&compose=warning`], ["user-account", `/users/${detailId}?tab=account`]] : []),
   ];
   const capture = async (name, route, theme, viewport, fullPage = false) => {
     const context = await browser.newContext({ viewport, deviceScaleFactor: 1, colorScheme: theme === "dark" ? "dark" : "light", reducedMotion: "reduce" });

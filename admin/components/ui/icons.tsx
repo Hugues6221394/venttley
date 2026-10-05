@@ -69,4 +69,8 @@ export {
   FileText,
   MessageSquare,
   MessagesSquare,
+  // Member contact
+  Mail,
+  Send,
+  OctagonAlert,
 } from "lucide-react";
