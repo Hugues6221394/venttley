@@ -58,7 +58,8 @@ exactly as before.
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | set; login fails closed without them |
 | `ADMIN_ORIGIN_SECRET` + `ADMIN_IP_ALLOWLIST` | set together, per DEPLOY.md |
 | `ADMIN_INVITATION_HMAC_KEY` | 64 hex characters, stable, never rotated casually |
-| `ADMIN_SHELL_V2` and every `ADMIN_*_UI` flag | `false` |
+| `ADMIN_SHELL_V2`, `ADMIN_OVERVIEW_V2`, `ADMIN_THEME_UI` | `true` (owner-approved 5 Oct), `ADMIN_SHELL_V2_ROLES=super_admin` |
+| Every other `ADMIN_*_UI` flag | `false` |
 
 ## 4. Smoke test after deploy (owner + engineering)
 
@@ -81,9 +82,10 @@ commit `886861e`.
 - Database: the new migrations are additive. Leave them in place; their
   controls are already off. Do not drop tables or history.
 
-## Before enabling `ADMIN_OVERVIEW_V2` later
+## Overview v2 snapshots
 
-The four `admin-overview-*` cron jobs ship inactive. Warm each panel with
+Done in production on 5 Oct: all four panels warmed without error codes and the
+four `admin-overview-*` jobs activated. For another environment, warm each panel with
 `private.refresh_admin_overview('<panel>')`, check the timestamps and query
 plans on production-sized data, then activate only those four jobs
 ([details](overview-batch-1.md)).
