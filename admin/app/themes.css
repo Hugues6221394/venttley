@@ -160,7 +160,7 @@ html[data-theme-ui="enabled"] :is(.input,.input-lg,.select,.textarea) { border-c
 html[data-theme-ui="enabled"] :is(input,textarea)::placeholder { color: rgb(var(--console-muted,124 91 98)); opacity: 1; }
 html[data-theme-ui="enabled"] :focus-visible { outline:2px solid var(--theme-focus); outline-offset:2px; }
 html[data-theme-ui="enabled"] :is(.input,.input-lg,.select,.textarea,.console-search-input):focus-visible {
-  outline:none; border-color: var(--theme-focus);
+  outline:2px solid transparent; outline-offset:2px; border-color: var(--theme-focus);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-focus) 28%, transparent);
 }
 html[data-theme-ui="enabled"] :is(input[type="checkbox"],input[type="radio"]) { accent-color: var(--theme-action); }
