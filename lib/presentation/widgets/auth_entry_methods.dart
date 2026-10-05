@@ -416,7 +416,10 @@ class _WelcomeAuthMarksState extends ConsumerState<WelcomeAuthMarks> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         for (final (i, mark) in marks.indexed) ...[
-          if (i > 0) const SizedBox(width: 18),
+          // Wider than it looks like it needs to be. At 18 the three read as
+          // one object — a segmented control — rather than three choices, and
+          // the thumb target of each stops being obvious.
+          if (i > 0) const SizedBox(width: 30),
           mark,
         ],
       ],

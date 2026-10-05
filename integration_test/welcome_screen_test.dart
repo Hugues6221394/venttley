@@ -74,6 +74,17 @@ void main() {
       ),
       findsOneWidget,
     );
+    // The rule that separates "bring an identity you have" from "make one".
+    expect(find.text('or'), findsOneWidget);
+    // The disclosure, under the button that triggers it.
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is RichText &&
+            w.text.toPlainText().startsWith('By continuing, you agree'),
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
     await shot(tester, 'welcome-light');
   });

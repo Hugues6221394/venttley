@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -106,7 +107,15 @@ class WelcomeScreen extends StatelessWidget {
                             const SizedBox(height: 20),
                             const WelcomeAuthMarks(),
                             SizedBox(
-                              height: constraints.maxHeight < 760 ? 16 : 22,
+                              height: constraints.maxHeight < 760 ? 14 : 18,
+                            ),
+                            // The marks are three ways to bring an identity
+                            // you already have. Below the rule is the one that
+                            // makes a new one, which is a different kind of
+                            // choice — the divider is what says so.
+                            const AuthOrDivider(),
+                            SizedBox(
+                              height: constraints.maxHeight < 760 ? 14 : 18,
                             ),
                             ElevatedButton(
                               onPressed: () =>
@@ -126,7 +135,11 @@ class WelcomeScreen extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 14),
+                            SizedBox(
+                              height: constraints.maxHeight < 760 ? 10 : 14,
+                            ),
+                            const _ConsentLine(),
+                            const SizedBox(height: 6),
                             Center(
                               child: TextButton(
                                 onPressed: () =>
@@ -201,4 +214,70 @@ class _Gutter extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 24),
     child: child,
   );
+}
+
+/// What somebody is agreeing to by going any further.
+///
+/// Placed under the button rather than above it, and quiet rather than bold:
+/// it is a disclosure, not a decision. The decision is the button. Shouting a
+/// legal line at somebody who has not chosen anything yet is how you get it
+/// skipped.
+///
+/// The two links are real routes, not decoration — /legal/terms and
+/// /legal/privacy both open without a session, because somebody has to be able
+/// to read what they are agreeing to before agreeing to it. That exemption is
+/// why the router lets legal paths through its auth gate.
+///
+/// This does not replace the consent step. Signing up still records an
+/// explicit acceptance against the policy version in force
+/// (20261008090000_policy_consent_at_signup); this is the notice that the
+/// acceptance is coming.
+class _ConsentLine extends StatefulWidget {
+  const _ConsentLine();
+
+  @override
+  State<_ConsentLine> createState() => _ConsentLineState();
+}
+
+class _ConsentLineState extends State<_ConsentLine> {
+  // Owned and disposed rather than built inline. A TapGestureRecognizer is a
+  // listener on the gesture arena; one made in build() is leaked on every
+  // rebuild, and this screen rebuilds every few seconds for the carousel.
+  late final _terms = TapGestureRecognizer()
+    ..onTap = () => context.push('/legal/terms');
+  late final _privacy = TapGestureRecognizer()
+    ..onTap = () => context.push('/legal/privacy');
+
+  @override
+  void dispose() {
+    _terms.dispose();
+    _privacy.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final quiet = scheme.onSurface.withValues(alpha: 0.52);
+    final link = TextStyle(
+      color: scheme.onSurface.withValues(alpha: 0.78),
+      fontWeight: FontWeight.w700,
+      decoration: TextDecoration.underline,
+      decorationColor: scheme.onSurface.withValues(alpha: 0.28),
+    );
+
+    return Text.rich(
+      textAlign: TextAlign.center,
+      TextSpan(
+        style: TextStyle(fontSize: 11.5, height: 1.45, color: quiet),
+        children: [
+          const TextSpan(text: 'By continuing, you agree to our '),
+          TextSpan(text: 'Terms', style: link, recognizer: _terms),
+          const TextSpan(text: ' and '),
+          TextSpan(text: 'Privacy Policy', style: link, recognizer: _privacy),
+          const TextSpan(text: '.'),
+        ],
+      ),
+    );
+  }
 }
