@@ -43,6 +43,29 @@ AS $$
   END;
 $$;
 
+-- Problem code for one job, or NULL when it is healthy.
+CREATE OR REPLACE FUNCTION private.cron_job_problem(
+  p_every INT, p_last_start TIMESTAMPTZ, p_last_success TIMESTAMPTZ,
+  p_last_status TEXT, p_now TIMESTAMPTZ
+)
+RETURNS TEXT
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT CASE
+    WHEN p_last_status = 'failed' AND (
+           p_every IS NULL OR p_every >= 60
+           -- Frequent jobs get a few ticks to recover from a transient error.
+           OR p_last_success IS NULL
+           OR p_last_success < p_now - make_interval(mins => p_every * 3 + 3)
+         ) THEN 'failed'
+    WHEN p_every IS NULL THEN NULL
+    WHEN p_last_start IS NULL THEN CASE WHEN p_every < 60 THEN 'not_running' END
+    WHEN p_last_start < p_now - make_interval(mins => p_every * 2 + 3) THEN 'late'
+  END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.platform_heartbeat_status()
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -54,6 +77,7 @@ DECLARE
   problems TEXT[] := '{}';
   checked  INT := 0;
   r        RECORD;
+  problem  TEXT;
   mail_age INT;
 BEGIN
   -- job_run_details is never purged, so read only the newest rows through its
@@ -79,21 +103,9 @@ BEGIN
      GROUP BY j.jobid, j.jobname, j.schedule
   LOOP
     checked := checked + 1;
-    IF r.last_status = 'failed' AND (
-         r.every IS NULL OR r.every >= 60
-         -- Frequent jobs get a few ticks to recover from a transient error.
-         OR r.last_success IS NULL
-         OR r.last_success < now() - make_interval(mins => r.every * 3 + 3)
-       ) THEN
-      problems := problems || (r.jobname || ':failed');
-    ELSIF r.every IS NULL THEN
-      CONTINUE;
-    ELSIF r.last_start IS NULL THEN
-      IF r.every < 60 THEN
-        problems := problems || (r.jobname || ':not_running');
-      END IF;
-    ELSIF r.last_start < now() - make_interval(mins => r.every * 2 + 3) THEN
-      problems := problems || (r.jobname || ':late');
+    problem := private.cron_job_problem(r.every, r.last_start, r.last_success, r.last_status, now());
+    IF problem IS NOT NULL THEN
+      problems := problems || (r.jobname || ':' || problem);
     END IF;
   END LOOP;
 
@@ -116,6 +128,7 @@ COMMENT ON FUNCTION public.platform_heartbeat_status() IS
   'Background-worker health for the external heartbeat: late or failing active cron jobs and a stalled email outbox. Fixed codes only.';
 
 REVOKE ALL ON FUNCTION private.cron_interval_minutes(TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.cron_job_problem(INT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.platform_heartbeat_status() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.platform_heartbeat_status() TO service_role;
 

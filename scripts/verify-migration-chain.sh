@@ -198,7 +198,7 @@ psql "$PROBE" -tAc "CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions"
 tot=0; bad=0; zero=""
 for f in supabase/tests/database/*.test.sql; do
   out=$(psql "$PROBE" -q -f "$f" 2>&1)
-  n=$(echo "$out" | grep -cE "^ (not )?ok [0-9]+"); k=$(echo "$out" | grep -c "^ not ok")
+  n=$(echo "$out" | grep -cE "^ (not )?ok [0-9]+"); k=$(echo "$out" | grep -cE "^ not ok|ERROR:")
   tot=$((tot+n)); bad=$((bad+k))
   [ "$n" -eq 0 ] && zero="$zero $(basename "$f" .test.sql)"
   [ "$k" -gt 0 ] && printf '  \033[31mFAIL %-44s %s of %s\033[0m\n' "$(basename "$f" .test.sql)" "$k" "$n"
