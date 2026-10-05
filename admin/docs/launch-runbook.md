@@ -95,8 +95,20 @@ plans on production-sized data, then activate only those four jobs
 Alerts go to **CODAFRIQA SUPPORT — support@codafriqa.rw**, monitored by the
 owner and the engineering team.
 
+## External monitor
+
+Better Stack (account: support@codafriqa.rw) watches `admin.venttly.com` and a
+heartbeat. Every minute the `monitor_heartbeat` cron job calls the
+`monitor-heartbeat` edge function, which runs `platform_heartbeat_status()`
+(every active cron job on time, last run not failing, email outbox moving) and
+pings the heartbeat URL, or its `/fail` endpoint with the failing job names.
+Pings stopping (database, scheduler or function down) also alerts.
+
+- The URL lives only in the edge secret `HEARTBEAT_URL`; the function reuses `CRON_SECRET`.
+- Drill: pause the job with `cron.alter_job(<jobid>, active := false)` for five
+  minutes, confirm the email, then reactivate it.
+- New cron jobs are picked up automatically. A daily job is only checked once it has run.
+
 ## Still open before launch
 
 - Supabase Pro (Free has no backups and limits realtime to ~200 connections).
-- External monitor (Better Stack): uptime checks plus a database heartbeat that
-  pings only while the background jobs are healthy, alerting the on-call address.
