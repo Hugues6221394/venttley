@@ -395,6 +395,40 @@ When: ${plainValue(v.when, "just now", 100)}
 You can review every device and security event in the app under
 Profile > Password & security.`,
   },
+  // Written by a staff member in the admin console (admin_email_member). The
+  // body is free text: every paragraph is escaped and nothing is linkified.
+  staff_message: {
+    subject: (v) =>
+      `Venttly: ${plainValue(v.subject, "A message from the Venttly team", 80)}`,
+    html: (v) =>
+      shell({
+        preheader: "A message from the Venttly team",
+        heading: htmlValue(v.subject, "A message from the Venttly team", 80),
+        body: `${
+          plainValue(v.body, "", 1000).length === 0 ? "" : String(v.body)
+            .slice(0, 1000)
+            .split(/\n{2,}/)
+            .map((part) =>
+              `<p style="${P}">${htmlValue(part.replace(/\n/g, " "), "", 1000)}</p>`
+            )
+            .join("")
+        }
+               <p style="${SMALL}">Sent by the Venttly team. You can also find our messages in the app under Notifications.</p>`,
+        cta: { label: "Open Venttly", href: APP_URL },
+        reason: "You are receiving this because the Venttly team needed to reach you about your account.",
+      }),
+    text: (v) =>
+      `${plainValue(v.subject, "A message from the Venttly team", 80)}
+
+${
+        typeof v.body === "string"
+          ? v.body.slice(0, 1000).replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, " ")
+          : ""
+      }
+
+— The Venttly team
+Open the app: https://venttly.app`,
+  },
   weekly_digest: {
     subject: () => "Your Venttly week — stories you might have missed",
     html: (v) =>
