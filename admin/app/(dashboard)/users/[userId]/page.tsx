@@ -618,7 +618,7 @@ export default async function UserDetailPage({
                 />
                 <button
                   type="submit"
-                  className="btn-secondary text-red-600 border-red-300 hover:bg-red-50 inline-flex items-center gap-1"
+                  className="btn-secondary is-destructive"
                 >
                   <Trash2 size={13} /> Delete user
                 </button>

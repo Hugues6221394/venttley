@@ -307,7 +307,7 @@ export default async function VerificationQueuePage({
                         type="submit"
                         name="approve"
                         value="true"
-                        className="btn-secondary text-green-700 border-green-300 hover:bg-green-50 inline-flex items-center gap-1"
+                        className="btn-secondary is-positive"
                       >
                         <CheckCircle2 size={14} /> Approve
                       </button>
@@ -315,7 +315,7 @@ export default async function VerificationQueuePage({
                         type="submit"
                         name="approve"
                         value="false"
-                        className="btn-secondary text-red-600 border-red-300 hover:bg-red-50 inline-flex items-center gap-1"
+                        className="btn-secondary is-destructive"
                       >
                         <XCircle size={14} /> Reject
                       </button>
@@ -362,7 +362,7 @@ export default async function VerificationQueuePage({
                     />
                     <button
                       type="submit"
-                      className="btn-secondary text-red-600 border-red-300 hover:bg-red-50 text-xs"
+                      className="btn-secondary is-destructive"
                     >
                       Revoke verification
                     </button>

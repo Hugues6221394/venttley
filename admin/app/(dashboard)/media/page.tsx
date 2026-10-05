@@ -208,7 +208,7 @@ function MediaItem({ row }: { row: MediaRow }) {
             <input type="hidden" name="kind" value={row.kind} />
             <input type="hidden" name="id" value={row.id} />
             <input type="hidden" name="status" value="blocked" />
-            <button className="btn-ghost text-xs text-danger" type="submit">
+            <button className="btn-ghost is-destructive" type="submit">
               <Ban size={13} /> Block
             </button>
           </form>

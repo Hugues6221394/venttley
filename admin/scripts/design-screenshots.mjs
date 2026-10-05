@@ -25,7 +25,7 @@ const origin = process.env.DESIGN_ORIGIN ?? `http://127.0.0.1:${port}`;
 const env = { ...process.env, NEXT_PUBLIC_SUPABASE_URL: config.API_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY: config.ANON_KEY,
   SUPABASE_SERVICE_ROLE_KEY: config.SERVICE_ROLE_KEY, NEXT_PUBLIC_ADMIN_ENV: "local", ADMIN_REQUIRE_MFA: "false",
   ADMIN_ORIGIN_SECRET: "", ADMIN_IP_ALLOWLIST: "", NEXT_TELEMETRY_DISABLED: "1",
-  ADMIN_SHELL_V2: "true", ADMIN_SHELL_V2_ROLES: "super_admin", ADMIN_OVERVIEW_V2: "true", ADMIN_THEME_UI: "true" };
+  ADMIN_SHELL_V2: "true", ADMIN_SHELL_V2_ROLES: "super_admin", ADMIN_OVERVIEW_V2: "true", ADMIN_THEME_UI: "true", ADMIN_INBOX_UI: "true", ADMIN_ATTENTION_UI: "true" };
 const label = process.env.DESIGN_LABEL ?? "after";
 const outputDir = resolve(root, ".artifacts", "redesign", label);
 await mkdir(outputDir, { recursive: true });
@@ -67,6 +67,7 @@ try {
   browser = await chromium.launch({ channel: process.env.ADMIN_BROWSER_CHANNEL ?? "chrome", headless: true });
   const shots = [
     ["overview", "/overview"], ["safety", "/safety"], ["moderation", "/moderation"], ["users", "/users"],
+    ["inbox", "/inbox"], ["system", "/system"],
     ...(detailId ? [["user-detail", `/users/${detailId}`]] : []),
   ];
   const capture = async (name, route, theme, viewport, fullPage = false) => {

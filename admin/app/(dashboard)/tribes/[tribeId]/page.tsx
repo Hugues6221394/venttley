@@ -241,8 +241,8 @@ export default async function TribeDetailPage({
                 type="submit"
                 className={
                   tribe.is_active
-                    ? "btn-secondary text-red-600 border-red-300 hover:bg-red-50 inline-flex items-center gap-1"
-                    : "btn-secondary text-green-700 border-green-300 hover:bg-green-50 inline-flex items-center gap-1"
+                    ? "btn-secondary is-destructive"
+                    : "btn-secondary is-positive"
                 }
               >
                 {tribe.is_active ? <Ban size={14} /> : <CheckCircle2 size={14} />}
@@ -274,7 +274,7 @@ export default async function TribeDetailPage({
                   />
                   <button
                     type="submit"
-                    className="btn-secondary text-green-700 border-green-300 hover:bg-green-50 inline-flex items-center gap-1"
+                    className="btn-secondary is-positive"
                   >
                     <RefreshCw size={14} />
                     Restore tribe
@@ -479,7 +479,7 @@ export default async function TribeDetailPage({
                         <button
                           type="submit"
                           title="Remove from tribe"
-                          className="btn-ghost text-red-600 hover:bg-red-50 inline-flex items-center gap-1"
+                          className="btn-ghost is-destructive"
                         >
                           <Trash2 size={13} />
                         </button>

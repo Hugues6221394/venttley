@@ -146,7 +146,7 @@ export default function PasswordResetForm() {
       <button
         type="submit"
         disabled={busy}
-        className="mt-1 rounded-xl bg-berry px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+        className="btn-primary mt-1"
       >
         {busy
           ? "Working…"

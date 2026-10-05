@@ -280,7 +280,7 @@ export default async function RolesPage() {
                   <button
                     type="submit"
                     title="Remove staff access (set role to normal)"
-                    className="btn-ghost text-red-600 hover:bg-red-50 inline-flex items-center gap-1"
+                    className="btn-ghost is-destructive"
                   >
                     <XCircle size={13} /> Remove
                   </button>
