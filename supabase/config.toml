@@ -447,6 +447,9 @@ verify_jwt = true
 
 # Internal Database Webhook / cron workers authenticate a dedicated shared
 # secret inside the handler. They do not accept public or user JWTs.
+[functions.monitor-heartbeat]
+verify_jwt = false
+
 [functions.notification-fanout]
 verify_jwt = false
 
