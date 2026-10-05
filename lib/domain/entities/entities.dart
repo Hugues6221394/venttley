@@ -607,10 +607,23 @@ class ScheduledPrompt {
 class Post {
   final String postId;
 
-  /// Stable author identity. Always present, but the UI should treat it
-  /// as opaque — never display the raw UUID. Used by the friend-action
-  /// chip and report flows to identify the author.
+  /// Stable identity of the *voice* that wrote this — which is the persona
+  /// when there is one, and the account otherwise. Never the account behind a
+  /// persona: that is the whole point of a persona, and the server stopped
+  /// sending it (migration 20261077090000).
+  ///
+  /// Opaque. Never display it, and never assume it names a user: for a persona
+  /// post it is a persona id, so /user/<authorId> does not exist. Use
+  /// [opensUserProfile] before routing anywhere with it.
   final String? authorId;
+
+  /// Whether the signed-in reader wrote this, answered by the server.
+  ///
+  /// Not `authorId == myUserId`: for a post behind one of my own personas the
+  /// author id is the persona's, so comparing it to my account id says no on
+  /// my own post. Only the database can answer this one, because only it can
+  /// see who owns the persona.
+  final bool isMine;
   final String authorPseudonym;
   final String? _authorDisplayName;
   final String? personaId;
@@ -709,6 +722,7 @@ class Post {
     required this.commentsCount,
     required this.createdAt,
     this.authorId,
+    this.isMine = false,
     this.personaId,
     this.authorProfilePhotoUrl,
     this.authorIsVerified = false,
@@ -754,7 +768,17 @@ class Post {
   bool get isDeleted => deletedAt != null;
   bool get isEdited => editedAt != null;
   bool get isLocked => lockedAt != null;
-  bool ownedBy(String? userId) => authorId != null && authorId == userId;
+  /// Kept for the mock backend and for posts that predate [isMine]. Prefer
+  /// [isMine], which is also right for a post behind one of your personas.
+  bool ownedBy(String? userId) =>
+      isMine || (authorId != null && authorId == userId);
+
+  /// Whether tapping the author's name can open a profile.
+  ///
+  /// False for a persona post: the id on it belongs to a persona, and there is
+  /// no page for one — nor should there be a route from a persona to the
+  /// account behind it.
+  bool get opensUserProfile => authorId != null && personaId == null;
 
   /// True when the caller has any reaction on this post.
   bool get likedByMe => myReaction != null;
@@ -788,6 +812,7 @@ class Post {
     return Post(
       postId: postId,
       authorId: authorId,
+      isMine: isMine,
       authorPseudonym: authorPseudonym,
       authorDisplayName: authorDisplayName ?? this.authorDisplayName,
       personaId: personaId,

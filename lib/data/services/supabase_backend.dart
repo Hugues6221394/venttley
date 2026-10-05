@@ -8931,6 +8931,10 @@ class SupabaseBackend {
     return Post(
       postId: r['post_id'] as String,
       authorId: r['author_id'] as String?,
+      // Absent until 20261077090000 is applied, where false is the safe
+      // reading: a post you cannot prove is yours simply loses its edit and
+      // delete affordances until the database catches up.
+      isMine: (r['is_mine'] as bool?) ?? false,
       authorPseudonym: (r['author_pseudonym'] as String?) ?? '@anonymous',
       authorDisplayName: r['author_display_name'] as String?,
       personaId: r['persona_id'] as String?,

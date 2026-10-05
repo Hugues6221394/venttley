@@ -131,7 +131,11 @@ class PostCard extends ConsumerWidget {
                             Row(
                               children: [
                                 Flexible(
-                                  child: post.authorId != null
+                                  // opensUserProfile, not authorId != null:
+                                  // on a persona post the id belongs to the
+                                  // persona, and /user/<persona> is a page
+                                  // that does not exist — and should not.
+                                  child: post.opensUserProfile
                                       ? InkWell(
                                           onTap: () => context.push(
                                             '/user/${post.authorId}',
