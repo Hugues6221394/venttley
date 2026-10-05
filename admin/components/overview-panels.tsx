@@ -5,7 +5,8 @@ import { OperatorPanel, OperatorMetric, OperatorTable, PanelUnavailable } from '
 import { SnapshotFreshness } from './ui/operator-controls';
 import { ReportVolume } from './overview-report-volume';
 import { QueueAttentionPanel } from './queue-attention-panel';
-import { Users, PenLine, UserPlus, MessageSquareText } from 'lucide-react';
+import { Users, PenLine, UserPlus, MessageSquareText, CheckCircle2, ChevronRight } from 'lucide-react';
+import { queueUrgency } from './queue-urgency';
 
 const regionNames=new Intl.DisplayNames(['en'],{type:'region'});
 const regionName=(code:string)=>{if(!/^[A-Z]{2}$/.test(code))return code;try{return regionNames.of(code)??code;}catch{return code;}};
@@ -27,9 +28,11 @@ export async function AttentionPanel() {
   if (process.env.ADMIN_ATTENTION_UI === 'true') return <QueueAttentionPanel/>;
   const s=await readOverviewPanel('queues');
   return <OperatorPanel title="Needs attention" className="operator-queue-panel" hint="Open work in your permitted queues."><SnapshotFreshness at={s.measured_at} state={s.state}/>
-    {!s.data?<PanelUnavailable label="Queue snapshots"/>:Object.keys(s.data).length===0?<p className="operator-note">Your role has no triage queues in this overview. Use your permitted workspace links.</p>:<OperatorTable caption="Actionable queue snapshots" headings={['Queue','Open','Next step']}>
-      {Object.entries(s.data).map(([key,count])=>{const q=queueInfo[key as keyof typeof queueInfo];return <tr key={key}><th scope="row">{q.label}</th><td><span className={`queue-count ${count===0?'is-zero':count?'is-open':''}`}>{count?.toLocaleString('en-US')}</span></td><td className="text-right"><Link href={q.href} prefetch={false} className="queue-open" aria-label={`Open ${q.label.toLowerCase()} queue`}>Open queue <span aria-hidden="true">→</span></Link></td></tr>;})}
-    </OperatorTable>}<p className="operator-note">Separate queues; counts must not be summed into unique incidents. Queue contents may have changed since this snapshot.</p>
+    {!s.data?<PanelUnavailable label="Queue snapshots"/>:Object.keys(s.data).length===0?<p className="operator-note">Your role has no triage queues in this overview. Use your permitted workspace links.</p>:<>
+      {Object.values(s.data).every(count=>count===0)&&<p className="queue-clear" role="status"><CheckCircle2 size={15} aria-hidden="true"/>All queues are clear in this snapshot.</p>}
+      <OperatorTable caption="Actionable queue snapshots" headings={['Queue','Open','Next step']}>
+      {Object.entries(s.data).map(([key,count])=>{const q=queueInfo[key as keyof typeof queueInfo];return <tr key={key} className="queue-row"><th scope="row">{q.label}</th><td><span className={`queue-count ${queueUrgency(count)}`}>{count?.toLocaleString('en-US')}</span></td><td className="text-right"><Link href={q.href} prefetch={false} className="queue-open" aria-label={`Open ${q.label.toLowerCase()} queue`}>Open <ChevronRight size={14} aria-hidden="true"/></Link></td></tr>;})}
+    </OperatorTable></>}<p className="operator-note">Separate queues; counts must not be summed into unique incidents. Queue contents may have changed since this snapshot.</p>
   </OperatorPanel>;
 }
 export async function ReportsPanel() {
