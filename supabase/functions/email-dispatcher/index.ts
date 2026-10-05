@@ -76,40 +76,209 @@ function safeHttpsUrl(value: unknown): string {
   }
 }
 
+
+// ── brand ──────────────────────────────────────────────────────────────────
+//
+// Venttly's palette, from lib/presentation/theme/colors.dart. Kept as literals
+// rather than imported: this runs in Deno on Supabase's edge, nowhere near the
+// Flutter app, and a colour drifting is a far smaller problem than a build
+// that cannot resolve a Dart file.
+const BRAND = {
+  berry: "#E0245E",
+  deep: "#A81145",
+  blush: "#FDF8FA",
+  tint: "#FBE9F0",
+  mauve: "#F3E4EA",
+  ink: "#241118",
+  muted: "#7A6269",
+};
+
+// Optional. Mail clients block remote images by default — Outlook and a good
+// share of Gmail accounts show nothing at all — so the wordmark below is real
+// text, and the logo is an enhancement rather than the brand. Set
+// BRAND_LOGO_URL to a public https image and it appears above the wordmark;
+// leave it unset and the email is unchanged in every way that matters.
+const LOGO_URL = Deno.env.get("BRAND_LOGO_URL") ?? "";
+
+const APP_URL = "https://venttly.app";
+
+/// One shell for every branded email, so the colours and the footer live once.
+///
+/// Tables, inline styles and no shorthand CSS. That is not nostalgia: Outlook
+/// renders through Word, which ignores float, flexbox, border-radius and most
+/// of what a stylesheet would carry. What survives everywhere is a table with
+/// inline attributes, so that is what this is.
+function shell(options: {
+  preheader: string;
+  heading: string;
+  body: string;
+  cta?: { label: string; href: string };
+  /// Why this landed in their inbox. Per-template, because "somebody created
+  /// an account with this address" is true of a welcome and plainly false of a
+  /// security alert — and a footer that explains the wrong thing is worse than
+  /// one that explains nothing, on mail about somebody's account being
+  /// accessed.
+  reason?: string;
+}): string {
+  const logo = LOGO_URL
+    ? `<img src="${LOGO_URL}" width="110" alt="Venttly"
+           style="display:block;margin:0 auto 10px;border:0;outline:none;text-decoration:none;" />`
+    : "";
+  const cta = options.cta
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:26px auto 6px;">
+         <tr><td align="center" bgcolor="${BRAND.berry}" style="border-radius:28px;">
+           <a href="${options.cta.href}"
+              style="display:inline-block;padding:14px 34px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:28px;">
+             ${options.cta.label}
+           </a>
+         </td></tr>
+       </table>`
+    : "";
+
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<title>Venttly</title>
+</head>
+<body style="margin:0;padding:0;background:${BRAND.blush};">
+  <!-- The line shown beside the subject in an inbox list. Hidden in the body. -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${options.preheader}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND.blush};">
+    <tr><td align="center" style="padding:32px 16px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+             style="width:100%;max-width:600px;background:#ffffff;border:1px solid ${BRAND.mauve};border-radius:20px;">
+        <tr><td align="center" style="padding:34px 32px 6px;">
+          ${logo}
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:30px;font-weight:800;letter-spacing:-0.4px;color:${BRAND.berry};">Venttly</div>
+        </td></tr>
+        <tr><td style="padding:18px 32px 0;">
+          <h1 style="margin:0 0 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:23px;line-height:1.3;font-weight:800;color:${BRAND.ink};">${options.heading}</h1>
+          ${options.body}
+          ${cta}
+        </td></tr>
+        <tr><td style="padding:26px 32px 30px;">
+          <div style="height:1px;background:${BRAND.mauve};line-height:1px;font-size:0;">&nbsp;</div>
+          <p style="margin:18px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:${BRAND.muted};">
+            ${
+    options.reason ??
+      "You are receiving this because you have a Venttly account."
+  }
+          </p>
+          <p style="margin:10px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:${BRAND.muted};">
+            Venttly is made by CODAFRIQA LTD.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+const P =
+  `margin:0 0 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;color:${BRAND.ink};`;
+
+const SMALL =
+  `margin:0 0 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;color:${BRAND.muted};`;
+
+/// A one-time code, set to be read aloud off a screen and typed into a phone.
+function codeBlock(code: string): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 18px;">
+    <tr><td align="center" style="background:${BRAND.tint};border-radius:14px;padding:20px 12px;">
+      <div style="font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;font-size:30px;font-weight:700;letter-spacing:9px;color:${BRAND.deep};">${code}</div>
+    </td></tr>
+  </table>`;
+}
+
+/// One labelled fact per row — device, time, place.
+function factRows(rows: Array<[string, string]>): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:2px 0 16px;">
+    ${
+    rows.map(([k, v]) =>
+      `<tr>
+         <td style="padding:5px 12px 5px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;color:${BRAND.muted};white-space:nowrap;">${k}</td>
+         <td style="padding:5px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;font-weight:600;color:${BRAND.ink};">${v}</td>
+       </tr>`
+    ).join("")
+  }
+  </table>`;
+}
+
 const TEMPLATES: Record<string, Template> = {
   welcome: {
     subject: () => "Welcome to Venttly",
     html: (v) =>
-      `<p>Hey @${htmlValue(v.pseudonym, "there")},</p>
-      <p>Welcome to Venttly — an anonymous space to share what you can't post elsewhere.</p>
-      <p>You're all set. <a href="https://venttly.app">Open the app</a> any time.</p>
-      <p>— The Venttly team</p>`,
+      shell({
+        preheader: "You're in. Here's the one rule that actually matters.",
+        heading: `You're in, @${htmlValue(v.pseudonym, "friend", 60)}.`,
+        body:
+          `<p style="${P}">Venttly is for the things you cannot post anywhere else — with your name off them. No one here needs to know who you are to understand you.</p>
+           <p style="${P}">Things worth trying first:</p>
+           <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;">
+             <tr><td style="padding:3px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:${BRAND.ink};">
+               <strong style="color:${BRAND.deep};">Vent it out.</strong> Say it plainly. Nobody is grading you.</td></tr>
+             <tr><td style="padding:3px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:${BRAND.ink};">
+               <strong style="color:${BRAND.deep};">Spill and scroll.</strong> Sit with other people's days for a while.</td></tr>
+             <tr><td style="padding:3px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:${BRAND.ink};">
+               <strong style="color:${BRAND.deep};">Find your tribe.</strong> Spaces for whatever you are carrying.</td></tr>
+           </table>
+           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 2px;">
+             <tr><td style="background:${BRAND.tint};border-radius:14px;padding:18px 20px;">
+               <p style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;font-weight:800;letter-spacing:0.6px;text-transform:uppercase;color:${BRAND.deep};">The one rule</p>
+               <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;color:${BRAND.ink};">
+                 People arrive here on their worst days. Treat whoever is on the other side the way you would want to be treated on yours — with kindness, and with real care for what they have trusted you with. That is the whole thing.
+               </p>
+             </td></tr>
+           </table>`,
+        cta: { label: "Open Venttly", href: APP_URL },
+        reason:
+          "You are getting this because somebody created a Venttly account with this address. " +
+          "If that was not you, you can ignore this message and nothing more will be sent.",
+      }),
     text: (v) =>
-      `Hey @${plainValue(v.pseudonym, "there")},
+      `You're in, @${plainValue(v.pseudonym, "friend", 60)}.
 
-Welcome to Venttly — an anonymous space to share what you can't post elsewhere.
+Venttly is for the things you cannot post anywhere else — with your name off
+them. No one here needs to know who you are to understand you.
 
-You're all set. Open the app any time: https://venttly.app
+Things worth trying first:
+  Vent it out.     Say it plainly. Nobody is grading you.
+  Spill and scroll. Sit with other people's days for a while.
+  Find your tribe. Spaces for whatever you are carrying.
 
-— The Venttly team`,
+THE ONE RULE
+People arrive here on their worst days. Treat whoever is on the other side the
+way you would want to be treated on yours — with kindness, and with real care
+for what they have trusted you with. That is the whole thing.
+
+Open Venttly: ${APP_URL}
+
+You are getting this because somebody created a Venttly account with this
+address. If that was not you, you can ignore this message.
+
+Venttly is made by CODAFRIQA LTD.`,
   },
   verify_email: {
     subject: () => "Your Venttly verification code",
     html: (v) =>
       v.code
-        ? `<p>Hi,</p>
-      <p>Enter this code in the app to verify your email:</p>
-      <p style="font-size:28px;font-weight:800;letter-spacing:6px;margin:16px 0;">${
-          htmlValue(v.code, "", 64)
-        }</p>
-      <p>It expires in 15 minutes. If you didn't request it, ignore this message.</p>
-      <p>— The Venttly team</p>`
-        : `<p>Hi,</p>
-      <p>Tap the link to verify your email:</p>
-      <p><a href="${
-          htmlValue(safeHttpsUrl(v.confirm_url), "https://venttly.app", 2000)
-        }">Verify email</a></p>
-      <p>If you didn't sign up, ignore this message.</p>`,
+        ? shell({
+          preheader: "Your code expires in 15 minutes.",
+          heading: "Confirm your email",
+          body: `<p style="${P}">Enter this code in the app:</p>
+                 ${codeBlock(htmlValue(v.code, "", 64))}
+                 <p style="${SMALL}">It expires in 15 minutes. If you did not ask for it, ignore this message — nothing happens without the code.</p>`,
+          reason: "You are receiving this because this address was entered on a Venttly account.",
+        })
+        : shell({
+          preheader: "One tap to confirm your email.",
+          heading: "Confirm your email",
+          body: `<p style="${P}">Tap the button to confirm this address belongs to you.</p>
+                 <p style="${SMALL}">If you did not sign up for Venttly, ignore this message.</p>`,
+          cta: { label: "Verify email", href: safeHttpsUrl(v.confirm_url) },
+          reason: "You are receiving this because this address was entered on a Venttly account.",
+        }),
     text: (v) =>
       v.code
         ? `Hi,
@@ -136,18 +305,22 @@ If you didn't sign up, ignore this message.`,
     subject: () => "Your Venttly password reset code",
     html: (v) =>
       v.code
-        ? `<p>Hi,</p>
-      <p>Enter this code in the app to set a new password:</p>
-      <p style="font-size:28px;font-weight:800;letter-spacing:6px;margin:16px 0;">${
-          htmlValue(v.code, "", 64)
-        }</p>
-      <p>It expires in 15 minutes. If you didn't ask to reset your password,
-      ignore this message — nothing has changed.</p>
-      <p>— The Venttly team</p>`
-        : `<p>Use this link within 1 hour to set a new password:</p>
-      <p><a href="${
-          htmlValue(safeHttpsUrl(v.reset_url), "https://venttly.app", 2000)
-        }">Reset password</a></p>`,
+        ? shell({
+          preheader: "Your reset code expires in 15 minutes.",
+          heading: "Set a new password",
+          body: `<p style="${P}">Enter this code in the app:</p>
+                 ${codeBlock(htmlValue(v.code, "", 64))}
+                 <p style="${SMALL}">It expires in 15 minutes. If you did not ask to reset your password, ignore this message — nothing has changed, and nobody can change it without this code.</p>`,
+          reason: "You are receiving this because a password reset was requested for your Venttly account.",
+        })
+        : shell({
+          preheader: "Set a new password within the hour.",
+          heading: "Set a new password",
+          body: `<p style="${P}">Use the button below within the next hour.</p>
+                 <p style="${SMALL}">If you did not request this, you can safely ignore it — nothing has changed.</p>`,
+          cta: { label: "Reset password", href: safeHttpsUrl(v.reset_url) },
+          reason: "You are receiving this because a password reset was requested for your Venttly account.",
+        }),
     text: (v) =>
       v.code
         ? `Hi,
@@ -171,13 +344,20 @@ If you didn't request this, you can safely ignore it.`,
         plainValue(v.device, "a new device", 100)
       }`,
     html: (v) =>
-      `<p>We noticed a new sign-in:</p>
-      <ul>
-        <li>Device: ${htmlValue(v.device, "unknown", 100)}</li>
-        <li>When: ${htmlValue(v.when, "just now", 100)}</li>
-        <li>Location (approx): ${htmlValue(v.location, "unknown", 100)}</li>
-      </ul>
-      <p>If this wasn't you, change your password immediately.</p>`,
+      shell({
+        preheader: "If this was not you, change your password now.",
+        heading: "A new sign-in to your account",
+        body: `<p style="${P}">Somebody signed in to your Venttly account:</p>
+               ${
+          factRows([
+            ["Device", htmlValue(v.device, "unknown", 100)],
+            ["When", htmlValue(v.when, "just now", 100)],
+            ["Location", htmlValue(v.location, "unknown", 100)],
+          ])
+        }
+               <p style="${P}">If that was you, there is nothing to do. If it was not, change your password now — and check Profile → Password &amp; security, where every device and sign-in is listed.</p>`,
+        reason: "Security notices like this one are always sent, and cannot be switched off.",
+      }),
     text: (v) =>
       `We noticed a new sign-in:
 
@@ -195,13 +375,16 @@ If this wasn't you, change your password immediately.`,
     subject: (v) =>
       `Venttly security: ${plainValue(v.headline, "an account change", 120)}`,
     html: (v) =>
-      `<p>${htmlValue(v.headline, "Something changed on your account", 120)}</p>
-      <p>${
-        htmlValue(v.detail, "Open the app to review your recent activity.", 400)
-      }</p>
-      <p>When: ${htmlValue(v.when, "just now", 100)}</p>
-      <p>You can review every device and security event in the app under
-      Profile → Password &amp; security.</p>`,
+      shell({
+        preheader: plainValue(v.headline, "A change on your account", 120),
+        heading: htmlValue(v.headline, "Something changed on your account", 120),
+        body: `<p style="${P}">${
+          htmlValue(v.detail, "Open the app to review your recent activity.", 400)
+        }</p>
+               ${factRows([["When", htmlValue(v.when, "just now", 100)]])}
+               <p style="${SMALL}">Every device and security event is listed in the app under Profile → Password &amp; security. If you did not make this change, go there now.</p>`,
+        reason: "Security notices like this one are always sent, and cannot be switched off.",
+      }),
     text: (v) =>
       `${plainValue(v.headline, "Something changed on your account", 120)}
 
@@ -215,12 +398,22 @@ Profile > Password & security.`,
   weekly_digest: {
     subject: () => "Your Venttly week — stories you might have missed",
     html: (v) =>
-      `<p>Here's what's been brewing:</p>
-      <ul>
-        <li>${htmlValue(v.hugs_received, "0", 20)} hugs received</li>
-        <li>${htmlValue(v.new_friends, "0", 20)} new friends</li>
-        <li>${htmlValue(v.top_post_title, "Open the app to see what hit")}</li>
-      </ul>`,
+      shell({
+        preheader: "Hugs, new friends, and the one that landed.",
+        heading: "Your week on Venttly",
+        body: `${
+          factRows([
+            ["Hugs received", htmlValue(v.hugs_received, "0", 20)],
+            ["New friends", htmlValue(v.new_friends, "0", 20)],
+          ])
+        }
+               <p style="${P}"><strong style="color:${BRAND.deep};">The one that landed:</strong> ${
+          htmlValue(v.top_post_title, "Open the app to see what hit")
+        }</p>`,
+        cta: { label: "Open Venttly", href: APP_URL },
+        reason:
+          "You are receiving your weekly summary. Turn it off any time in the app under Settings → Notifications.",
+      }),
     text: (v) =>
       `Here's what's been brewing:
 
