@@ -31,7 +31,7 @@ export function DataTable<T>({
     <div className="surface overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-canvas/70">
+          <thead className="bg-canvas">
             <tr>
               {columns.map((c) => (
                 <th
@@ -51,7 +51,7 @@ export function DataTable<T>({
               <tr>
                 <td
                   colSpan={columns.length + (onRowHref ? 1 : 0)}
-                  className="text-center py-12 text-ink-muted italic"
+                  className="text-center py-12 text-sm text-ink-muted"
                 >
                   {empty}
                 </td>

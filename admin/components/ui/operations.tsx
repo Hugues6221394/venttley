@@ -10,15 +10,11 @@ export function CapabilityNotice({
   children: ReactNode;
 }) {
   return (
-    <aside className="surface-flat border border-warn/30 bg-warn/5 px-4 py-3">
-      <div className="flex items-start gap-2.5">
-        <Lock size={15} className="mt-0.5 shrink-0 text-warn" />
-        <div>
-          <p className="text-sm font-bold text-burgundy">{title}</p>
-          <div className="mt-0.5 text-xs leading-relaxed text-ink-muted">
-            {children}
-          </div>
-        </div>
+    <aside className="notice notice-warn">
+      <span className="notice-icon" aria-hidden="true"><Lock size={15} /></span>
+      <div className="min-w-0">
+        <p className="notice-title">{title}</p>
+        <div className="notice-body">{children}</div>
       </div>
     </aside>
   );
@@ -37,17 +33,11 @@ export function DataWarning({
   caveat?: boolean;
 }) {
   return (
-    <aside data-console-state={caveat ? "caveat" : "warning"} className="surface-flat border border-danger/25 bg-danger/5 px-4 py-3">
-      <div className="flex items-start gap-2.5">
-        <AlertTriangle size={15} className="mt-0.5 shrink-0 text-danger" />
-        <div>
-          <p className="text-sm font-bold text-danger">{title}</p>
-          {children && (
-            <div className="mt-0.5 text-xs leading-relaxed text-ink-muted">
-              {children}
-            </div>
-          )}
-        </div>
+    <aside data-console-state={caveat ? "caveat" : "warning"} className={`notice ${caveat ? "notice-warn" : "notice-danger"}`}>
+      <span className="notice-icon" aria-hidden="true"><AlertTriangle size={15} /></span>
+      <div className="min-w-0">
+        <p className={`notice-title ${caveat ? "" : "text-danger"}`}>{title}</p>
+        {children && <div className="notice-body">{children}</div>}
       </div>
     </aside>
   );

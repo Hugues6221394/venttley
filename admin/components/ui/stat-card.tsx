@@ -3,13 +3,13 @@ import { ArrowUpRight, ArrowDownRight } from "./icons";
 
 export type Tone = "neutral" | "ok" | "warn" | "danger" | "info" | "crisis";
 
-const toneRing: Record<Tone, string> = {
-  neutral: "bg-canvas text-burgundy",
-  ok:      "bg-ok/12 text-ok",
-  warn:    "bg-warn/15 text-warn",
-  danger:  "bg-danger/12 text-danger",
-  info:    "bg-info/12 text-info",
-  crisis:  "bg-danger text-white",
+const toneDot: Record<Tone, string> = {
+  neutral: "var(--theme-line-strong)",
+  ok:      "rgb(var(--console-ok))",
+  warn:    "rgb(var(--console-warn))",
+  danger:  "rgb(var(--console-danger))",
+  info:    "rgb(var(--console-info))",
+  crisis:  "rgb(var(--console-danger))",
 };
 
 export function StatCard({
@@ -31,46 +31,39 @@ export function StatCard({
   /** Tiny inline sparkline values, 6-24 points. */
   spark?: number[];
 }) {
+  const zero = value === 0 || value === "0";
   const body = (
-    <div className="stat">
+    <div className={`kpi ${tone === "crisis" ? "is-alert" : ""}`}>
       <div className="flex items-center justify-between gap-2">
-        <p className="h-eyebrow">{label}</p>
+        <p className="kpi-label">
+          <span className="kpi-tone" style={tone !== "neutral" ? { background: toneDot[tone] } : undefined} aria-hidden="true" />
+          {label}
+        </p>
         {trend !== undefined && trend !== null && (
           <span
-            className={`pill ${
-              trend > 0
-                ? "bg-ok/12 text-ok"
-                : trend < 0
-                  ? "bg-danger/12 text-danger"
-                  : "bg-line text-ink-muted"
-            }`}
+            className={`delta ${trend > 0 ? "delta-up" : trend < 0 ? "delta-down" : "delta-flat"}`}
             title="Compared to previous period"
           >
             {trend > 0 ? (
-              <ArrowUpRight size={12} />
+              <ArrowUpRight size={12} aria-hidden="true" />
             ) : trend < 0 ? (
-              <ArrowDownRight size={12} />
+              <ArrowDownRight size={12} aria-hidden="true" />
             ) : null}
             {Math.abs(trend).toFixed(0)}%
           </span>
         )}
       </div>
-      <div className="flex items-baseline gap-2">
-        <p className="tabular text-[28px] font-extrabold leading-none text-burgundy">
+      <div className="flex items-end gap-3">
+        <p className={`kpi-value ${zero ? "is-zero" : ""}`}>
           {typeof value === "number" ? value.toLocaleString() : value}
         </p>
         {spark && spark.length > 1 && <Sparkline data={spark} tone={tone} />}
       </div>
-      {sub && <p className="text-xs text-ink-muted">{sub}</p>}
-      {tone !== "neutral" && (
-        <span
-          className={`mt-1 inline-block self-start h-1 w-8 rounded-full ${toneRing[tone].split(" ")[0]}`}
-        />
-      )}
+      {sub && <p className="kpi-sub">{sub}</p>}
     </div>
   );
   return href ? (
-    <Link href={href} className="block card-hover">
+    <Link href={href} className="block h-full rounded-xl card-hover">
       {body}
     </Link>
   ) : (
@@ -82,8 +75,8 @@ export function StatCard({
 export function Sparkline({
   data,
   tone = "neutral",
-  width = 64,
-  height = 22,
+  width = 72,
+  height = 26,
 }: {
   data: number[];
   tone?: Tone;
@@ -109,7 +102,7 @@ export function Sparkline({
     : tone === "info" ? "rgb(var(--console-info,59 106 182))"
     : "rgb(var(--console-accent,209 46 101))";
   return (
-    <svg width={width} height={height} className="ml-auto opacity-80">
+    <svg width={width} height={height} className="ml-auto mb-1 opacity-90" aria-hidden="true">
       <polyline
         fill="none"
         stroke={color}

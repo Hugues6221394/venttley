@@ -13,9 +13,9 @@ export function EmptyState({
 }) {
   return (
     <div className="empty">
-      {icon && <div className="text-mauve mb-1">{icon}</div>}
+      {icon && <div className="empty-icon [&>svg]:h-[18px] [&>svg]:w-[18px]" aria-hidden="true">{icon}</div>}
       <p className="text-sm font-semibold text-burgundy">{title}</p>
-      {hint && <p className="text-xs text-ink-muted max-w-sm">{hint}</p>}
+      {hint && <p className="text-xs text-ink-muted max-w-sm leading-relaxed">{hint}</p>}
       {action && <div className="mt-3">{action}</div>}
     </div>
   );
@@ -31,8 +31,8 @@ export function ErrorPanel({
   hint?: string;
 }) {
   return (
-    <div data-console-state="unavailable" role="status" className="surface p-4 border-danger/30 bg-danger/5">
-      <p className="text-sm font-bold text-danger">{title}</p>
+    <div data-console-state="unavailable" role="status" className="notice notice-danger flex-col gap-0">
+      <p className="text-sm font-semibold text-danger">{title}</p>
       {detail && (
         <pre className="mt-1 text-xs whitespace-pre-wrap text-danger/85 font-mono">
           {detail}
