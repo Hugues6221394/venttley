@@ -97,3 +97,8 @@ BEGIN
  UPDATE private.broadcast_approval_control SET enabled=p_enabled WHERE true;
  INSERT INTO private.broadcast_approval_controls(operation_id,enabled) VALUES(p_operation,p_enabled);
 END $function$;
+
+-- Every migration records itself, so the app can tell a database that is
+-- behind the build from one that is current. Added by the ledger guard, not
+-- by the author of the change above.
+SELECT public.record_migration('20261079093000', 'single_row_updates_name_their_rows');
