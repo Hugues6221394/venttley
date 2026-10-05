@@ -354,10 +354,20 @@ skip_nonce_check = true
 email_optional = false
 
 [auth.external.apple]
-enabled = false
-client_id = ""
-# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
-secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
+# Enabled locally with placeholder credentials, for the same reason Google is.
+# The button asks GoTrue which providers are on and hides itself when its own
+# is not among them, which is correct against production and a trap locally: a
+# stack that answers "email only" makes a wired-up feature look deleted, and
+# the last one cost two rounds of "why does Continue with Google keep
+# disappearing". The round trip cannot complete against a placeholder; the
+# button being there is the point.
+#
+# Production needs the real thing from the Apple Developer account — a
+# Services ID, Team ID, Key ID and the .p8 key — set in the Supabase dashboard,
+# not here.
+enabled = true
+client_id = "rw.codafriqa.venttly.local"
+secret = "local-dev-placeholder"
 # Overrides the default auth callback URL derived from auth.external_url.
 redirect_uri = ""
 # Overrides the default auth provider URL. Used to support self-hosted gitlab, single-tenant Azure,

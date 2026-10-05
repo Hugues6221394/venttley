@@ -559,6 +559,25 @@ class SupabaseBackend {
     );
   }
 
+  /// Continue with Apple.
+  ///
+  /// The same browser round trip as Google rather than the native sheet. The
+  /// native one needs an Apple Developer account and a platform-specific SDK,
+  /// and this build ships to Play first, where there is no native sheet to
+  /// use — Android does Sign in with Apple through the web flow or not at all.
+  /// When the App Store build comes, iOS should move to the native sheet:
+  /// Apple's own guidelines expect it, and a browser hop for an account you
+  /// are already signed into on the device is a worse first impression.
+  Future<bool> signInWithApple() {
+    return _client.auth.signInWithOAuth(
+      OAuthProvider.apple,
+      redirectTo: VentlyConfig.oauthRedirectUrl.isEmpty
+          ? null
+          : VentlyConfig.oauthRedirectUrl,
+      authScreenLaunchMode: LaunchMode.externalApplication,
+    );
+  }
+
   /// Sends an SMS OTP to [phone] (E.164, e.g. +250788123456). Requires an SMS
   /// provider configured in Supabase → Authentication → Providers → Phone.
   Future<void> startPhoneOtp(String phone) async {

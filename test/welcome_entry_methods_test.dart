@@ -13,6 +13,16 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   String read(String path) => File(path).readAsStringSync();
 
+  /// Whether supabase/config.toml switches a provider on for the local stack.
+  bool locallyEnabled(String provider) {
+    final config = read('supabase/config.toml');
+    final start = config.indexOf('[auth.external.$provider]');
+    if (start < 0) return false;
+    final next = config.indexOf('[auth.external.', start + 10);
+    final block = config.substring(start, next < 0 ? config.length : next);
+    return RegExp(r'^enabled\s*=\s*true', multiLine: true).hasMatch(block);
+  }
+
   final entry = read('lib/presentation/widgets/auth_entry_methods.dart');
   final welcome = read(
     'lib/presentation/screens/onboarding/welcome_screen.dart',
@@ -64,17 +74,35 @@ void main() {
     //
     // A dev backend that lies about the product is the bug. This keeps the two
     // in step.
-    final config = read('supabase/config.toml');
-    final google = config.indexOf('[auth.external.google]');
-    expect(google, greaterThan(-1), reason: 'no google block in config.toml');
-    final block = config.substring(
-      google,
-      config.indexOf('[auth.external.', google + 10),
-    );
+    expect(locallyEnabled('google'), isTrue,
+        reason: 'the local stack must offer Google, or local builds lose it');
+  });
+
+  test('Continue with Apple still exists', () {
+    expect(entry, contains('Continue with Apple'));
+    expect(entry, contains('signInWithApple'));
+    expect(signIn, contains('SocialAuthRow'));
+  });
+
+  test('the local stack advertises Apple too', () {
+    expect(locallyEnabled('apple'), isTrue,
+        reason: 'the local stack must offer Apple, or local builds lose it');
+  });
+
+  test('Apple’s button keeps Apple’s own mark and wording', () {
+    // Apple's guidelines require their mark and the exact label; a paraphrase
+    // or a substitute glyph is a review rejection, not a style note.
+    expect(entry, contains('assets/images/apple_logo.svg'));
+    expect(File('assets/images/apple_logo.svg').existsSync(), isTrue);
+  });
+
+  test('neither provider is gated on the other', () {
+    // One row renders both, and an early return for a missing Google would
+    // take Apple down with it.
     expect(
-      RegExp(r'^enabled\s*=\s*true', multiLine: true).hasMatch(block),
-      isTrue,
-      reason: 'the local stack must offer Google, or local builds lose it',
+      entry.contains("if (!providers.contains('google')) {"),
+      isFalse,
+      reason: 'an early return on Google also hides Apple',
     );
   });
 

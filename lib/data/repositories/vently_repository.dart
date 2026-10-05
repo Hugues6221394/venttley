@@ -513,6 +513,15 @@ class VentlyRepository implements MusicProvider {
     return live.signInWithGoogle();
   }
 
+  /// Launch Apple OAuth. Returns false if the flow could not start.
+  Future<bool> signInWithApple() async {
+    final live = _live;
+    if (live == null) {
+      throw StateError('Apple sign-in needs the live backend.');
+    }
+    return live.signInWithApple();
+  }
+
   /// Send an SMS OTP to [phone] (E.164).
   Future<void> startPhoneOtp(String phone) async {
     final live = _live;

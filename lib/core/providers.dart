@@ -382,6 +382,8 @@ class SessionController extends StateNotifier<AppUser?> {
 
   Future<bool> signInWithGoogle() => _repo.signInWithGoogle();
 
+  Future<bool> signInWithApple() => _repo.signInWithApple();
+
   Future<void> startPhoneOtp(String phone) => _repo.startPhoneOtp(phone);
 
   Future<AppUser> verifyPhoneOtp({
