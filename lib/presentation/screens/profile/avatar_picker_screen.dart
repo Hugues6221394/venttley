@@ -53,7 +53,11 @@ class _AvatarPickerScreenState extends ConsumerState<AvatarPickerScreen> {
             photoUrl: AvatarPresets.publicUrl(VentlyConfig.supabaseUrl, id),
             personaId: widget.personaId,
           );
-      ref.invalidate(sessionProvider);
+      // restore(), not invalidate(). Invalidating rebuilds the controller from
+      // the repository's cached user, which is the copy that still has the old
+      // avatar on it — the write lands, the database is right, and the profile
+      // keeps showing the letter tile.
+      await ref.read(sessionProvider.notifier).restore();
       ref.invalidate(myPersonasProvider);
       navigator.pop(true);
     } catch (_) {

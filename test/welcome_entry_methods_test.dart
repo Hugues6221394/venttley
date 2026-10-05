@@ -55,6 +55,29 @@ void main() {
     expect(welcome, contains('/onboarding/recover'));
   });
 
+  test('the local stack advertises Google, like production does', () {
+    // The button asks GoTrue which providers are enabled and hides itself when
+    // Google is not among them. That is correct behaviour — and it is why
+    // "Continue with Google has disappeared" was reported three times while the
+    // button sat in the code, enabled on production, with a phone running a
+    // build pointed at a local stack that offered email only.
+    //
+    // A dev backend that lies about the product is the bug. This keeps the two
+    // in step.
+    final config = read('supabase/config.toml');
+    final google = config.indexOf('[auth.external.google]');
+    expect(google, greaterThan(-1), reason: 'no google block in config.toml');
+    final block = config.substring(
+      google,
+      config.indexOf('[auth.external.', google + 10),
+    );
+    expect(
+      RegExp(r'^enabled\s*=\s*true', multiLine: true).hasMatch(block),
+      isTrue,
+      reason: 'the local stack must offer Google, or local builds lose it',
+    );
+  });
+
   test('Google’s button keeps Google’s own mark', () {
     // Google's branding guidelines require their G, not a tinted Material
     // glyph. Shipping the wrong one is a store-review problem.

@@ -329,6 +329,30 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
+# Google, enabled LOCALLY so the local stack advertises what production
+# advertises.
+#
+# This file configures local development only — production's providers live in
+# the dashboard, where Google has been enabled all along. The credentials below
+# are deliberate placeholders: the OAuth round trip cannot complete against
+# them, and it does not need to. What matters is that GoTrue answers
+# /auth/v1/settings with google: true, because the app asks that question
+# before it draws the button.
+#
+# This exists because "Continue with Google has disappeared" was reported three
+# times, and every time the button was present in the code and enabled on
+# production — the phone was simply running a build pointed at this stack,
+# which offered email and nothing else. A screen that honestly reflects its
+# backend is right; a dev backend that lies about the product is not.
+[auth.external.google]
+enabled = true
+client_id = "local-dev-placeholder.apps.googleusercontent.com"
+secret = "local-dev-placeholder"
+redirect_uri = ""
+url = ""
+skip_nonce_check = true
+email_optional = false
+
 [auth.external.apple]
 enabled = false
 client_id = ""
