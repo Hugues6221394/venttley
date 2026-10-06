@@ -154,7 +154,13 @@ SELECT throws_like(
       '{"pseudonym":"IDENTITY_A","avatar_seed":"duplicate","birth_year":2000}'::JSONB,
       now(), now()
     )$$,
-  '%duplicate key%',
+  -- Not '%duplicate key%' any more. 20261081090000 wraps the insert and
+  -- re-raises the unique violation as a bare `pseudonym_taken`, because the
+  -- raw message named an internal constraint and repeated the handle that was
+  -- asked for — which let a stranger confirm a specific handle exists just by
+  -- reading an error. The rejection is what this test is about, and it still
+  -- happens; only its wording changed.
+  '%pseudonym_taken%',
   'normalized duplicate usernames are rejected'
 );
 
