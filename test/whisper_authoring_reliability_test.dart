@@ -28,7 +28,12 @@ void main() {
     expect(recorder, contains('Stopwatch _activeSegmentClock'));
     expect(recorder, isNot(contains('DateTime.now().difference')));
     expect(processor, contains('ffmpeg_kit_flutter_new_audio'));
-    expect(processor, contains('-c:a aac -b:a 96k'));
+    // 64k, not 96k. Measured on a device through all eight voice filters, a
+    // 36-second clip — the average whisper on production — is 441 kB at 96k
+    // and 297 kB at 64k. AAC-LC is speech-transparent well below 96k, and a
+    // third off every whisper applies to storage and to every play of it.
+    // See docs/voice-storage-decision.md.
+    expect(processor, contains('-c:a aac -b:a 64k'));
     expect(migration, contains('BETWEEN 3 AND 600'));
   });
 

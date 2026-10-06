@@ -18,6 +18,7 @@ import '../data/services/push_registration_service.dart';
 import '../data/services/whisper_player.dart';
 import '../domain/entities/entities.dart';
 import '../domain/moderation/enforcement_notice.dart';
+import '../domain/support/support_conversation.dart';
 import '../domain/home/home_discovery.dart';
 import '../domain/tribe/tribe_chat_hub.dart';
 import '../domain/tribe/tribe_management.dart';
@@ -1751,6 +1752,20 @@ final myEnforcementHistoryProvider =
     FutureProvider.autoDispose<List<EnforcementNotice>>((ref) async {
       ref.watch(sessionProvider);
       return ref.watch(repositoryProvider).myEnforcementHistory();
+    });
+
+/// The signed-in member's conversations with the Venttly team. Watches the
+/// session so one account never sees another's conversations.
+final supportConversationsProvider =
+    FutureProvider.autoDispose<List<SupportConversationSummary>>((ref) async {
+      ref.watch(sessionProvider);
+      return ref.watch(repositoryProvider).supportConversations();
+    });
+
+final supportThreadProvider = FutureProvider.autoDispose
+    .family<SupportThread, SupportThreadRef>((ref, thread) async {
+      ref.watch(sessionProvider);
+      return ref.watch(repositoryProvider).supportThread(thread);
     });
 
 /// How many Whispers the database holds for this caller.

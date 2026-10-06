@@ -17,6 +17,7 @@ import '../services/cache_service.dart';
 import '../services/identity_service.dart';
 import '../services/mock_backend.dart';
 import '../../domain/moderation/enforcement_notice.dart';
+import '../../domain/support/support_conversation.dart';
 import '../services/supabase_backend.dart';
 import '../services/telemetry_service.dart';
 
@@ -4553,6 +4554,53 @@ class VentlyRepository implements MusicProvider {
       throw StateError('You need a connection to withdraw an appeal.');
     }
     return live.withdrawAppeal(appealId);
+  }
+
+  // ===================== Support =====================
+  /// Empty offline or in mock mode: an invented conversation with the
+  /// Venttly team would be worse than none.
+  Future<List<SupportConversationSummary>> supportConversations() async {
+    final live = _live;
+    if (live == null) return const [];
+    return live.supportConversations();
+  }
+
+  Future<SupportThread> supportThread(SupportThreadRef ref) async {
+    final live = _live;
+    if (live == null) {
+      throw StateError('You need a connection to read this conversation.');
+    }
+    return live.supportThread(ref);
+  }
+
+  Future<String> startSupportConversation({
+    required String operationId,
+    required SupportCategory category,
+    required String subject,
+    required String body,
+  }) async {
+    final live = _live;
+    if (live == null) {
+      throw StateError('You need a connection to contact Venttly.');
+    }
+    return live.startSupportConversation(
+      operationId: operationId,
+      category: category,
+      subject: subject,
+      body: body,
+    );
+  }
+
+  Future<String> replySupport({
+    required String operationId,
+    required SupportThreadRef ref,
+    required String body,
+  }) async {
+    final live = _live;
+    if (live == null) {
+      throw StateError('You need a connection to send a reply.');
+    }
+    return live.replySupport(operationId: operationId, ref: ref, body: body);
   }
 
   Future<List<NotificationItem>> notifications() {

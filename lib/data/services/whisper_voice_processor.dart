@@ -33,7 +33,7 @@ class WhisperVoiceProcessor {
       await input.writeAsBytes(sourceBytes, flush: true);
       final session = await FFmpegKit.execute(
         '-y -i ${_quote(input.path)} -vn '
-        '-af "$audioFilter" -c:a aac -b:a 96k -movflags +faststart '
+        '-af "$audioFilter" -c:a aac -b:a 64k -movflags +faststart '
         '${_quote(output.path)}',
       );
       final returnCode = await session.getReturnCode();

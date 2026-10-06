@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/moderation/enforcement_notice.dart';
+import '../../domain/support/support_conversation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants.dart';
@@ -8622,6 +8623,69 @@ class SupabaseBackend {
 
   Future<void> withdrawAppeal(String appealId) async {
     await _client.rpc('withdraw_appeal', params: {'p_appeal': appealId});
+  }
+
+  /// The member's conversations with the Venttly team, and staff messages
+  /// they have not answered yet. Messages live in a private table; these
+  /// functions are the only way to them, and only to the caller's own.
+  Future<List<SupportConversationSummary>> supportConversations() async {
+    if (_uid == null) return const [];
+    final rows = await _client.rpc('member_support_conversations') as List;
+    return [
+      for (final r in rows.whereType<Map>())
+        ?SupportConversationSummary.fromRow(r.cast<String, dynamic>()),
+    ];
+  }
+
+  /// Opening a thread marks the team's replies as read.
+  Future<SupportThread> supportThread(SupportThreadRef ref) async {
+    final json = await _client.rpc(
+      'member_support_thread',
+      params: {
+        'p_conversation': ref.conversationId,
+        'p_communication': ref.communicationId,
+      },
+    );
+    return SupportThread.fromJson((json as Map).cast<String, dynamic>());
+  }
+
+  /// [operationId] is stable across retries of one send, so a retry after a
+  /// dropped connection never posts the message twice.
+  Future<String> startSupportConversation({
+    required String operationId,
+    required SupportCategory category,
+    required String subject,
+    required String body,
+  }) async {
+    final id = await _client.rpc(
+      'member_start_support',
+      params: {
+        'p_operation': operationId,
+        'p_category': category.wire,
+        'p_subject': subject,
+        'p_body': body,
+      },
+    );
+    return id as String;
+  }
+
+  /// Returns the conversation id, which is new when this is the first answer
+  /// to a staff message.
+  Future<String> replySupport({
+    required String operationId,
+    required SupportThreadRef ref,
+    required String body,
+  }) async {
+    final id = await _client.rpc(
+      'member_reply_support',
+      params: {
+        'p_operation': operationId,
+        'p_body': body,
+        'p_conversation': ref.conversationId,
+        'p_communication': ref.communicationId,
+      },
+    );
+    return id as String;
   }
 
   Future<List<NotificationItem>> notifications() async {

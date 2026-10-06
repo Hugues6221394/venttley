@@ -103,7 +103,20 @@ class NotificationPayload {
       // A broadcast has no target of its own, so the tap lands back on the
       // row it came from rather than doing nothing at all.
       case 'admin_broadcast':
+        return notifications();
+      // A message or reply from the Venttly team opens its conversation, where
+      // the member can answer. Other system rows stay on the list.
       case 'system':
+        if (payload['source'] == 'venttly_team') {
+          final conversation = payload['support_case_id'];
+          if (conversation is String && _isUuid(conversation)) {
+            return 'support:$conversation';
+          }
+          final message = payload['communication_id'];
+          if (message is String && _isUuid(message)) {
+            return 'support_message:$message';
+          }
+        }
         return notifications();
       // Security rows carry no user-controlled identifier, so they route to a
       // fixed screen rather than being reconstructed from the payload.
@@ -210,6 +223,14 @@ String? routeForNotificationPayload(String? payload) {
       return '/friends';
     case 'notifications':
       return '/notifications';
+    case 'support':
+      return NotificationPayload._isUuid(id)
+          ? '/settings/support/thread?conversation=$id'
+          : '/settings/support';
+    case 'support_message':
+      return NotificationPayload._isUuid(id)
+          ? '/settings/support/thread?message=$id'
+          : '/settings/support';
     case 'profile':
       if (id == null || id.isEmpty) return '/profile';
       return '/profile?tab=$id';

@@ -51,7 +51,16 @@ class WhisperRecorder {
       await _recorder.start(
         const RecordConfig(
           encoder: AudioEncoder.aacLc,
-          bitRate: 96000,
+          // 64 kbps mono, not 96. These are voices, not music: AAC-LC is
+          // speech-transparent well below 96k, and the measurement on device
+          // was 441 kB against 297 kB for the same 36-second clip through the
+          // same filters — a third off every whisper, stored and streamed,
+          // for no difference anybody can hear.
+          //
+          // The sample rate stays at 44.1 kHz because every voice filter
+          // hardcodes asetrate=44100; changing it would silently detune all
+          // eight of them.
+          bitRate: 64000,
           sampleRate: 44100,
           numChannels: 1,
         ),

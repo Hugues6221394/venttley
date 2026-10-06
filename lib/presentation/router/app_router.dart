@@ -47,6 +47,8 @@ import '../screens/profile/security_check_screen.dart';
 import '../screens/profile/security_screen.dart';
 import '../screens/profile/password_security_screen.dart';
 import '../screens/settings/appeals_screen.dart';
+import '../screens/settings/support_screen.dart';
+import '../../domain/support/support_conversation.dart';
 import '../screens/settings/feedback_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/settings/verification_screen.dart';
@@ -327,6 +329,34 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/appeals',
         builder: (_, __) => const AppealsScreen(),
+      ),
+      GoRoute(
+        path: '/settings/support',
+        builder: (_, __) => const SupportScreen(),
+      ),
+      GoRoute(
+        path: '/settings/support/new',
+        builder: (_, __) => const NewSupportScreen(),
+      ),
+      // ?conversation=<id> or ?message=<id> (a staff message not yet
+      // answered). Anything else falls back to the list.
+      GoRoute(
+        path: '/settings/support/thread',
+        builder: (_, st) {
+          final q = st.uri.queryParameters;
+          final conversation = q['conversation'], message = q['message'];
+          if (isSupportId(conversation) && message == null) {
+            return SupportThreadScreen(
+              thread: SupportThreadRef(conversationId: conversation),
+            );
+          }
+          if (isSupportId(message) && conversation == null) {
+            return SupportThreadScreen(
+              thread: SupportThreadRef(communicationId: message),
+            );
+          }
+          return const SupportScreen();
+        },
       ),
       GoRoute(
         path: '/legal/terms',

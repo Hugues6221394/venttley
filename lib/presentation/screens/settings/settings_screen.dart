@@ -240,6 +240,34 @@ class SettingsScreen extends ConsumerWidget {
               );
             },
           ),
+          Consumer(
+            builder: (context, ref, _) {
+              final unread =
+                  ref
+                      .watch(supportConversationsProvider)
+                      .valueOrNull
+                      ?.where((c) => c.unread)
+                      .length ??
+                  0;
+              return ListTile(
+                leading: const Icon(
+                  Icons.forum_rounded,
+                  color: VentlyColors.berryMagenta,
+                ),
+                title: const Text(
+                  'Contact Venttly',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  unread > 0
+                      ? '$unread new ${unread == 1 ? "reply" : "replies"} from the team'
+                      : 'Message the team and read their replies',
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => context.push('/settings/support'),
+              );
+            },
+          ),
           if (me?.isPlug == true)
             ListTile(
               leading: const Icon(
