@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  BarChart3, Compass, FileCheck2, Headset, Home, Inbox, KeyRound, LayoutDashboard, Scale,
+  BarChart3, Compass, FileCheck2, Headset, Home, Inbox, KeyRound, LayoutDashboard, ListChecks, Scale,
   Server, ShieldAlert, ShieldCheck, SlidersHorizontal, Users, UsersRound,
 } from "lucide-react";
 
@@ -18,6 +18,7 @@ const icons: Record<string, LucideIcon> = {
 
 const pageIcons: Record<string, LucideIcon> = {
   "/overview": Home,
+  "/queue": ListChecks,
   "/inbox": Inbox,
   "/users": Users,
   "/moderation": ShieldCheck,

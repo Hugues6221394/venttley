@@ -4,7 +4,7 @@
 //   DESIGN_LABEL=before|after  DESIGN_SKIP_BUILD=1  DESIGN_ORIGIN=http://127.0.0.1:3000
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -57,6 +57,8 @@ try {
   sql(`INSERT INTO public.users (user_id,anonymous_pseudonym,avatar_seed,recovery_key_hash,display_name,display_name_normalized,username_normalized,user_role,account_status,birth_year)
     VALUES ('${userId}','${pseudonym}','${pseudonym}','integration-only','Care Team','care team','${pseudonym}','super_admin','active',1990)
     ON CONFLICT (user_id) DO UPDATE SET user_role='super_admin',account_status='active'`);
+  // Optional local seed; ":fixture" becomes the disposable admin's id.
+  if (process.env.DESIGN_SEED) sql((await readFile(process.env.DESIGN_SEED, "utf8")).replaceAll(":fixture", userId));
   const cookies = new Map();
   const auth = createServerClient(config.API_URL, config.ANON_KEY, { cookies: {
     getAll: () => [...cookies].map(([name, value]) => ({ name, value })),
@@ -67,7 +69,7 @@ try {
   browser = await chromium.launch({ channel: process.env.ADMIN_BROWSER_CHANNEL ?? "chrome", headless: true });
   const shots = [
     ["overview", "/overview"], ["safety", "/safety"], ["moderation", "/moderation"], ["users", "/users"],
-    ["inbox", "/inbox"], ["system", "/system"],
+    ["inbox", "/inbox"], ["system", "/system"], ["queue", "/queue"],
     ...(detailId ? [["user-detail", `/users/${detailId}`], ["user-contact", `/users/${detailId}?tab=communications&compose=warning`], ["user-account", `/users/${detailId}?tab=account`]] : []),
   ];
   const capture = async (name, route, theme, viewport, fullPage = false) => {
@@ -95,6 +97,7 @@ try {
   await browser?.close().catch(() => {});
   server?.kill("SIGTERM");
   if (userId) {
+    if (process.env.DESIGN_CLEANUP) try { sql((await readFile(process.env.DESIGN_CLEANUP, "utf8")).replaceAll(":fixture", userId)); } catch {}
     await service.auth.admin.deleteUser(userId);
     try { sql(`DELETE FROM public.users WHERE user_id='${userId}'`); } catch {}
   }

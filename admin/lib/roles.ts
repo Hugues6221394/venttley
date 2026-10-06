@@ -48,6 +48,9 @@ const SECTION_ROLES: Record<string, StaffRole[]> = {
   "/tribe-governance": ["super_admin", "admin", "moderator"],
   "/youth-safety": ["super_admin", "admin"],
   "/queue-control": ["super_admin", "admin", "moderator"],
+  // Union of the four source queues; each source is still gated on its own
+  // section, so support sees support cases and moderators see cases/appeals.
+  "/queue": ["super_admin", "admin", "moderator", "support"],
   // Matches admin_appeal_queue's own is_staff gate. support is excluded
   // deliberately: it can triage the safety queue but cannot decide an appeal,
   // and a section that loads only to refuse every action is worse than a

@@ -6,7 +6,7 @@ import { canAccess } from "./roles";
 // expanded. The rest is ordered by how often staff need it.
 export const navigationGroups = [
   { label: "Daily work", pinned: true, pages: [
-    ["/overview", "Home"], ["/inbox", "Inbox"], ["/users", "Members"],
+    ["/overview", "Home"], ["/queue", "Work queue"], ["/inbox", "Inbox"], ["/users", "Members"],
     ["/moderation", "Moderation"], ["/appeals", "Appeals"], ["/support/cases", "Support"],
   ] },
   { label: "Safety", pages: [
