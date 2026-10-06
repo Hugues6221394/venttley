@@ -285,6 +285,7 @@
 .member-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 6px; font-size: 12.5px; color: var(--theme-muted); text-transform: none; }
 .member-meta > span:not(.pill) { text-transform: capitalize; }
 .member-meta > span.member-id { text-transform: none; color: var(--theme-faint); font-size: 11.5px; }
+.member-meta > span.is-plain { text-transform: none; }
 .member-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .member-metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; background: var(--theme-line); }
 .member-metrics .operator-metric { padding: 16px 20px; border: 0; background: var(--theme-panel); }

@@ -109,6 +109,27 @@ try {
     console.log("support claim result:", new URL(page.url()).searchParams.get("result"));
     await context.close();
   }
+  if (process.env.DESIGN_SUPPORT === "1") {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, reducedMotion: "reduce" });
+    await context.addCookies([...cookies].map(([n, value]) => ({ name: n, value, url: origin, sameSite: "Lax" })));
+    const page = await context.newPage();
+    await page.goto(`${origin}/queue?kind=support`, { waitUntil: "networkidle", timeout: 90000 });
+    await page.screenshot({ path: resolve(outputDir, "support-queue.png") });
+    const href = await page.locator(".queue-actions a").last().getAttribute("href");
+    console.log("conversation:", href);
+    const response = await page.goto(`${origin}${href}`, { waitUntil: "networkidle", timeout: 90000 });
+    console.log("conversation status:", response?.status());
+    await page.screenshot({ path: resolve(outputDir, "support-conversation.png"), fullPage: true });
+    await page.locator("textarea[name=body]").fill("Thanks Maya. I have released the handle; try again in the app and it should go through.");
+    await page.getByRole("button", { name: "Send reply" }).click();
+    const status = page.locator("form.support-reply [role=status]");
+    await status.waitFor({ timeout: 30000 });
+    console.log("reply result:", (await status.textContent())?.trim());
+    await page.waitForLoadState("networkidle");
+    await page.screenshot({ path: resolve(outputDir, "support-replied.png"), fullPage: true });
+    console.log("staff messages:", sql(`SELECT count(*) FROM private.support_messages WHERE author_kind='staff' AND author_id='${userId}'`, "pipe").trim());
+    await context.close();
+  }
   if (process.env.DESIGN_QUEUE_ASSIGN) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, reducedMotion: "reduce" });
     await context.addCookies([...cookies].map(([n, value]) => ({ name: n, value, url: origin, sameSite: "Lax" })));

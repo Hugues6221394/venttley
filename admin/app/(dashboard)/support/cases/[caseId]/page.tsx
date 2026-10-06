@@ -52,8 +52,8 @@ export default async function SupportConversationPage({ params }: { params: Prom
             <div className="member-meta">
               <Badge tone={STATUS_TONE[conversation.status] ?? "neutral"}>{words(conversation.status)}</Badge>
               <Badge tone={conversation.priority === "critical" ? "danger" : conversation.priority === "high" ? "warn" : "neutral"}>{conversation.priority}</Badge>
-              {waitingOnStaff && <span className="text-danger font-semibold">Member is waiting for a reply</span>}
-              <span>{conversation.member_id ? handle : "No member on this case"}</span>
+              {waitingOnStaff && <span className="is-plain text-danger font-semibold">Member is waiting for a reply</span>}
+              <span className="is-plain">{conversation.member_id ? handle : "No member on this case"}</span>
               <span className="member-id">{conversation.support_case_id.slice(0, 8)}</span>
             </div>
           </div>
