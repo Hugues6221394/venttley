@@ -9,6 +9,7 @@ import '../../theme/colors.dart';
 import '../glass_surfaces.dart';
 import '../user_link.dart';
 import 'online_avatar_ring.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Quick member roster from chat header — faster than opening full hub.
 Future<void> showTribeMemberSheet(
@@ -91,7 +92,7 @@ class _TribeMemberSheetBody extends ConsumerWidget {
         Expanded(
           child: onlineAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('$e')),
+            error: (e, _) => Center(child: Text(UserFriendlyErrors.message(e))),
             data: (members) {
               if (members.isEmpty) {
                 return const Center(child: Text('No members yet'));
@@ -279,7 +280,14 @@ class _MemberTile extends ConsumerWidget {
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Could not remove: $e')),
+                    SnackBar(
+                      content: Text(
+                        UserFriendlyErrors.message(
+                          e,
+                          fallback: 'Could not remove.',
+                        ),
+                      ),
+                    ),
                   );
                 }
               }
@@ -312,9 +320,16 @@ class _MemberTile extends ConsumerWidget {
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('Could not ban: $e')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        UserFriendlyErrors.message(
+                          e,
+                          fallback: 'Could not ban.',
+                        ),
+                      ),
+                    ),
+                  );
                 }
               }
             },

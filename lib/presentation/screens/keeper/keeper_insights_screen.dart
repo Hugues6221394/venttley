@@ -9,6 +9,7 @@ import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/skeleton.dart';
 import 'keeper_studio_scaffold.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// AI Insights — heuristic growth, retention, mood, and safety signals.
 class KeeperInsightsScreen extends ConsumerWidget {
@@ -35,7 +36,9 @@ class KeeperInsightsScreen extends ConsumerWidget {
       },
       builder: (_) => insightsAsync.when(
         loading: () => const StudioSkeleton(rows: 3),
-        error: (e, _) => Text('Could not load insights: $e'),
+        error: (e, _) => Text(
+          UserFriendlyErrors.message(e, fallback: 'Could not load insights.'),
+        ),
         data: (data) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -321,9 +324,13 @@ class _ExportButtonState extends ConsumerState<_ExportButton> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Export failed.'),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }

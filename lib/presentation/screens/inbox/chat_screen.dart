@@ -167,9 +167,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not pick image: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not pick image.'),
+          ),
+        ),
+      );
     }
   }
 
@@ -203,9 +207,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not pick that video: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              e,
+              fallback: 'Could not pick that video.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -724,7 +735,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       } catch (e) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Could not delete: $e')),
+                          SnackBar(
+                            content: Text(
+                              UserFriendlyErrors.message(
+                                e,
+                                fallback: 'Could not delete.',
+                              ),
+                            ),
+                          ),
                         );
                       }
                     },
@@ -816,7 +834,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   } catch (e) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Could not edit: $e')),
+                      SnackBar(
+                        content: Text(
+                          UserFriendlyErrors.message(
+                            e,
+                            fallback: 'Could not edit.',
+                          ),
+                        ),
+                      ),
                     );
                   }
                   return;
@@ -995,9 +1020,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not send: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not send.'),
+          ),
+        ),
+      );
     }
   }
 }
@@ -1091,9 +1120,13 @@ class _Bubble extends ConsumerWidget {
       unawaited(ref.read(repositoryProvider).refreshMessages(message.roomId));
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not react: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Could not react.'),
+            ),
+          ),
+        );
       }
     }
   }

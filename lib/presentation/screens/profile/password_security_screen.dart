@@ -13,6 +13,7 @@ import '../../theme/colors.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../onboarding/mfa_challenge_screen.dart';
 import '../../theme/glass_tokens.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Instagram-style "Password and security" hub: a security checkup summary,
 /// password rotation, a real recovery email, two-factor, and session control.
@@ -1070,7 +1071,14 @@ class _PasswordSecurityScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Couldn\'t sign out everywhere: $e')),
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(
+                e,
+                fallback: 'Couldn\'t sign out everywhere.',
+              ),
+            ),
+          ),
         );
       }
     }

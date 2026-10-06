@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Per-tribe report queue. Keeper-only — RLS on `reports` (migration 0008)
 /// rejects reads from anyone else.
@@ -258,7 +259,14 @@ class _ReportCard extends ConsumerWidget {
                     } catch (e) {
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Could not resolve: $e')),
+                        SnackBar(
+                          content: Text(
+                            UserFriendlyErrors.message(
+                              e,
+                              fallback: 'Could not resolve.',
+                            ),
+                          ),
+                        ),
                       );
                     }
                   },

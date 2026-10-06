@@ -7,6 +7,7 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/post_card.dart';
 import '../../theme/glass_tokens.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Plug-only dashboard. Each plug keeps one or more tribes; this is
 /// the landing they hit instead of the public profile when they
@@ -33,7 +34,11 @@ class PlugDashboardScreen extends ConsumerWidget {
       ),
       body: tribesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Couldn\'t load tribes: $e')),
+        error: (e, _) => Center(
+          child: Text(
+            UserFriendlyErrors.message(e, fallback: 'Couldn\'t load tribes.'),
+          ),
+        ),
         data: (tribes) {
           if (tribes.isEmpty) {
             return const _EmptyState();
@@ -350,9 +355,13 @@ class _TribeManageCard extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Couldn\'t save: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Couldn\'t save.'),
+            ),
+          ),
+        );
       }
     }
   }
@@ -390,9 +399,13 @@ class _TribeManageCard extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Couldn\'t toggle: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Couldn\'t toggle.'),
+            ),
+          ),
+        );
       }
     }
   }
@@ -462,9 +475,13 @@ class _TribeManageCard extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Couldn\'t save: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Couldn\'t save.'),
+            ),
+          ),
+        );
       }
     }
   }

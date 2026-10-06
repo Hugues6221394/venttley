@@ -10,6 +10,7 @@ import '../../widgets/question_card.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/vently_logo.dart';
 import '../home/home_shell.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Question of the Day + every open prompt. Anyone can ask — questions go
 /// to everyone or just your connections. Tapping a prompt opens its real
@@ -161,9 +162,13 @@ class QuestionsScreen extends ConsumerWidget {
             } catch (e) {
               if (!ctx.mounted) return;
               setSheetState(() => sending = false);
-              ScaffoldMessenger.of(
-                ctx,
-              ).showSnackBar(SnackBar(content: Text('Could not ask: $e')));
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    UserFriendlyErrors.message(e, fallback: 'Could not ask.'),
+                  ),
+                ),
+              );
             }
           }
 
@@ -319,9 +324,13 @@ class QuestionsScreen extends ConsumerWidget {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not post: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not post.'),
+          ),
+        ),
+      );
     }
   }
 

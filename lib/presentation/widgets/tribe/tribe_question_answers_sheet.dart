@@ -10,6 +10,7 @@ import '../glass_card.dart';
 import '../glass_surfaces.dart';
 import '../profile_avatar.dart';
 import 'tribe_chat_poll_card.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Thread of replies to a keeper question card.
 Future<void> showTribeQuestionAnswersSheet(
@@ -96,7 +97,14 @@ class _QuestionAnswersSheet extends ConsumerWidget {
                 child: messagesAsync.when(
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Center(child: Text('Error: $e')),
+                  error: (e, _) => Center(
+                    child: Text(
+                      UserFriendlyErrors.message(
+                        e,
+                        fallback: "Couldn't load the answers.",
+                      ),
+                    ),
+                  ),
                   data: (all) {
                     final replies = all
                         .where(

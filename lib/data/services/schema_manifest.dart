@@ -163,4 +163,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261078090000': 'the_ranker_learns_the_new_name',
   '20261079093000': 'single_row_updates_name_their_rows',
   '20261080090000': 'staff_can_reach_a_member',
+  '20261081090000': 'a_taken_handle_says_so',
 };

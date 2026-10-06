@@ -19,6 +19,7 @@ import '../../widgets/profile_avatar.dart';
 import '../../widgets/recovery_phrase_dialog.dart';
 import '../../widgets/vently_notification_bell.dart';
 import '../home/adaptive_shell_tabs.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Account, appearance, privacy, and safety settings.
 class SettingsScreen extends ConsumerWidget {
@@ -207,14 +208,15 @@ class SettingsScreen extends ConsumerWidget {
           // actioned is a row nobody knows to look for.
           Consumer(
             builder: (context, ref, _) {
-              final notices =
-                  ref.watch(myEnforcementHistoryProvider).valueOrNull;
-              final open = notices
+              final notices = ref
+                  .watch(myEnforcementHistoryProvider)
+                  .valueOrNull;
+              final open =
+                  notices
                       ?.where((n) => n.appealStatus == AppealStatus.open)
                       .length ??
                   0;
-              final actionable =
-                  notices?.where((n) => n.canAppeal).length ?? 0;
+              final actionable = notices?.where((n) => n.canAppeal).length ?? 0;
               return ListTile(
                 leading: const Icon(
                   Icons.gavel_rounded,
@@ -224,17 +226,15 @@ class SettingsScreen extends ConsumerWidget {
                   'Decisions & appeals',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
-                subtitle: Text(
-                  switch ((notices, open, actionable)) {
-                    (null, _, _) => 'Moderation decisions about your account',
-                    (final n, _, _) when n!.isEmpty => 'Nothing on your record',
-                    (_, final o, _) when o > 0 =>
-                      '$o appeal${o == 1 ? "" : "s"} under review',
-                    (_, _, final a) when a > 0 =>
-                      '$a decision${a == 1 ? "" : "s"} you can still appeal',
-                    _ => 'Your moderation history',
-                  },
-                ),
+                subtitle: Text(switch ((notices, open, actionable)) {
+                  (null, _, _) => 'Moderation decisions about your account',
+                  (final n, _, _) when n!.isEmpty => 'Nothing on your record',
+                  (_, final o, _) when o > 0 =>
+                    '$o appeal${o == 1 ? "" : "s"} under review',
+                  (_, _, final a) when a > 0 =>
+                    '$a decision${a == 1 ? "" : "s"} you can still appeal',
+                  _ => 'Your moderation history',
+                }),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => context.push('/settings/appeals'),
               );
@@ -281,7 +281,8 @@ class SettingsScreen extends ConsumerWidget {
             onText: 'Senders can see when you have read their message',
             // Reciprocal, the way every messenger does it. A setting for
             // taking without giving is not one people expect here.
-            offText: "Senders cannot see when you've read — and you won't see "
+            offText:
+                "Senders cannot see when you've read — and you won't see "
                 'theirs either',
             read: (p) => p.showReadReceipts,
             write: (n, v) => n.setShowReadReceipts(v),
@@ -569,9 +570,13 @@ class SettingsScreen extends ConsumerWidget {
       if (context.mounted) context.go('/onboarding');
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not deactivate: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Could not deactivate.'),
+            ),
+          ),
+        );
       }
     }
   }
@@ -617,7 +622,9 @@ class SettingsScreen extends ConsumerWidget {
 
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(sessionProvider.notifier).deleteAccount(password: password);
+      await ref
+          .read(sessionProvider.notifier)
+          .deleteAccount(password: password);
       if (context.mounted) context.go('/onboarding');
     } catch (e) {
       if (!context.mounted) return;
@@ -632,7 +639,8 @@ class SettingsScreen extends ConsumerWidget {
   /// nothing about what to do next.
   String _deletionMessage(Object error) {
     final raw = error.toString();
-    if (raw.contains('password_incorrect') || raw.contains('password_required')) {
+    if (raw.contains('password_incorrect') ||
+        raw.contains('password_required')) {
       return "That password doesn't match. Nothing has been deleted.";
     }
     if (raw.contains('rate_limited')) {
@@ -671,7 +679,14 @@ class SettingsScreen extends ConsumerWidget {
       ], subject: 'My Venttly data');
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not export your data: $e')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              e,
+              fallback: 'Could not export your data.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -838,7 +853,6 @@ class _SectionHeader extends StatelessWidget {
     );
   }
 }
-
 
 /// One line describing verification standing for the Settings row.
 ///

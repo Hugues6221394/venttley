@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/user_friendly_errors.dart';
 import '../../theme/colors.dart';
 import '../../widgets/onboarding_backdrop.dart';
+import '../../widgets/username_availability.dart';
 
 /// Email-based sign-up screen.
 ///
@@ -56,7 +59,11 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
     });
     try {
       if (_birthDate == null) {
-        throw const FormatException('Pick your birth date so we can age-gate.');
+        // Not thrown: this is the form answering for itself, and routing it
+        // through the catch below would hand a FormatException to a mapper
+        // that can only shrug and show the generic fallback.
+        setState(() => _error = 'Pick your birth date so we can age-gate.');
+        return;
       }
       const avatarSeed =
           'v2:silhouette=orb;palette=berry;hair=none;'
@@ -83,7 +90,18 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
       context.go('/onboarding/key', extra: result.recoveryPhrase);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      // Never the raw exception. This form used to print things like
+      // "AuthWeakPasswordException(message: ..., statusCode: 422,
+      // reasons: [length])" into the error box, which is the first thing a
+      // stranger sees of Venttly.
+      setState(
+        () => _error = UserFriendlyErrors.message(
+          e,
+          fallback:
+              'We couldn\'t create your account just now. '
+              'Please try again.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -94,6 +112,11 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
     if (_checkInbox) {
       return _CheckInboxState(email: _email.text.trim());
     }
+    final availability = ref.watch(usernameAvailabilityProvider);
+    // Only a handle we have been told is gone blocks the button. `unknown`
+    // -- the lookup itself failed -- must not, or a flaky connection locks
+    // somebody out of signing up over a name that is probably free.
+    final handleTaken = availability.status == UsernameStatus.taken;
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -140,12 +163,25 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
                   controller: _username,
                   autocorrect: false,
                   maxLength: 20,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9_]')),
+                  ],
+                  // Answered while they type, exactly as the anonymous signup
+                  // form does. Without it the only word that a handle was gone
+                  // arrived as a 500 after the form was filled in -- and the
+                  // 500 does not mention handles at all.
+                  onChanged: ref.read(usernameAvailabilityProvider).check,
                   decoration: const InputDecoration(
                     labelText: 'Anonymous handle',
                     hintText: 'e.g. nightowl',
                     prefixIcon: Icon(Icons.alternate_email_rounded),
                     counterText: '',
                   ),
+                ),
+                const SizedBox(height: 8),
+                UsernameAvailabilityHint(
+                  status: availability.status,
+                  username: availability.describes,
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -191,7 +227,7 @@ class _EmailSignupScreenState extends ConsumerState<EmailSignupScreen> {
                 ],
                 const SizedBox(height: 18),
                 FilledButton(
-                  onPressed: _busy ? null : _submit,
+                  onPressed: _busy || handleTaken ? null : _submit,
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(54),
                     backgroundColor: VentlyColors.berryMagenta,

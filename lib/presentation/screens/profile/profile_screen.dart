@@ -8,6 +8,7 @@ import '../../theme/colors.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../widgets/post_card.dart';
 import 'profile_overview.dart';
+import '../../../core/user_friendly_errors.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key, this.showBackButton = false});
@@ -622,7 +623,14 @@ class _MyWhisperTile extends ConsumerWidget {
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Could not delete: $e')),
+                    SnackBar(
+                      content: Text(
+                        UserFriendlyErrors.message(
+                          e,
+                          fallback: 'Could not delete.',
+                        ),
+                      ),
+                    ),
                   );
                 }
               }

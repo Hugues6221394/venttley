@@ -9,6 +9,7 @@ import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/skeleton.dart';
 import 'keeper_studio_scaffold.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Moderation Center — unified reports queue + safety shortcuts.
 class KeeperModerationCenterScreen extends ConsumerWidget {
@@ -35,7 +36,9 @@ class KeeperModerationCenterScreen extends ConsumerWidget {
       },
       builder: (_) => queueAsync.when(
         loading: () => const StudioSkeleton(rows: 4),
-        error: (e, _) => Text('Could not load queue: $e'),
+        error: (e, _) => Text(
+          UserFriendlyErrors.message(e, fallback: 'Could not load queue.'),
+        ),
         data: (queue) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -11,6 +11,7 @@ import '../../widgets/skeleton.dart';
 import '../../widgets/studio_tribe_selector.dart';
 import '../../widgets/vently_premium_background.dart';
 import 'home_shell.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Keeper tab — SaaS-style analytics for tribe operators.
 class KeeperAnalyticsScreen extends ConsumerWidget {
@@ -33,7 +34,11 @@ class KeeperAnalyticsScreen extends ConsumerWidget {
               padding: EdgeInsets.fromLTRB(20, 20, 20, 20),
               child: StudioSkeleton(rows: 4),
             ),
-            error: (e, _) => Center(child: Text('Could not load: $e')),
+            error: (e, _) => Center(
+              child: Text(
+                UserFriendlyErrors.message(e, fallback: 'Could not load.'),
+              ),
+            ),
             data: (overview) {
               final stats = tribe != null
                   ? overview.statsFor(tribe.tribeId)

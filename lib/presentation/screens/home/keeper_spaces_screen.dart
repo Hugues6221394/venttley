@@ -10,6 +10,7 @@ import '../../widgets/post_card.dart';
 import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_premium_background.dart';
 import 'home_shell.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Keeper tab — active tribes & spaces with live activity signals.
 class KeeperSpacesScreen extends ConsumerWidget {
@@ -25,7 +26,11 @@ class KeeperSpacesScreen extends ConsumerWidget {
         child: SafeArea(
           child: overviewAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Could not load: $e')),
+            error: (e, _) => Center(
+              child: Text(
+                UserFriendlyErrors.message(e, fallback: 'Could not load.'),
+              ),
+            ),
             data: (overview) {
               if (overview.tribes.isEmpty) {
                 return _Empty(onCreate: () => context.push('/tribes/new'));

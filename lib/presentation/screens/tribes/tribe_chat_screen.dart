@@ -39,6 +39,7 @@ import '../../../data/services/whisper_recorder.dart';
 import '../../widgets/voice_note_composer.dart';
 import '../../theme/glass_tokens.dart';
 import '../../widgets/tagged_text.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Tribe Group Chat — Image #16.
 ///
@@ -377,7 +378,11 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
       ),
       error: (e, _) => Scaffold(
         appBar: AppBar(),
-        body: Center(child: Text('Error: $e')),
+        body: Center(
+          child: Text(
+            UserFriendlyErrors.message(e, fallback: "Couldn't open this chat."),
+          ),
+        ),
       ),
       data: (tribe) {
         if (tribe == null) {
@@ -480,7 +485,14 @@ class _TribeChatScreenState extends ConsumerState<TribeChatScreen> {
                     child: messagesAsync.when(
                       loading: () =>
                           const Center(child: CircularProgressIndicator()),
-                      error: (e, _) => Center(child: Text('Error: $e')),
+                      error: (e, _) => Center(
+                        child: Text(
+                          UserFriendlyErrors.message(
+                            e,
+                            fallback: "Couldn't open this chat.",
+                          ),
+                        ),
+                      ),
                       data: (messages) {
                         final query = _search.text;
                         if (_searchOpen && query.trim().isNotEmpty) {
@@ -1511,9 +1523,13 @@ class _MessageBubble extends ConsumerWidget {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not send: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not send.'),
+          ),
+        ),
+      );
     }
   }
 
@@ -2338,9 +2354,13 @@ class _TopicThreadSheetState extends ConsumerState<_TopicThreadSheet> {
       _controller.clear();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not send: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not send.'),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _sending = false);
     }

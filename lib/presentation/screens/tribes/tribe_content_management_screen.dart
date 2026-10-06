@@ -12,6 +12,7 @@ import '../../widgets/profile_avatar.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../../core/user_friendly_errors.dart';
 
 enum _ContentFilter { all, pinned, pending, attention, archived }
 
@@ -230,7 +231,14 @@ class _TribeContentManagementScreenState
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update this vent: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not update this vent.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busyPostId = null);
@@ -243,9 +251,16 @@ class _TribeContentManagementScreenState
       spaces = await ref.read(spacesByTribeProvider(tribeId).future);
     } catch (error) {
       if (!mounted) return null;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not load Spaces: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not load Spaces.',
+            ),
+          ),
+        ),
+      );
       return null;
     }
     if (!mounted) return null;

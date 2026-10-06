@@ -180,9 +180,16 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
           );
         }
       } else if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not post comment: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(
+                e,
+                fallback: 'Could not post comment.',
+              ),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -250,9 +257,13 @@ class _WhisperCommentsSheetState extends ConsumerState<_WhisperCommentsSheet> {
       ref.invalidate(whispersFeedProvider);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not delete: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Could not delete.'),
+            ),
+          ),
+        );
       }
     }
   }

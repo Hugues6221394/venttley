@@ -66,9 +66,9 @@ class UsernameAvailability extends ChangeNotifier {
 
   Future<void> _ask(String username) async {
     try {
-      final free = await _ref.read(repositoryProvider).usernameAvailable(
-        username,
-      );
+      final free = await _ref
+          .read(repositoryProvider)
+          .usernameAvailable(username);
       // Typing moved on while we were waiting. Showing this would label a
       // handle with an answer about a different one.
       if (_pending != username) return;
@@ -171,7 +171,8 @@ class UsernameAvailabilityHint extends StatelessWidget {
               fontSize: 11,
               height: 1.4,
               color: colour,
-              fontWeight: status == UsernameStatus.free ||
+              fontWeight:
+                  status == UsernameStatus.free ||
                       status == UsernameStatus.taken
                   ? FontWeight.w700
                   : FontWeight.w400,

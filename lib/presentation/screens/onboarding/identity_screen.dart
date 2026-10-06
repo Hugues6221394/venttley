@@ -217,9 +217,12 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
 
       if (!mounted) return;
       context.go('/onboarding/key', extra: result.recoveryPhrase);
-    } on AgeGateBlocked catch (e) {
+    } on AgeGateBlocked {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      // Written here rather than taken from the exception's toString: what a
+      // person reads should live in the screen that shows it, not depend on
+      // the debug representation of a class staying sentence-shaped.
+      setState(() => _error = 'Venttly is for members aged 13 and over.');
     } on UsernameTakenException {
       if (!mounted) return;
       setState(
@@ -231,7 +234,20 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       _shuffleName();
     } on EmailConfirmationStillOnException catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      // This one is a note to whoever runs the project -- "disable Confirm
+      // email in Authentication → Providers" -- and it was being shown to the
+      // person signing up, who can do nothing with it and should never learn
+      // that Venttly runs on Supabase. It goes to the log; they get a sentence
+      // and the door that still works.
+      log.warn(
+        'signup.email_confirmation_still_on',
+        props: {'error': e.toString()},
+      );
+      setState(
+        () => _error =
+            'Username-only signup is unavailable right now. '
+            'Please try again later, or continue with your email.',
+      );
     } on FormatException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.message);

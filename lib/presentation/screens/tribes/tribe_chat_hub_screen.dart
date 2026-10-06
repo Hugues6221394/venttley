@@ -20,6 +20,7 @@ import '../../widgets/tribe_avatar.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../theme/glass_tokens.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// WhatsApp-style tribe group info hub.
 class TribeChatHubScreen extends ConsumerWidget {
@@ -34,7 +35,14 @@ class TribeChatHubScreen extends ConsumerWidget {
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(
         appBar: AppBar(),
-        body: Center(child: Text('Error: $e')),
+        body: Center(
+          child: Text(
+            UserFriendlyErrors.message(
+              e,
+              fallback: "Couldn't open this Tribe.",
+            ),
+          ),
+        ),
       ),
       data: (tribe) {
         if (tribe == null) {
@@ -157,7 +165,12 @@ class _HubBody extends ConsumerWidget {
                   const SizedBox(height: 8),
                   membersAsync.when(
                     loading: () => const LinearProgressIndicator(minHeight: 2),
-                    error: (e, _) => Text('Could not load members: $e'),
+                    error: (e, _) => Text(
+                      UserFriendlyErrors.message(
+                        e,
+                        fallback: 'Could not load members.',
+                      ),
+                    ),
                     data: (members) => _MembersList(
                       tribe: tribe,
                       members: members,
@@ -171,7 +184,12 @@ class _HubBody extends ConsumerWidget {
                   const SizedBox(height: 8),
                   promptsAsync.when(
                     loading: () => const LinearProgressIndicator(minHeight: 2),
-                    error: (e, _) => Text('Could not load prompts: $e'),
+                    error: (e, _) => Text(
+                      UserFriendlyErrors.message(
+                        e,
+                        fallback: 'Could not load prompts.',
+                      ),
+                    ),
                     data: (prompts) => _PromptsSection(
                       tribe: tribe,
                       prompts: prompts,
@@ -217,7 +235,7 @@ class _MediaTab extends ConsumerWidget {
     final mediaAsync = ref.watch(tribeChatMediaProvider(tribeId));
     return mediaAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('$e')),
+      error: (e, _) => Center(child: Text(UserFriendlyErrors.message(e))),
       data: (items) {
         if (items.isEmpty) {
           return const Center(child: Text('No shared media yet'));
@@ -315,9 +333,13 @@ class _HeroSection extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Upload failed.'),
+            ),
+          ),
+        );
       }
     }
   }
@@ -623,9 +645,11 @@ class _MembersList extends ConsumerWidget {
                           ref.invalidate(tribeMembersProvider(tribe.tribeId));
                         } catch (e) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(
-                              context,
-                            ).showSnackBar(SnackBar(content: Text('$e')));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(UserFriendlyErrors.message(e)),
+                              ),
+                            );
                           }
                         }
                       },
@@ -1112,9 +1136,13 @@ class _PromptComposerState extends ConsumerState<_PromptComposer> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not create: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Could not create.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
