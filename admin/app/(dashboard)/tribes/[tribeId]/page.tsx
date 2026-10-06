@@ -519,9 +519,9 @@ export default async function TribeDetailPage({
                         {new Date(p.created_at).toLocaleString()}
                       </p>
                     </div>
-                    <p className="text-sm text-burgundy line-clamp-3">
-                      {p.content}
-                    </p>
+                    <Link href={`/content/${p.post_id}`} className="block text-sm text-burgundy line-clamp-3 hover:underline">
+                      {p.content || "Media only"}
+                    </Link>
                     <p className="text-[11px] text-ink-muted mt-1">
                       ♡ {p.likes_count} · 💬 {p.comments_count}
                     </p>
