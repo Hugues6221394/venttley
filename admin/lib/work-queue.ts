@@ -117,7 +117,7 @@ export function sortWork(items: WorkItem[]): WorkItem[] {
 
 // Which queue actions a row offers. Appeals have no assignee; verification
 // can be claimed but has no release; a row someone else holds is reassigned
-// from its own queue, not taken over from the list.
+// to a named teammate, never silently claimed over.
 export function rowActions(item: WorkItem, me: { userId: string; pseudonym: string }) {
   const unassigned = !item.assignee && !item.assigneeId;
   const mine = !unassigned && isMine(item, me);
@@ -126,7 +126,7 @@ export function rowActions(item: WorkItem, me: { userId: string; pseudonym: stri
   return {
     claim: unassigned && claimable,
     release: mine && (item.kind === "case" || item.kind === "support"),
-    assign: item.kind === "support",
+    assign: item.kind === "case" || item.kind === "support",
   };
 }
 

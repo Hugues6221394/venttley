@@ -28,6 +28,7 @@ function back(form: FormData, result: string): never {
 function failure(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes("already_claimed")) return "already_claimed";
+  if (message.includes("assignee is not a moderator")) return "invalid_assignee";
   if (message.includes("request_not_open") || message.includes("closed_support_case")) return "no_longer_open";
   return operationalResult(error);
 }
@@ -86,10 +87,19 @@ export async function releaseWorkItem(form: FormData) {
   back(form, result);
 }
 
-export async function assignSupportItem(form: FormData) {
+export async function assignWorkItem(form: FormData) {
   let result = "assigned";
   try {
-    await updateSupport(form, uuid(form, "assignee_id"));
+    const kind = parseKind(String(form.get("item_kind") ?? ""));
+    const assignee = uuid(form, "assignee_id");
+    if (kind === "case") {
+      await requireOperationalActor(CASE_ROLES);
+      await rpc("admin_assign_case", { p_case: uuid(form, "id"), p_assignee: assignee, p_reason: "assigned from the work queue" });
+    } else if (kind === "support") {
+      await updateSupport(form, assignee);
+    } else {
+      result = "invalid_input";
+    }
   } catch (error) { result = failure(error); }
   back(form, result);
 }

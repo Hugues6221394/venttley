@@ -14,7 +14,7 @@ import {
   isMine, parseKind, parseView, rowActions, sortWork,
   type AppealSource, type CaseSource, type QueueKind, type QueuePriority, type QueueView, type VerificationSource, type WorkItem,
 } from "@/lib/work-queue";
-import { assignSupportItem, claimWorkItem, releaseWorkItem } from "@/lib/work-queue-actions";
+import { assignWorkItem, claimWorkItem, releaseWorkItem } from "@/lib/work-queue-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,8 @@ const PRIORITY_TONE: Record<QueuePriority, Tone> = { critical: "danger", high: "
 const RESULTS: Record<string, { tone: "ok" | "warn" | "danger"; text: string }> = {
   claimed: { tone: "ok", text: "Claimed. It now shows under Mine." },
   released: { tone: "ok", text: "Released back to the queue." },
-  assigned: { tone: "ok", text: "Assigned." },
+  assigned: { tone: "ok", text: "Assigned. Your teammate now sees it under Mine." },
+  invalid_assignee: { tone: "warn", text: "That person can no longer take moderation cases. Choose someone else." },
   already_claimed: { tone: "warn", text: "Someone else claimed this first. The list is refreshed." },
   no_longer_open: { tone: "warn", text: "This item is no longer open. The list is refreshed." },
   mfa_required: { tone: "warn", text: "This action needs two-factor verification. Verify, then try again." },
@@ -72,9 +73,14 @@ export default async function WorkQueuePage({ searchParams }: {
   const failed = sources.filter(s => s.failed).map(s => QUEUE_KINDS[s.kind].label);
   const rows = filterWork(everything, view, kind, staff);
   const result = params.result && Object.hasOwn(RESULTS, params.result) ? RESULTS[params.result] : null;
-  const assignees = rows.some(r => r.kind === "support")
-    ? await rpc<Assignee[]>("admin_support_assignees", { p_query: "" }).catch(() => [] as Assignee[])
-    : [];
+  const teammates = (fn: string, needed: boolean) => needed
+    ? rpc<Assignee[]>(fn, { p_query: "" }).then(r => r ?? [], () => [] as Assignee[])
+    : Promise.resolve([] as Assignee[]);
+  const [caseAssignees, supportAssignees] = await Promise.all([
+    teammates("admin_case_assignees", rows.some(r => r.kind === "case")),
+    teammates("admin_support_assignees", rows.some(r => r.kind === "support")),
+  ]);
+  const assignees: Partial<Record<QueueKind, Assignee[]>> = { case: caseAssignees, support: supportAssignees };
 
   const scoped = kind === "all" ? everything : everything.filter(i => i.kind === kind);
   const counts = {
@@ -179,7 +185,7 @@ export default async function WorkQueuePage({ searchParams }: {
                     <td className="t-td text-right tabular text-ink-muted">{ageLabel(item.openedAt, now)}</td>
                     <td className={`t-td text-right tabular ${item.overdue ? "text-danger font-semibold" : "text-ink-muted"}`}>{dueLabel(item.dueAt, now)}</td>
                     <td className="t-td">
-                      <RowActions item={item} me={staff} view={view} kind={kind} assignees={assignees} />
+                      <RowActions item={item} me={staff} view={view} kind={kind} assignees={assignees[item.kind] ?? []} />
                     </td>
                   </tr>
                 ))}
@@ -216,7 +222,7 @@ function RowActions({ item, me, view, kind, assignees }: {
       {can.assign && others.length > 0 && (
         <details className="queue-assign">
           <summary className="btn-ghost text-xs">Assign</summary>
-          <form action={assignSupportItem}>
+          <form action={assignWorkItem}>
             {hidden}
             <select name="assignee_id" className="select" aria-label="Assign to" required defaultValue="">
               <option value="" disabled>Choose a teammate</option>
