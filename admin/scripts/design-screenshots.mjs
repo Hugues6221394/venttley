@@ -109,6 +109,22 @@ try {
     console.log("support claim result:", new URL(page.url()).searchParams.get("result"));
     await context.close();
   }
+  if (process.env.DESIGN_QUEUE_ASSIGN) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, reducedMotion: "reduce" });
+    await context.addCookies([...cookies].map(([n, value]) => ({ name: n, value, url: origin, sameSite: "Lax" })));
+    const page = await context.newPage();
+    await page.goto(`${origin}/queue?kind=case`, { waitUntil: "networkidle", timeout: 90000 });
+    const assign = page.locator("details.queue-assign").first();
+    await assign.locator("summary").click();
+    await assign.locator("select").selectOption({ label: process.env.DESIGN_QUEUE_ASSIGN });
+    await page.screenshot({ path: resolve(outputDir, "queue-assign-open.png") });
+    await assign.getByRole("button", { name: "Assign" }).click();
+    await page.waitForURL(/result=/, { timeout: 30000 });
+    console.log("assign result:", new URL(page.url()).searchParams.get("result"));
+    await page.screenshot({ path: resolve(outputDir, "queue-assigned.png") });
+    console.log("cases held by teammate:", sql(`SELECT count(*) FROM public.moderation_cases c JOIN public.users u ON u.user_id=c.assignee_id WHERE u.display_name='${process.env.DESIGN_QUEUE_ASSIGN}'`, "pipe").trim());
+    await context.close();
+  }
   if (!only || only.includes("overview")) {
     await capture("overview-light-full", "/overview", "light", { width: 1440, height: 900 }, true);
     await capture("overview-mobile-390", "/overview", "light", { width: 390, height: 844 });
