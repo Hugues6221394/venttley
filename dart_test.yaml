@@ -1,0 +1,14 @@
+# Golden-image tests compare rendered pixels, so a reference captured on one
+# platform does not match another: the app bundles no fonts, so every glyph
+# comes from the host. Six of them failed on every Linux CI run while passing
+# on macOS, which is where they were recorded.
+#
+# The tag lets CI skip exactly those and keep everything else, rather than the
+# usual alternatives — a tolerance so wide it stops catching real breaks, or
+# references that only match the machine that last wrote them.
+tags:
+  golden:
+    description: >-
+      Compares rendered pixels. Only meaningful on the platform the reference
+      images were captured on (macOS). CI excludes these; re-record with
+      `flutter test --update-goldens`.

@@ -67,12 +67,10 @@ jobs:
       # Keep errors/warnings fatal while the existing informational lint debt
       # is retired incrementally.
       - run: flutter analyze --no-fatal-infos
-      # --reporter github emits a ::error:: annotation per failing test, so a
-      # red run names the tests instead of only saying "exit code 1". Without
-      # it the only way to find out which test failed is to open the web UI and
-      # read 3,000 lines of log, which is why the six failures below went
-      # undiagnosed for as long as they did.
-      - run: flutter test --coverage --reporter github
+      # Everything except the golden-image tests, which compare rendered
+      # pixels and only mean anything on the platform their references were
+      # captured on. See dart_test.yaml and test/premium_member_ui_test.dart.
+      - run: flutter test --coverage --exclude-tags golden
 
   android:
     # Nothing built Android here before, and it rotted invisibly: Android
