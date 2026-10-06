@@ -12,6 +12,7 @@ export type WorkItem = {
   member: string | null;
   priority: QueuePriority;
   status: string;
+  rawStatus: string;
   assigneeId: string | null;
   assignee: string | null;
   openedAt: string;
@@ -63,10 +64,10 @@ export function fromCases(rows: CaseSource[]): WorkItem[] {
   return rows.filter(r => r.status !== "resolved").map(r => ({
     kind: "case", id: r.case_id,
     title: `${words(r.target_type)} · ${r.report_count} ${r.report_count === 1 ? "report" : "reports"}`,
-    member: r.subject_pseudonym, priority: casePriority(r.severity), status: words(r.status),
+    member: r.subject_pseudonym, priority: casePriority(r.severity), status: words(r.status), rawStatus: r.status,
     assigneeId: r.assignee_id, assignee: r.assignee_pseudonym,
     openedAt: r.opened_at, dueAt: r.sla_due_at, overdue: !!r.sla_breached,
-    href: "/moderation?tab=cases",
+    href: `/moderation/cases/${r.case_id}`,
   }));
 }
 
@@ -74,7 +75,7 @@ export function fromAppeals(rows: AppealSource[]): WorkItem[] {
   return rows.filter(r => r.status === "open").map(r => ({
     kind: "appeal", id: r.appeal_id,
     title: r.original_decision ? `Appeal of ${words(r.original_decision)}` : `Appeal · ${words(r.subject_kind)}`,
-    member: r.appellant_pseudonym, priority: "normal", status: r.reviewable_by_me ? "open" : "open · another reviewer",
+    member: r.appellant_pseudonym, priority: "normal", status: r.reviewable_by_me ? "open" : "open · another reviewer", rawStatus: r.status,
     assigneeId: null, assignee: null, openedAt: r.created_at, dueAt: null, overdue: false,
     href: "/appeals",
   }));
@@ -84,7 +85,7 @@ export function fromVerification(rows: VerificationSource[]): WorkItem[] {
   return rows.filter(r => OPEN_VERIFICATION.has(r.status)).map(r => ({
     kind: "verification", id: r.request_id,
     title: r.category ? `${words(r.category)} application` : "Verification request",
-    member: r.pseudonym, priority: "low", status: words(r.status),
+    member: r.pseudonym, priority: "low", status: words(r.status), rawStatus: r.status,
     assigneeId: null, assignee: r.claimed_by_pseudonym, openedAt: r.created_at, dueAt: null, overdue: false,
     href: r.pseudonym ? `/verification?q=${encodeURIComponent(r.pseudonym)}` : "/verification",
   }));
@@ -94,7 +95,7 @@ export function fromSupport(rows: SupportSource[], now: number): WorkItem[] {
   return rows.filter(r => !CLOSED_SUPPORT.has(r.status)).map(r => ({
     kind: "support", id: r.support_case_id,
     title: words(r.category), member: null,
-    priority: supportPriority(r.priority), status: words(r.status),
+    priority: supportPriority(r.priority), status: words(r.status), rawStatus: r.status,
     assigneeId: r.assignee_id, assignee: r.assignee_name,
     openedAt: r.created_at, dueAt: r.sla_due_at,
     overdue: !!r.sla_due_at && Date.parse(r.sla_due_at) < now,
@@ -112,6 +113,21 @@ export function sortWork(items: WorkItem[]): WorkItem[] {
     RANK[a.priority] - RANK[b.priority] ||
     due(a) - due(b) ||
     Date.parse(a.openedAt) - Date.parse(b.openedAt));
+}
+
+// Which queue actions a row offers. Appeals have no assignee; verification
+// can be claimed but has no release; a row someone else holds is reassigned
+// from its own queue, not taken over from the list.
+export function rowActions(item: WorkItem, me: { userId: string; pseudonym: string }) {
+  const unassigned = !item.assignee && !item.assigneeId;
+  const mine = !unassigned && isMine(item, me);
+  const claimable = item.kind !== "appeal" &&
+    (item.kind !== "verification" || item.rawStatus === "pending");
+  return {
+    claim: unassigned && claimable,
+    release: mine && (item.kind === "case" || item.kind === "support"),
+    assign: item.kind === "support",
+  };
 }
 
 export function isMine(item: WorkItem, me: { userId: string; pseudonym: string }) {

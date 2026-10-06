@@ -89,6 +89,24 @@ try {
     if (only && !only.includes(name)) continue;
     for (const theme of ["light", "dark"]) await capture(`${name}-${theme}`, route, theme, { width: 1440, height: 900 });
   }
+  // Optional journey: claim the top claimable row, then report what the
+  // database recorded. Local only, like everything else here.
+  if (process.env.DESIGN_QUEUE_CLAIM === "1") {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, reducedMotion: "reduce" });
+    await context.addCookies([...cookies].map(([n, value]) => ({ name: n, value, url: origin, sameSite: "Lax" })));
+    const page = await context.newPage();
+    await page.goto(`${origin}/queue?kind=case`, { waitUntil: "networkidle", timeout: 90000 });
+    await page.getByRole("button", { name: "Claim" }).first().click();
+    await page.waitForURL(/result=/, { timeout: 30000 });
+    console.log("claim result:", new URL(page.url()).searchParams.get("result"));
+    await page.screenshot({ path: resolve(outputDir, "queue-claimed.png") });
+    console.log("claimed cases:", sql(`SELECT count(*) FROM public.moderation_cases WHERE assignee_id='${userId}'`, "pipe").trim());
+    await page.goto(`${origin}/queue?kind=support`, { waitUntil: "networkidle", timeout: 90000 });
+    await page.getByRole("button", { name: "Claim" }).first().click();
+    await page.waitForURL(/result=/, { timeout: 30000 });
+    console.log("support claim result:", new URL(page.url()).searchParams.get("result"));
+    await context.close();
+  }
   if (!only || only.includes("overview")) {
     await capture("overview-light-full", "/overview", "light", { width: 1440, height: 900 }, true);
     await capture("overview-mobile-390", "/overview", "light", { width: 390, height: 844 });

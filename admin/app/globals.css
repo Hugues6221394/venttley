@@ -479,6 +479,12 @@
 .queue-title { display: block; font-weight: 600; color: var(--theme-heading); }
 .queue-title::first-letter { text-transform: uppercase; }
 .queue-member { display: block; margin-top: 2px; font-size: 12px; color: var(--theme-muted); }
+.queue-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; white-space: nowrap; }
+.queue-assign { position: relative; }
+.queue-assign > summary { list-style: none; cursor: pointer; }
+.queue-assign > summary::-webkit-details-marker { display: none; }
+.queue-assign[open] > summary { background: var(--theme-hover); color: var(--theme-heading); }
+.queue-assign > form { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; display: grid; gap: 8px; width: 240px; padding: 12px; border: 1px solid var(--theme-line); border-radius: 10px; background: var(--theme-panel); box-shadow: 0 12px 32px rgb(28 21 23 / .14); }
 .work-queue-table tr.is-overdue td:first-child { box-shadow: inset 3px 0 0 var(--theme-danger); }
 @media (max-width: 760px) { .work-queue-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .work-queue-metrics .operator-metric:last-child { grid-column: auto; } }
 .rollout-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 20px; padding: 10px 12px 10px 16px; border: 1px solid var(--theme-line); border-left: 3px solid var(--theme-accent); border-radius: 8px; background: var(--theme-panel); font-size: 13px; color: var(--theme-muted); }

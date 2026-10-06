@@ -52,6 +52,16 @@ assert.deepEqual(q.filterWork(all, "mine", "all", me).map(i => i.id).sort(), ["c
 assert.deepEqual(q.filterWork(all, "unassigned", "all", me).map(i => i.id).sort(), ["a1", "c1", "c3"]);
 assert.deepEqual(q.filterWork(all, "overdue", "case", me).map(i => i.id), ["c3"]);
 
+const act = id => q.rowActions(all.find(i => i.id === id), me);
+assert.deepEqual(act("c1"), { claim: true, release: false, assign: false }, "unassigned case can be claimed");
+assert.deepEqual(act("c2"), { claim: false, release: true, assign: false }, "my case can be released");
+assert.deepEqual(act("a1"), { claim: false, release: false, assign: false }, "appeals have no assignee to claim");
+assert.deepEqual(act("v1"), { claim: false, release: false, assign: false }, "verification in more_info is not claimable");
+assert.deepEqual(act("s1"), { claim: false, release: false, assign: true }, "someone else's support case is reassigned, not taken over");
+assert.equal(all.find(i => i.id === "c2").href, "/moderation/cases/c2", "cases open their own page");
+const pendingVerification = q.fromVerification([{ request_id: "v3", pseudonym: "j", status: "pending", category: null, claimed_by_pseudonym: null, created_at: hoursAgo(1) }])[0];
+assert.equal(q.rowActions(pendingVerification, me).claim, true);
+
 assert.equal(q.parseView("mine"), "mine");
 assert.equal(q.parseView("<script>"), "all");
 assert.equal(q.parseKind("support"), "support");
