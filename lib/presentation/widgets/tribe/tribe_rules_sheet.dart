@@ -5,6 +5,7 @@ import '../../../core/providers.dart';
 import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../glass_surfaces.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Tribe rules — visible to every member from the chat header.
 /// The keeper can edit rules inline and manage the ban list; everyone else
@@ -212,9 +213,13 @@ class _RulesSheetBodyState extends ConsumerState<_RulesSheetBody> {
       if (mounted) setState(() => _rules = saved);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not save rules: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not save rules.'),
+          ),
+        ),
+      );
     }
   }
 }

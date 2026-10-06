@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/colors.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../../theme/glass_tokens.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Security & 2FA settings. Wires Supabase Auth MFA (TOTP) so a
 /// returning user can require a 6-digit code in addition to their
@@ -44,7 +45,10 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _err = e.toString();
+        _err = UserFriendlyErrors.message(
+          e,
+          fallback: 'Couldn\'t load your security settings.',
+        );
         _loading = false;
       });
     }
@@ -64,7 +68,15 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Couldn\'t start enrollment: $e')));
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(
+                e,
+                fallback: 'Couldn\'t start enrollment.',
+              ),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -89,103 +101,116 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
         initialValues: const [''],
         builder: (ctx, controllers) {
           final codeCtl = controllers.single;
-          return StatefulBuilder(builder: (ctx, setSheet) {
-            return SingleChildScrollView(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 20,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Set up authenticator',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 8),
-                  const Text(
-                      'Open Google Authenticator / 1Password / Authy. Add a new account with this secret, then enter the 6-digit code below.',
-                      style: TextStyle(height: 1.4)),
-                  const SizedBox(height: 14),
-                  _SecretBlock(secret: secret, uri: uri),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: codeCtl,
-                    keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      labelText: '6-digit code',
-                      errorText: error,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: VentlyColors.berryMagenta,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+          return StatefulBuilder(
+            builder: (ctx, setSheet) {
+              return SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 20,
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Set up authenticator',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
                       ),
-                      onPressed: verifying
-                          ? null
-                          : () async {
-                              final code = codeCtl.text.trim();
-                              if (code.length != 6) {
-                                setSheet(
-                                    () => error = 'Enter the 6-digit code.');
-                                return;
-                              }
-                              setSheet(() {
-                                verifying = true;
-                                error = null;
-                              });
-                              try {
-                                final challenge = await Supabase
-                                    .instance.client.auth.mfa
-                                    .challenge(factorId: factorId);
-                                await Supabase.instance.client.auth.mfa.verify(
-                                  factorId: factorId,
-                                  challengeId: challenge.id,
-                                  code: code,
-                                );
-                                if (ctx.mounted) Navigator.pop(ctx, true);
-                              } catch (_) {
-                                if (!ctx.mounted) return;
-                                setSheet(() {
-                                  verifying = false;
-                                  error = 'Code didn\'t match. Try again.';
-                                });
-                              }
-                            },
-                      child: verifying
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Verify & enable 2FA',
-                              style: TextStyle(fontWeight: FontWeight.w900),
-                            ),
                     ),
-                  ),
-                ],
-              ),
-            );
-          });
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Open Google Authenticator / 1Password / Authy. Add a new account with this secret, then enter the 6-digit code below.',
+                      style: TextStyle(height: 1.4),
+                    ),
+                    const SizedBox(height: 14),
+                    _SecretBlock(secret: secret, uri: uri),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: codeCtl,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        labelText: '6-digit code',
+                        errorText: error,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: VentlyColors.berryMagenta,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        onPressed: verifying
+                            ? null
+                            : () async {
+                                final code = codeCtl.text.trim();
+                                if (code.length != 6) {
+                                  setSheet(
+                                    () => error = 'Enter the 6-digit code.',
+                                  );
+                                  return;
+                                }
+                                setSheet(() {
+                                  verifying = true;
+                                  error = null;
+                                });
+                                try {
+                                  final challenge = await Supabase
+                                      .instance
+                                      .client
+                                      .auth
+                                      .mfa
+                                      .challenge(factorId: factorId);
+                                  await Supabase.instance.client.auth.mfa
+                                      .verify(
+                                        factorId: factorId,
+                                        challengeId: challenge.id,
+                                        code: code,
+                                      );
+                                  if (ctx.mounted) Navigator.pop(ctx, true);
+                                } catch (_) {
+                                  if (!ctx.mounted) return;
+                                  setSheet(() {
+                                    verifying = false;
+                                    error = 'Code didn\'t match. Try again.';
+                                  });
+                                }
+                              },
+                        child: verifying
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Verify & enable 2FA',
+                                style: TextStyle(fontWeight: FontWeight.w900),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
         },
       ),
     );
     if (verified == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Two-factor authentication is on.')));
+        const SnackBar(content: Text('Two-factor authentication is on.')),
+      );
     } else {
       // User cancelled — clean up the half-enrolled factor.
       try {
@@ -200,14 +225,17 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Turn off 2FA?'),
         content: const Text(
-            'Your account will only need your password to sign in. You can re-enable it any time.'),
+          'Your account will only need your password to sign in. You can re-enable it any time.',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: VentlyColors.berryMagenta),
+              backgroundColor: VentlyColors.berryMagenta,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Turn off'),
           ),
@@ -221,8 +249,13 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
       await _refresh();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Couldn\'t disable: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Couldn\'t disable.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -245,8 +278,7 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                   decoration: BoxDecoration(
                     color: GlassTokens.card(context),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: GlassTokens.cardEdge(context)),
+                    border: Border.all(color: GlassTokens.cardEdge(context)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -302,7 +334,8 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                                 child: const Text(
                                   'Disable',
                                   style: TextStyle(
-                                      color: VentlyColors.berryMagenta),
+                                    color: VentlyColors.berryMagenta,
+                                  ),
                                 ),
                               ),
                             ),
@@ -317,8 +350,10 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                             ),
                             onPressed: _busy ? null : _enroll,
                             icon: const Icon(Icons.lock_outline, size: 18),
-                            label: const Text('Turn on 2FA',
-                                style: TextStyle(fontWeight: FontWeight.w900)),
+                            label: const Text(
+                              'Turn on 2FA',
+                              style: TextStyle(fontWeight: FontWeight.w900),
+                            ),
                           ),
                         ),
                     ],
@@ -362,7 +397,10 @@ class _SecretBlock extends StatelessWidget {
           Text(
             'Secret (paste into authenticator)',
             style: TextStyle(
-                fontSize: 11, fontWeight: FontWeight.w800, color: context.ink),
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: context.ink,
+            ),
           ),
           const SizedBox(height: 4),
           Row(
@@ -383,7 +421,8 @@ class _SecretBlock extends StatelessWidget {
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: secret));
                   ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Secret copied')));
+                    const SnackBar(content: Text('Secret copied')),
+                  );
                 },
               ),
             ],
@@ -392,9 +431,10 @@ class _SecretBlock extends StatelessWidget {
           Text(
             'Or copy the full setup URI:',
             style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: context.ink.withOpacity(0.7)),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: context.ink.withOpacity(0.7),
+            ),
           ),
           Row(
             children: [
@@ -410,8 +450,9 @@ class _SecretBlock extends StatelessWidget {
                 icon: const Icon(Icons.copy, size: 18),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: uri));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('URI copied')));
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('URI copied')));
                 },
               ),
             ],

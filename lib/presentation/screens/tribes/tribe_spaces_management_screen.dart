@@ -8,6 +8,7 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../../widgets/vently_premium_background.dart';
 import 'tribe_helpers_screen.dart' show myTribePermissionsProvider;
+import '../../../core/user_friendly_errors.dart';
 
 class TribeSpacesManagementScreen extends ConsumerStatefulWidget {
   const TribeSpacesManagementScreen({
@@ -96,7 +97,12 @@ class _TribeSpacesManagementScreenState
           error: (error, _) => Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: Text('Could not load Spaces: $error'),
+              child: Text(
+                UserFriendlyErrors.message(
+                  error,
+                  fallback: 'Could not load Spaces.',
+                ),
+              ),
             ),
           ),
           data: (items) {
@@ -187,7 +193,14 @@ class _TribeSpacesManagementScreenState
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save the Space: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not save the Space.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => busySpaceId = null);
@@ -263,7 +276,14 @@ class _TribeSpacesManagementScreenState
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update the Space: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not update the Space.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => busySpaceId = null);

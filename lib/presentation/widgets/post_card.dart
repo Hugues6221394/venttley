@@ -22,6 +22,7 @@ import 'share_post_to_friend_sheet.dart';
 import 'tagged_text.dart';
 import 'tribe_avatar.dart';
 import 'verified_badge.dart';
+import '../../core/user_friendly_errors.dart';
 
 class PostCard extends ConsumerWidget {
   const PostCard({
@@ -566,9 +567,13 @@ Future<void> openReportPostSheet(
     );
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Could not send report: $e')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          UserFriendlyErrors.message(e, fallback: 'Could not send report.'),
+        ),
+      ),
+    );
   }
 }
 

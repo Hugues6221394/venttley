@@ -5,6 +5,7 @@ import '../../../core/providers.dart';
 import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../../core/user_friendly_errors.dart';
 
 class TribeRulesEditorScreen extends ConsumerStatefulWidget {
   const TribeRulesEditorScreen({super.key, required this.slug});
@@ -84,8 +85,14 @@ class _TribeRulesEditorScreenState
       body: VentlyPremiumBackground(
         child: overview.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) =>
-              Center(child: Text('Could not load rules: $error')),
+          error: (error, _) => Center(
+            child: Text(
+              UserFriendlyErrors.message(
+                error,
+                fallback: 'Could not load rules.',
+              ),
+            ),
+          ),
           data: (_) {
             final current = rules ?? const <TribeRuleItem>[];
             if (current.isEmpty) {
@@ -253,9 +260,16 @@ class _TribeRulesEditorScreenState
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not save rules: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not save rules.',
+            ),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => saving = false);
     }

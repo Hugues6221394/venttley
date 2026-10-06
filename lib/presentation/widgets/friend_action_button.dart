@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
+import '../../core/user_friendly_errors.dart';
 
 /// Reactive friend-action chip used anywhere a stranger's identity is
 /// surfaced. Reads [friendStatusProvider] for the target user and
@@ -108,9 +109,13 @@ class _ChipForStatus extends ConsumerWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Could not update: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                UserFriendlyErrors.message(e, fallback: 'Could not update.'),
+              ),
+            ),
+          );
         }
       }
     }

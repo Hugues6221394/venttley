@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/providers.dart';
 import '../theme/colors.dart';
+import '../../core/user_friendly_errors.dart';
 
 /// Creates or schedules a Tribe prompt through the canonical repository RPC.
 Future<bool> showKeeperPromptComposer(
@@ -122,7 +123,14 @@ class _KeeperPromptComposerSheetState
       if (!mounted) return;
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not publish this prompt: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not publish this prompt.',
+            ),
+          ),
+        ),
       );
     }
   }

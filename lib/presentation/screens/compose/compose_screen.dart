@@ -27,6 +27,7 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/tagged_text.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../theme/glass_tokens.dart';
+import '../../../core/user_friendly_errors.dart';
 
 class ComposeScreen extends ConsumerStatefulWidget {
   const ComposeScreen({super.key, this.queryParams = const {}});
@@ -165,9 +166,13 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not pick image: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not pick image.'),
+          ),
+        ),
+      );
     }
   }
 
@@ -600,9 +605,13 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         }
         await outbox.discardStagedMedia(stagedMedia?.path);
         setState(() => _busy = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Photo upload failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Photo upload failed.'),
+            ),
+          ),
+        );
         return;
       }
     }
@@ -645,7 +654,15 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       if (!mounted) return;
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Couldn't post: $e — your draft is saved.")),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+                  e,
+                  fallback: "Couldn't post that just now.",
+                ) +
+                ' Your draft is saved.',
+          ),
+        ),
       );
       return;
     }

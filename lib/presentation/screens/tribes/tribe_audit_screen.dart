@@ -6,6 +6,7 @@ import '../../../domain/tribe/tribe_management.dart';
 import '../../theme/colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../../core/user_friendly_errors.dart';
 
 class TribeAuditScreen extends ConsumerStatefulWidget {
   const TribeAuditScreen({super.key, required this.slug});
@@ -97,7 +98,14 @@ class _TribeAuditScreenState extends ConsumerState<TribeAuditScreen> {
                   child: Center(child: CircularProgressIndicator()),
                 ),
                 error: (error, _) => SliverFillRemaining(
-                  child: Center(child: Text('Could not load history: $error')),
+                  child: Center(
+                    child: Text(
+                      UserFriendlyErrors.message(
+                        error,
+                        fallback: 'Could not load history.',
+                      ),
+                    ),
+                  ),
                 ),
                 data: (items) {
                   final visible = items

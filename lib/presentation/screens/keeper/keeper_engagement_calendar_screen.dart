@@ -9,6 +9,7 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/keeper_prompt_composer_sheet.dart';
 import 'keeper_studio_scaffold.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Engagement calendar — scheduled prompts + cadence suggestions.
 class KeeperEngagementCalendarScreen extends ConsumerWidget {
@@ -35,7 +36,9 @@ class KeeperEngagementCalendarScreen extends ConsumerWidget {
       },
       builder: (_) => calAsync.when(
         loading: () => const StudioSkeleton(rows: 3),
-        error: (e, _) => Text('Could not load calendar: $e'),
+        error: (e, _) => Text(
+          UserFriendlyErrors.message(e, fallback: 'Could not load calendar.'),
+        ),
         data: (cal) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

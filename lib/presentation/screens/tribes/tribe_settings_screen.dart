@@ -13,6 +13,7 @@ import '../../widgets/tribe_avatar.dart';
 import '../../widgets/vently_error_state.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../home/home_shell.dart';
+import '../../../core/user_friendly_errors.dart';
 
 class TribeSettingsScreen extends ConsumerWidget {
   const TribeSettingsScreen({super.key, required this.slug});
@@ -284,7 +285,14 @@ class TribeSettingsScreen extends ConsumerWidget {
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save settings: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not save settings.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -354,7 +362,14 @@ class TribeSettingsScreen extends ConsumerWidget {
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update the Tribe: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not update the Tribe.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -381,7 +396,14 @@ class TribeSettingsScreen extends ConsumerWidget {
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load transfer candidates: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not load transfer candidates.',
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -494,7 +516,14 @@ class TribeSettingsScreen extends ConsumerWidget {
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deletion did not go through: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Deletion did not go through.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -759,8 +788,18 @@ class KeeperAgreementRecord extends ConsumerWidget {
   final String tribeId;
 
   static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   @override
@@ -1395,7 +1434,14 @@ class _TransferSheetState extends ConsumerState<_TransferSheet> {
       if (!mounted) return;
       setState(() => saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not start transfer: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not start transfer.',
+            ),
+          ),
+        ),
       );
     }
   }

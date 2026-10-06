@@ -9,6 +9,7 @@ import '../../widgets/anonymous_avatar.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/skeleton.dart';
 import 'keeper_studio_scaffold.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Co-mod permissions grid — who can warn, kick, pin, and schedule.
 class KeeperComodScreen extends ConsumerWidget {
@@ -35,7 +36,9 @@ class KeeperComodScreen extends ConsumerWidget {
       },
       builder: (_) => matrixAsync.when(
         loading: () => const StudioSkeleton(rows: 3),
-        error: (e, _) => Text('Could not load team: $e'),
+        error: (e, _) => Text(
+          UserFriendlyErrors.message(e, fallback: 'Could not load team.'),
+        ),
         data: (matrix) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

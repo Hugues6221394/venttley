@@ -127,8 +127,7 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
                 onBanner: () => _pickMedia(tribe.tribeId, banner: true),
                 onRemoveAvatar: () =>
                     _removeMedia(tribe.tribeId, banner: false),
-                onRemoveBanner: () =>
-                    _removeMedia(tribe.tribeId, banner: true),
+                onRemoveBanner: () => _removeMedia(tribe.tribeId, banner: true),
               ),
               const SizedBox(height: 18),
               GlassCard(
@@ -256,8 +255,7 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
                         'public' => 'Anyone can find it and join.',
                         'private' =>
                           'Anyone can find it. You approve everyone who joins.',
-                        _ =>
-                          'Hidden from search. People get in by invitation.',
+                        _ => 'Hidden from search. People get in by invitation.',
                       },
                       style: TextStyle(
                         color: context.ink.withOpacity(0.55),
@@ -417,7 +415,9 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
         }
       });
       _refreshTribeEverywhere(tribeId);
-      _toast('${kind.label[0].toUpperCase()}${kind.label.substring(1)} removed.');
+      _toast(
+        '${kind.label[0].toUpperCase()}${kind.label.substring(1)} removed.',
+      );
     } catch (error) {
       if (!mounted) return;
       _toast(
@@ -488,9 +488,13 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
       context.pop();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not save: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(error, fallback: 'Could not save.'),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -509,7 +513,6 @@ class _EditTribeScreenState extends ConsumerState<EditTribeScreen> {
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;')
       .trim();
-
 }
 
 class _MediaEditor extends StatelessWidget {
@@ -762,7 +765,6 @@ class _SectionTitle extends StatelessWidget {
     );
   }
 }
-
 
 /// A small destructive overlay control for the banner.
 ///

@@ -7,6 +7,7 @@ import '../../domain/entities/entities.dart';
 import 'anonymous_avatar.dart';
 import 'post_card.dart' show PostCard;
 import 'profile_avatar.dart';
+import '../../core/user_friendly_errors.dart';
 
 /// Refreshes every surface a question appears on after a mutation.
 void _refreshQuestions(WidgetRef ref, PlugPrompt prompt) {
@@ -155,9 +156,13 @@ class _QuestionCardState extends ConsumerState<QuestionCard> {
       ).showSnackBar(const SnackBar(content: Text('Question updated.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not update: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not update.'),
+          ),
+        ),
+      );
     }
   }
 
@@ -196,9 +201,13 @@ class _QuestionCardState extends ConsumerState<QuestionCard> {
       ).showSnackBar(const SnackBar(content: Text('Question deleted.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not delete: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not delete.'),
+          ),
+        ),
+      );
     }
   }
 
@@ -525,9 +534,13 @@ class _AnswerThreadSheetState extends ConsumerState<_AnswerThreadSheet> {
       _refreshQuestions(ref, widget.prompt);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not post: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not post.'),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _sending = false);
     }

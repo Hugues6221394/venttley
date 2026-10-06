@@ -7,6 +7,7 @@ import '../../../domain/entities/entities.dart';
 import '../../theme/colors.dart';
 import '../../widgets/anonymous_avatar.dart';
 import '../../theme/glass_tokens.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Plugz V2 — Moderation Center for one tribe.
 ///
@@ -52,9 +53,13 @@ class _TribeModerationScreenState extends ConsumerState<TribeModerationScreen> {
       ref.invalidate(_keywordFiltersProvider(tribeId));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not add: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not add.'),
+          ),
+        ),
+      );
     }
   }
 
@@ -72,9 +77,13 @@ class _TribeModerationScreenState extends ConsumerState<TribeModerationScreen> {
       ).showSnackBar(const SnackBar(content: Text('Rules saved.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not save: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not save.'),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _savingRules = false);
     }
@@ -88,7 +97,7 @@ class _TribeModerationScreenState extends ConsumerState<TribeModerationScreen> {
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(
         appBar: AppBar(),
-        body: Center(child: Text('$e')),
+        body: Center(child: Text(UserFriendlyErrors.message(e))),
       ),
       data: (tribe) {
         if (tribe == null) {
@@ -248,7 +257,12 @@ class _TribeModerationScreenState extends ConsumerState<TribeModerationScreen> {
                             padding: EdgeInsets.all(12),
                             child: Center(child: CircularProgressIndicator()),
                           ),
-                          error: (e, _) => Text('Could not load: $e'),
+                          error: (e, _) => Text(
+                            UserFriendlyErrors.message(
+                              e,
+                              fallback: 'Could not load.',
+                            ),
+                          ),
                           data: (list) {
                             if (list.isEmpty) {
                               return const _Hint(
@@ -296,7 +310,12 @@ class _TribeModerationScreenState extends ConsumerState<TribeModerationScreen> {
                         padding: EdgeInsets.all(12),
                         child: Center(child: CircularProgressIndicator()),
                       ),
-                      error: (e, _) => Text('Could not load: $e'),
+                      error: (e, _) => Text(
+                        UserFriendlyErrors.message(
+                          e,
+                          fallback: 'Could not load.',
+                        ),
+                      ),
                       data: (list) {
                         if (list.isEmpty) {
                           return Column(

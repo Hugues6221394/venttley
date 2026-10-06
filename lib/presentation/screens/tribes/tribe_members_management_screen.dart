@@ -11,6 +11,7 @@ import '../../widgets/user_profile_link.dart';
 import '../../widgets/vently_premium_background.dart';
 import '../../widgets/tribe/tribe_invite_sheet.dart';
 import '../../widgets/verified_badge.dart';
+import '../../../core/user_friendly_errors.dart';
 
 class TribeMembersManagementScreen extends ConsumerStatefulWidget {
   const TribeMembersManagementScreen({super.key, required this.slug});
@@ -127,7 +128,14 @@ class _TribeMembersManagementScreenState
                   child: Center(child: CircularProgressIndicator()),
                 ),
                 error: (error, _) => SliverFillRemaining(
-                  child: Center(child: Text('Could not load members: $error')),
+                  child: Center(
+                    child: Text(
+                      UserFriendlyErrors.message(
+                        error,
+                        fallback: 'Could not load members.',
+                      ),
+                    ),
+                  ),
                 ),
                 data: (items) {
                   final visible = _filterMembers(items);
@@ -201,7 +209,14 @@ class _TribeMembersManagementScreenState
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update request: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not update request.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -257,7 +272,14 @@ class _TribeMembersManagementScreenState
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update member: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not update member.',
+            ),
+          ),
+        ),
       );
     }
   }

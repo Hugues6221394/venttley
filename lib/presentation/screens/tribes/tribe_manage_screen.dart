@@ -15,6 +15,7 @@ import '../../widgets/post_card.dart';
 import '../../widgets/user_link.dart';
 import 'tribe_helpers_screen.dart' show myTribePermissionsProvider;
 import '../../widgets/tribe/tribe_invite_sheet.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Plugz / Keeper creator dashboard.
 ///
@@ -1148,7 +1149,14 @@ Future<void> _showCreatePromptSheet(
                     } catch (e) {
                       if (!ctx.mounted) return;
                       ScaffoldMessenger.of(ctx).showSnackBar(
-                        SnackBar(content: Text('Could not post: $e')),
+                        SnackBar(
+                          content: Text(
+                            UserFriendlyErrors.message(
+                              e,
+                              fallback: 'Could not post.',
+                            ),
+                          ),
+                        ),
                       );
                     }
                   },
@@ -1618,9 +1626,13 @@ class _BrandingCardState extends ConsumerState<_BrandingCard> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not save: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Could not save.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1741,7 +1753,9 @@ class _PinnedPostsCard extends ConsumerWidget {
           padding: EdgeInsets.symmetric(vertical: 10),
           child: LinearProgressIndicator(minHeight: 2),
         ),
-        error: (e, _) => Text('Could not load pins: $e'),
+        error: (e, _) => Text(
+          UserFriendlyErrors.message(e, fallback: 'Could not load pins.'),
+        ),
         data: (list) {
           if (list.isEmpty) {
             return Padding(
@@ -1955,7 +1969,9 @@ class _ScheduledPromptsCard extends ConsumerWidget {
           padding: EdgeInsets.symmetric(vertical: 10),
           child: LinearProgressIndicator(minHeight: 2),
         ),
-        error: (e, _) => Text('Could not load prompts: $e'),
+        error: (e, _) => Text(
+          UserFriendlyErrors.message(e, fallback: 'Could not load prompts.'),
+        ),
         data: (list) {
           if (list.isEmpty) {
             return Padding(
@@ -2037,7 +2053,14 @@ class _PromptRow extends ConsumerWidget {
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update this prompt: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not update this prompt.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -2069,7 +2092,14 @@ class _PromptRow extends ConsumerWidget {
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not delete this prompt: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not delete this prompt.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -2200,9 +2230,13 @@ class _PromptComposerSheetState extends ConsumerState<_PromptComposerSheet> {
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not schedule: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Could not schedule.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2548,9 +2582,13 @@ class _SpotlightPickerSheetState extends ConsumerState<_SpotlightPickerSheet> {
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not save: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(e, fallback: 'Could not save.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2604,7 +2642,12 @@ class _SpotlightPickerSheetState extends ConsumerState<_SpotlightPickerSheet> {
             Flexible(
               child: members.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Text('Could not load members: $e'),
+                error: (e, _) => Text(
+                  UserFriendlyErrors.message(
+                    e,
+                    fallback: 'Could not load members.',
+                  ),
+                ),
                 data: (rows) {
                   if (rows.isEmpty) {
                     return const Padding(

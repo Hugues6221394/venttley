@@ -1294,7 +1294,14 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update this request: $error')),
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(
+              error,
+              fallback: 'Could not update this request.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1925,7 +1932,14 @@ class _FriendRow extends ConsumerWidget {
                   } catch (e) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Could not message: $e')),
+                        SnackBar(
+                          content: Text(
+                            UserFriendlyErrors.message(
+                              e,
+                              fallback: 'Could not message.',
+                            ),
+                          ),
+                        ),
                       );
                     }
                   }

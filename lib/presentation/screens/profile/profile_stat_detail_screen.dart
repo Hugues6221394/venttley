@@ -12,6 +12,7 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/vently_premium_background.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Premium deep-dive for one profile KPI (connections, vents, badges, …).
 class ProfileStatDetailScreen extends ConsumerWidget {
@@ -51,7 +52,14 @@ class ProfileStatDetailScreen extends ConsumerWidget {
         child: SafeArea(
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
+            error: (e, _) => Center(
+              child: Text(
+                UserFriendlyErrors.message(
+                  e,
+                  fallback: "Couldn't load this list.",
+                ),
+              ),
+            ),
             data: (profile) {
               if (profile == null) {
                 return const Center(child: Text('Profile unavailable'));

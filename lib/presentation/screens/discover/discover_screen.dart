@@ -15,6 +15,7 @@ import '../../widgets/vently_notification_bell.dart';
 import '../../widgets/user_link.dart';
 import '../../widgets/verified_badge.dart';
 import '../../theme/glass_tokens.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Discover — Image #12.
 ///
@@ -554,9 +555,7 @@ class _TribeResultTile extends StatelessWidget {
             decoration: BoxDecoration(
               color: GlassTokens.card(context),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: GlassTokens.cardEdge(context),
-              ),
+              border: Border.all(color: GlassTokens.cardEdge(context)),
             ),
             child: Row(
               children: [
@@ -633,9 +632,7 @@ class _PostResultTile extends StatelessWidget {
             decoration: BoxDecoration(
               color: GlassTokens.card(context),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: GlassTokens.cardEdge(context),
-              ),
+              border: Border.all(color: GlassTokens.cardEdge(context)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -856,9 +853,7 @@ class _TrendingSearchesRow extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: GlassTokens.card(context),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: GlassTokens.cardEdge(context),
-                    ),
+                    border: Border.all(color: GlassTokens.cardEdge(context)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -957,9 +952,7 @@ class _RecentRow extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: GlassTokens.card(context),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: GlassTokens.cardEdge(context),
-                    ),
+                    border: Border.all(color: GlassTokens.cardEdge(context)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1514,9 +1507,13 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not send: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not send.'),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1587,9 +1584,7 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
           : Text(
               _sent ? 'Pending' : 'Follow',
               style: TextStyle(
-                color: _sent
-                    ? GlassTokens.onCardMuted(context)
-                    : Colors.white,
+                color: _sent ? GlassTokens.onCardMuted(context) : Colors.white,
                 fontWeight: FontWeight.w900,
                 fontSize: 12,
               ),

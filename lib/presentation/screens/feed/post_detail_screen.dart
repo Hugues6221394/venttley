@@ -160,9 +160,13 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Couldn\'t pick image: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Couldn\'t pick image.'),
+          ),
+        ),
+      );
     }
   }
 
@@ -619,9 +623,13 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not send: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not send.'),
+          ),
+        ),
+      );
     }
   }
 
@@ -1298,9 +1306,13 @@ class _CommentNodeState extends ConsumerState<_CommentNode> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Couldn\'t update pin: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Couldn\'t update pin.'),
+          ),
+        ),
+      );
     }
   }
 

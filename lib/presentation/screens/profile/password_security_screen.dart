@@ -13,6 +13,7 @@ import '../../theme/colors.dart';
 import '../../widgets/modal_text_controller_scope.dart';
 import '../onboarding/mfa_challenge_screen.dart';
 import '../../theme/glass_tokens.dart';
+import '../../../core/user_friendly_errors.dart';
 
 /// Instagram-style "Password and security" hub: a security checkup summary,
 /// password rotation, a real recovery email, two-factor, and session control.
@@ -122,10 +123,7 @@ class _PasswordSecurityScreenState
                 label: checkup.twoFactorLabel,
                 ok: checkup.twoFactorOn,
               ),
-              _CheckItem(
-                label: checkup.recoveryLabel,
-                ok: checkup.recoveryOk,
-              ),
+              _CheckItem(label: checkup.recoveryLabel, ok: checkup.recoveryOk),
             ],
           ),
           const SizedBox(height: 20),
@@ -143,8 +141,9 @@ class _PasswordSecurityScreenState
             icon: Icons.alternate_email_rounded,
             title: 'Recovery email',
             subtitle: _recoverySubtitle(_recovery?.email, 'email address'),
-            trailingBadge:
-                _recovery?.email.pending == true ? 'Enter code' : null,
+            trailingBadge: _recovery?.email.pending == true
+                ? 'Enter code'
+                : null,
             onTap: _openRecoveryEmail,
           ),
           // Gated on the live flag, not a constant: confirm_recovery_phone()
@@ -159,12 +158,12 @@ class _PasswordSecurityScreenState
             onTap: smsReady
                 ? _openRecoveryPhone
                 : (_recovery?.phone.isEmpty ?? true)
-                      // Nothing stored and nothing storable — an inert row is
-                      // kinder than one that opens a form leading nowhere.
-                      ? null
-                      // A number saved before SMS was switched off is stranded.
-                      // Removing it is the only real action, so offer that.
-                      : () => _removeRecovery(email: false),
+                // Nothing stored and nothing storable — an inert row is
+                // kinder than one that opens a form leading nowhere.
+                ? null
+                // A number saved before SMS was switched off is stranded.
+                // Removing it is the only real action, so offer that.
+                : () => _removeRecovery(email: false),
           ),
           _Tile(
             icon: Icons.verified_user_outlined,
@@ -585,7 +584,8 @@ class _PasswordSecurityScreenState
       title: current?.verified == true
           ? 'Change recovery email'
           : 'Add a recovery email',
-      blurb: 'If you ever lose your password, this is how we get you back in. '
+      blurb:
+          'If you ever lose your password, this is how we get you back in. '
           'We only use it for account recovery.',
       hint: 'you@example.com',
       keyboard: TextInputType.emailAddress,
@@ -662,7 +662,8 @@ class _PasswordSecurityScreenState
       title: _recovery?.phone.isEmpty == false
           ? 'Change recovery phone'
           : 'Add a recovery phone',
-      blurb: 'Include your country code, like +250. We will text you a 6-digit '
+      blurb:
+          'Include your country code, like +250. We will text you a 6-digit '
           'code to confirm the number is yours.',
       hint: '+250 7xx xxx xxx',
       keyboard: TextInputType.phone,
@@ -690,9 +691,8 @@ class _PasswordSecurityScreenState
   Future<void> _enterPhoneCode(String phone, String shown) async {
     // updateUser(phone:) is what actually sends the SMS, and it is also what a
     // resend calls — GoTrue issues a fresh OTP for the same number.
-    Future<void> send() => Supabase.instance.client.auth.updateUser(
-      UserAttributes(phone: phone),
-    );
+    Future<void> send() =>
+        Supabase.instance.client.auth.updateUser(UserAttributes(phone: phone));
 
     // If no provider is configured this throws, which is why the row is
     // flag-gated: reaching here with SMS off would show a code prompt for a
@@ -702,7 +702,8 @@ class _PasswordSecurityScreenState
         await send();
         return true;
       },
-      onError: (e) => 'We could not text $shown. Check the number and '
+      onError: (e) =>
+          'We could not text $shown. Check the number and '
           'your connection, then try again.',
     );
     if (sent != true || !mounted) return;
@@ -749,7 +750,9 @@ class _PasswordSecurityScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(email ? 'Remove recovery email?' : 'Remove recovery phone?'),
+        title: Text(
+          email ? 'Remove recovery email?' : 'Remove recovery phone?',
+        ),
         content: const Text(
           'You will have one less way back into your account if you lose your '
           'password. Your recovery phrase still works.',
@@ -768,20 +771,18 @@ class _PasswordSecurityScreenState
     );
     if (confirmed != true) return;
 
-    await _guard(
-      () async {
-        final repo = ref.read(repositoryProvider);
-        if (email) {
-          await repo.clearRecoveryEmail();
-        } else {
-          await repo.clearRecoveryPhone();
-        }
-        return true;
-      },
-      onError: _recoveryErrorText,
-    );
+    await _guard(() async {
+      final repo = ref.read(repositoryProvider);
+      if (email) {
+        await repo.clearRecoveryEmail();
+      } else {
+        await repo.clearRecoveryPhone();
+      }
+      return true;
+    }, onError: _recoveryErrorText);
     await _loadRecovery();
-    if (mounted) _snack(email ? 'Recovery email removed.' : 'Recovery phone removed.');
+    if (mounted)
+      _snack(email ? 'Recovery email removed.' : 'Recovery phone removed.');
   }
 
   /// Server error codes turned into something a person can act on. Anything
@@ -830,8 +831,10 @@ class _PasswordSecurityScreenState
               onTap: () => Navigator.pop(ctx, _ManageChoice.change),
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline,
-                  color: VentlyColors.berryMagenta),
+              leading: const Icon(
+                Icons.delete_outline,
+                color: VentlyColors.berryMagenta,
+              ),
               title: const Text('Remove it'),
               subtitle: const Text('One less way back into your account'),
               onTap: () => Navigator.pop(ctx, _ManageChoice.remove),
@@ -936,7 +939,9 @@ class _PasswordSecurityScreenState
                 Text(
                   title,
                   style: const TextStyle(
-                      fontSize: 19, fontWeight: FontWeight.w900),
+                    fontSize: 19,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -1010,11 +1015,8 @@ class _PasswordSecurityScreenState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => _CodeSheet(
-        sentTo: sentTo,
-        blurb: blurb,
-        onResend: onResend,
-      ),
+      builder: (ctx) =>
+          _CodeSheet(sentTo: sentTo, blurb: blurb, onResend: onResend),
     );
   }
 
@@ -1034,11 +1036,10 @@ class _PasswordSecurityScreenState
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
-
 
   Future<void> _signOutEverywhere() async {
     final ok =
@@ -1070,14 +1071,20 @@ class _PasswordSecurityScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Couldn\'t sign out everywhere: $e')),
+          SnackBar(
+            content: Text(
+              UserFriendlyErrors.message(
+                e,
+                fallback: 'Couldn\'t sign out everywhere.',
+              ),
+            ),
+          ),
         );
       }
     }
   }
 
   // ---- Helpers -----------------------------------------------------------
-
 }
 
 // ============================= Widgets =====================================

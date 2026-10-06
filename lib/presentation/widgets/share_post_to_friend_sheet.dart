@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers.dart';
 import '../../domain/entities/entities.dart';
 import 'anonymous_avatar.dart';
+import '../../core/user_friendly_errors.dart';
 
 /// Bottom sheet that lists the current user's friends and sends the
 /// selected post into the DM thread with them. Routes through the
@@ -80,9 +81,13 @@ class _SharePostToFriendSheetState
       ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not share: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            UserFriendlyErrors.message(e, fallback: 'Could not share.'),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _sendingTo = null);
     }
