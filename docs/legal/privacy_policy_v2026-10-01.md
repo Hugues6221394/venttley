@@ -115,7 +115,7 @@ you are not told about.
 | **Firebase Cloud Messaging (Google)** | A device token and generic notification text | Delivering push notifications | **United States and Google's global infrastructure.** Messaging has no single project-wide region |
 | **Sightengine** | An uploaded image | Checking whether it is unsafe before it is shown | **Global.** Media is processed at the nearest location; confining it to the EU requires an enterprise plan we do not hold |
 | **Cloudflare** | Connection metadata for requests to the admin console | Protecting the console from attack | **Global edge network.** Requests are handled at the nearest data centre; confining this to the EU requires Cloudflare's Data Localization Suite, which is not enabled |
-| **Upstash** | Request metadata used for rate limiting | Preventing abuse of the admin console | **`[CONFIRM — the Redis instance's region, chosen when it was created]`** |
+| **Upstash** | Request metadata used for rate limiting | Preventing abuse of the admin console | **Germany** (eu-central-1, Frankfurt) |
 
 **PostHog.** Venttly previously sent scrubbed usage events to PostHog's United
 States cloud. As of this version that is switched off, and the destination has
@@ -124,10 +124,10 @@ provisioned, **no usage analytics are collected or sent anywhere at all.**
 Events already sent to the US project before this change remain there until
 they are deleted.
 
-> `[CONFIRM]` marks a region not yet verified against CODAFRIQA's own account.
-> It must be confirmed before this Policy is published. The DPP Law requires us
-> to identify the countries personal data is transferred to; "transfers may
-> occur" is not sufficient, and neither is a plausible guess.
+**In short:** the things that hold what you write — the database, the crash
+reports and the rate-limit cache — are in **Germany**. What is handled outside
+the EU is edge routing, content delivery and push delivery, together with the
+email and image-scanning services named above.
 
 **What none of them ever receives:** the text of your Vents, the contents of
 your messages, Whisper audio or transcripts, your recovery phrase, or a real
