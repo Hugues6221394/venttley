@@ -54,8 +54,38 @@ BEGIN
    WHERE name = 'account_purge_cron_secret';
 
   IF v_secret IS NULL OR length(btrim(v_secret)) = 0 THEN
-    RAISE EXCEPTION
-      'vault secret account_purge_cron_secret is missing or empty. The email dispatch job authenticates with it; scheduling without it would post a null x-cron-secret header and be rejected every minute with nothing to show for it. Add the secret, then re-run this migration.';
+    -- Two very different situations wear the same symptom here.
+    --
+    -- On a database with people in it, a missing secret means somebody
+    -- deployed without configuring CRON_SECRET, and scheduling anyway would
+    -- post a null header and be rejected every minute in silence. That is
+    -- what the exception below is for, and it stays.
+    --
+    -- On an empty database it means the chain is being replayed from zero —
+    -- CI, a new laptop, a rebuild — where no secret can exist yet because
+    -- nothing has been deployed. Refusing there makes the migration chain
+    -- unreplayable, which is the one property CI exists to check, and it had
+    -- made every "Migration replay" run red for as long as the job has
+    -- existed.
+    --
+    -- The silent-dead-pipeline risk the exception guards against is covered
+    -- either way by part 2 of this same migration: mail queued and unsent
+    -- becomes a platform security event, so a mismatched secret has a voice
+    -- whether it was minted here or mistyped by an operator.
+    IF EXISTS (SELECT 1 FROM auth.users LIMIT 1) THEN
+      RAISE EXCEPTION
+        'vault secret account_purge_cron_secret is missing or empty. The email dispatch job authenticates with it; scheduling without it would post a null x-cron-secret header and be rejected every minute with nothing to show for it. Add the secret, then re-run this migration.';
+    END IF;
+
+    PERFORM vault.create_secret(
+      encode(extensions.gen_random_bytes(32), 'hex'),
+      'account_purge_cron_secret',
+      'Placeholder minted while replaying migrations on an empty database. '
+      'Replace it with the real CRON_SECRET before this deployment sends mail.'
+    );
+    RAISE WARNING
+      'account_purge_cron_secret was missing on an empty database, so a placeholder was minted to keep the migration chain replayable. Mail will NOT send until it is replaced with the value configured as CRON_SECRET on the Edge Functions.';
+    RETURN;
   END IF;
 
   RAISE NOTICE 'vault secret present, length %', length(v_secret);

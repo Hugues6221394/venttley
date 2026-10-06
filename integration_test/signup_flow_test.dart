@@ -29,7 +29,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:vently_app/core/providers.dart';
 import 'package:vently_app/presentation/router/app_router.dart';
 import 'package:vently_app/presentation/theme/app_theme.dart';
 import 'package:vently_app/presentation/widgets/profile_avatar.dart';

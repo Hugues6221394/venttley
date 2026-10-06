@@ -223,7 +223,11 @@ SELECT is(
   (
     SELECT count(*)
       FROM public.posts
-     WHERE author_id = '10000000-0000-4000-8000-000000000001'
+-- display_author_id, not author_id: 20261077090000 revoked author_id from
+-- authenticated so a persona post cannot be joined to the account behind
+-- it. For an ordinary post — which every fixture here creates — the two
+-- hold the same value, so this asks exactly what it asked before.
+     WHERE display_author_id = '10000000-0000-4000-8000-000000000001'
        AND content = 'idempotent post fixture'
   ),
   1::BIGINT,

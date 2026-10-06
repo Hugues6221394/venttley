@@ -8,7 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vently_app/presentation/theme/app_theme.dart';
 import 'package:vently_app/presentation/theme/colors.dart';
 import 'package:vently_app/presentation/theme/glass_tokens.dart';
-import 'package:vently_app/presentation/theme/vently_tokens.dart';
 import 'package:vently_app/presentation/widgets/onboarding_backdrop.dart';
 
 /// What the onboarding surfaces actually look like, per theme, as numbers.

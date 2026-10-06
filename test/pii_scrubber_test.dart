@@ -44,7 +44,10 @@ void main() {
 
       // ...but only when the value is *entirely* an identifier. Real numbers,
       // alone or embedded in a sentence, must still be redacted.
-      expect(PiiScrubber.scrubText('+15551234567'), contains('<scrubbed:phone>'));
+      expect(
+        PiiScrubber.scrubText('+15551234567'),
+        contains('<scrubbed:phone>'),
+      );
       final sentence = PiiScrubber.scrubText('call me on 555 123 4567 tonight');
       expect(sentence, contains('<scrubbed:phone>'));
       expect(sentence, isNot(contains('4567')));

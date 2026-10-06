@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/logger.dart';
 import '../../../core/password_policy.dart';
@@ -14,7 +13,6 @@ import '../../../data/services/identity_service.dart';
 import '../../../data/services/supabase_backend.dart'
     show UsernameTakenException, EmailConfirmationStillOnException;
 import '../../theme/colors.dart';
-import '../../theme/glass_tokens.dart';
 import '../../../core/constants.dart';
 import '../../widgets/auth_entry_methods.dart';
 import '../../widgets/anonymous_avatar.dart';

@@ -26,7 +26,6 @@ import '../../widgets/music_track_card.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/tagged_text.dart';
 import '../../widgets/vently_premium_background.dart';
-import '../../theme/glass_tokens.dart';
 
 class ComposeScreen extends ConsumerStatefulWidget {
   const ComposeScreen({super.key, this.queryParams = const {}});
@@ -49,7 +48,6 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   bool _success = false;
   bool _includePoll = false;
   bool _isWhisper = false;
-  bool _storyFriendsOnly = true;
   String? _cardBackgroundColor;
   String? _cardTextColor;
   MusicTrack? _selectedMusic;

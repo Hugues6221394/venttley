@@ -763,9 +763,7 @@ class _CategoryPicker extends StatelessWidget {
                 borderRadius: BorderRadius.circular(18),
                 border: c == active
                     ? null
-                    : Border.all(
-                        color: GlassTokens.cardEdge(context),
-                      ),
+                    : Border.all(color: GlassTokens.cardEdge(context)),
               ),
               child: Text(
                 FeedCategories.label(c),

@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(24);
+SELECT plan(25);
 
 SELECT ok(
   has_table_privilege('authenticated', 'public.chat_rooms', 'SELECT'),
@@ -12,9 +12,17 @@ SELECT ok(
   has_table_privilege('authenticated', 'public.chat_messages', 'SELECT'),
   'authenticated members can read their RLS-visible chat messages'
 );
+-- Column-level, not table-level. 20261077090000 replaced the table-wide
+-- grant on posts with a column list so that author_id is unreadable: a
+-- persona post and its author's own post carried the same value, which made
+-- unmasking a persona a join rather than a mystery.
 SELECT ok(
-  has_table_privilege('authenticated', 'public.posts', 'SELECT'),
+  has_any_column_privilege('authenticated', 'public.posts', 'SELECT'),
   'authenticated members can read RLS-visible Vents'
+);
+SELECT ok(
+  NOT has_column_privilege('authenticated', 'public.posts', 'author_id', 'SELECT'),
+  'the account behind a persona post is not readable off the table'
 );
 SELECT ok(
   has_table_privilege('authenticated', 'public.personas', 'SELECT'),

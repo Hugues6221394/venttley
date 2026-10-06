@@ -291,10 +291,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // from Settings by an account that signed up long ago — and they must
       // stay reachable without a session, since somebody has to be able to
       // read the Terms before deciding to create one.
-      GoRoute(
-        path: '/launching',
-        builder: (_, __) => const LaunchingScreen(),
-      ),
+      GoRoute(path: '/launching', builder: (_, __) => const LaunchingScreen()),
       GoRoute(
         path: '/onboarding/personalise',
         builder: (_, __) => const PersonaliseScreen(),
@@ -310,9 +307,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ?persona=<id> designs that persona's face instead of the account's.
       GoRoute(
         path: '/avatar/design',
-        builder: (ctx, st) => AvatarStudioScreen(
-          personaId: st.uri.queryParameters['persona'],
-        ),
+        builder: (ctx, st) =>
+            AvatarStudioScreen(personaId: st.uri.queryParameters['persona']),
       ),
       GoRoute(
         path: '/onboarding/consent',

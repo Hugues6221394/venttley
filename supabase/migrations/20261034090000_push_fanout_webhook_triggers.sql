@@ -55,12 +55,29 @@ BEGIN
      WHERE name = 'push_fanout_webhook_secret'
        AND length(btrim(decrypted_secret)) > 0
   ) THEN
-    RAISE EXCEPTION
-      'vault secret push_fanout_webhook_secret is missing or empty. The '
-      'notification-fanout worker authenticates with it; creating these '
-      'triggers without it would post an unauthenticated body on every '
-      'message insert and be rejected every time. Add the secret, then '
-      're-run this migration.';
+    -- Empty database: the chain is being replayed from zero (CI, a new
+    -- laptop, a rebuild) and no secret can exist yet because nothing has been
+    -- deployed. Refusing there makes the chain unreplayable, which is the one
+    -- property the migration-replay job exists to check. On a database with
+    -- people in it the refusal stands, because there it means somebody
+    -- deployed without configuring the secret.
+    IF EXISTS (SELECT 1 FROM auth.users LIMIT 1) THEN
+      RAISE EXCEPTION
+        'vault secret push_fanout_webhook_secret is missing or empty. The '
+        'notification-fanout worker authenticates with it; creating these '
+        'triggers without it would post an unauthenticated body on every '
+        'message insert and be rejected every time. Add the secret, then '
+        're-run this migration.';
+    END IF;
+
+    PERFORM vault.create_secret(
+      encode(extensions.gen_random_bytes(32), 'hex'),
+      'push_fanout_webhook_secret',
+      'Placeholder minted while replaying migrations on an empty database. '
+      'Replace it with the secret the notification-fanout worker expects.'
+    );
+    RAISE WARNING
+      'push_fanout_webhook_secret was missing on an empty database, so a placeholder was minted to keep the migration chain replayable. Push fan-out will NOT authenticate until it is replaced.';
   END IF;
 END $$;
 

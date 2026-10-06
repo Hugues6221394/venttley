@@ -22,7 +22,23 @@ BEGIN
   SELECT decrypted_secret INTO v_secret
     FROM vault.decrypted_secrets WHERE name = 'account_purge_cron_secret';
   IF v_secret IS NULL OR length(btrim(v_secret)) = 0 THEN
-    RAISE EXCEPTION 'vault secret account_purge_cron_secret is missing; the heartbeat job authenticates with it.';
+    -- Empty database: the chain is being replayed from zero (CI, a new
+    -- laptop, a rebuild) and no secret can exist yet because nothing has been
+    -- deployed. Refusing there makes the chain unreplayable, which is the one
+    -- property the migration-replay job exists to check. On a database with
+    -- people in it the refusal stands, because there it means somebody
+    -- deployed without configuring the secret.
+    IF EXISTS (SELECT 1 FROM auth.users LIMIT 1) THEN
+      RAISE EXCEPTION 'vault secret account_purge_cron_secret is missing; the heartbeat job authenticates with it.';
+    END IF;
+
+    PERFORM vault.create_secret(
+      encode(extensions.gen_random_bytes(32), 'hex'),
+      'account_purge_cron_secret',
+      'Placeholder minted while replaying migrations on an empty database.'
+    );
+    RAISE WARNING
+      'account_purge_cron_secret was missing on an empty database, so a placeholder was minted to keep the migration chain replayable.';
   END IF;
 END $$;
 

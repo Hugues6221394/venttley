@@ -50,8 +50,10 @@ class ConnectionBanner extends ConsumerWidget {
               child: Container(
                 key: ValueKey('$status-$queued-$failed'),
                 margin: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: VentlyColors.berryMagenta.withOpacity(0.92),
                   borderRadius: BorderRadius.circular(999),
@@ -88,8 +90,9 @@ class ConnectionBanner extends ConsumerWidget {
                         onPressed: status == ConnectionStatus.offline
                             ? null
                             : () async {
-                                final outbox =
-                                    ref.read(outboxProvider).valueOrNull;
+                                final outbox = ref
+                                    .read(outboxProvider)
+                                    .valueOrNull;
                                 if (outbox == null) return;
                                 await outbox.retryFailed();
                                 await outbox.flush();

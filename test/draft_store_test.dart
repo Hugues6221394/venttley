@@ -6,22 +6,24 @@ import 'package:vently_app/data/services/draft_store.dart';
 import 'helpers/memory_sensitive_store.dart';
 
 void main() {
-  test('drafts persist in the sensitive store without mutating input',
-      () async {
-    final storage = MemorySensitiveStore();
-    final now = DateTime.utc(2026, 7, 14, 10);
-    final store = await DraftStore.openWithStore(storage, now: () => now);
-    final payload = <String, dynamic>{'text': 'private draft'};
+  test(
+    'drafts persist in the sensitive store without mutating input',
+    () async {
+      final storage = MemorySensitiveStore();
+      final now = DateTime.utc(2026, 7, 14, 10);
+      final store = await DraftStore.openWithStore(storage, now: () => now);
+      final payload = <String, dynamic>{'text': 'private draft'};
 
-    await store.save('compose', payload);
+      await store.save('compose', payload);
 
-    expect(payload, {'text': 'private draft'});
-    expect(store.loadText('compose'), 'private draft');
-    expect(
-      storage.values.keys,
-      contains('vently.draft.v2.test-user.compose'),
-    );
-  });
+      expect(payload, {'text': 'private draft'});
+      expect(store.loadText('compose'), 'private draft');
+      expect(
+        storage.values.keys,
+        contains('vently.draft.v2.test-user.compose'),
+      );
+    },
+  );
 
   test('expired and malformed drafts are removed during startup', () async {
     final now = DateTime.utc(2026, 7, 14, 10);

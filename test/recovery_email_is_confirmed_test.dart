@@ -20,9 +20,12 @@ import 'package:vently_app/presentation/theme/app_theme.dart';
 /// The brief said it plainly: a recovery email "that always be verified on
 /// onboarding screen".
 class _FakeRepo extends VentlyRepository {
-  _FakeRepo({this.acceptCode = '123456'}) : super(forceMock: true);
+  _FakeRepo() : super(forceMock: true);
 
-  final String acceptCode;
+  // The code every caller in this file uses. It was an optional constructor
+  // parameter nothing ever passed, which reads as configurability that does
+  // not exist.
+  static const acceptCode = '123456';
   final List<String> saved = [];
   final List<String> attempted = [];
 

@@ -76,7 +76,6 @@ function safeHttpsUrl(value: unknown): string {
   }
 }
 
-
 // ── brand ──────────────────────────────────────────────────────────────────
 //
 // Venttly's palette, from lib/presentation/theme/colors.dart. Kept as literals
@@ -269,15 +268,18 @@ Venttly is made by CODAFRIQA LTD.`,
           body: `<p style="${P}">Enter this code in the app:</p>
                  ${codeBlock(htmlValue(v.code, "", 64))}
                  <p style="${SMALL}">It expires in 15 minutes. If you did not ask for it, ignore this message — nothing happens without the code.</p>`,
-          reason: "You are receiving this because this address was entered on a Venttly account.",
+          reason:
+            "You are receiving this because this address was entered on a Venttly account.",
         })
         : shell({
           preheader: "One tap to confirm your email.",
           heading: "Confirm your email",
-          body: `<p style="${P}">Tap the button to confirm this address belongs to you.</p>
+          body:
+            `<p style="${P}">Tap the button to confirm this address belongs to you.</p>
                  <p style="${SMALL}">If you did not sign up for Venttly, ignore this message.</p>`,
           cta: { label: "Verify email", href: safeHttpsUrl(v.confirm_url) },
-          reason: "You are receiving this because this address was entered on a Venttly account.",
+          reason:
+            "You are receiving this because this address was entered on a Venttly account.",
         }),
     text: (v) =>
       v.code
@@ -311,7 +313,8 @@ If you didn't sign up, ignore this message.`,
           body: `<p style="${P}">Enter this code in the app:</p>
                  ${codeBlock(htmlValue(v.code, "", 64))}
                  <p style="${SMALL}">It expires in 15 minutes. If you did not ask to reset your password, ignore this message — nothing has changed, and nobody can change it without this code.</p>`,
-          reason: "You are receiving this because a password reset was requested for your Venttly account.",
+          reason:
+            "You are receiving this because a password reset was requested for your Venttly account.",
         })
         : shell({
           preheader: "Set a new password within the hour.",
@@ -319,7 +322,8 @@ If you didn't sign up, ignore this message.`,
           body: `<p style="${P}">Use the button below within the next hour.</p>
                  <p style="${SMALL}">If you did not request this, you can safely ignore it — nothing has changed.</p>`,
           cta: { label: "Reset password", href: safeHttpsUrl(v.reset_url) },
-          reason: "You are receiving this because a password reset was requested for your Venttly account.",
+          reason:
+            "You are receiving this because a password reset was requested for your Venttly account.",
         }),
     text: (v) =>
       v.code
@@ -356,7 +360,8 @@ If you didn't request this, you can safely ignore it.`,
           ])
         }
                <p style="${P}">If that was you, there is nothing to do. If it was not, change your password now — and check Profile → Password &amp; security, where every device and sign-in is listed.</p>`,
-        reason: "Security notices like this one are always sent, and cannot be switched off.",
+        reason:
+          "Security notices like this one are always sent, and cannot be switched off.",
       }),
     text: (v) =>
       `We noticed a new sign-in:
@@ -377,13 +382,22 @@ If this wasn't you, change your password immediately.`,
     html: (v) =>
       shell({
         preheader: plainValue(v.headline, "A change on your account", 120),
-        heading: htmlValue(v.headline, "Something changed on your account", 120),
+        heading: htmlValue(
+          v.headline,
+          "Something changed on your account",
+          120,
+        ),
         body: `<p style="${P}">${
-          htmlValue(v.detail, "Open the app to review your recent activity.", 400)
+          htmlValue(
+            v.detail,
+            "Open the app to review your recent activity.",
+            400,
+          )
         }</p>
                ${factRows([["When", htmlValue(v.when, "just now", 100)]])}
                <p style="${SMALL}">Every device and security event is listed in the app under Profile → Password &amp; security. If you did not make this change, go there now.</p>`,
-        reason: "Security notices like this one are always sent, and cannot be switched off.",
+        reason:
+          "Security notices like this one are always sent, and cannot be switched off.",
       }),
     text: (v) =>
       `${plainValue(v.headline, "Something changed on your account", 120)}
@@ -399,7 +413,9 @@ Profile > Password & security.`,
   // body is free text: every paragraph is escaped and nothing is linkified.
   staff_message: {
     subject: (v) =>
-      `Venttly: ${plainValue(v.subject, "A message from the Venttly team", 80)}`,
+      `Venttly: ${
+        plainValue(v.subject, "A message from the Venttly team", 80)
+      }`,
     html: (v) =>
       shell({
         preheader: "A message from the Venttly team",
@@ -409,20 +425,26 @@ Profile > Password & security.`,
             .slice(0, 1000)
             .split(/\n{2,}/)
             .map((part) =>
-              `<p style="${P}">${htmlValue(part.replace(/\n/g, " "), "", 1000)}</p>`
+              `<p style="${P}">${
+                htmlValue(part.replace(/\n/g, " "), "", 1000)
+              }</p>`
             )
             .join("")
         }
                <p style="${SMALL}">Sent by the Venttly team. You can also find our messages in the app under Notifications.</p>`,
         cta: { label: "Open Venttly", href: APP_URL },
-        reason: "You are receiving this because the Venttly team needed to reach you about your account.",
+        reason:
+          "You are receiving this because the Venttly team needed to reach you about your account.",
       }),
     text: (v) =>
       `${plainValue(v.subject, "A message from the Venttly team", 80)}
 
 ${
         typeof v.body === "string"
-          ? v.body.slice(0, 1000).replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, " ")
+          ? v.body.slice(0, 1000).replace(
+            /[\u0000-\u0009\u000b-\u001f\u007f]/g,
+            " ",
+          )
           : ""
       }
 

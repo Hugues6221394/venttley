@@ -27,114 +27,119 @@ void main() {
     expect(OutboxService.retryDelayForAttempt(20), const Duration(minutes: 2));
   });
 
-  test('a successful operation is removed from encrypted persistence',
-      () async {
-    final storage = MemorySensitiveStore();
-    var executions = 0;
-    final service = await OutboxService.openWithStore(
-      storage,
-      executor: (operation) async {
-        executions += 1;
-      },
-    );
-    addTearDown(service.dispose);
+  test(
+    'a successful operation is removed from encrypted persistence',
+    () async {
+      final storage = MemorySensitiveStore();
+      var executions = 0;
+      final service = await OutboxService.openWithStore(
+        storage,
+        executor: (operation) async {
+          executions += 1;
+        },
+      );
+      addTearDown(service.dispose);
 
-    await service.enqueue(
-      OutboxKind.dm,
-      {'roomId': 'room-1', 'plaintext': 'private message'},
-      operationId: 'operation-1',
-    );
-    expect(service.pendingCount, 1);
-    expect(storage.values.values.single, contains('private message'));
+      await service.enqueue(OutboxKind.dm, {
+        'roomId': 'room-1',
+        'plaintext': 'private message',
+      }, operationId: 'operation-1');
+      expect(service.pendingCount, 1);
+      expect(storage.values.values.single, contains('private message'));
 
-    await service.flush();
+      await service.flush();
 
-    expect(executions, 1);
-    expect(service.pending, isEmpty);
-    expect(storage.values, isEmpty);
-  });
+      expect(executions, 1);
+      expect(service.pending, isEmpty);
+      expect(storage.values, isEmpty);
+    },
+  );
 
-  test('failed operations persist backoff state and retry only when due',
-      () async {
-    final storage = MemorySensitiveStore();
-    var now = DateTime.utc(2026, 7, 14, 10);
-    var executions = 0;
-    var fail = true;
-    final service = await OutboxService.openWithStore(
-      storage,
-      now: () => now,
-      executor: (operation) async {
-        executions += 1;
-        if (fail) throw TimeoutException('offline');
-      },
-    );
-    addTearDown(service.dispose);
+  test(
+    'failed operations persist backoff state and retry only when due',
+    () async {
+      final storage = MemorySensitiveStore();
+      var now = DateTime.utc(2026, 7, 14, 10);
+      var executions = 0;
+      var fail = true;
+      final service = await OutboxService.openWithStore(
+        storage,
+        now: () => now,
+        executor: (operation) async {
+          executions += 1;
+          if (fail) throw TimeoutException('offline');
+        },
+      );
+      addTearDown(service.dispose);
 
-    await service.enqueue(
-      OutboxKind.post,
-      {'content': 'queued vent'},
-      operationId: 'operation-2',
-    );
-    await service.flush();
+      await service.enqueue(OutboxKind.post, {
+        'content': 'queued vent',
+      }, operationId: 'operation-2');
+      await service.flush();
 
-    expect(executions, 1);
-    expect(service.pending.single.attempts, 1);
-    expect(service.pending.single.id, 'operation-2');
-    expect(service.pending.single.nextRetryAt,
-        now.add(const Duration(seconds: 2)));
-    expect(jsonDecode(storage.values.values.single)['attempts'], 1);
+      expect(executions, 1);
+      expect(service.pending.single.attempts, 1);
+      expect(service.pending.single.id, 'operation-2');
+      expect(
+        service.pending.single.nextRetryAt,
+        now.add(const Duration(seconds: 2)),
+      );
+      expect(jsonDecode(storage.values.values.single)['attempts'], 1);
 
-    now = now.add(const Duration(seconds: 1));
-    fail = false;
-    await service.flush();
-    expect(executions, 1);
+      now = now.add(const Duration(seconds: 1));
+      fail = false;
+      await service.flush();
+      expect(executions, 1);
 
-    now = now.add(const Duration(seconds: 1));
-    await service.flush();
-    expect(executions, 2);
-    expect(service.pending, isEmpty);
-  });
+      now = now.add(const Duration(seconds: 1));
+      await service.flush();
+      expect(executions, 2);
+      expect(service.pending, isEmpty);
+    },
+  );
 
-  test('startup removes corrupt/completed operations and retains expired ones',
-      () async {
-    final now = DateTime.utc(2026, 7, 14, 10);
-    final valid = OutboxOp(
-      id: 'valid',
-      kind: OutboxKind.comment,
-      payload: {'content': 'still due'},
-      createdAt: now.subtract(const Duration(hours: 1)),
-    );
-    final expired = OutboxOp(
-      id: 'expired',
-      kind: OutboxKind.comment,
-      payload: {'content': 'too old'},
-      createdAt: now.subtract(const Duration(hours: 25)),
-    );
-    final storage = MemorySensitiveStore({
-      'vently.outbox.v2.valid': jsonEncode(valid.toJson()),
-      'vently.outbox.v2.expired': jsonEncode(expired.toJson()),
-      'vently.outbox.v2.complete': jsonEncode({'completed': true}),
-      'vently.outbox.v2.corrupt': '{bad json',
-    });
+  test(
+    'startup removes corrupt/completed operations and retains expired ones',
+    () async {
+      final now = DateTime.utc(2026, 7, 14, 10);
+      final valid = OutboxOp(
+        id: 'valid',
+        kind: OutboxKind.comment,
+        payload: {'content': 'still due'},
+        createdAt: now.subtract(const Duration(hours: 1)),
+      );
+      final expired = OutboxOp(
+        id: 'expired',
+        kind: OutboxKind.comment,
+        payload: {'content': 'too old'},
+        createdAt: now.subtract(const Duration(hours: 25)),
+      );
+      final storage = MemorySensitiveStore({
+        'vently.outbox.v2.valid': jsonEncode(valid.toJson()),
+        'vently.outbox.v2.expired': jsonEncode(expired.toJson()),
+        'vently.outbox.v2.complete': jsonEncode({'completed': true}),
+        'vently.outbox.v2.corrupt': '{bad json',
+      });
 
-    final service = await OutboxService.openWithStore(
-      storage,
-      now: () => now,
-      executor: (operation) async {},
-    );
-    addTearDown(service.dispose);
+      final service = await OutboxService.openWithStore(
+        storage,
+        now: () => now,
+        executor: (operation) async {},
+      );
+      addTearDown(service.dispose);
 
-    expect(service.pending.map((operation) => operation.id), ['valid']);
-    expect(service.failed.map((operation) => operation.id), ['expired']);
-    expect(storage.values.keys, [
-      'vently.outbox.v2.valid',
-      'vently.outbox.v2.expired',
-    ]);
-    expect(
-      jsonDecode(storage.values['vently.outbox.v2.expired']!)['failedAt'],
-      isNotNull,
-    );
-  });
+      expect(service.pending.map((operation) => operation.id), ['valid']);
+      expect(service.failed.map((operation) => operation.id), ['expired']);
+      expect(storage.values.keys, [
+        'vently.outbox.v2.valid',
+        'vently.outbox.v2.expired',
+      ]);
+      expect(
+        jsonDecode(storage.values['vently.outbox.v2.expired']!)['failedAt'],
+        isNotNull,
+      );
+    },
+  );
 
   test('failed operations retry with the same mutation id', () async {
     final now = DateTime.utc(2026, 7, 14, 10);
@@ -173,11 +178,9 @@ void main() {
       executor: (operation) async {},
     );
     addTearDown(alice.dispose);
-    await alice.enqueue(
-      OutboxKind.post,
-      {'content': 'alice private vent'},
-      operationId: 'alice-operation',
-    );
+    await alice.enqueue(OutboxKind.post, {
+      'content': 'alice private vent',
+    }, operationId: 'alice-operation');
 
     final bob = await OutboxService.openWithStore(
       storage,
@@ -191,104 +194,107 @@ void main() {
     expect(alice.pending.single.actorUserId, 'alice');
   });
 
-  test('staged media survives a failed send and is deleted after success',
-      () async {
-    final directory =
-        await Directory.systemTemp.createTemp('venttly-outbox-media-');
-    addTearDown(() async {
-      if (await directory.exists()) await directory.delete(recursive: true);
-    });
-    final storage = MemorySensitiveStore();
-    final mediaStore = PendingMediaStore.forDirectory(
-      directory,
-      keyStore: storage,
-    );
-    var shouldFail = true;
-    final service = await OutboxService.openWithStore(
-      storage,
-      userId: 'alice',
-      mediaStore: mediaStore,
-      executor: (operation) async {
-        expect(
-          await mediaStore.read(operation.payload['localMediaPath'] as String),
-          [1, 2, 3],
-        );
-        if (shouldFail) throw TimeoutException('offline');
-      },
-    );
-    addTearDown(service.dispose);
-    final staged = await service.stageMedia(
-      operationId: 'media-operation',
-      bytes: [1, 2, 3],
-      extension: 'jpg',
-      contentType: 'image/jpeg',
-      mediaType: 'image',
-    );
-    await service.enqueue(
-      OutboxKind.dm,
-      {
+  test(
+    'staged media survives a failed send and is deleted after success',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'venttly-outbox-media-',
+      );
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      final storage = MemorySensitiveStore();
+      final mediaStore = PendingMediaStore.forDirectory(
+        directory,
+        keyStore: storage,
+      );
+      var shouldFail = true;
+      final service = await OutboxService.openWithStore(
+        storage,
+        userId: 'alice',
+        mediaStore: mediaStore,
+        executor: (operation) async {
+          expect(
+            await mediaStore.read(
+              operation.payload['localMediaPath'] as String,
+            ),
+            [1, 2, 3],
+          );
+          if (shouldFail) throw TimeoutException('offline');
+        },
+      );
+      addTearDown(service.dispose);
+      final staged = await service.stageMedia(
+        operationId: 'media-operation',
+        bytes: [1, 2, 3],
+        extension: 'jpg',
+        contentType: 'image/jpeg',
+        mediaType: 'image',
+      );
+      await service.enqueue(OutboxKind.dm, {
         'roomId': 'room-1',
         'plaintext': '',
         ...staged.toPayload(),
-      },
-      operationId: 'media-operation',
-    );
+      }, operationId: 'media-operation');
 
-    await service.flush();
+      await service.flush();
 
-    expect(await File(staged.path).exists(), isTrue);
-    expect(service.pending.single.attempts, 1);
+      expect(await File(staged.path).exists(), isTrue);
+      expect(service.pending.single.attempts, 1);
 
-    shouldFail = false;
-    final operation = service.pending.single;
-    operation.nextRetryAt = null;
-    await service.flush();
+      shouldFail = false;
+      final operation = service.pending.single;
+      operation.nextRetryAt = null;
+      await service.flush();
 
-    expect(await File(staged.path).exists(), isFalse);
-    expect(service.pending, isEmpty);
-    expect(
-      storage.values.keys.where((key) => key.startsWith('vently.outbox.v2.')),
-      isEmpty,
-    );
-  });
+      expect(await File(staged.path).exists(), isFalse);
+      expect(service.pending, isEmpty);
+      expect(
+        storage.values.keys.where((key) => key.startsWith('vently.outbox.v2.')),
+        isEmpty,
+      );
+    },
+  );
 
-  test('removing a failed media operation also removes its staged bytes',
-      () async {
-    final directory =
-        await Directory.systemTemp.createTemp('venttly-outbox-remove-');
-    addTearDown(() async {
-      if (await directory.exists()) await directory.delete(recursive: true);
-    });
-    final storage = MemorySensitiveStore();
-    final mediaStore = PendingMediaStore.forDirectory(
-      directory,
-      keyStore: storage,
-    );
-    final service = await OutboxService.openWithStore(
-      storage,
-      userId: 'alice',
-      mediaStore: mediaStore,
-      executor: (operation) async {},
-    );
-    addTearDown(service.dispose);
-    final staged = await service.stageMedia(
-      operationId: 'remove-media-operation',
-      bytes: [4, 5, 6],
-      extension: 'png',
-      contentType: 'image/png',
-      mediaType: 'image',
-    );
-    await service.enqueue(
-      OutboxKind.post,
-      {'content': 'with a photo', ...staged.toPayload()},
-      operationId: 'remove-media-operation',
-    );
+  test(
+    'removing a failed media operation also removes its staged bytes',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'venttly-outbox-remove-',
+      );
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      final storage = MemorySensitiveStore();
+      final mediaStore = PendingMediaStore.forDirectory(
+        directory,
+        keyStore: storage,
+      );
+      final service = await OutboxService.openWithStore(
+        storage,
+        userId: 'alice',
+        mediaStore: mediaStore,
+        executor: (operation) async {},
+      );
+      addTearDown(service.dispose);
+      final staged = await service.stageMedia(
+        operationId: 'remove-media-operation',
+        bytes: [4, 5, 6],
+        extension: 'png',
+        contentType: 'image/png',
+        mediaType: 'image',
+      );
+      await service.enqueue(OutboxKind.post, {
+        'content': 'with a photo',
+        ...staged.toPayload(),
+      }, operationId: 'remove-media-operation');
 
-    await service.remove('remove-media-operation');
+      await service.remove('remove-media-operation');
 
-    expect(await File(staged.path).exists(), isFalse);
-    expect(service.pending, isEmpty);
-  });
+      expect(await File(staged.path).exists(), isFalse);
+      expect(service.pending, isEmpty);
+    },
+  );
 
   test('a policy refusal is failed immediately rather than retried', () async {
     final storage = MemorySensitiveStore();
@@ -302,11 +308,10 @@ void main() {
     );
     addTearDown(service.dispose);
 
-    await service.enqueue(
-      OutboxKind.dm,
-      {'roomId': 'room-1', 'plaintext': 'after the falling-out'},
-      operationId: 'blocked-send',
-    );
+    await service.enqueue(OutboxKind.dm, {
+      'roomId': 'room-1',
+      'plaintext': 'after the falling-out',
+    }, operationId: 'blocked-send');
     await service.flush();
 
     expect(executions, 1);

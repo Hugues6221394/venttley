@@ -72,7 +72,11 @@ SET LOCAL request.jwt.claims =
   '{"sub":"ddd10000-0000-4000-8000-000000000002","role":"authenticated"}';
 SELECT results_eq(
   $$ SELECT count(*)::INT FROM public.posts
-      WHERE author_id = 'ddd10000-0000-4000-8000-000000000001' $$,
+-- display_author_id, not author_id: 20261077090000 revoked author_id from
+-- authenticated so a persona post cannot be joined to the account behind
+-- it. For an ordinary post — which every fixture here creates — the two
+-- hold the same value, so this asks exactly what it asked before.
+      WHERE display_author_id = 'ddd10000-0000-4000-8000-000000000001' $$,
   ARRAY[1],
   'before deletion, other people can read their post'
 );
@@ -98,7 +102,7 @@ SET LOCAL request.jwt.claims =
   '{"sub":"ddd10000-0000-4000-8000-000000000002","role":"authenticated"}';
 SELECT results_eq(
   $$ SELECT count(*)::INT FROM public.posts
-      WHERE author_id = 'ddd10000-0000-4000-8000-000000000001' $$,
+      WHERE display_author_id = 'ddd10000-0000-4000-8000-000000000001' $$,
   ARRAY[0],
   'the moment they delete, their post is gone for everyone else'
 );
@@ -110,7 +114,7 @@ SET LOCAL request.jwt.claims =
   '{"sub":"ddd10000-0000-4000-8000-000000000001","role":"authenticated"}';
 SELECT results_eq(
   $$ SELECT count(*)::INT FROM public.posts
-      WHERE author_id = 'ddd10000-0000-4000-8000-000000000001' $$,
+      WHERE display_author_id = 'ddd10000-0000-4000-8000-000000000001' $$,
   ARRAY[1],
   'the author still sees it, so signing back in restores rather than resurrects'
 );

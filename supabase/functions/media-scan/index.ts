@@ -95,7 +95,14 @@ async function scanLocal(bytes: Uint8Array): Promise<ScanResult | null> {
 
   try {
     const form = new FormData();
-    form.append("file", new Blob([bytes]), "image.bin");
+    // bytes.buffer is typed ArrayBufferLike, which since TypeScript 5.7 is no
+    // longer assignable to BlobPart — SharedArrayBuffer is in that union and
+    // a Blob cannot take one. Copying into a view that owns a plain
+    // ArrayBuffer satisfies it without a cast, and a cast here would be
+    // papering over a real distinction.
+    const filePart = new Uint8Array(bytes.byteLength);
+    filePart.set(bytes);
+    form.append("file", new Blob([filePart]), "image.bin");
     const res = await fetch(`${base}/classify`, {
       method: "POST",
       body: form,
@@ -104,7 +111,9 @@ async function scanLocal(bytes: Uint8Array): Promise<ScanResult | null> {
     if (!res.ok) return null;
     const body = await res.json();
     const verdict = body.verdict;
-    if (verdict !== "clean" && verdict !== "sensitive" && verdict !== "blocked") {
+    if (
+      verdict !== "clean" && verdict !== "sensitive" && verdict !== "blocked"
+    ) {
       return null;
     }
     return {
@@ -196,10 +205,14 @@ async function copyToQuarantine(
   bytes: Uint8Array,
 ): Promise<void> {
   const dest = `${kind}/${id}/${storedPath}`;
-  const { error } = await sb.storage.from("media-quarantine").upload(dest, bytes, {
-    contentType: "application/octet-stream",
-    upsert: true,
-  });
+  const { error } = await sb.storage.from("media-quarantine").upload(
+    dest,
+    bytes,
+    {
+      contentType: "application/octet-stream",
+      upsert: true,
+    },
+  );
   if (error) {
     console.error("quarantine copy failed", sourceBucket);
   }

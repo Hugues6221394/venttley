@@ -58,13 +58,15 @@ void main() {
     expect(() => store.delete(outside.path), throwsStateError);
   });
 
-  test('refuses traversal paths that start inside the managed directory',
-      () async {
-    final traversal = '${root.path}/user/../../escaped.vpm';
+  test(
+    'refuses traversal paths that start inside the managed directory',
+    () async {
+      final traversal = '${root.path}/user/../../escaped.vpm';
 
-    expect(() => store.read(traversal), throwsStateError);
-    expect(() => store.delete(traversal), throwsStateError);
-  });
+      expect(() => store.read(traversal), throwsStateError);
+      expect(() => store.delete(traversal), throwsStateError);
+    },
+  );
 
   test('fails closed when encrypted bytes are tampered with', () async {
     final path = await store.stage(
@@ -79,6 +81,8 @@ void main() {
     await file.writeAsBytes(bytes, flush: true);
 
     expect(
-        () => store.read(path), throwsA(isA<SecretBoxAuthenticationError>()));
+      () => store.read(path),
+      throwsA(isA<SecretBoxAuthenticationError>()),
+    );
   });
 }

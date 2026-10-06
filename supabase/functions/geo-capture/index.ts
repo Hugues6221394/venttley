@@ -120,7 +120,9 @@ Deno.serve(async (req) => {
       JSON.stringify({
         ok: true,
         country: null,
-        ...(debug ? { country_headers_present: presentCountryHeaders(req) } : {}),
+        ...(debug
+          ? { country_headers_present: presentCountryHeaders(req) }
+          : {}),
       }),
       { headers },
     );

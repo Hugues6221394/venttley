@@ -15,7 +15,6 @@
 //     --dart-define=SUPABASE_URL=http://10.0.2.2:54321 \
 //     --dart-define=SUPABASE_ANON_KEY=<local anon key>
 
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';

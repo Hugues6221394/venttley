@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 
 /// The avatars somebody can choose, and where they live.
 ///

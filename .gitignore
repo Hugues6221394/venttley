@@ -86,3 +86,4 @@ assets/images/avatars/avatarsfiles/*
 !assets/images/avatars/avatarsfiles/Asset Layer*.png
 !assets/images/avatars/avatarsfiles/Asset2*.png
 !assets/images/avatars/avatarsfiles/Asset3*.png
+coverage/
