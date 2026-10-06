@@ -286,9 +286,12 @@ export default async function ContentPage({
                           : row.body
                         : "No text. This item may contain audio or image media only."}
                     </p>
-                    <p className="mt-2 select-all font-mono text-[10px] text-ink-muted">
-                      {row.id}
-                    </p>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <p className="select-all font-mono text-[10px] text-ink-muted">{row.id}</p>
+                      {(row.kind === "post" || row.kind === "story") && (
+                        <Link href={`/content/${row.id}`} className="btn-ghost text-xs">Open</Link>
+                      )}
+                    </div>
                   </li>
                 );
               })}

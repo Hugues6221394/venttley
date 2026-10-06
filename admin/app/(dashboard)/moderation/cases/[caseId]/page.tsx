@@ -403,7 +403,9 @@ export default async function CaseDetailPage({
         <div className="flex flex-col gap-6">
           <Card title="Case facts">
             <Row label="Target type" value={record.target_type} />
-            <Row label="Target ID" value={<code className="text-[10px]">{record.target_id}</code>} />
+            <Row label="Target ID" value={record.target_type === "post"
+              ? <Link href={`/content/${record.target_id}`} className="text-burgundy hover:underline"><code className="text-[10px]">{record.target_id}</code></Link>
+              : <code className="text-[10px]">{record.target_id}</code>} />
             <Row
               label="Subject"
               value={

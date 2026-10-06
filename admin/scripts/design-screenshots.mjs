@@ -29,7 +29,7 @@ const env = { ...process.env, NEXT_PUBLIC_SUPABASE_URL: config.API_URL, NEXT_PUB
 const label = process.env.DESIGN_LABEL ?? "after";
 const outputDir = resolve(root, ".artifacts", "redesign", label);
 await mkdir(outputDir, { recursive: true });
-const sql = (statement, stdio = "ignore") => execFileSync("psql", [config.DB_URL, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c", statement], { encoding: "utf8", stdio: ["ignore", stdio, "ignore"] });
+const sql = (statement, stdio = "ignore") => execFileSync("psql", [config.DB_URL, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c", statement], { encoding: "utf8", stdio: ["ignore", stdio, "pipe"] });
 const service = createClient(config.API_URL, config.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
 const email = `design-shot-${suffix}@example.test`, password = `Local-${randomUUID()}-Aa1!`, pseudonym = `care${suffix.slice(0, 6)}`;
@@ -70,6 +70,8 @@ try {
   const shots = [
     ["overview", "/overview"], ["safety", "/safety"], ["moderation", "/moderation"], ["users", "/users"],
     ["inbox", "/inbox"], ["system", "/system"], ["queue", "/queue"],
+    ...(process.env.DESIGN_POST ? [["post", `/content/${process.env.DESIGN_POST}`]] : []),
+    ...(process.env.DESIGN_TRIBE ? [["tribe", `/tribes/${process.env.DESIGN_TRIBE}`]] : []),
     ...(detailId ? [["user-detail", `/users/${detailId}`], ["user-contact", `/users/${detailId}?tab=communications&compose=warning`], ["user-account", `/users/${detailId}?tab=account`]] : []),
   ];
   const capture = async (name, route, theme, viewport, fullPage = false) => {

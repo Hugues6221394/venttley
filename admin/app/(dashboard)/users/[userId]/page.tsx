@@ -487,7 +487,7 @@ export default async function UserDetailPage({
 
       {tab === "overview" && (
         <div className="member-grid">
-          <Card title="Recent posts" hint="Last 8 posts. Act on content from Moderation." padded={false}>
+          <Card title="Recent posts" hint="Last 8 posts. Open one to see its reports and cases." padded={false}>
             {(recentPosts ?? []).length === 0 ? (
               <p className="member-empty">No posts yet.</p>
             ) : (
@@ -506,7 +506,7 @@ export default async function UserDetailPage({
                         {p.crisis_level && <Badge tone="crisis">crisis · {p.crisis_level}</Badge>}
                         <time>{new Date(p.created_at).toLocaleString()}</time>
                       </div>
-                      <p className="member-list-body line-clamp-2">{p.content}</p>
+                      <Link href={`/content/${p.post_id}`} className="member-list-body line-clamp-2 block hover:text-burgundy">{p.content || "Media only"}</Link>
                       <p className="member-list-foot tabular">
                         {p.likes_count} hugs · {p.comments_count} comments
                       </p>
