@@ -222,7 +222,7 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       // Written here rather than taken from the exception's toString: what a
       // person reads should live in the screen that shows it, not depend on
       // the debug representation of a class staying sentence-shaped.
-      setState(() => _error = 'Venttly is for members aged 13 and over.');
+      setState(() => _error = 'Venttly is for members aged 16 and over.');
     } on UsernameTakenException {
       if (!mounted) return;
       setState(

@@ -1419,7 +1419,7 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
         SnackBar(
           content: Text(
             blocked
-                ? 'Accounts registered as 13-17 can reply to chats, but not '
+                ? 'Accounts registered as 16-17 can reply to chats, but not '
                       'start new ones.'
                 : 'Could not start chat: $e',
           ),
@@ -1452,7 +1452,7 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
       button: true,
       hint: mayStartNew
           ? null
-          : 'Accounts registered as 13-17 cannot start new chats',
+          : 'Accounts registered as 16-17 cannot start new chats',
       child: Material(
         color: accent,
         borderRadius: BorderRadius.circular(10),

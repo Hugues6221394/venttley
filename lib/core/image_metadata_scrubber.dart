@@ -21,7 +21,7 @@ import 'dart:typed_data';
 /// `GPSLatitude` / `GPSLongitude`.
 ///
 /// On a platform whose entire promise is anonymity, and whose users include
-/// 13–17 year olds, a vent photo that carries the coordinates of the bedroom it
+/// 16–17 year olds, a vent photo that carries the coordinates of the bedroom it
 /// was taken in is the most direct de-anonymisation vector in the product.
 ///
 /// ## Why it strips rather than re-encodes

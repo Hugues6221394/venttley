@@ -70,8 +70,8 @@ class _AgeCompletionScreenState extends ConsumerState<AgeCompletionScreen> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = raw.contains('age_below_minimum') || raw.contains('under 13')
-            ? 'Venttly is not available to children under 13.'
+        _error = raw.contains('age_below_minimum') || raw.contains('under 16')
+            ? 'Venttly is for people aged 16 and over.'
             : 'We couldn\'t verify your age. Check the date and try again.';
       });
     }
@@ -116,7 +116,7 @@ class _AgeCompletionScreenState extends ConsumerState<AgeCompletionScreen> {
                     const SizedBox(height: 10),
                     Text(
                       'We store only your birth year. It is not shown on your profile. '
-                      'Members aged 13–17 receive additional protections.',
+                      'Members aged 16–17 receive additional protections.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: scheme.onSurfaceVariant,

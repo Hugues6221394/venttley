@@ -56,7 +56,7 @@ class UserFriendlyErrors {
     // Raised by handle_new_auth_user before it writes anything, so no account
     // exists. Arrives as P0001 with the bare identifier as the message.
     if (raw.contains('age_below_minimum')) {
-      return 'Venttly is for members aged 13 and over.';
+      return 'Venttly is for members aged 16 and over.';
     }
     if (raw.contains('could_not_allocate_pseudonym')) {
       return 'We couldn\'t reserve a handle for you. Please try again.';

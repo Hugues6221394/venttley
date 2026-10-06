@@ -77,7 +77,7 @@ class VentlyConfig {
   static bool get gifSearchEnabled => tenorApiKey.isNotEmpty;
 
   /// Product age floor. The server rejects a declared age below 13 and places
-  /// declared ages 13–17 in a restricted safety tier. This is not, by itself,
+  /// declared ages 16–17 in a restricted safety tier. This is not, by itself,
   /// a claim of legal compliance or independent age assurance.
   static const int minAge = 13;
   static const int restrictedMaxAge = 17;

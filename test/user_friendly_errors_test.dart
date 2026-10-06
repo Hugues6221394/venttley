@@ -111,11 +111,11 @@ void main() {
   test('the age floor is not reported as a naming problem', () {
     const error =
         'AuthApiException(message: {"code":"P0001","message":'
-        '"age_below_minimum","hint":"Venttly is not available under 13."}, '
+        '"age_below_minimum","hint":"Venttly is not available under 16."}, '
         'statusCode: 500)';
     expect(
       UserFriendlyErrors.message(error),
-      'Venttly is for members aged 13 and over.',
+      'Venttly is for members aged 16 and over.',
     );
     expect(UserFriendlyErrors.message(error), isNot(contains('handle')));
   });

@@ -8,7 +8,7 @@ import '../theme/colors.dart';
 
 /// The 18+ check that stands in front of Tribe creation.
 ///
-/// Creating a Tribe hands someone authority over a space that 13–17 year olds
+/// Creating a Tribe hands someone authority over a space that 16–17 year olds
 /// use, so the floor is real. But a floor is not an excuse for a bad moment:
 /// the person on the other side is usually an adult who simply wants to start a
 /// community, and they should not be made to feel accused.

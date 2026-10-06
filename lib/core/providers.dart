@@ -992,7 +992,7 @@ final storyRepliesEnabledProvider =
     );
 
 /// True when the signed-in user may start a NEW chat with this user. False for
-/// a restricted minor (13-17), who can still reply in threads that exist.
+/// a restricted minor (16-17), who can still reply in threads that exist.
 final dmInitiationAllowedProvider = FutureProvider.autoDispose
     .family<bool, String>((ref, userId) {
       return ref.watch(repositoryProvider).canInitiateDm(userId);
