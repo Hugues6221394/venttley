@@ -74,17 +74,62 @@ void main() {
     expect(UserFriendlyErrors.message(error), contains('16 characters'));
   });
 
-  test('a handle lost in the race says so, rather than "database error"', () {
-    // The handle is unique in the database and the row is written by a
-    // trigger, so a name taken between typing it and pressing the button
-    // comes back as a 500 that never mentions handles.
+  // The three below are the responses production actually returns, captured
+  // by posting to /auth/v1/signup with a handle that exists. Written from the
+  // wire rather than from what the error was assumed to be: the first version
+  // of this mapper read "Database error saving new user" as a taken handle,
+  // which would have told a twelve-year-old to pick another name.
+
+  test('a handle lost in the race says so', () {
     const error =
-        'AuthRetryableFetchException(message: {"code":"unexpected_failure",'
-        '"message":"Database error saving new user"}, statusCode: 500)';
+        'AuthApiException(message: {"code":"23505","message":"duplicate key '
+        'value violates unique constraint '
+        '\\"users_pseudonym_lower_unique\\"","detail":"Key '
+        '(lower(anonymous_pseudonym::text))=(first_light) already exists."}, '
+        'statusCode: 500)';
     expect(
       UserFriendlyErrors.message(error),
       'That handle was taken a moment ago. Pick another and try again.',
     );
+    // And the handle is not read back out of a Postgres detail line.
+    expect(UserFriendlyErrors.message(error), isNot(contains('lower(')));
+  });
+
+  test('…and still says so once the database stops naming its constraint', () {
+    // What migration 20261076090000 raises instead. The app has to read both,
+    // because it ships ahead of the database it talks to.
+    expect(
+      UserFriendlyErrors.message(
+        'AuthApiException(message: {"code":"P0001","message":'
+        '"pseudonym_taken","hint":"That handle is already in use."}, '
+        'statusCode: 500)',
+      ),
+      'That handle was taken a moment ago. Pick another and try again.',
+    );
+  });
+
+  test('the age floor is not reported as a naming problem', () {
+    const error =
+        'AuthApiException(message: {"code":"P0001","message":'
+        '"age_below_minimum","hint":"Venttly is not available under 13."}, '
+        'statusCode: 500)';
+    expect(
+      UserFriendlyErrors.message(error),
+      'Venttly is for members aged 13 and over.',
+    );
+    expect(UserFriendlyErrors.message(error), isNot(contains('handle')));
+  });
+
+  test('GoTrue\'s own wrapper does not claim to know what went wrong', () {
+    // This message replaces the database's, so it cannot be read as any
+    // particular cause -- only as "the write failed".
+    const error =
+        'AuthRetryableFetchException(message: {"code":"unexpected_failure",'
+        '"message":"Database error saving new user"}, statusCode: 500)';
+    final message = UserFriendlyErrors.message(error);
+    expect(message, contains('try again'));
+    expect(message, isNot(contains('handle')));
+    expect(message, isNot(contains('13')));
   });
 
   test('a database grant is not a microphone', () {

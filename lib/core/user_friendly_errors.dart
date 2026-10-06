@@ -32,13 +32,44 @@ class UserFriendlyErrors {
       return 'That password is too easy to guess. Try a longer one.';
     }
 
-    // The handle is unique in the database, and the row is written by a
-    // trigger during sign-up -- so a name taken between typing it and
-    // pressing the button comes back as a 500 about "saving new user"
-    // rather than as anything about handles. The live check beside the
-    // field catches nearly all of these; this is the race that slips past.
-    if (raw.contains('database error saving new user')) {
+    // The handle is unique in the database and the profile row is written by
+    // a trigger during sign-up, so a name taken between typing it and
+    // pressing the button surfaces as the bare Postgres violation --
+    //
+    //   {"code":"23505","message":"duplicate key value violates unique
+    //    constraint \"users_pseudonym_lower_unique\"","detail":"Key
+    //    (lower(anonymous_pseudonym::text))=(first_light) already exists."}
+    //
+    // which names the constraint and repeats the handle back. Matched on the
+    // constraint rather than on 23505 alone: other unique constraints on the
+    // same insert must not all claim to be about handles.
+    //
+    // `pseudonym_taken` is what the trigger raises once migration
+    // 20261076090000 is applied; the raw constraint is what a database
+    // without it still says. Both are matched, because the app ships ahead of
+    // the database and must read either.
+    if (raw.contains('pseudonym_taken') ||
+        raw.contains('users_pseudonym_lower_unique') ||
+        (raw.contains('23505') && raw.contains('anonymous_pseudonym'))) {
       return 'That handle was taken a moment ago. Pick another and try again.';
+    }
+    // Raised by handle_new_auth_user before it writes anything, so no account
+    // exists. Arrives as P0001 with the bare identifier as the message.
+    if (raw.contains('age_below_minimum')) {
+      return 'Venttly is for members aged 13 and over.';
+    }
+    if (raw.contains('could_not_allocate_pseudonym')) {
+      return 'We couldn\'t reserve a handle for you. Please try again.';
+    }
+    // GoTrue's own wrapper, which replaces the database's message with this
+    // one. It is NOT specifically a taken handle -- an earlier version of this
+    // file claimed it was, which would have told somebody blocked by the age
+    // floor to pick another name. It says only that the write failed, so the
+    // copy says only that, and the retryable class it arrives in is the clue
+    // that trying again is worth something.
+    if (raw.contains('database error saving new user')) {
+      return 'We couldn\'t finish creating your account. Please try again in '
+          'a moment.';
     }
     if (raw.contains('already in someone\'s sanctuary') ||
         raw.contains('usernametakenexception')) {
