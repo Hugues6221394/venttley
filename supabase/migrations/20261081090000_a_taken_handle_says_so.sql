@@ -133,7 +133,7 @@ END;
 $function$;
 
 SELECT public.record_migration(
-  '20261076090000', 'a_taken_handle_says_so'
+  '20261081090000', 'a_taken_handle_says_so'
 );
 
 NOTIFY pgrst, 'reload schema';

@@ -45,7 +45,7 @@ class UserFriendlyErrors {
     // same insert must not all claim to be about handles.
     //
     // `pseudonym_taken` is what the trigger raises once migration
-    // 20261076090000 is applied; the raw constraint is what a database
+    // 20261081090000 is applied; the raw constraint is what a database
     // without it still says. Both are matched, because the app ships ahead of
     // the database and must read either.
     if (raw.contains('pseudonym_taken') ||

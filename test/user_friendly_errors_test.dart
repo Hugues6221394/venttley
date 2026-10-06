@@ -96,7 +96,7 @@ void main() {
   });
 
   test('…and still says so once the database stops naming its constraint', () {
-    // What migration 20261076090000 raises instead. The app has to read both,
+    // What migration 20261081090000 raises instead. The app has to read both,
     // because it ships ahead of the database it talks to.
     expect(
       UserFriendlyErrors.message(
