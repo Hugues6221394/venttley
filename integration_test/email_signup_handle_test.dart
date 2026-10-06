@@ -44,13 +44,25 @@ const _anonKey = String.fromEnvironment(
 /// from the report; username_available() answers false for it.
 const _takenHandle = 'first_light';
 
-Future<void> settle(WidgetTester tester, {int ms = 4000}) async {
-  // The lookup is debounced 350ms and then goes to the network, so pumping a
-  // fixed frame count is not enough.
-  final deadline = ms ~/ 100;
-  for (var i = 0; i < deadline; i++) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
+Future<void> settle(WidgetTester tester) async {
+  // Two clocks, and the lookup needs both.
+  //
+  // The 350ms debounce is a Timer created inside the test zone, so it is a
+  // fake timer that only moves when pump() advances the test clock. The reply
+  // it then waits for is a real HTTP round trip, which only happens in real
+  // time — and real time does not pass inside a testWidgets body unless you
+  // ask for it with runAsync.
+  //
+  // Pumping 4000ms of fake time, which is what this did, fires the debounce
+  // and then returns before the network can possibly have answered. The hint
+  // never appears, and the test reads as "the feature is broken" when what is
+  // broken is the waiting.
+  await tester.pump(const Duration(milliseconds: 500));
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(seconds: 3)),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
 }
 
 void main() {
