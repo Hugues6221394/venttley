@@ -10,6 +10,7 @@ export type SupportCase = {
   support_case_id: string; source_kind: string; source_id: string | null; member_id: string | null;
   category: string; priority: string; status: string; assignee_id: string | null; assignee_name: string | null;
   sla_due_at: string; first_response_at: string | null; resolved_at: string | null; created_at: string; updated_at: string;
+  subject?: string | null; last_message_at?: string | null; last_message_by?: "member" | "staff" | null;
 };
 
 export type LegalRequest = {

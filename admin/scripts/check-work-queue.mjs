@@ -41,6 +41,11 @@ const support = q.fromSupport([
   { support_case_id: "s2", category: "other", priority: "bogus", status: "closed", assignee_id: null, assignee_name: null, sla_due_at: null, created_at: hoursAgo(1) },
 ], now);
 assert.deepEqual(support.map(s => s.id), ["s1"]);
+assert.equal(support[0].href, "/support/cases/s1", "support opens its conversation");
+const replied = q.fromSupport([{ support_case_id: "s3", category: "technical", priority: "normal", status: "assigned", assignee_id: null, assignee_name: null, sla_due_at: null, created_at: hoursAgo(1), subject: "App will not load", last_message_by: "member" }], Date.now());
+assert.equal(replied[0].title, "App will not load", "a conversation is titled by its subject");
+assert.equal(replied[0].status, "awaiting reply", "a member waiting on staff is called out");
+assert.equal(replied[0].rawStatus, "assigned", "the workflow status is kept for actions");
 assert.equal(support[0].overdue, true, "support overdue is derived from its due time");
 
 const all = q.sortWork([...cases, ...appeals, ...verification, ...support]);

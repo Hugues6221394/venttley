@@ -5,10 +5,10 @@ export const inboxSeverities = ["all", "info", "warning", "critical"] as const;
 export type StaffInboxFilter = typeof inboxFilters[number];
 export type InboxCategory = typeof inboxCategories[number];
 export type InboxSeverity = typeof inboxSeverities[number];
-export type StaffInboxKind = "support_assigned" | "support_sla_breached" | "legal_review_requested" | "moderation_assigned" | "moderation_review_requested" | "job_push_attention" | "job_email_attention" | "job_media_attention" | "impact_report_ready" | "incident_changed" | "incident_overdue" | "access_review_assigned" | "access_review_overdue" | "promotion_review_requested" | "promotion_ready" | "broadcast_review_requested" | "broadcast_ready";
+export type StaffInboxKind = "support_assigned" | "support_sla_breached" | "support_member_replied" | "legal_review_requested" | "moderation_assigned" | "moderation_review_requested" | "job_push_attention" | "job_email_attention" | "job_media_attention" | "impact_report_ready" | "incident_changed" | "incident_overdue" | "access_review_assigned" | "access_review_overdue" | "promotion_review_requested" | "promotion_ready" | "broadcast_review_requested" | "broadcast_ready";
 export type StaffInboxItem = {
   event_id: string; kind: StaffInboxKind; severity: Exclude<InboxSeverity, "all">;
-  source_id: string; destination: "/support/cases" | "/legal-requests" | `/moderation/cases/${string}` | `/jobs#${string}` | `/impact/reports/${string}` | `/incidents/records/${string}` | `/staff/access-reviews?campaign=${string}` | `/approvals?source=${string}` | `/broadcasts?source=${string}`;
+  source_id: string; destination: "/support/cases" | `/support/cases/${string}` | "/legal-requests" | `/moderation/cases/${string}` | `/jobs#${string}` | `/impact/reports/${string}` | `/incidents/records/${string}` | `/staff/access-reviews?campaign=${string}` | `/approvals?source=${string}` | `/broadcasts?source=${string}`;
   delivered_at: string; read_at: string | null;
 };
 export type StaffInboxCursor = { beforeAt: string; beforeId: string };
@@ -27,6 +27,7 @@ export const inboxCopy = {
   incident_changed: { title: "Incident response updated", description: "An incident assigned to your response team changed. Check its current phase and ownership. No external paging or containment is implied.", category: "Incidents" },
   incident_overdue: { title: "Incident response overdue", description: "An active incident passed its response deadline. Open the incident to check current ownership and next steps.", category: "Incidents" },
   support_assigned: { title: "Support case assigned", description: "A support case was assigned to you. Check its current owner and deadline in the source queue.", category: "Support" },
+  support_member_replied: { title: "A member replied", description: "A member answered in a support conversation you own. Open it to read and reply; the case is back with you.", category: "Support" },
   support_sla_breached: { title: "Support response overdue", description: "A support case passed its response deadline. Open the source to check its current status.", category: "Support" },
   legal_review_requested: { title: "Legal approval requested", description: "An independent review was requested. Open the legal register to check the current decision state.", category: "Legal" },
   moderation_assigned: { title: "Moderation case assigned", description: "A moderation case was assigned to you. Check its current owner and deadline in the case dossier.", category: "Moderation" },
@@ -49,6 +50,7 @@ export function sourceHref(item: StaffInboxItem) {
   if(item.kind==='job_email_attention')return '/jobs#email-failures';
   if(item.kind==='job_media_attention')return '/jobs#media-stalled';
   if(item.kind==='moderation_assigned'||item.kind==='moderation_review_requested')return `/moderation/cases/${item.source_id}`;
+  if(item.kind==='support_member_replied')return `/support/cases/${item.source_id}`;
   const destination = item.kind === "legal_review_requested" ? "/legal-requests" :
     item.kind === "support_assigned" || item.kind === "support_sla_breached" ? "/support/cases" : null;
   return destination ? `${destination}?source=${item.source_id}` : null;

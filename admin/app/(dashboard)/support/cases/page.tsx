@@ -23,7 +23,7 @@ export default async function SupportCasesPage({ searchParams }: { searchParams:
   const queue = queueFilter || source ? await getLinkedQueue<SupportCase>("support", queueFilter ?? "all", source) : await getSupportCases();
   return <div className="flex max-w-[1500px] flex-col gap-6">
     <RefreshAttentionOnRender token={randomUUID()} />
-    <PageHeader eyebrow="Member operations" title="Support cases" subtitle="Canonical metadata-only cases with SLA ownership, retry-safe mutations, and a complete operator audit trail. Never paste confession or message content here." />
+    <PageHeader eyebrow="Member operations" title="Support cases" subtitle="Cases with SLA ownership, retry-safe changes and a complete audit trail. Open a case to read and answer its conversation with the member." />
     <QueueAttentionPanel queue="support" />
     <OperationResult code={result} />
     {(queueFilter || source) && <p className="text-sm text-ink-muted">{source ? "Notification source case" : "Open support cases"} · <Link className="underline" href="/support/cases" prefetch={false}>Show all cases</Link></p>}
@@ -42,7 +42,7 @@ export default async function SupportCasesPage({ searchParams }: { searchParams:
     <Card title="Case queue" hint={`${queue.data.length} most recent cases · earliest SLA first`} padded={false}>
       {queue.data.length === 0 ? <p className="p-5 text-sm text-ink-muted">{queue.error ? "Cases could not be verified." : "No cases match this view."}</p> : <div className="overflow-x-auto"><table className="data-table"><thead><tr><th>Case</th><th>Owner / SLA</th><th>State</th><th>Update</th></tr></thead><tbody>
         {queue.data.map((item) => <tr key={item.support_case_id}>
-          <td><p className="font-semibold text-burgundy">{item.category.replaceAll("_", " ")}</p><p className="text-xs text-ink-muted">{item.source_kind}{item.member_id ? " · member bound" : ""}</p><p className="font-mono text-[10px] text-ink-muted">{item.support_case_id}</p></td>
+          <td><Link href={`/support/cases/${item.support_case_id}`} prefetch={false} className="font-semibold text-burgundy hover:underline">{item.subject || item.category.replaceAll("_", " ")}</Link>{item.last_message_by === "member" && !["resolved", "closed"].includes(item.status) && <p className="text-xs font-semibold text-danger">Awaiting reply</p>}<p className="text-xs text-ink-muted">{item.source_kind}{item.member_id ? " · member bound" : ""}</p><p className="font-mono text-[10px] text-ink-muted">{item.support_case_id}</p></td>
           <td><p className="text-xs">{item.assignee_name ?? "Unassigned"}</p><p className="text-[11px] text-ink-muted">Due {new Date(item.sla_due_at).toLocaleString()}</p></td>
           <td><div className="flex flex-col items-start gap-1"><Badge tone={statusTone(item.status)}>{item.status.replaceAll("_", " ")}</Badge><Badge tone={item.priority === "critical" ? "danger" : item.priority === "high" ? "warn" : "neutral"}>{item.priority}</Badge></div></td>
           <td><form action={updateSupportCase} className="flex min-w-[460px] flex-wrap items-end gap-2">
@@ -55,6 +55,6 @@ export default async function SupportCasesPage({ searchParams }: { searchParams:
         </tr>)}
       </tbody></table></div>}
     </Card>
-    <CapabilityNotice title="Content-minimizing workflow">Cases store category, state, ownership, SLA, and bound record IDs only. Member-authored text belongs in its source system and is revealed only through that system&apos;s audited access path.</CapabilityNotice>
+    <CapabilityNotice title="What a case holds">Category, state, ownership, SLA and bound record IDs, plus the conversation with the member when there is one. Do not copy confessions or private messages from elsewhere into a reply.</CapabilityNotice>
   </div>;
 }

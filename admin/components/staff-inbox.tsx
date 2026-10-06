@@ -140,7 +140,7 @@ function InboxList({ compact = false, governance = false }: { compact?: boolean;
       (loading && items.length === 0) || !attention.data ? <p className="inbox-state" role="status">Loading notifications…</p> :
       items.length === 0 ? <div className="inbox-state"><Mail size={28} /><h3>No notifications in this view</h3><p>This does not mean your team&apos;s queues are clear.</p></div> :
       <ul>{(compact ? items.slice(0, 5) : items).map(item => { const copy = inboxCopy[item.kind], source = sourceHref(item); if (!copy) return null;
-        const icon = item.kind === "support_assigned" ? 1 : item.kind === "support_sla_breached" ? 2 : 3;
+        const icon = item.kind === "support_assigned" || item.kind === "support_member_replied" ? 1 : item.kind === "support_sla_breached" ? 2 : 3;
         return <li key={item.event_id} className="inbox-row" data-read={!!item.read_at}>
           <img className="inbox-row-icon" src={`/design/inbox/viewport-1-a-main-notifications-item-${icon}-icon.png`} width={30} height={30} alt="" />
           <div className="inbox-row-content"><h3>{!item.read_at && <span className="inbox-dot" aria-label="Unread" />}{copy.title}</h3><p>{copy.description}</p>

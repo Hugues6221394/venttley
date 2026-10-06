@@ -37,6 +37,7 @@ export type VerificationSource = {
 export type SupportSource = {
   support_case_id: string; category: string; priority: string; status: string;
   assignee_id: string | null; assignee_name: string | null; sla_due_at: string | null; created_at: string;
+  subject?: string | null; last_message_by?: "member" | "staff" | null;
 };
 
 export const QUEUE_KINDS: Record<QueueKind, { label: string; route: string }> = {
@@ -94,12 +95,13 @@ export function fromVerification(rows: VerificationSource[]): WorkItem[] {
 export function fromSupport(rows: SupportSource[], now: number): WorkItem[] {
   return rows.filter(r => !CLOSED_SUPPORT.has(r.status)).map(r => ({
     kind: "support", id: r.support_case_id,
-    title: words(r.category), member: null,
-    priority: supportPriority(r.priority), status: words(r.status), rawStatus: r.status,
+    title: r.subject || words(r.category), member: null,
+    priority: supportPriority(r.priority),
+    status: r.last_message_by === "member" ? "awaiting reply" : words(r.status), rawStatus: r.status,
     assigneeId: r.assignee_id, assignee: r.assignee_name,
     openedAt: r.created_at, dueAt: r.sla_due_at,
     overdue: !!r.sla_due_at && Date.parse(r.sla_due_at) < now,
-    href: "/support/cases",
+    href: `/support/cases/${r.support_case_id}`,
   }));
 }
 
