@@ -133,7 +133,17 @@ jobs:
       - run: npm ci
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
+      # Prerendering /mfa constructs a Supabase browser client, which refuses
+      # to exist without a URL and key — so the build needs them present, not
+      # correct. Nothing is fetched at build time.
+      #
+      # Placeholders rather than the real anon key: it is public, but putting
+      # it here would imply this job talks to production, and the next person
+      # to read it would have to prove to themselves that it does not.
       - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://build-time-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: build-time-placeholder-anon-key
 
   database:
     name: Migration replay and lint
