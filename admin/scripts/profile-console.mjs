@@ -262,7 +262,7 @@ try {
         await search.waitFor();
         await page.getByRole("textbox",{name:"Find an admin page"}).fill("Staff accounts");
         assert.equal(await search.locator(".operator-search-results button").count(),canAccess(role,"/staff")?1:0);
-        await page.getByRole("textbox",{name:"Find an admin page"}).fill("Control Center");
+        await page.getByRole("textbox",{name:"Find an admin page"}).fill("Home");
         await page.keyboard.press("ArrowDown");
         assert(await search.locator(".operator-search-results button").first().evaluate(button=>button===document.activeElement),"arrow keys focus actual page result");
         await page.keyboard.press("Escape");

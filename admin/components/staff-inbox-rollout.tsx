@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { WorkflowForm } from './workflows/workflow-form';
 import { configureStaffInbox } from '@/lib/staff-inbox-rollout-actions';
 import { audienceFor, inboxAudiences, type InboxRolloutHealth } from '@/lib/staff-inbox-rollout';
@@ -45,5 +46,15 @@ export function StaffInboxRollout({ health }: { health: InboxRolloutHealth | nul
         </label>
       </WorkflowForm>
     </section>
+  );
+}
+
+export function StaffInboxRolloutNotice({ health }: { health: InboxRolloutHealth | null }) {
+  if (health?.enabled) return null;
+  return (
+    <p role="status" className="rollout-notice">
+      <span><strong>Staff notifications are off.</strong> The bell and queue badges stay empty until they are turned on.</span>
+      <Link href="/system#staff-notifications" prefetch={false} className="btn-secondary text-xs">Set up in System health</Link>
+    </p>
   );
 }

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getRenderStaff } from '@/lib/supabase/server';
 import { loadInboxRollout } from '@/lib/staff-inbox-health';
-import { StaffInboxRollout } from '@/components/staff-inbox-rollout';
+import { StaffInboxRolloutNotice } from '@/components/staff-inbox-rollout';
 import { hasModernShell } from '@/lib/shell-rollout';
 import { canAccess } from '@/lib/roles';
 import LegacyOverview from '@/components/legacy-overview';
@@ -21,7 +21,7 @@ export default async function OverviewPage() {
   const inboxHealth = staff.role==='super_admin' ? await loadInboxRollout() : undefined;
   return <OperatorPage title="A clear view of your community" subtitle="Activity, attention, and context. Each panel is independently verified."
     actions={<><RefreshOverview/><OperatorDrawer title="Metric definitions" trigger="Metric definitions"><dl className="operator-definitions">{overviewDefinitions.map(([name,definition])=><div key={name}><dt>{name}</dt><dd>{definition}</dd></div>)}</dl></OperatorDrawer></>}>
-    {inboxHealth!==undefined&&!inboxHealth?.enabled&&<StaffInboxRollout health={inboxHealth}/>}
+    {inboxHealth!==undefined&&<StaffInboxRolloutNotice health={inboxHealth}/>}
     <Suspense fallback={<PanelSkeleton label="community activity" className="operator-activity"/>}><ActivityPanel/></Suspense>
     <div className="operator-priority-grid">
       <Suspense fallback={<PanelSkeleton label="queue snapshots" className="operator-queue-panel"/>}><AttentionPanel/></Suspense>

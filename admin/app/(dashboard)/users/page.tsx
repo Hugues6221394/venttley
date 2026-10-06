@@ -1,17 +1,14 @@
 import Link from "next/link";
-import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
-import { rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
-  Ban,
-  CheckCircle2,
   ChevronRight,
   EyeOff,
   Search,
+  Send,
   Users as UsersIcon,
 } from "@/components/ui/icons";
 
@@ -44,22 +41,6 @@ type Row = {
   home_country: string | null;
   created_at: string;
 };
-
-// ──────────────────────────── Server actions ────────────────────────────
-
-async function setStatusAction(formData: FormData) {
-  "use server";
-  const id = String(formData.get("user_id") ?? "");
-  const status = String(formData.get("status") ?? "");
-  const reason = String(formData.get("reason") ?? "");
-  if (!id || !status) return;
-  await rpc("admin_set_user_status", {
-    p_target: id,
-    p_status: status,
-    p_reason: reason || null,
-  });
-  revalidatePath("/users");
-}
 
 // ──────────────────────────── Page ────────────────────────────
 
@@ -105,9 +86,9 @@ export default async function UsersPage({
   return (
     <div className="flex flex-col gap-6 max-w-[1300px]">
       <PageHeader
-        eyebrow="Manage"
-        title="Users"
-        subtitle="Search, inspect, and act on individual accounts. Open a user to see their full activity timeline."
+        eyebrow="Daily work"
+        title="Members"
+        subtitle="Find a member, then open their profile to review activity, contact them, or change their account."
         actions={
           <span className="text-xs text-ink-muted">
             {(totalUsers ?? 0).toLocaleString()} total · {(activeUsers ?? 0).toLocaleString()} active
@@ -243,23 +224,12 @@ export default async function UsersPage({
                     </td>
                     <td className="t-td text-right">
                       <div className="flex gap-1.5 justify-end">
-                        {u.account_status === "active" ? (
-                          <QuickAction
-                            action={setStatusAction}
-                            userId={u.user_id}
-                            status="suspended"
-                            label="Suspend"
-                            icon={<Ban size={13} />}
-                          />
-                        ) : (
-                          <QuickAction
-                            action={setStatusAction}
-                            userId={u.user_id}
-                            status="active"
-                            label="Reactivate"
-                            icon={<CheckCircle2 size={13} />}
-                          />
-                        )}
+                        <Link
+                          href={`/users/${u.user_id}?tab=communications&compose=message#contact`}
+                          className="btn-ghost"
+                        >
+                          <Send size={13} /> Message
+                        </Link>
                         <Link
                           href={`/users/${u.user_id}`}
                           className="btn-ghost"
@@ -296,29 +266,4 @@ function StatusBadge({ status }: { status: string }) {
       </Badge>
     );
   return <Badge tone="danger">{status}</Badge>;
-}
-
-function QuickAction({
-  action,
-  userId,
-  status,
-  label,
-  icon,
-}: {
-  action: (fd: FormData) => Promise<void>;
-  userId: string;
-  status: string;
-  label: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <form action={action}>
-      <input type="hidden" name="user_id" value={userId} />
-      <input type="hidden" name="status" value={status} />
-      <button className="btn-ghost" type="submit">
-        {icon}
-        {label}
-      </button>
-    </form>
-  );
 }

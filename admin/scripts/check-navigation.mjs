@@ -13,7 +13,9 @@ const { hasModernShell } = await import(moduleUrl(rolloutSource.replace('"./role
 const { navigationGroups, visibleNavigation, activeNavigation, safeFavorites, searchNavigation } =
   await import(moduleUrl(source.replace('"./roles"', JSON.stringify(rolesUrl))));
 
-assert.equal(navigationGroups.length, 6);
+assert.equal(navigationGroups.length, 8);
+assert.equal(navigationGroups.filter(group => group.pinned).length, 1);
+for (const role of STAFF_ROLES) assert(visibleNavigation(role).length === 0 || visibleNavigation(role).some(page => page.group === "Daily work"), `${role} has a daily-work entry`);
 const all = navigationGroups.flatMap(group => group.pages.map(([href]) => href));
 assert.equal(new Set(all).size, all.length, "one canonical entry per page");
 // Preserve every existing sidebar destination while regrouping it. The number
@@ -31,7 +33,7 @@ assert.deepEqual(safeFavorites("support", ["/staff", "/users/private-id", "/over
 assert.deepEqual(safeFavorites("super_admin", { href: "/staff" }), []);
 assert.equal(activeNavigation("super_admin", "/staff/invitations/opaque-id")?.href, "/staff/invitations");
 assert.equal(activeNavigation("moderator", "/moderation/workforce"), undefined);
-assert.equal(activeNavigation("super_admin", "/users/opaque-id")?.label, "Users");
+assert.equal(activeNavigation("super_admin", "/users/opaque-id")?.label, "Members");
 assert.equal(searchNavigation("super_admin", "  ACCESS reviews ")[0]?.href, "/staff/access-reviews");
 assert.equal(searchNavigation("super_admin", "<script>" ).length, 0);
 assert.equal(hasModernShell("super_admin"), false);

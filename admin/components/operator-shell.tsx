@@ -7,9 +7,9 @@ import Topbar from "./topbar";
 import { BrandMark } from "./brand-mark";
 import { ShieldCheck, ChevronRight, Menu, X } from "./ui/icons";
 import { Star, Search, Rows3 } from "lucide-react";
-import { groupIcon } from "./navigation-icons";
+import { groupIcon, pageIcon } from "./navigation-icons";
 import dynamic from "next/dynamic";
-import { activeNavigation, navigationGroups, safeFavorites, visibleNavigation } from "@/lib/navigation";
+import { activeNavigation, isPinnedGroup, navigationGroups, safeFavorites, visibleNavigation } from "@/lib/navigation";
 import { containDialogTab } from "@/lib/dialog-focus";
 import { useStaffAttention } from "./staff-attention";
 import { attentionDestination } from "@/lib/inbox-model";
@@ -74,8 +74,8 @@ export default function OperatorShell({ role, pseudonym, env, badges, children }
       } />
       <div className="operator-context">
         <nav aria-label="Breadcrumb" className="operator-breadcrumb">
-          <BreadcrumbIcon group={active?.group} />
-          <span>{active?.group ?? "Workspace"}</span><span aria-hidden="true"><ChevronRight size={13} /></span>
+          {active && isPinnedGroup(active.group) ? <PageCrumbIcon href={active.href} /> : <BreadcrumbIcon group={active?.group} />}
+          {!isPinnedGroup(active?.group) && <><span>{active?.group ?? "Workspace"}</span><span aria-hidden="true"><ChevronRight size={13} /></span></>}
           {active && pathname !== active.href ? <><Link href={active.href} prefetch={false}>{active.label}</Link><span aria-hidden="true"><ChevronRight size={13} /></span><span aria-current="page">Details</span></> :
             <span aria-current="page">{active?.label ?? "Page"}</span>}
         </nav>
@@ -111,6 +111,11 @@ function BreadcrumbIcon({ group }: { group?: string }) {
   return <Icon size={14} aria-hidden="true" />;
 }
 
+function PageCrumbIcon({ href }: { href: string }) {
+  const Icon = pageIcon(href);
+  return <Icon size={14} aria-hidden="true" />;
+}
+
 function ShellNavigation({ role, pathname, favorites, badges, mobile, onNavigate }: {
   role: string; pathname: string; favorites: string[]; badges: Partial<Record<string, ReactNode>>;
   mobile: boolean; onNavigate: () => void;
@@ -119,13 +124,13 @@ function ShellNavigation({ role, pathname, favorites, badges, mobile, onNavigate
   const pages = visibleNavigation(role);
   const { data: attention, queuesAvailable } = useStaffAttention();
   const destination = (href: string) => attentionDestination(href, attention, queuesAvailable);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({ [active?.group ?? "Command Center"]: true });
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(active ? { [active.group]: true } : {});
   useEffect(() => {
     if (active) setExpanded(previous => ({ ...previous, [active.group]: true }));
   }, [pathname, active?.group]);
-  const item = (href: string, label: string, badge = true) => <Link key={href} href={badge ? destination(href) : href} prefetch={false}
+  const item = (href: string, label: string, badge = true, Icon?: ReturnType<typeof pageIcon>) => <Link key={href} href={badge ? destination(href) : href} prefetch={false}
     aria-current={active?.href === href ? "page" : undefined} onClick={onNavigate}
-    className="operator-page-link"><span>{label}</span>{badge && badges[href]}<Pending /></Link>;
+    className={`operator-page-link${Icon ? " is-primary" : ""}`}>{Icon && <Icon size={16} aria-hidden="true" />}<span>{label}</span>{badge && badges[href]}<Pending /></Link>;
   return <nav className="operator-navigation" aria-label={mobile ? "Mobile pages" : "Pages"}>
     {favorites.length > 0 && <section className="operator-favorites" aria-label="Favorites">
       <p className="operator-nav-label">Favorites · this session</p>
@@ -134,6 +139,10 @@ function ShellNavigation({ role, pathname, favorites, badges, mobile, onNavigate
     {navigationGroups.map((group, index) => {
       const visible = pages.filter(page => page.group === group.label);
       if (!visible.length) return null;
+      if ("pinned" in group) return <section key={group.label} className="operator-nav-primary" aria-label={group.label}>
+        {visible.map(page => item(page.href, page.label, true, pageIcon(page.href)))}
+        <p className="operator-nav-label">Sections</p>
+      </section>;
       const Icon = groupIcon(group.label);
       const id = `operator-${mobile ? "mobile" : "desktop"}-group-${index}`;
       return <section key={group.label} className="operator-nav-group">
