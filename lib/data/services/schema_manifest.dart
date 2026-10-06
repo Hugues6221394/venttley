@@ -165,4 +165,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261080090000': 'staff_can_reach_a_member',
   '20261081090000': 'a_taken_handle_says_so',
   '20261082090000': 'sixteen_and_promises_we_keep',
+  '20261083090000': 'case_assignees',
 };

@@ -138,17 +138,36 @@ class VentlyConfig {
     defaultValue: '',
   );
 
-  /// PostHog — product analytics + feature flags.
-  /// Project: Venttly (US Cloud, project id 480284).
-  /// Override the key with --dart-define=POSTHOG_KEY='' to silence
-  /// analytics in CI / mock runs.
+  /// PostHog — product analytics + feature flags. **EU cloud.**
+  ///
+  /// This used to default to the US cloud (project 480284) and nothing
+  /// overrode it, so every build shipped scrubbed analytics to the United
+  /// States while the database and error reporting both sat in Germany. One
+  /// extra country to justify to the Data Protection and Privacy Office, for
+  /// no benefit anyone could name.
+  ///
+  /// The key is deliberately empty. PostHog's US and EU clouds are separate
+  /// deployments: a US key does not authenticate against the EU host, so
+  /// carrying the old one over would have failed silently on every event. An
+  /// empty key makes AnalyticsService fall back to a no-op, which means no
+  /// analytics at all until the EU project exists — and, crucially, nothing
+  /// going to the US in the meantime.
+  ///
+  /// To switch analytics back on, create a project on PostHog EU and build
+  /// with:
+  ///   --dart-define=POSTHOG_KEY=phc_<the new EU project key>
+  ///
+  /// The old US project still holds historical events. Moving the destination
+  /// does not move or delete those; deleting them is a separate job, and the
+  /// Privacy Policy's processor table should keep naming the US until it is
+  /// done.
   static const String posthogKey = String.fromEnvironment(
     'POSTHOG_KEY',
-    defaultValue: 'phc_tDyuFaUpZvN2pp2xWssF5JvGtQUagY5FKhfJ2fEdSojZ',
+    defaultValue: '',
   );
   static const String posthogHost = String.fromEnvironment(
     'POSTHOG_HOST',
-    defaultValue: 'https://us.i.posthog.com',
+    defaultValue: 'https://eu.i.posthog.com',
   );
 
   /// Upstash Redis (REST). Used by CacheService for cross-process cache.

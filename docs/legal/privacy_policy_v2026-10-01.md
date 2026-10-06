@@ -109,20 +109,25 @@ you are not told about.
 
 | Processor | What it receives | Why | Where it processes |
 |---|---|---|---|
-| **Supabase** | Everything in section 4 | Our database, storage, authentication and server functions | **Germany** (eu-central-1, Frankfurt) — verified |
-| **Sentry** | Scrubbed error reports | Diagnosing crashes | **Germany** (de.sentry.io) — verified |
-| **PostHog** | Scrubbed usage events | Understanding how the app is used | **United States** (us.i.posthog.com) — verified |
-| **Resend** | Your email address and the message text | Sending an email you asked for | **United States** `[CONFIRM]` |
-| **Firebase Cloud Messaging (Google)** | A device token and generic notification text | Delivering push notifications | **United States / global** `[CONFIRM]` |
-| **Sightengine** | An uploaded image | Checking whether it is unsafe before it is shown | **France** `[CONFIRM]` |
-| **Upstash** | Request metadata used for rate limiting | Preventing abuse of the admin console | `[CONFIRM — region chosen at provisioning]` |
-| **Cloudflare** | Connection metadata for requests to the admin console | Protecting the console from attack | **Global edge network** `[CONFIRM]` |
+| **Supabase** | Everything in section 4 | Our database, storage, authentication and server functions | **Germany** (eu-central-1, Frankfurt) |
+| **Sentry** | Scrubbed error reports | Diagnosing crashes | **Germany** (de.sentry.io) |
+| **Resend** | Your email address and the message text | Sending an email you asked for | **United States.** Account data, logs, templates and metadata are held in the US; selecting an EU dispatch region changes delivery latency only, not where data is stored |
+| **Firebase Cloud Messaging (Google)** | A device token and generic notification text | Delivering push notifications | **United States and Google's global infrastructure.** Messaging has no single project-wide region |
+| **Sightengine** | An uploaded image | Checking whether it is unsafe before it is shown | **Global.** Media is processed at the nearest location; confining it to the EU requires an enterprise plan we do not hold |
+| **Cloudflare** | Connection metadata for requests to the admin console | Protecting the console from attack | **Global edge network.** Requests are handled at the nearest data centre; confining this to the EU requires Cloudflare's Data Localization Suite, which is not enabled |
+| **Upstash** | Request metadata used for rate limiting | Preventing abuse of the admin console | **`[CONFIRM — the Redis instance's region, chosen when it was created]`** |
 
-> `[CONFIRM]` marks a region taken from the provider's documented default and
-> not yet verified against CODAFRIQA's own account. **These must be confirmed
-> before this Policy is published.** The DPP Law requires us to identify the
-> countries personal data is transferred to; "transfers may occur" is not
-> sufficient, and neither is a plausible guess.
+**PostHog.** Venttly previously sent scrubbed usage events to PostHog's United
+States cloud. As of this version that is switched off, and the destination has
+been moved to PostHog's **European Union** cloud. Until the EU project is
+provisioned, **no usage analytics are collected or sent anywhere at all.**
+Events already sent to the US project before this change remain there until
+they are deleted.
+
+> `[CONFIRM]` marks a region not yet verified against CODAFRIQA's own account.
+> It must be confirmed before this Policy is published. The DPP Law requires us
+> to identify the countries personal data is transferred to; "transfers may
+> occur" is not sufficient, and neither is a plausible guess.
 
 **What none of them ever receives:** the text of your Vents, the contents of
 your messages, Whisper audio or transcripts, your recovery phrase, or a real
