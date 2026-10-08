@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createRateLimiter, ipFrom } from "@/lib/redis";
 import { originRejection, sameOrigin } from "@/lib/guard";
+import { maskEmail } from "@/lib/mask-email";
+import { staffResetDestination } from "@/lib/supabase/preauth";
 
 /**
  * Password reset for the console.
@@ -29,7 +31,9 @@ import { originRejection, sameOrigin } from "@/lib/guard";
  *
  * The response is deliberately identical whether or not an account exists. The
  * Edge Function is careful about this and it would be undone by a console that
- * said "no such user" on the way past.
+ * said "no such user" on the way past. The single, bounded exception — a
+ * masked inbox for a staff account that was really sent a code — is explained
+ * where it is returned.
  */
 
 // Tighter than the database's five-per-account-per-hour: that one stops an
@@ -122,11 +126,22 @@ export async function POST(req: NextRequest) {
   const data = (await upstream.json().catch(() => ({}))) as Record<string, unknown>;
 
   if (action === "request") {
-    // Always the same answer. Whether the account exists, whether it has a
-    // verified recovery address, whether it is rate limited upstream — none of
-    // that is disclosed, because this endpoint is reachable without a session
-    // and would otherwise report who has an account here.
-    return NextResponse.json({ ok: true });
+    // The same answer for every miss. Whether the account exists, whether it
+    // has a verified recovery address, whether it is rate limited upstream —
+    // none of that is disclosed, because this endpoint is reachable without a
+    // session and would otherwise report who has an account here.
+    //
+    // The one exception is a staff account that a code has demonstrably just
+    // been issued to: it gets the masked inbox, because "a code is on its way,
+    // maybe" sent the console's own operators to wait on mail that was never
+    // going to come. That tells a caller "this handle is staff and recovery
+    // works", at most five times per address per quarter hour and five per
+    // account per hour, and each time puts a code in the real owner's inbox.
+    // Member accounts are never looked up, so the console cannot be used to
+    // probe them.
+    if (!upstream.ok) return NextResponse.json({ ok: true });
+    const sentTo = maskEmail(await staffResetDestination(identifier));
+    return NextResponse.json(sentTo ? { ok: true, sentTo } : { ok: true });
   }
 
   if (!upstream.ok) {

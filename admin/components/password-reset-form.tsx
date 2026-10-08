@@ -11,8 +11,12 @@ import { useRouter } from "next/navigation";
  * whether or not the account exists, whether or not it has a verified recovery
  * address. This page is reachable without a session, so anything else would
  * turn it into a way to ask "does this person have an admin account here".
- * That is why the copy says "if that account has a verified recovery email"
- * rather than "sent": the second is a claim we have decided not to make.
+ * That is why the default copy says "if that account has a verified recovery
+ * email" rather than "sent".
+ *
+ * The exception is a staff account the server has confirmed a code went to:
+ * it names the inbox, masked, so the operator knows where to look. The
+ * trade-off is argued in app/api/auth/password-reset/route.ts.
  */
 export default function PasswordResetForm() {
   const router = useRouter();
@@ -24,6 +28,7 @@ export default function PasswordResetForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
 
   async function post(body: Record<string, unknown>) {
     const res = await fetch("/api/auth/password-reset", {
@@ -31,7 +36,10 @@ export default function PasswordResetForm() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    return { ok: res.ok, body: (await res.json()) as { ok?: boolean; error?: string } };
+    return {
+      ok: res.ok,
+      body: (await res.json()) as { ok?: boolean; error?: string; sentTo?: string },
+    };
   }
 
   async function onRequest(e: React.FormEvent) {
@@ -41,10 +49,16 @@ export default function PasswordResetForm() {
     try {
       const { body } = await post({ action: "request", identifier: username.trim() });
       if (body.error) throw new Error(body.error);
-      setNotice(
-        "If that account has a verified recovery email, a code is on its way. " +
-          "It expires in 15 minutes.",
-      );
+      if (typeof body.sentTo === "string" && body.sentTo.length > 0) {
+        setSentTo(body.sentTo);
+        setNotice(null);
+      } else {
+        setSentTo(null);
+        setNotice(
+          "If that account has a verified recovery email, a code is on its way. " +
+            "It expires in 15 minutes.",
+        );
+      }
       setStep("confirm");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start the reset.");
@@ -140,6 +154,13 @@ export default function PasswordResetForm() {
         </>
       )}
 
+      {sentTo && (
+        <p className="text-xs text-burgundy/70">
+          We sent a code to{" "}
+          <span className="font-semibold text-burgundy">{sentTo}</span>. It expires in
+          15 minutes — check spam if it is not in the inbox.
+        </p>
+      )}
       {notice && <p className="text-xs text-burgundy/70">{notice}</p>}
       {error && <p className="text-xs font-semibold text-danger">{error}</p>}
 

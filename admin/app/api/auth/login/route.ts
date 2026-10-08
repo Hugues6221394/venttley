@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createSsrClient } from "@/lib/supabase/server";
 import { syntheticEmail } from "@/lib/supabase/client";
+import { staffLoginEmail } from "@/lib/supabase/preauth";
 import { createRateLimiter, ipFrom } from "@/lib/redis";
 import { originRejection, sameOrigin } from "@/lib/guard";
 
@@ -78,9 +79,14 @@ export async function POST(req: Request) {
     );
   }
 
+  // A staff handle resolves to the mailbox that account actually signs in
+  // with; anything else keeps the synthetic address. The resolved address is
+  // used here and never echoed, and a miss fails exactly like a wrong password.
+  const email = (await staffLoginEmail(username)) ?? syntheticEmail(username);
+
   const supabase = await createSsrClient();
   const { data, error } = await supabase.auth.signInWithPassword({
-    email: syntheticEmail(username),
+    email,
     password,
   });
   if (error || !data.user) {
