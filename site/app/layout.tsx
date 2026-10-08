@@ -35,6 +35,7 @@ export default function RootLayout({
             </div>
             <strong>Venttly</strong>
             <nav>
+              <Link href="/waitlist">Waitlist</Link>
               <Link href="/privacy">Privacy</Link>
               <Link href="/terms">Terms</Link>
             </nav>

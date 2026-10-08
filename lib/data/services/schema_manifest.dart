@@ -159,4 +159,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261074090000': 'an_avatar_you_made',
   '20261075090000': 'the_ledger_catches_up',
   '20261081090000': 'a_taken_handle_says_so',
+  '20261082090000': 'a_waitlist_worth_joining',
 };

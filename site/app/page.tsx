@@ -23,6 +23,16 @@ export default function Home() {
           listen, you find people who understand — under a handle, not a name.
         </p>
 
+        {/* The app is not out yet, so the one thing a visitor can actually do
+            is ask to be told when it is. It sits above the explanation rather
+            than under it: somebody who already knows what Venttly is should
+            not have to read three cards to find the only button. */}
+        <p>
+          <Link className="cta" href="/waitlist">
+            Join the waitlist
+          </Link>
+        </p>
+
         <div className="cards">
           <div className="card">
             <h2>Pseudonymous by default</h2>
