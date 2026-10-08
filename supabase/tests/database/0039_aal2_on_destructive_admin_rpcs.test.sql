@@ -159,11 +159,11 @@ RESET role;
 SELECT is(
   (SELECT count(*)::int FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.prosrc ~ 'require_aal2'),
-  51,
-  'fifty-one admin functions require a step-up: the original destructive set, '
+  53,
+  'fifty-three admin functions require a step-up: the original destructive set, '
   'impact reporting, operational governance, staff inbox rollout/recovery/operations, checked workflows, scoped support bindings, '
   'media review, access reviews, the staff invitation ledger, staff outreach '
-  '(admin_message_member, admin_warn_member, admin_email_member) and support replies (admin_reply_support)'
+  '(admin_message_member, admin_warn_member, admin_email_member) and support replies (admin_reply_support) and broadcasts (admin_publish_broadcast, admin_withdraw_broadcast)'
 );
 
 SELECT * FROM finish();
