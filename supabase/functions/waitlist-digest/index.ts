@@ -156,17 +156,42 @@ Deno.serve(async (req) => {
   });
 
   if (!res.ok) {
-    // The rows are already stamped, so this is the one failure that costs
-    // something. Logged with the addresses so the day is recoverable from the
-    // function log without a database query.
+    // The rows were stamped before this call, so leaving them stamped would
+    // mark these addresses delivered and drop them from every future digest --
+    // a signup lost to somebody else's outage. Hand them back instead, so
+    // tomorrow's run reports them. Reporting an address twice costs the team
+    // three seconds; losing one costs a person who asked to be told.
     const detail = await res.text();
+    const { data: released, error: releaseError } = await db.rpc(
+      "release_waitlist_digest",
+      { p_emails: signups.map((s) => s.email) },
+    );
+    if (releaseError) {
+      // Both halves failed, so the log really is the only copy now. Say that
+      // plainly rather than leaving "send_failed" to imply it is recoverable.
+      console.error(
+        "waitlist.release_failed",
+        releaseError.message,
+        signups.map((s) => s.email).join(","),
+      );
+    }
     console.error(
       "waitlist.send_failed",
       res.status,
       detail,
+      `released=${releaseError ? "no" : String(released ?? 0)}`,
       signups.map((s) => s.email).join(","),
     );
-    return json({ error: "send_failed", status: res.status }, 502);
+    return json(
+      {
+        error: "send_failed",
+        status: res.status,
+        // Explicit, because "did these people stay on the list?" is the only
+        // question worth asking about a failed digest.
+        released: releaseError ? false : Number(released ?? 0),
+      },
+      502,
+    );
   }
 
   return json({ ok: true, sent: signups.length, total });
