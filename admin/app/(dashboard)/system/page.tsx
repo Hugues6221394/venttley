@@ -1,5 +1,6 @@
 import { createAdminClient, createSsrClient, getRenderStaff } from "@/lib/supabase/server";
 import { StaffInboxRollout } from "@/components/staff-inbox-rollout";
+import { ControlSwitches } from "@/components/control-switches";
 import { loadInboxRollout } from "@/lib/staff-inbox-health";
 import { redis, isRedisConfigured, rateLimitingStatus } from "@/lib/redis";
 import { PageHeader, SectionHeader } from "@/components/ui/page-header";
@@ -70,6 +71,7 @@ export default async function SystemHealthPage() {
       />
 
       {inboxHealth !== undefined && <StaffInboxRollout health={inboxHealth} />}
+      {staff?.role === "super_admin" && <ControlSwitches invitationKeyConfigured={Boolean(process.env.ADMIN_INVITATION_HMAC_KEY)} />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {probes.map((p) => (
