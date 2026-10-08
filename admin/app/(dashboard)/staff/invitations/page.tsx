@@ -13,6 +13,8 @@ import { CapabilityNotice, DataWarning } from "@/components/ui/operations";
 import { KeyRound } from "@/components/ui/icons";
 import { invitationCursor } from "@/lib/staff-invitation-model";
 import { StaffInvitationRegister } from "@/components/workflows/staff-invitation-register";
+import { WorkflowForm } from "@/components/workflows/workflow-form";
+import { resendStaffInvite, revokeStaffInvite } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -140,18 +142,35 @@ export default async function StaffInvitationsPage({ searchParams }: { searchPar
                 </div>
                 <p className="mt-1 text-xs text-ink-muted">{maskEmail(row.email)} · invited Auth account created {new Date(row.authCreatedAt).toLocaleString()}</p>
                 <p className="mt-1 text-[11px] text-ink-muted">{row.lastSignIn ? `Last sign-in ${new Date(row.lastSignIn).toLocaleString()}` : "No completed sign-in"} · account {row.account_status}</p>
+                {row.pendingFlag && <div className="mt-3 grid gap-4 md:grid-cols-2">
+                  {!row.emailConfirmed && <WorkflowForm action={resendStaffInvite} blockUncertainRetry
+                    disabled={process.env.ADMIN_STAFF_INVITES_DISABLED === "true"}
+                    label="Resend invitation"
+                    confirmation="Send the invitation email to this address again. Audited; no access changes.">
+                    <input type="hidden" name="user_id" value={row.user_id} />
+                    <label className="contact-field"><span>Reason</span>
+                      <input name="reason" className="input" required minLength={3} maxLength={500} placeholder="e.g. first email went to spam" />
+                    </label>
+                  </WorkflowForm>}
+                  <WorkflowForm action={revokeStaffInvite} blockUncertainRetry
+                    label="Revoke invitation"
+                    confirmation="Remove staff access and delete this unused account, so the link stops working. The audit history stays. You can invite the address again afterwards.">
+                    <input type="hidden" name="user_id" value={row.user_id} />
+                    <label className="contact-field"><span>Reason</span>
+                      <input name="reason" className="input" required minLength={3} maxLength={500} placeholder="e.g. sent to the wrong address" />
+                    </label>
+                  </WorkflowForm>
+                </div>}
               </li>
             ))}
           </ul>
         )}
       </Card>
       <StaffDirectoryPages filters={filters} nextId={nextId} path="/staff/invitations" />
-      <CapabilityNotice title="Resend, revoke, and reconcile controls remain unavailable">
-        The backend phase must add an idempotency key, hashed invitation address,
-        requested role, inviter, expiry, state transitions, cancellation,
-        delivery attempts, Auth user ID, and transactional consume/reconcile
-        operations. Blindly sending another Auth invitation can create ambiguous
-        state and should not be a UI-only retry.
+      <CapabilityNotice title="Resend and revoke apply to unfinished invitations only">
+        Resend works until the person opens the email. Once opened but not
+        finished, revoke it and invite the address again. Anyone who has set a
+        password is managed from the staff directory.
       </CapabilityNotice>
     </div>
   );

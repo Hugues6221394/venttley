@@ -13,8 +13,8 @@ async function load(path,dependencies={}) {
 const validate=await load('../lib/validate.ts');
 const result=await load('../lib/staff-action-result.ts',{'./validate':validate});
 const actor='00000000-0000-4000-8000-000000000001',target='00000000-0000-4000-8000-000000000002';
-let role,session,aal,limited,stage,targetRole,superCount,lookupError,handleTaken,calls,invalidated,ledger=false;
-function reset() {role='super_admin';session=true;aal='aal2';limited=false;stage='';targetRole='moderator';superCount=2;lookupError=false;handleTaken=false;calls=[];invalidated=[];ledger=false;}
+let role,session,aal,limited,stage,targetRole,superCount,lookupError,handleTaken,calls,invalidated,ledger=false,invitePending,inviteOpened;
+function reset() {role='super_admin';session=true;aal='aal2';limited=false;stage='';targetRole='moderator';superCount=2;lookupError=false;handleTaken=false;calls=[];invalidated=[];ledger=false;invitePending=true;inviteOpened=false;}
 const actions=await load('../app/(dashboard)/staff/actions.ts',{
  'next/cache':{revalidatePath:path=>invalidated.push(path)},
  '@/lib/staff-action-result':result,
@@ -40,6 +40,8 @@ const actions=await load('../app/(dashboard)/staff/actions.ts',{
   createRequiredAuthAdminClient:()=>({auth:{admin:{
    inviteUserByEmail:async()=>{calls.push({name:'invite'});return stage==='invite'?{data:{user:null},error:Error('email private detail')}:{data:{user:{id:target,app_metadata:{}}},error:null};},
    updateUserById:async()=>{calls.push({name:'metadata'});return {error:stage==='metadata'?Error('private metadata failure'):null};},
+   getUserById:async id=>({data:{user:{id,email:'synthetic@example.invalid',email_confirmed_at:inviteOpened?'2026-10-01T00:00:00Z':null,app_metadata:{staff_invite_pending:invitePending}}},error:null}),
+   deleteUser:async()=>{calls.push({name:'delete'});return {error:stage==='delete'?Error('private delete failure'):null};},
   }}}),
  },
 });
@@ -81,6 +83,22 @@ for(const failure of ['invite','metadata']) {
  assert.equal(calls.filter(call=>call.name==='invite').length,1);assert.equal(invalidated.length,0);
 }
 assert(!result.staffSuccess('invited').message.includes('Invitation sent'));
+// Resend and revoke: same gates, unfinished invitations only, record before acting.
+for(const name of ['resendStaffInvite','revokeStaffInvite']) {
+ for(const rejected of ['admin','moderator','support','analyst','read_only_auditor',null]) {reset();role=rejected;assert.equal((await actions[name](data())).status,'error');assert.equal(calls.length,0);}
+ reset();aal='aal1';assert((await actions[name](data())).message.includes('MFA'));assert.equal(calls.length,0);
+ reset();limited=true;assert.equal((await actions[name](data())).status,'error');assert.equal(calls.length,0);
+ reset();assert.equal((await actions[name](data({reason:''}))).field,'reason');assert.equal(calls.length,0);
+ reset();invitePending=false;const finished=await actions[name](data());assert.equal(finished.status,'error');assert(finished.message.includes('staff directory'));assert.equal(calls.length,0);
+}
+reset();assert.equal((await actions.resendStaffInvite(data())).status,'success');
+assert.deepEqual(calls.map(call=>call.name),['admin_note_staff_invitation','invite']);
+reset();inviteOpened=true;const opened=await actions.resendStaffInvite(data());assert(opened.message.includes('Revoke it'));assert.equal(calls.length,0);
+reset();invitesPaused=true;assert.equal((await actions.resendStaffInvite(data())).status,'error');assert.equal(calls.length,0);invitesPaused=false;
+reset();assert.equal((await actions.revokeStaffInvite(data())).status,'success');
+assert.deepEqual(calls.map(call=>call.name),['admin_set_user_role','admin_note_staff_invitation','delete']);
+reset();assert(( await actions.revokeStaffInvite(data({user_id:actor}))).message.includes('Self-changes'));assert.equal(calls.length,0);
+reset();stage='delete';const partial=await actions.revokeStaffInvite(data());assert.equal(partial.status,'unknown');assert(!JSON.stringify(partial).includes('private'));
 // Prepared enabled-ledger branches: no provider call without a confirmed first
 // reservation; any later failure retains the attempt and suppresses auto-retry.
 reset();ledger=true;assert.equal((await actions.inviteStaff(data())).status,'success');
@@ -106,4 +124,4 @@ assert(source.includes('method="post"'),'never allow pre-hydration default GET s
 assert(!source.includes('localStorage')||source.includes('not localStorage'));
 const actionSource=await readFile(new URL('../app/(dashboard)/staff/actions.ts',import.meta.url),'utf8');
 assert(!actionSource.includes('redirect('),'action failures must return in place, not discard inputs via redirect');
-console.log('PASS staff actions: five runtime authorization/MFA/rate gates, validation, self/last-admin guards, success, partial invitation and ambiguous-write handling with synthetic adapters');
+console.log('PASS staff actions: seven runtime authorization/MFA/rate gates, validation, self/last-admin guards, success, partial invitation and ambiguous-write handling with synthetic adapters');

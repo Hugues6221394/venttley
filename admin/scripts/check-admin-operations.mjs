@@ -30,8 +30,8 @@ const accessReviews = read("app/(dashboard)/staff/access-reviews/page.tsx");
 const releaseReadiness = read("app/(dashboard)/releases/page.tsx");
 
 expect(
-  (staffActions.match(/await requireSuperAdminAal2\(\)/g) ?? []).length === 5,
-  "every one of the five exported staff mutations must re-check super-admin AAL2",
+  (staffActions.match(/await requireSuperAdminAal2\(\)/g) ?? []).length === 7,
+  "every one of the seven exported staff mutations must re-check super-admin AAL2",
 );
 expect(
   staffActions.includes("auth.admin.inviteUserByEmail") &&

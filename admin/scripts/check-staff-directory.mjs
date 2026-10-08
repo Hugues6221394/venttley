@@ -111,6 +111,7 @@ const adapters={
  '@/components/ui/operations':{CapabilityNotice:box,DataWarning:box},
  '@/components/ui/icons':{KeyRound:()=>null,UserRoundCog:()=>null,ClipboardCheck:()=>null},
  './actions':{changeStaffRole:action,grantExistingStaff:action,inviteStaff:action,removeStaffAccess:action,setStaffStatus:action},
+ '../actions':{resendStaffInvite:action,revokeStaffInvite:action},
 };
 const page=await load('../app/(dashboard)/staff/page.tsx',adapters);
 const render=async(params={})=>renderToStaticMarkup(await page.default({searchParams:Promise.resolve(params)}));

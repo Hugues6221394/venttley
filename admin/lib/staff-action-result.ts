@@ -7,6 +7,8 @@ const messages = {
   role_changed: "Staff role changed and existing sessions revoked.",
   status_changed: "Staff account status changed and existing sessions revoked.",
   access_removed: "Staff access removed. The member account and audit history were preserved.",
+  invite_resent: "Invitation sent again. The earlier link may stop working; this does not confirm delivery.",
+  invite_revoked: "Invitation revoked. Staff access was removed and the unused account deleted, so its link no longer works. You can invite this address again.",
 } as const;
 export type StaffSuccess = keyof typeof messages;
 export function staffSuccess(code: StaffSuccess): WorkflowResult {
@@ -25,7 +27,8 @@ export function staffFailure(error: unknown, mutationStarted: boolean): Workflow
     return { status: "error", message: "Check the indicated field. No staff mutation was started.",
       ...(["email", "pseudonym", "user_id", "role", "status", "reason", "confirm"].includes(field) ? {field} : {}) };
   }
-  const code = error instanceof Error ? error.message : "";
+  // rpc() reports database refusals as "<function>: <code>".
+  const code = error instanceof Error ? error.message.replace(/^[a-z_]+: /, "") : "";
   const known: Record<string, {message:string; field?:string}> = {
     mfa_required: {message:"Complete MFA in a separate tab, then retry. Your inputs are retained."},
     not_authenticated: {message:"Your session is unavailable. Sign in again before changing access."},
@@ -39,6 +42,9 @@ export function staffFailure(error: unknown, mutationStarted: boolean): Workflow
     invite_redirect_invalid: {message:"The invitation redirect configuration is invalid. No invitation was requested."},
     invitation_key_unavailable: {message:"Invitation tracking is not configured correctly. Ask the deployment owner to check its dedicated key. No invitation was requested."},
     invitations_paused: {message:"New staff invitations are paused. No invitation was requested."},
+    rate_limited: {message:"Too many invitation changes this hour. Wait, then try again."},
+    invitation_not_pending: {message:"This person already finished setting up. Change their access from the staff directory instead."},
+    invitation_already_opened: {message:"This invitation was already opened, so it cannot be sent again. Revoke it, then invite the address again."},
   };
   if (Object.hasOwn(known,code)) return {status:"error",...known[code]};
   return {status:"error",message:"The preflight checks could not be completed. No staff mutation was started. Try again after checking service availability."};

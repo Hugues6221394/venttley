@@ -175,6 +175,70 @@ export async function inviteStaff(formData: FormData) {
   return finish("invited");
 }
 
+function inviteRedirect(): string {
+  const redirectTo = process.env.ADMIN_INVITE_REDIRECT_URL?.trim();
+  if (!redirectTo) throw new Error("invite_redirect_required");
+  const parsed = new URL(redirectTo);
+  if (parsed.protocol !== "https:" && parsed.hostname !== "localhost") throw new Error("invite_redirect_invalid");
+  if (parsed.pathname !== "/" || parsed.search || parsed.hash) throw new Error("invite_redirect_invalid");
+  return redirectTo;
+}
+
+/** An account still waiting for its invitation to be finished, or why not. */
+async function pendingInvite(targetId: string) {
+  const authAdmin = createRequiredAuthAdminClient();
+  const { data, error } = await authAdmin.auth.admin.getUserById(targetId);
+  if (error || !data.user) throw new Error("invalid_target");
+  if (data.user.app_metadata?.staff_invite_pending !== true) throw new Error("invitation_not_pending");
+  return { authAdmin, user: data.user };
+}
+
+export async function resendStaffInvite(formData: FormData) {
+  let mutationStarted = false;
+  try {
+    await limitAction("destructive");
+    await requireSuperAdminAal2();
+    if (process.env.ADMIN_STAFF_INVITES_DISABLED === "true") throw new Error("invitations_paused");
+    const targetId = uuid(formData, "user_id");
+    const reason = reqStr(formData, "reason", 500);
+    const redirectTo = inviteRedirect();
+    const { authAdmin, user } = await pendingInvite(targetId);
+    // Auth only re-sends to an address that has not opened its invitation.
+    if (user.email_confirmed_at || !user.email) throw new Error("invitation_already_opened");
+    await rpc("admin_note_staff_invitation", { p_target: targetId, p_action: "resent", p_reason: reason });
+    mutationStarted = true;
+    const { error } = await authAdmin.auth.admin.inviteUserByEmail(user.email, { redirectTo });
+    if (error) throw new Error(error.message);
+  } catch (error) {
+    return staffFailure(error, mutationStarted);
+  }
+  return finish("invite_resent");
+}
+
+export async function revokeStaffInvite(formData: FormData) {
+  let mutationStarted = false;
+  try {
+    await limitAction("destructive");
+    const { actorId } = await requireSuperAdminAal2();
+    const targetId = uuid(formData, "user_id");
+    if (targetId === actorId) throw new Error("self_change");
+    const reason = reqStr(formData, "reason", 500);
+    const { authAdmin } = await pendingInvite(targetId);
+    await protectLastSuperAdmin(targetId, "normal");
+    mutationStarted = true;
+    // Access first, through the audited path that also revokes sessions; then
+    // the record; then the account. If deletion fails, what is left is a
+    // member account with no staff access and no usable password.
+    await rpc("admin_set_user_role", { p_target: targetId, p_role: "normal", p_reason: `Invitation revoked: ${reason}` });
+    await rpc("admin_note_staff_invitation", { p_target: targetId, p_action: "revoked", p_reason: reason });
+    const { error } = await authAdmin.auth.admin.deleteUser(targetId);
+    if (error) throw new Error("invite_delete_failed");
+  } catch (error) {
+    return staffFailure(error, mutationStarted);
+  }
+  return finish("invite_revoked");
+}
+
 export async function grantExistingStaff(formData: FormData) {
   let mutationStarted = false;
   try {
