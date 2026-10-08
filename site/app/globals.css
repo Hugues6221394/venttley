@@ -165,6 +165,87 @@ li { margin: 0.35rem 0; }
 .card h2 { margin: 0 0 0.4rem; font-size: 1rem; }
 .card p { margin: 0; color: var(--muted); font-size: 0.92rem; }
 
+/* ---- waitlist ---- */
+
+.join { margin: 0 0 2.5rem; }
+
+.join-row {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.join-row input {
+  flex: 1 1 16rem;
+  min-width: 0;
+  font: inherit;
+  color: var(--ink);
+  background: var(--page);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.join-row input:focus-visible {
+  outline: 2px solid var(--berry);
+  outline-offset: 1px;
+  border-color: var(--berry);
+}
+
+.join-row button {
+  font: inherit;
+  font-weight: 700;
+  color: #fff;
+  background: var(--berry);
+  border: 0;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.4rem;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.join-row button:hover { filter: brightness(1.07); }
+.join-row button:disabled { opacity: 0.6; cursor: default; }
+
+.join-error {
+  color: var(--berry);
+  font-size: 0.9rem;
+  margin: 0.6rem 0 0;
+}
+
+/* The honeypot. Off-screen rather than display:none, which some bots skip. */
+.trap {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The landing page's one call to action. */
+.cta {
+  display: inline-block;
+  font-weight: 700;
+  color: #fff;
+  background: var(--berry);
+  border-radius: 0.75rem;
+  padding: 0.8rem 1.5rem;
+  text-decoration: none;
+}
+
+.cta:hover { filter: brightness(1.07); text-decoration: none; }
+
 /* ---- footer ---- */
 
 footer {
