@@ -23,7 +23,9 @@ const adapters={
   '@/components/workflows/promotion-register':{PromotionRegister:()=>{throw Error('disabled pilot');}},
   'react/jsx-runtime':jsx,'node:crypto':{randomUUID:()=>id},
   'next/link':{__esModule:true,default:({children,href})=>h('a',{href},children)},'next/navigation':{notFound:()=>{throw Error('NOT_FOUND');}},
-  '@/lib/supabase/server':{createAdminClient:async()=>{privilegedClients++;return {from:query};}},
+  '@/lib/supabase/server':{createAdminClient:async()=>{privilegedClients++;return {from:query};},
+    createSsrClient:async()=>({rpc:async(fn)=>failed?{data:null,error:{message:'PRIVATE-SENTINEL'}}:{data:fn==='admin_privacy_member_requests'?{email_available:true,requests:[]}:[],error:null}})},
+  '@/lib/privacy-actions':{openPrivacyRequest:action,privacyCommand:action,sendPrivacyExport:action,clearPrivacyExport:action},
   '@/lib/governance':{
     getOperationalRole:async()=>role,getLegalRequests:async()=>({data:[],error:failed?'PRIVATE-SENTINEL':null}),
     getRecoveryDrills:async()=>({data:[],error:failed?'PRIVATE-SENTINEL':null}),
@@ -56,7 +58,7 @@ for(const route of ['privacy','privacy/requests/[userId]','approvals','recovery-
     accountFailed=true;html=await render();assert(html.includes('Privacy request unavailable'));assert(!html.includes('PRIVATE-SENTINEL'));accountFailed=false;
   }
 }
-assert.equal(forms,4,'registration forms reused in both failure and healthy states');
+assert.equal(forms,5,'registration forms reused in both failure and healthy states, plus opening a privacy request once its source loads');
 for(const route of ['privacy','privacy/requests/[userId]']) {
   const render=await page(route);
   for(const candidate of ['super_admin','admin','moderator','support','analyst','read_only_auditor',null]) {
