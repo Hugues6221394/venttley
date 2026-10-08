@@ -62,6 +62,10 @@ exactly as before.
 | `ADMIN_INBOX_UI`, `ADMIN_ATTENTION_UI` | `true` (owner-approved 5 Oct); producers stay off until a super admin enables them on `/system` → Staff notifications (MFA, audited) |
 | Every other `ADMIN_*_UI` flag | `false` |
 
+Vercel only accepts production deploys whose commit author email is linked to the owner's
+account. Author console commits with the GitHub no-reply address (set as the repo-local
+`user.email`), not the machine default `hugues@MacBook-Pro.local`.
+
 ## 4. Smoke test after deploy (owner + engineering)
 
 Signed in as a super admin with MFA:
