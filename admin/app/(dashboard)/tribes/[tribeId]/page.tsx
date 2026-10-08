@@ -1,99 +1,21 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import {
   createAdminClient,
   createSsrClient,
 } from "@/lib/supabase/server";
 import { POST_AUTHOR_EMBED, withAuthorPseudonym } from "@/lib/admin-posts";
-import { rpc } from "@/lib/audit";
+import { WorkflowForm } from "@/components/workflows/workflow-form";
+import { setTribeActive, setTribeFeatured, setTribeKeeper, addTribeMember, removeTribeMember, restoreTribe } from "@/lib/content-actions";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, Row as KV } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
 import {
-  Ban,
-  CheckCircle2,
   ChevronLeft,
-  RefreshCw,
   Sparkles,
-  Trash2,
-  Users2,
 } from "@/components/ui/icons";
 
 export const dynamic = "force-dynamic";
-
-async function toggleFeatured(formData: FormData) {
-  "use server";
-  const id = String(formData.get("tribe_id") ?? "");
-  const featured = String(formData.get("featured") ?? "") === "true";
-  await rpc("admin_set_tribe_featured", {
-    p_tribe: id,
-    p_featured: featured,
-    p_reason: null,
-  });
-  revalidatePath(`/tribes/${id}`);
-}
-
-async function setActive(formData: FormData) {
-  "use server";
-  const id = String(formData.get("tribe_id") ?? "");
-  const active = String(formData.get("active") ?? "") === "true";
-  await rpc("admin_set_tribe_active", {
-    p_tribe: id,
-    p_active: active,
-    p_reason: null,
-  });
-  revalidatePath(`/tribes/${id}`);
-}
-
-async function setKeeper(formData: FormData) {
-  "use server";
-  const id = String(formData.get("tribe_id") ?? "");
-  const keeper = String(formData.get("new_keeper") ?? "").trim();
-  const reason = String(formData.get("reason") ?? "");
-  await rpc("admin_set_tribe_keeper", {
-    p_tribe: id,
-    p_new_keeper: keeper,
-    p_reason: reason || null,
-  });
-  revalidatePath(`/tribes/${id}`);
-}
-
-async function addMember(formData: FormData) {
-  "use server";
-  const id = String(formData.get("tribe_id") ?? "");
-  const uid = String(formData.get("user_id") ?? "").trim();
-  await rpc("admin_add_tribe_member", {
-    p_tribe: id,
-    p_user: uid,
-    p_reason: null,
-  });
-  revalidatePath(`/tribes/${id}`);
-}
-
-async function removeMember(formData: FormData) {
-  "use server";
-  const id = String(formData.get("tribe_id") ?? "");
-  const uid = String(formData.get("user_id") ?? "");
-  await rpc("admin_remove_tribe_member", {
-    p_tribe: id,
-    p_user: uid,
-    p_reason: null,
-  });
-  revalidatePath(`/tribes/${id}`);
-}
-
-async function restoreTribe(formData: FormData) {
-  "use server";
-  const id = String(formData.get("tribe_id") ?? "");
-  const reason = String(formData.get("reason") ?? "").trim();
-  await rpc("admin_restore_tribe", {
-    p_tribe_id: id,
-    p_reason: reason || "Restored from the Super Admin console",
-  });
-  revalidatePath(`/tribes/${id}`);
-  revalidatePath("/tribes");
-}
 
 export default async function TribeDetailPage({
   params,
@@ -113,7 +35,7 @@ export default async function TribeDetailPage({
         .eq("user_id", actor.id)
         .maybeSingle()
     : { data: null };
-  const canRestore =
+  const canManage =
     actorProfile?.user_role === "super_admin" ||
     actorProfile?.user_role === "admin";
 
@@ -229,59 +151,6 @@ export default async function TribeDetailPage({
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <form action={setActive}>
-              <input type="hidden" name="tribe_id" value={tribeId} />
-              <input
-                type="hidden"
-                name="active"
-                value={tribe.is_active ? "false" : "true"}
-              />
-              <button
-                type="submit"
-                className={
-                  tribe.is_active
-                    ? "btn-secondary is-destructive"
-                    : "btn-secondary is-positive"
-                }
-              >
-                {tribe.is_active ? <Ban size={14} /> : <CheckCircle2 size={14} />}
-                {tribe.is_active ? "Deactivate" : "Activate"}
-              </button>
-            </form>
-            <form action={toggleFeatured}>
-              <input type="hidden" name="tribe_id" value={tribeId} />
-              <input
-                type="hidden"
-                name="featured"
-                value={tribe.is_featured ? "false" : "true"}
-              />
-              <button type="submit" className="btn-secondary">
-                <Sparkles size={14} />
-                {tribe.is_featured ? "Unfeature" : "Feature"}
-              </button>
-            </form>
-            {canRestore &&
-              tribe.lifecycle_status === "pending_deletion" &&
-              tribe.deletion_purge_at &&
-              new Date(tribe.deletion_purge_at).getTime() > Date.now() && (
-                <form action={restoreTribe}>
-                  <input type="hidden" name="tribe_id" value={tribeId} />
-                  <input
-                    type="hidden"
-                    name="reason"
-                    value="Recovered during the 30-day deletion window"
-                  />
-                  <button
-                    type="submit"
-                    className="btn-secondary is-positive"
-                  >
-                    <RefreshCw size={14} />
-                    Restore tribe
-                  </button>
-                </form>
-              )}
-          </div>
         </div>
       </div>
 
@@ -321,6 +190,25 @@ export default async function TribeDetailPage({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="flex flex-col gap-6">
+          {canManage && <Card title="Tribe actions" hint="Each needs a reason and is audited" padded>
+            <div className="flex flex-col gap-4">
+              <WorkflowForm action={setTribeActive} blockUncertainRetry label={tribe.is_active ? "Deactivate tribe" : "Reactivate tribe"}
+                confirmation={tribe.is_active ? "Hides the tribe and stops all posting in it. Members keep their membership and nothing is deleted." : "Makes the tribe visible again and lets members post."}>
+                <input type="hidden" name="tribe_id" value={tribeId} /><input type="hidden" name="active" value={tribe.is_active ? "false" : "true"} />
+                <label className="contact-field"><span>Reason</span><input name="reason" className="input" required minLength={3} maxLength={500} /></label>
+              </WorkflowForm>
+              <WorkflowForm action={setTribeFeatured} blockUncertainRetry label={tribe.is_featured ? "Stop featuring" : "Feature tribe"}
+                confirmation={tribe.is_featured ? "Removes the tribe from the featured list." : "Shows the tribe in the featured list for every member."}>
+                <input type="hidden" name="tribe_id" value={tribeId} /><input type="hidden" name="featured" value={tribe.is_featured ? "false" : "true"} />
+                <label className="contact-field"><span>Reason</span><input name="reason" className="input" required minLength={3} maxLength={500} /></label>
+              </WorkflowForm>
+              {tribe.lifecycle_status === "pending_deletion" && tribe.deletion_purge_at && new Date(tribe.deletion_purge_at).getTime() > Date.now() &&
+                <WorkflowForm action={restoreTribe} blockUncertainRetry label="Restore tribe" confirmation="Cancels the deletion and brings back the tribe with its members and posts.">
+                  <input type="hidden" name="tribe_id" value={tribeId} />
+                  <label className="contact-field"><span>Reason</span><input name="reason" className="input" required minLength={3} maxLength={500} defaultValue="Recovered during the 30-day deletion window" /></label>
+                </WorkflowForm>}
+            </div>
+          </Card>}
           <Card title="Keeper" padded>
             {tribe.keeper_id && keeper ? (
               <div className="flex items-center gap-3">
@@ -345,28 +233,13 @@ export default async function TribeDetailPage({
             ) : (
               <p className="text-sm text-ink-muted italic">No keeper assigned.</p>
             )}
-            <form action={setKeeper} className="flex flex-col gap-2 mt-4 pt-4 border-t border-line">
-              <label className="h-eyebrow">Change keeper (new keeper user ID)</label>
-              <input
-                type="text"
-                name="new_keeper"
-                placeholder="user_id of new keeper"
-                className="input font-mono text-xs"
-                required
-              />
-              <input type="hidden" name="tribe_id" value={tribeId} />
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  name="reason"
-                  placeholder="reason"
-                  className="input flex-1"
-                />
-                <button type="submit" className="btn-secondary">
-                  Reassign
-                </button>
-              </div>
-            </form>
+            {canManage && <div className="mt-4 pt-4 border-t border-line">
+              <WorkflowForm action={setTribeKeeper} blockUncertainRetry label="Change keeper" confirmation="The new keeper can approve members and moderate this tribe. The current keeper becomes a regular member.">
+                <input type="hidden" name="tribe_id" value={tribeId} />
+                <label className="contact-field"><span>New keeper (handle or user ID)</span><input name="member" className="input" required maxLength={60} placeholder="@handle" /></label>
+                <label className="contact-field"><span>Reason</span><input name="reason" className="input" required minLength={3} maxLength={500} placeholder="e.g. keeper asked to step down" /></label>
+              </WorkflowForm>
+            </div>}
           </Card>
 
           <Card title="Facts" padded>
@@ -430,24 +303,21 @@ export default async function TribeDetailPage({
         <div className="lg:col-span-2 flex flex-col gap-6">
           <Card
             title={`Members · ${tribe.member_count}`}
-            hint="Add, remove, or promote to keeper. Every change is audited."
+            hint="Latest 250 · every change needs a reason and is audited"
             padded={false}
           >
-            <div className="px-5 py-3 border-b border-line">
-              <form action={addMember} className="flex gap-2">
+            {canManage && <div className="grid gap-4 border-b border-line px-5 py-4 md:grid-cols-2">
+              <WorkflowForm action={addTribeMember} blockUncertainRetry label="Add member" confirmation="Adds this member to the tribe straight away, without a join request.">
                 <input type="hidden" name="tribe_id" value={tribeId} />
-                <input
-                  type="text"
-                  name="user_id"
-                  placeholder="user_id to add as member"
-                  className="input flex-1 font-mono text-xs"
-                  required
-                />
-                <button type="submit" className="btn-secondary inline-flex items-center gap-1">
-                  <Users2 size={14} /> Add
-                </button>
-              </form>
-            </div>
+                <label className="contact-field"><span>Member (handle or user ID)</span><input name="member" className="input" required maxLength={60} placeholder="@handle" /></label>
+                <label className="contact-field"><span>Reason</span><input name="reason" className="input" required minLength={3} maxLength={500} placeholder="e.g. invited by the keeper" /></label>
+              </WorkflowForm>
+              <WorkflowForm action={removeTribeMember} blockUncertainRetry label="Remove member" confirmation="Removes this member from the tribe. They can ask to join again unless the tribe is private.">
+                <input type="hidden" name="tribe_id" value={tribeId} />
+                <label className="contact-field"><span>Member (handle or user ID)</span><input name="member" className="input" required maxLength={60} placeholder="@handle" /></label>
+                <label className="contact-field"><span>Reason</span><input name="reason" className="input" required minLength={3} maxLength={500} placeholder="e.g. repeated harassment in the tribe" /></label>
+              </WorkflowForm>
+            </div>}
             {((members ?? []) as unknown[]).length === 0 ? (
               <div className="px-5 py-8 text-sm text-ink-muted italic">
                 No members.
@@ -472,19 +342,6 @@ export default async function TribeDetailPage({
                     <Badge tone={m.role === "keeper" ? "info" : "neutral"}>
                       {m.role}
                     </Badge>
-                    {m.role !== "keeper" && (
-                      <form action={removeMember}>
-                        <input type="hidden" name="tribe_id" value={tribeId} />
-                        <input type="hidden" name="user_id" value={m.user_id} />
-                        <button
-                          type="submit"
-                          title="Remove from tribe"
-                          className="btn-ghost is-destructive"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </form>
-                    )}
                   </li>
                 ))}
               </ul>

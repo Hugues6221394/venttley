@@ -190,7 +190,7 @@ async function LegacyMusicPage({
                   const rights = licenseState(track);
                   return (
                     <tr className="t-row" key={track.track_id}>
-                      <td className="t-td"><p className="font-bold text-burgundy">{track.title}</p><p className="text-xs text-ink-muted">{track.artist}{track.album ? ` · ${track.album}` : ""}</p><p className="mt-1 font-mono text-[10px] text-ink-muted">{track.track_id}</p></td>
+                      <td className="t-td"><Link href={`/music/${track.track_id}`} className="font-bold text-burgundy hover:text-berry">{track.title}</Link><p className="text-xs text-ink-muted">{track.artist}{track.album ? ` · ${track.album}` : ""}</p><p className="mt-1 font-mono text-[10px] text-ink-muted">{track.track_id}</p></td>
                       <td className="t-td"><Badge tone="info">{track.provider}</Badge><p className="mt-1 font-mono text-[10px] text-ink-muted">{track.provider_track_id}</p></td>
                       <td className="t-td"><Badge tone={rights === "expired" ? "danger" : rights === "expiring" ? "warn" : rights === "inactive" ? "neutral" : "ok"}>{rights}</Badge><p className="mt-1 text-xs text-ink-muted">{track.license_code} · {track.rights_holder}</p>{track.rights_expires_at && <p className="text-[11px] text-ink-muted">expires {new Date(track.rights_expires_at).toLocaleDateString()}</p>}</td>
                       <td className="t-td text-xs text-ink-muted">{track.allowed_regions?.length ? track.allowed_regions.slice(0, 5).join(", ") + (track.allowed_regions.length > 5 ? "…" : "") : "Global / unspecified"}</td>
@@ -206,12 +206,10 @@ async function LegacyMusicPage({
         </Card>
       ) : null}
 
-      <CapabilityNotice title="Catalog writes are locked until the backend contract exists">
-        Adding, changing, disabling, and taking down tracks needs an audited
-        <code className="mx-1 font-mono">admin_manage_music_track</code> RPC with
-        provider validation, rights dates, regional rules, idempotency, and a
-        usage-impact check. Direct service-role table edits are intentionally not
-        exposed as buttons.
+      <CapabilityNotice title="Adding tracks stays with the provider import">
+        Open a track to take it down, put it back, or change when its rights end.
+        Each change needs a reason and MFA, and is audited. New tracks arrive through
+        the provider import, which validates the rights record.
       </CapabilityNotice>
     </div>
   );

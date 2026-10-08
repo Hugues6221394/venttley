@@ -39,10 +39,11 @@ async function MediaQueue({filters}:{filters:CatalogFilters}) {
         <div className="flex flex-wrap gap-2"><h2 className="font-bold">{filters.kind==="post"?"Vent image":"Whisper image"} · item {index+1}</h2><Badge tone="warn">{row.status}</Badge>{row.deleted_at&&<Badge>Deleted content · do not restore through media review</Badge>}</div>
         <p className="text-xs text-ink-muted">Created {new Date(row.created_at).toISOString().replace("T"," ").replace("Z"," UTC")}</p>
         <details className="workflow-technical"><summary>Technical reference</summary><code>{row.id}</code></details>
+        <Link href={`/media/${filters.kind}/${row.id}`} className="btn-secondary" prefetch={false}>Review</Link>
       </li>)}</ul>}
     </OperatorPanel>
     <Pager kind="media" filters={filters} next={result.length>CATALOG_PAGE_SIZE?rows.at(-1)?.id:undefined}/>
-    <CapabilityNotice title="Evidence first">This metadata queue never fetches images or confession text. Review evidence in the authorized moderation workflow before changing visibility. Inline approval is withheld because the legacy clean-media command can also restore deleted content; a conflict-safe replacement is required.</CapabilityNotice>
+    <CapabilityNotice title="Evidence first">This metadata queue never fetches images or confession text. Review evidence in the authorized moderation workflow before changing visibility. Decisions happen on each item's review page, with a reason; approving never restores deleted content.</CapabilityNotice>
   </>;
 }
 async function MusicQueue({filters}:{filters:CatalogFilters}) {
@@ -59,10 +60,11 @@ async function MusicQueue({filters}:{filters:CatalogFilters}) {
           <div><dt className="font-bold">Regions</dt><dd>{track.allowed_regions?.length?track.allowed_regions.join(", "):"Unspecified · verify the rights record"}</dd></div>
           <div><dt className="font-bold">Caching policy</dt><dd>{track.cache_allowed?"Catalog permits caching":"Stream only"}</dd></div></dl>
         <details className="workflow-technical"><summary>Technical reference</summary><code>{track.track_id}</code></details>
+        <Link href={`/music/${track.track_id}`} className="btn-secondary" prefetch={false}>Open track</Link>
       </li>)}</ul>}
     </OperatorPanel>
     <Pager kind="music" filters={filters} next={result.length>CATALOG_PAGE_SIZE?rows.at(-1)?.track_id:undefined}/>
-    <CapabilityNotice title="Rights review, not catalog authorization">No audio or artwork is downloaded here. Catalog writes remain unavailable until provider validation, region/expiry enforcement, usage-impact checks and an audited mutation contract are verified. A metadata entry alone does not establish licensed use.</CapabilityNotice>
+    <CapabilityNotice title="Rights review, not catalog authorization">No audio or artwork is downloaded here. Open a track to take it down or change its rights end, with a reason and MFA. A metadata entry alone does not establish licensed use.</CapabilityNotice>
   </>;
 }
 export async function CatalogWorkspace({kind,searchParams}:{kind:CatalogKind;searchParams:Promise<Record<string,string|string[]|undefined>>}) {

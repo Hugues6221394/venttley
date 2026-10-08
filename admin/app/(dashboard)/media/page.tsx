@@ -1,16 +1,15 @@
-import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { CatalogWorkspace } from "@/components/workflows/catalog-workspace";
 import { getOperationalRole } from "@/lib/governance";
 import { notFound } from "next/navigation";
 import { DataWarning } from "@/components/ui/operations";
 import { createAdminClient } from "@/lib/supabase/server";
-import { rpc } from "@/lib/audit";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ShieldCheck, Check, Ban } from "lucide-react";
+import { ShieldCheck, Ban } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -29,22 +28,6 @@ const STATUS_TONE: Record<MediaRow["status"], "danger" | "warn" | "neutral"> = {
   sensitive: "warn",
   pending: "neutral",
 };
-
-async function setStatusAction(formData: FormData) {
-  "use server";
-  const kind = String(formData.get("kind") ?? "");
-  const id = String(formData.get("id") ?? "");
-  const status = String(formData.get("status") ?? "");
-  const reason = String(formData.get("reason") ?? "");
-  if (!id || (kind !== "post" && kind !== "whisper")) return;
-  await rpc("admin_set_media_status", {
-    p_kind: kind,
-    p_id: id,
-    p_status: status,
-    p_reason: reason || null,
-  });
-  revalidatePath("/media");
-}
 
 export default async function MediaPage({
   searchParams,
@@ -123,7 +106,7 @@ async function LegacyMediaPage({
       <PageHeader
         eyebrow="Operate"
         title="Media safety"
-        subtitle="Images the classifier auto-blocked (nudity/gore) or veiled (sensitive). Blocked media is already hidden from users — review here for false positives. Every override is audit-logged."
+        subtitle="Images the classifier auto-blocked (nudity/gore) or veiled (sensitive). Blocked media is already hidden from users — review here for false positives. Open an item to approve, veil, block or re-scan it, with a reason. Every decision is audit-logged."
       />
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -194,26 +177,7 @@ function MediaItem({ row }: { row: MediaRow }) {
         )}
       </div>
 
-      <div className="shrink-0 flex flex-col gap-2 items-end">
-        <form action={setStatusAction} className="flex items-center gap-2">
-          <input type="hidden" name="kind" value={row.kind} />
-          <input type="hidden" name="id" value={row.id} />
-          <input type="hidden" name="status" value="clean" />
-          <button className="btn-secondary text-xs" type="submit">
-            <Check size={13} /> Approve
-          </button>
-        </form>
-        {row.status !== "blocked" && (
-          <form action={setStatusAction}>
-            <input type="hidden" name="kind" value={row.kind} />
-            <input type="hidden" name="id" value={row.id} />
-            <input type="hidden" name="status" value="blocked" />
-            <button className="btn-ghost is-destructive" type="submit">
-              <Ban size={13} /> Block
-            </button>
-          </form>
-        )}
-      </div>
+      <Link href={`/media/${row.kind}/${row.id}`} className="btn-secondary shrink-0 text-xs">Review</Link>
     </li>
   );
 }
