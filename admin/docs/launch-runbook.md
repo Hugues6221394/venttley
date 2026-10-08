@@ -109,7 +109,30 @@ Pings stopping (database, scheduler or function down) also alerts.
 - Drill: pause the job with `cron.alter_job(<jobid>, active := false)` for five
   minutes, confirm the email, then reactivate it.
 - New cron jobs are picked up automatically. A daily job is only checked once it has run.
+- Drill run 8 Oct 2026: job 31 paused 11:01:36 UTC, reactivated 11:08:05 UTC (last
+  beat 11:01:00, next 11:09:00 succeeded). Alert email receipt to be confirmed by the owner.
+
+## State on 8 Oct 2026
+
+- Production migrations applied and verified (ledger, functions, anon has no execute):
+  `20261088` broadcasts reach members (`broadcast-delivery` cron every minute),
+  `20261089` staff invitation resend/revoke, `20261090` privacy requests and exports
+  (private `privacy-exports` bucket), `20261091` music track controls,
+  `20261092` release switch read-out. 58 public functions require MFA step-up.
+- Console deploys of `codex/super-admin-improvements` are **blocked by Vercel**: "the
+  commit author doesn't have permission to create deployments for this project". The
+  live console is still `venttly-admin-prod-75x8tqtc5` (7 Oct). The new pages, the login
+  fix and the `/system` release controls panel ship with the next successful deploy.
+- Every release switch is off. Staff notifications and their sources, access reviews and
+  governance notices are turned on by a super admin from `/system` (MFA, audited) once the
+  console is deployed; there is no service path for them by design.
+- Invitation ledger needs `ADMIN_INVITATION_HMAC_KEY` on the console first (not set).
+- Promotion approvals (service-only switch, two active super admins present) wait for
+  `ADMIN_PROMOTION_APPROVALS_UI` to ship, or promotions to super admin would have no path.
+- Broadcast approvals stay off: enforcement only admits immediate broadcasts to everyone,
+  so it would refuse tribe and scheduled broadcasts from the composer.
 
 ## Still open before launch
 
-- Supabase Pro (Free has no backups and limits realtime to ~200 connections).
+- ~~Supabase Pro~~ — upgraded by the owner, 8 Oct 2026.
+- Unblock console deploys (Vercel commit-author permission), then turn on the release switches.
