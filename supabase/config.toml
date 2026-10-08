@@ -430,6 +430,12 @@ verify_jwt = false
 [functions.email-dispatcher]
 verify_jwt = false
 
+# waitlist-digest mails the waitlist to the team once a day. Same gate again:
+# it is the only path by which that list leaves the database, so it must not
+# be reachable with the anon key the public site carries.
+[functions.waitlist-digest]
+verify_jwt = false
+
 # Stripe cannot present a Supabase JWT. The handler instead validates Stripe's
 # signature over the unmodified request body before service-role mutations.
 [functions.payment-webhook]
