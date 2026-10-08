@@ -173,4 +173,5 @@ const Map<String, String> kExpectedMigrations = <String, String>{
   '20261088090000': 'broadcasts_reach_members',
   '20261089090000': 'staff_invitation_resend_revoke',
   '20261090090000': 'privacy_requests',
+  '20261091090000': 'music_track_controls',
 };
